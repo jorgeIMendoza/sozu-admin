@@ -510,7 +510,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           .select("*")
           .in("id_producto", productIds)
           .eq("es_manual", false)
-          .eq("activo", true);
+          .eq("activo", true)
+          .order("orden", { ascending: true })
+          .order("id", { ascending: true });
         
         if (schemes) {
           schemesMap = schemes.reduce((acc, scheme) => {
@@ -562,7 +564,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         .eq("id_proyecto", projectId)
         .is("id_producto", null)
         .eq("es_manual", false)
-        .eq("activo", true);
+        .eq("activo", true)
+        .order("orden", { ascending: true })
+        .order("id", { ascending: true });
       
       if (error) throw error;
       return data || [];

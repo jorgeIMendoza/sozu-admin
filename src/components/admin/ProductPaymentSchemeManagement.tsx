@@ -1,15 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CreditCard, Eye, Edit, Trash2 } from "lucide-react";
+import { CreditCard, Eye, Edit, Trash2, GripVertical } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewProductPaymentSchemeDialog } from "./NewProductPaymentSchemeDialog";
 import { EditProductPaymentSchemeDialog } from "./EditProductPaymentSchemeDialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface ProductPaymentSchemeManagementProps {
   productId: number;
@@ -19,7 +36,14 @@ interface ProductPaymentSchemeManagementProps {
 export const ProductPaymentSchemeManagement = ({ productId, productName }: ProductPaymentSchemeManagementProps) => {
   const [open, setOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [orderedSchemes, setOrderedSchemes] = useState<any[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Always fetch count for display in the button
   const { data: schemeCount = 0 } = useQuery({
@@ -56,7 +80,8 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
           activo: true,
           es_manual: false 
         })
-        .order("nombre");
+        .order("orden", { ascending: true })
+        .order("id", { ascending: true });
       
       if (error) {
         console.error("Error fetching product payment schemes:", error);
@@ -67,6 +92,51 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
     },
     enabled: !!productId && productId > 0 && open,
   });
+
+  useEffect(() => {
+    if (schemes) setOrderedSchemes(schemes);
+  }, [schemes]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedSchemes.findIndex((s) => s.id === active.id);
+    const newIndex = orderedSchemes.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(orderedSchemes, oldIndex, newIndex);
+    setOrderedSchemes(reordered);
+
+    setIsSavingOrder(true);
+    try {
+      const updates = reordered.map((s, idx) =>
+        supabase
+          .from("esquemas_pago")
+          .update({ orden: idx + 1 })
+          .eq("id", s.id)
+      );
+      const results = await Promise.all(updates);
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) throw errors[0].error;
+
+      toast({
+        title: "Orden actualizado",
+        description: "El orden de los esquemas se guardó correctamente.",
+      });
+      refetch();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el nuevo orden.",
+        variant: "destructive",
+      });
+      if (schemes) setOrderedSchemes(schemes);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
 
   const handleSchemeAdded = () => {
     setRefreshKey(prev => prev + 1);
@@ -233,35 +303,40 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
             <div className="py-8 text-center text-muted-foreground">
               Cargando esquemas de pago...
             </div>
-          ) : schemes && schemes.length > 0 ? (
+          ) : orderedSchemes && orderedSchemes.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {schemes.length} esquema{schemes.length !== 1 ? 's' : ''} encontrado{schemes.length !== 1 ? 's' : ''}
-              </p>
-              <div className="grid grid-cols-1 gap-4">
-                {schemes.map((scheme) => (
-                  <Card key={scheme.id}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <CreditCard className="h-4 w-4" />
-                          <span>{scheme.nombre}</span>
-                        </div>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex space-x-2">
-                        <PaymentSchemeDetailsDialog scheme={scheme} />
-                        <EditProductPaymentSchemeDialog 
-                          scheme={scheme} 
-                          onSchemeUpdated={handleSchemeAdded} 
-                        />
-                        <DeletePaymentSchemeDialog scheme={scheme} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {orderedSchemes.length} esquema{orderedSchemes.length !== 1 ? 's' : ''} encontrado{orderedSchemes.length !== 1 ? 's' : ''}
+                  <span className="ml-2 text-xs italic">(arrastra para reordenar)</span>
+                </p>
+                {isSavingOrder && (
+                  <span className="text-xs text-muted-foreground">Guardando…</span>
+                )}
               </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={orderedSchemes.map((s) => s.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 gap-4">
+                    {orderedSchemes.map((scheme, idx) => (
+                      <SortableProductSchemeCard
+                        key={scheme.id}
+                        scheme={scheme}
+                        displayOrder={idx + 1}
+                        onUpdated={handleSchemeAdded}
+                        DetailsDialog={PaymentSchemeDetailsDialog}
+                        DeleteDialog={DeletePaymentSchemeDialog}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
           ) : (
             <Card>
@@ -275,5 +350,74 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+// ----------------------------------------------------------------------------
+// Sortable card component
+// ----------------------------------------------------------------------------
+interface SortableProductSchemeCardProps {
+  scheme: any;
+  displayOrder: number;
+  onUpdated: () => void;
+  DetailsDialog: React.ComponentType<{ scheme: any }>;
+  DeleteDialog: React.ComponentType<{ scheme: any }>;
+}
+
+const SortableProductSchemeCard = ({
+  scheme,
+  displayOrder,
+  onUpdated,
+  DetailsDialog,
+  DeleteDialog,
+}: SortableProductSchemeCardProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: scheme.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : "auto",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card className="relative">
+        <Badge
+          variant="secondary"
+          className="absolute top-2 right-2 h-6 min-w-6 px-2 flex items-center justify-center text-xs font-semibold"
+        >
+          #{displayOrder}
+        </Badge>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center justify-between pr-10">
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 rounded hover:bg-muted text-muted-foreground"
+                aria-label="Arrastrar para reordenar"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+              <CreditCard className="h-4 w-4" />
+              <span>{scheme.nombre}</span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex space-x-2">
+            <DetailsDialog scheme={scheme} />
+            <EditProductPaymentSchemeDialog
+              scheme={scheme}
+              onSchemeUpdated={onUpdated}
+            />
+            <DeleteDialog scheme={scheme} />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };

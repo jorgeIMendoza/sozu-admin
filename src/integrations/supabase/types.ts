@@ -3840,6 +3840,7 @@ export type Database = {
           nombre: string
           numero_mensualidades: number
           numero_pagos_enganche: number
+          orden: number
           porcentaje_descuento_aumento: number
           porcentaje_enganche: number
           porcentaje_entrega: number
@@ -3857,6 +3858,7 @@ export type Database = {
           nombre: string
           numero_mensualidades: number
           numero_pagos_enganche?: number
+          orden?: number
           porcentaje_descuento_aumento?: number
           porcentaje_enganche?: number
           porcentaje_entrega?: number
@@ -3874,6 +3876,7 @@ export type Database = {
           nombre?: string
           numero_mensualidades?: number
           numero_pagos_enganche?: number
+          orden?: number
           porcentaje_descuento_aumento?: number
           porcentaje_enganche?: number
           porcentaje_entrega?: number

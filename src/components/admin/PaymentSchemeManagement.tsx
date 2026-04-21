@@ -1,15 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CreditCard, Eye, Edit, Trash2 } from "lucide-react";
+import { CreditCard, Eye, Edit, Trash2, GripVertical } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewPaymentSchemeDialog } from "./NewPaymentSchemeDialog";
 import { EditPaymentSchemeDialog } from "./EditPaymentSchemeDialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface PaymentSchemeManagementProps {
   projectId: number;
@@ -20,7 +37,14 @@ interface PaymentSchemeManagementProps {
 
 export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate = true, canDelete = true }: PaymentSchemeManagementProps) => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [orderedSchemes, setOrderedSchemes] = useState<any[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const { data: schemes, isLoading, refetch } = useQuery({
     queryKey: ["project-payment-schemes", projectId, refreshKey],
@@ -33,7 +57,8 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
           activo: true,
           es_manual: false 
         })
-        .order("nombre");
+        .order("orden", { ascending: true })
+        .order("id", { ascending: true });
       
       if (error) {
         console.error("Error fetching payment schemes:", error);
@@ -44,6 +69,54 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
     },
     enabled: !!projectId && projectId > 0,
   });
+
+  // Sincronizar estado local cuando llegan los schemes
+  useEffect(() => {
+    if (schemes) setOrderedSchemes(schemes);
+  }, [schemes]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedSchemes.findIndex((s) => s.id === active.id);
+    const newIndex = orderedSchemes.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(orderedSchemes, oldIndex, newIndex);
+    setOrderedSchemes(reordered);
+
+    setIsSavingOrder(true);
+    try {
+      // Actualizar el orden de cada esquema (1-indexed)
+      const updates = reordered.map((s, idx) =>
+        supabase
+          .from("esquemas_pago")
+          .update({ orden: idx + 1 })
+          .eq("id", s.id)
+      );
+      const results = await Promise.all(updates);
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) throw errors[0].error;
+
+      toast({
+        title: "Orden actualizado",
+        description: "El orden de los esquemas se guardó correctamente.",
+      });
+      refetch();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el nuevo orden.",
+        variant: "destructive",
+      });
+      // Revertir
+      if (schemes) setOrderedSchemes(schemes);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
 
   const handleSchemeAdded = () => {
     setRefreshKey(prev => prev + 1);
@@ -243,41 +316,41 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
       />
       </div>
 
-      {schemes && schemes.length > 0 ? (
+      {orderedSchemes && orderedSchemes.length > 0 ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {schemes.length} esquema{schemes.length !== 1 ? 's' : ''} encontrado{schemes.length !== 1 ? 's' : ''}
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {schemes.map((scheme) => {
-              const totalPercentage = scheme.porcentaje_enganche + scheme.porcentaje_mensualidades + scheme.porcentaje_entrega;
-              const isValidScheme = totalPercentage === 100;
-
-              return (
-                <Card key={scheme.id}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <CreditCard className="h-4 w-4" />
-                        <span>{scheme.nombre}</span>
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="flex space-x-2">
-                      <PaymentSchemeDetailsDialog scheme={scheme} />
-                      <EditPaymentSchemeDialog 
-                        scheme={scheme} 
-                        onSchemeUpdated={handleSchemeAdded}
-                        canUpdate={canUpdate}
-                      />
-                      <DeletePaymentSchemeDialog scheme={scheme} />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {orderedSchemes.length} esquema{orderedSchemes.length !== 1 ? 's' : ''} encontrado{orderedSchemes.length !== 1 ? 's' : ''}
+              <span className="ml-2 text-xs italic">(arrastra las tarjetas para reordenar)</span>
+            </p>
+            {isSavingOrder && (
+              <span className="text-xs text-muted-foreground">Guardando orden…</span>
+            )}
           </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={orderedSchemes.map((s) => s.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {orderedSchemes.map((scheme, idx) => (
+                  <SortablePaymentSchemeCard
+                    key={scheme.id}
+                    scheme={scheme}
+                    displayOrder={idx + 1}
+                    canUpdate={canUpdate}
+                    onUpdated={handleSchemeAdded}
+                    DetailsDialog={PaymentSchemeDetailsDialog}
+                    DeleteDialog={DeletePaymentSchemeDialog}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
       ) : (
         <Card>
@@ -288,6 +361,78 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+};
+
+// ----------------------------------------------------------------------------
+// Sortable card component
+// ----------------------------------------------------------------------------
+interface SortablePaymentSchemeCardProps {
+  scheme: any;
+  displayOrder: number;
+  canUpdate: boolean;
+  onUpdated: () => void;
+  DetailsDialog: React.ComponentType<{ scheme: any }>;
+  DeleteDialog: React.ComponentType<{ scheme: any }>;
+}
+
+const SortablePaymentSchemeCard = ({
+  scheme,
+  displayOrder,
+  canUpdate,
+  onUpdated,
+  DetailsDialog,
+  DeleteDialog,
+}: SortablePaymentSchemeCardProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: scheme.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : "auto",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card className="relative">
+        <Badge
+          variant="secondary"
+          className="absolute top-2 right-2 h-6 min-w-6 px-2 flex items-center justify-center text-xs font-semibold"
+        >
+          #{displayOrder}
+        </Badge>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center justify-between pr-10">
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 rounded hover:bg-muted text-muted-foreground"
+                aria-label="Arrastrar para reordenar"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+              <CreditCard className="h-4 w-4" />
+              <span>{scheme.nombre}</span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex space-x-2">
+            <DetailsDialog scheme={scheme} />
+            <EditPaymentSchemeDialog
+              scheme={scheme}
+              onSchemeUpdated={onUpdated}
+              canUpdate={canUpdate}
+            />
+            <DeleteDialog scheme={scheme} />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
