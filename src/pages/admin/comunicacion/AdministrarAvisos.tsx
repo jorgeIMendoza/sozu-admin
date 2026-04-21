@@ -945,23 +945,63 @@ export default function AdministrarAvisos() {
                   <p className="text-muted-foreground italic">Sin roles configurados (los destinatarios se calculan dinámicamente según la fuente del evento).</p>
                 ) : (
                   (() => {
-                    const totalCorreos = detailRoles.reduce((acc, r) => acc + (Array.isArray(r.correos) ? r.correos.length : 0), 0);
-                    const rolesNombres = detailRoles.map(r => roles.find(x => x.id === r.id_rol)?.nombre || `Rol ${r.id_rol}`);
+                    // correos puede venir como { destinatarios: [{email,nombre}] } o como array directo
+                    const extraerCorreos = (c: any): { email: string; nombre?: string }[] => {
+                      if (!c) return [];
+                      if (Array.isArray(c)) {
+                        return c.map((x: any) => typeof x === 'string' ? { email: x } : x).filter((x: any) => x?.email);
+                      }
+                      if (Array.isArray(c?.destinatarios)) {
+                        return c.destinatarios.filter((x: any) => x?.email);
+                      }
+                      return [];
+                    };
+                    const rolesConCorreos = detailRoles.map(r => ({
+                      rolNombre: roles.find(x => x.id === r.id_rol)?.nombre || `Rol ${r.id_rol}`,
+                      correos: extraerCorreos(r.correos),
+                    }));
+                    const totalCorreos = rolesConCorreos.reduce((acc, r) => acc + r.correos.length, 0);
+                    // Modo A: solo correos específicos (sin envío al rol completo)
+                    // Modo B: envío al rol entero (sin correos específicos)
+                    // Heurística: si hay correos específicos, son los destinatarios reales
+                    if (totalCorreos > 0) {
+                      const todos = rolesConCorreos.flatMap(r => r.correos);
+                      const mostrar = todos.slice(0, 5);
+                      return (
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-start gap-2">
+                            <Mail className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                            <span>
+                              Se envía a <strong>{totalCorreos}</strong> destinatario{totalCorreos === 1 ? '' : 's'} específico{totalCorreos === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <ul className="text-xs text-muted-foreground space-y-0.5 pl-5">
+                            {mostrar.map((c, i) => (
+                              <li key={i}>
+                                {c.nombre ? <><strong className="text-foreground/80">{c.nombre}</strong> — </> : null}
+                                {c.email}
+                              </li>
+                            ))}
+                            {todos.length > mostrar.length && (
+                              <li className="italic">y {todos.length - mostrar.length} más…</li>
+                            )}
+                          </ul>
+                          <p className="text-[11px] text-muted-foreground italic pl-5">
+                            Asociado al rol: {rolesConCorreos.map(r => r.rolNombre).join(', ')}
+                          </p>
+                        </div>
+                      );
+                    }
+                    // Sin correos específicos: se envía a todos los usuarios con ese rol
                     return (
                       <div className="space-y-2 text-sm">
                         <div className="flex items-start gap-2">
                           <Mail className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
                           <span>
-                            <strong>{detailRoles.length}</strong> rol{detailRoles.length === 1 ? '' : 'es'}
-                            {totalCorreos > 0 && (
-                              <> y <strong>{totalCorreos}</strong> correo{totalCorreos === 1 ? '' : 's'} adicional{totalCorreos === 1 ? '' : 'es'}</>
-                            )}
+                            Se envía a todos los usuarios con {detailRoles.length === 1 ? 'el rol' : 'los roles'}:{' '}
+                            <strong>{rolesConCorreos.map(r => r.rolNombre).join(', ')}</strong>
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {rolesNombres.slice(0, 3).join(', ')}
-                          {rolesNombres.length > 3 && ` y ${rolesNombres.length - 3} más`}
-                        </p>
                       </div>
                     );
                   })()
