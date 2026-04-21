@@ -218,9 +218,8 @@ Deno.serve(async (req) => {
             ? renderJsonTemplate(aviso.payload_postmark, vars)
             : { mensaje: { nombre: persona.nombre_legal || '', texto: renderedHtml, asunto: renderedAsunto } };
 
-          // Construir lista de destinatarios: cliente real + correos manuales (siempre reciben copia)
-          // Cada destinatario tiene su propio clave_entidad para idempotencia independiente.
-          type Dest = { email: string | null; nombre: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
+          // Destinatario único por acuerdo: el cliente real (o el override de prueba si está configurado)
+          type Dest = { email: string | null; nombre: string; tipo: 'cliente'; claveEntidad: string };
           const destinatarios: Dest[] = [];
           if (emailReal) {
             destinatarios.push({
@@ -228,16 +227,6 @@ Deno.serve(async (req) => {
               nombre: persona.nombre_legal || '',
               tipo: 'cliente',
               claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
-            });
-          }
-          for (const m of manualEmails) {
-            // Evitar duplicado si el manual coincide con el cliente real
-            if (emailReal && m.email.toLowerCase() === emailReal.toLowerCase()) continue;
-            destinatarios.push({
-              email: m.email,
-              nombre: m.nombre || '',
-              tipo: 'manual',
-              claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email.toLowerCase()}`,
             });
           }
 
