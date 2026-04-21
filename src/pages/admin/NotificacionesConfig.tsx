@@ -576,13 +576,13 @@ const NotificacionesConfig = () => {
                     }}
                     rows={6}
                     className="font-mono text-xs"
-                    placeholder={`{\n  "nombre_desarrollo": "{nombre_desarrollo}"\n}`}
+                    placeholder={`{\n  "mensaje": {\n    "proyecto": "{nombre_desarrollo}"\n  }\n}`}
                   />
                   {mapeoJsonError && (
                     <p className="text-xs text-destructive mt-1">JSON inválido: {mapeoJsonError}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Llave = nombre exacto de la variable en Postmark. Valor = placeholder del sistema o texto fijo.
+                    Llave = nombre exacto de la variable en Postmark. Si la plantilla usa <code>{`{{mensaje.proyecto}}`}</code>, anida el JSON como <code>{`{ "mensaje": { "proyecto": "..." } }`}</code>. Valor = placeholder del sistema o texto fijo.
                   </p>
                 </div>
               </div>
