@@ -20,13 +20,14 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Within ±5 min of hora_envio (HH:MM:SS in Mexico time)
-function withinSendWindow(horaEnvio: string, mexNow: Date, toleranceMin = 5): boolean {
+// Solo dispara DESDE hora_envio hasta hora_envio + toleranceMin minutos.
+// Nunca antes de la hora configurada.
+function withinSendWindow(horaEnvio: string, mexNow: Date, toleranceMin = 2): boolean {
   const [h, m] = horaEnvio.split(':').map(Number);
   const target = new Date(mexNow);
   target.setHours(h, m || 0, 0, 0);
-  const diffMin = Math.abs((mexNow.getTime() - target.getTime()) / 60000);
-  return diffMin <= toleranceMin;
+  const diffMin = (mexNow.getTime() - target.getTime()) / 60000;
+  return diffMin >= 0 && diffMin <= toleranceMin;
 }
 
 function renderTemplate(tpl: string, vars: Record<string, string>): string {
