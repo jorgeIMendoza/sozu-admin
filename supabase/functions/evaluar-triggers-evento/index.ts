@@ -231,6 +231,16 @@ Deno.serve(async (req) => {
           let okEmail = true, okWa = true;
           let errMsg = '';
 
+          if (dryRun) {
+            await supabaseAdmin
+              .from('avisos_envios_evento')
+              .update({ estado: 'simulado', error: 'dry_run', payload_enviado: templateModel })
+              .eq('id', ins.id);
+            summary.details.push({ trigger_id: trig.id, clave_entidad: claveEntidad, estado: 'simulado', email: persona.email, telefono: persona.telefono });
+            summary.sent++;
+            continue;
+          }
+
           // EMAIL
           if ((channel === 'email' || channel === 'ambos') && persona.email) {
             if (!POSTMARK_TOKEN) { okEmail = false; errMsg += 'POSTMARK_SERVER_TOKEN faltante; '; }
