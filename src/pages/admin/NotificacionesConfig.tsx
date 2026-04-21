@@ -84,6 +84,7 @@ const NotificacionesConfig = () => {
   const [loadingVars, setLoadingVars] = useState(false);
   const [mapeoJsonText, setMapeoJsonText] = useState<string>('{}');
   const [mapeoJsonError, setMapeoJsonError] = useState<string | null>(null);
+  const mapeoTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({
     nombre_desarrollo: 'Torre Sozu Polanco',
