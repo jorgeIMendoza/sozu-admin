@@ -226,7 +226,7 @@ Deno.serve(async (req) => {
               id_trigger: trig.id,
               clave_entidad: claveEntidad,
               fecha_objetivo: fechaObjetivo,
-              email_destino: persona.email || null,
+              email_destino: emailReal,
               telefono_destino: persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : null,
               canal: channel,
               estado: 'enviando',
@@ -253,27 +253,29 @@ Deno.serve(async (req) => {
               .from('avisos_envios_evento')
               .update({ estado: 'simulado', error: 'dry_run', payload_enviado: templateModel })
               .eq('id', ins.id);
-            summary.details.push({ trigger_id: trig.id, clave_entidad: claveEntidad, estado: 'simulado', email: persona.email, telefono: persona.telefono });
+            summary.details.push({ trigger_id: trig.id, clave_entidad: claveEntidad, estado: 'simulado', email: emailReal, telefono: persona.telefono, override: !!emailOverride, bcc: bccList });
             summary.sent++;
             continue;
           }
 
           // EMAIL
-          if ((channel === 'email' || channel === 'ambos') && persona.email) {
+          if ((channel === 'email' || channel === 'ambos') && emailReal) {
             if (!POSTMARK_TOKEN) { okEmail = false; errMsg += 'POSTMARK_SERVER_TOKEN faltante; '; }
             else {
               try {
                 const templateId = aviso.postmark_template_id || 36978552;
+                const postmarkBody: any = {
+                  From: 'notificaciones@sozu.com',
+                  To: emailReal,
+                  TemplateId: templateId,
+                  TemplateModel: templateModel,
+                  MessageStream: 'outbound',
+                };
+                if (bccList.length > 0) postmarkBody.Bcc = bccList.join(',');
                 const res = await fetch('https://api.postmarkapp.com/email/withTemplate', {
                   method: 'POST',
                   headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Postmark-Server-Token': POSTMARK_TOKEN },
-                  body: JSON.stringify({
-                    From: 'notificaciones@sozu.com',
-                    To: persona.email,
-                    TemplateId: templateId,
-                    TemplateModel: templateModel,
-                    MessageStream: 'outbound',
-                  }),
+                  body: JSON.stringify(postmarkBody),
                 });
                 const body = await res.json();
                 if (!res.ok || (body?.ErrorCode && body.ErrorCode !== 0)) {
