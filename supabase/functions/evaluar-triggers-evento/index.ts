@@ -233,6 +233,27 @@ Deno.serve(async (req) => {
 
         console.log(`${tag} trigger ${trig.id} offset ${offset} fecha=${fechaObjetivo} → ${rows?.length || 0} acuerdos`);
 
+        // ============================================================
+        // Acumuladores para envío CONSOLIDADO por (trigger, offset).
+        // - Si hay manualEmails: deduplicamos por email/teléfono y enviamos
+        //   UNA sola petición a n8n con la lista completa separada por comas.
+        //   La idempotencia se aplica por (trigger, offset, email manual),
+        //   independientemente de cuántos acuerdos haya.
+        // - Si no hay manualEmails: enviamos 1 petición por cliente real
+        //   (cada uno tiene su propio template personalizado).
+        // ============================================================
+        const manualAccum: Map<string, {
+          email: string;
+          nombre: string;
+          telefono: string;
+          claveEntidad: string;
+          // Snapshot de plantilla del primer acuerdo (para mensaje genérico)
+          asunto: string;
+          html: string;
+          textoPlano: string;
+          templateModel: any;
+        }> = new Map();
+
         for (const ac of rows || []) {
           const cc: any = (ac as any).cuentas_cobranza;
           const persona: any = cc?.ofertas?.personas;
@@ -268,32 +289,47 @@ Deno.serve(async (req) => {
             ? renderJsonTemplate(aviso.payload_postmark, vars)
             : { mensaje: { nombre: persona.nombre_legal || '', texto: renderedHtml, asunto: renderedAsunto } };
 
-          // Destinatarios por acuerdo:
-          //   1) Cliente real (o email_override si está en filtros) — siempre que tenga email
-          //   2) Cada correo manual configurado en la UI (adicionales / copia)
-          // Cada destinatario tiene su propia clave de idempotencia para no duplicar envíos.
-          type Dest = { email: string | null; nombre: string; telefono: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
-          const destinatarios: Dest[] = [];
           if (manualEmails.length > 0) {
-            // Modo manual: SOLO a los correos configurados, NO al cliente real.
+            // Modo manual: acumulamos por destinatario único (no por acuerdo).
+            // El primer acuerdo establece el template "base" del lote.
             for (const m of manualEmails) {
-              destinatarios.push({
+              const key = `${m.email}|${m.telefono || ''}`;
+              if (manualAccum.has(key)) continue;
+              const destVars: Record<string, string> = { ...vars, nombre: m.nombre || persona.nombre_legal || '' };
+              const destAsunto = renderTemplate(aviso.asunto || '', destVars);
+              const destHtml = renderTemplate(aviso.mensaje_html || '', destVars);
+              destVars.asunto = destAsunto;
+              destVars.texto = destHtml;
+              const destTemplateModel = aviso.payload_postmark
+                ? renderJsonTemplate(aviso.payload_postmark, destVars)
+                : { mensaje: { nombre: m.nombre || persona.nombre_legal || '', texto: destHtml, asunto: destAsunto } };
+              const textoPlano = destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+              manualAccum.set(key, {
                 email: m.email,
                 nombre: m.nombre || persona.nombre_legal || '',
                 telefono: m.telefono || '',
-                tipo: 'manual',
-                claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email}`,
+                // Idempotencia: 1 envío por (trigger, offset, manual_email) sin importar # acuerdos
+                claveEntidad: `trigger:${trig.id}:offset:${offset}:fecha:${fechaObjetivo}:manual:${m.email}`,
+                asunto: destAsunto,
+                html: destHtml,
+                textoPlano,
+                templateModel: destTemplateModel,
               });
             }
-          } else if (emailReal) {
-            destinatarios.push({
-              email: emailReal,
-              nombre: persona.nombre_legal || '',
-              telefono: persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : '',
-              tipo: 'cliente',
-              claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
-            });
+            // En modo manual NO procesamos por acuerdo (se hace consolidado abajo).
+            continue;
           }
+
+          // ===== Modo cliente real: 1 envío por acuerdo (template personalizado) =====
+          if (!emailReal) continue;
+          type Dest = { email: string | null; nombre: string; telefono: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
+          const destinatarios: Dest[] = [{
+            email: emailReal,
+            nombre: persona.nombre_legal || '',
+            telefono: persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : '',
+            tipo: 'cliente',
+            claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
+          }];
 
           for (const dest of destinatarios) {
             // Idempotent insert por destinatario
