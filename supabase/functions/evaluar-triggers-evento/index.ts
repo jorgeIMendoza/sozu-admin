@@ -136,9 +136,9 @@ Deno.serve(async (req) => {
             id, fecha_pago, monto, orden, id_concepto, id_cuenta_cobranza, activo, pago_completado,
             cuentas_cobranza:cuentas_cobranza!fk_acpago_cuenta!inner (
               id,
-              ofertas:ofertas!inner (
+              ofertas:ofertas!fk_ccob_oferta!inner (
                 id,
-                personas:personas!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
+                personas:personas!fk_ofertas_persona_lead!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
               )
             )
           `)
@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
         const { data: rows, error: qErr } = await q;
         if (qErr) {
           console.error(`${tag} trigger ${trig.id} offset ${offset}: query error`, qErr);
+          summary.details.push({ trigger_id: trig.id, offset, fecha_objetivo: fechaObjetivo, query_error: (qErr as any).message || String(qErr), code: (qErr as any).code || null });
           summary.errors++;
           continue;
         }
