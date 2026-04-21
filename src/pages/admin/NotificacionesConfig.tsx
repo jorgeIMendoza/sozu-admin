@@ -334,6 +334,60 @@ const NotificacionesConfig = () => {
     }
   };
 
+  // Jump to the JSON key for a given dotted variable path. If missing, insert a stub key.
+  const jumpToJsonKey = (variablePath: string) => {
+    const ta = mapeoTextareaRef.current;
+    if (!ta) return;
+    const parts = variablePath.split('.');
+    const leafKey = parts[parts.length - 1];
+    const text = mapeoJsonText || '';
+    // Try to find "leafKey" (the deepest key) in the JSON text.
+    const keyRegex = new RegExp(`"${leafKey.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}"\\s*:`);
+    const match = keyRegex.exec(text);
+    if (match) {
+      const start = match.index;
+      const end = start + match[0].length;
+      ta.focus();
+      ta.setSelectionRange(start, end);
+      // Scroll the match roughly into view by computing approximate line.
+      const lineNumber = text.slice(0, start).split('\n').length;
+      const lineHeight = 16; // approx for text-xs font
+      ta.scrollTop = Math.max(0, (lineNumber - 3) * lineHeight);
+      toast({ title: 'Variable ubicada', description: `Key "${leafKey}" en el JSON` });
+    } else {
+      // Build a nested stub for the missing path and append/merge it into the JSON.
+      try {
+        const parsed = JSON.parse(text || '{}');
+        const obj = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        let cur: any = obj;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const k = parts[i];
+          if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
+          cur = cur[k];
+        }
+        if (!(leafKey in cur)) cur[leafKey] = '';
+        const newText = JSON.stringify(obj, null, 2);
+        setMapeoJsonText(newText);
+        setEditItem(prev => prev ? { ...prev, mapeo_variables_postmark: obj } : prev);
+        // Focus the newly inserted key after state update.
+        setTimeout(() => {
+          const ta2 = mapeoTextareaRef.current;
+          if (!ta2) return;
+          const m = keyRegex.exec(newText);
+          if (m) {
+            ta2.focus();
+            ta2.setSelectionRange(m.index, m.index + m[0].length);
+            const lineNumber = newText.slice(0, m.index).split('\n').length;
+            ta2.scrollTop = Math.max(0, (lineNumber - 3) * 16);
+          }
+        }, 50);
+        toast({ title: 'Variable agregada', description: `Se agregó "${leafKey}" al JSON` });
+      } catch {
+        toast({ title: 'JSON inválido', description: 'Corrige el JSON antes de saltar a la variable', variant: 'destructive' });
+      }
+    }
+  };
+
   const canalLabel = (canal: string) => {
     switch (canal) {
       case 'email': return 'Email';
