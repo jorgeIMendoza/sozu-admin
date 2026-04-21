@@ -66,9 +66,18 @@ Deno.serve(async (req) => {
   const summary: any = { evaluated: 0, triggers: 0, sent: 0, skipped: 0, errors: 0, details: [] as any[] };
 
   try {
+    // Optional debug flags via query string:
+    //   ?ignore_window=1   → bypass hora_envio window check
+    //   ?dry_run=1         → run query path but skip sending emails/whatsapp
+    const url = new URL(req.url);
+    const ignoreWindow = url.searchParams.get('ignore_window') === '1';
+    const dryRun = url.searchParams.get('dry_run') === '1';
+    const overrideOffsetParam = url.searchParams.get('override_offset');
+    const overrideOffset = overrideOffsetParam !== null ? Number(overrideOffsetParam) : null;
+
     const mexNow = getMexicoTime();
     const tag = `[${fmtTime(mexNow)} MX]`;
-    console.log(`${tag} evaluar-triggers-evento iniciando`);
+    console.log(`${tag} evaluar-triggers-evento iniciando (ignoreWindow=${ignoreWindow}, dryRun=${dryRun})`);
 
     // Load all active event triggers + their aviso
     const { data: triggers, error: tErr } = await supabaseAdmin
@@ -99,16 +108,17 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (!withinSendWindow(trig.hora_envio as string, mexNow)) {
+      if (!ignoreWindow && !withinSendWindow(trig.hora_envio as string, mexNow)) {
         console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): fuera de ventana hora_envio=${trig.hora_envio}`);
         summary.skipped++;
         continue;
       }
 
       const offsets: number[] = (trig.offsets_dias as number[]) || [];
-      if (offsets.length === 0) { summary.skipped++; continue; }
+      const effectiveOffsets = overrideOffset !== null && !Number.isNaN(overrideOffset) ? [overrideOffset] : offsets;
+      if (effectiveOffsets.length === 0) { summary.skipped++; continue; }
 
-      for (const offset of offsets) {
+      for (const offset of effectiveOffsets) {
         // UI semantics: negative offset = send N days BEFORE the due date (reminders),
         // positive offset = send N days AFTER the due date (overdue notices).
         // Therefore fecha_objetivo = today - offset
@@ -136,9 +146,9 @@ Deno.serve(async (req) => {
             id, fecha_pago, monto, orden, id_concepto, id_cuenta_cobranza, activo, pago_completado,
             cuentas_cobranza:cuentas_cobranza!fk_acpago_cuenta!inner (
               id,
-              ofertas:ofertas!inner (
+              ofertas:ofertas!fk_ccob_oferta!inner (
                 id,
-                personas:personas!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
+                personas:personas!fk_ofertas_persona_lead!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
               )
             )
           `)
@@ -155,6 +165,7 @@ Deno.serve(async (req) => {
         const { data: rows, error: qErr } = await q;
         if (qErr) {
           console.error(`${tag} trigger ${trig.id} offset ${offset}: query error`, qErr);
+          summary.details.push({ trigger_id: trig.id, offset, fecha_objetivo: fechaObjetivo, query_error: (qErr as any).message || String(qErr), code: (qErr as any).code || null });
           summary.errors++;
           continue;
         }
@@ -222,6 +233,16 @@ Deno.serve(async (req) => {
 
           let okEmail = true, okWa = true;
           let errMsg = '';
+
+          if (dryRun) {
+            await supabaseAdmin
+              .from('avisos_envios_evento')
+              .update({ estado: 'simulado', error: 'dry_run', payload_enviado: templateModel })
+              .eq('id', ins.id);
+            summary.details.push({ trigger_id: trig.id, clave_entidad: claveEntidad, estado: 'simulado', email: persona.email, telefono: persona.telefono });
+            summary.sent++;
+            continue;
+          }
 
           // EMAIL
           if ((channel === 'email' || channel === 'ambos') && persona.email) {
