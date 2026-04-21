@@ -306,6 +306,33 @@ const NotificacionesConfig = () => {
 
   const getRolName = (id: number) => roles.find(r => r.id === id)?.nombre || `Rol ${id}`;
 
+  // Detect if the mapping JSON already provides a value for a key path (e.g. "asunto" or "mensaje.detalles")
+  const mapeoHasPath = (path: string): boolean => {
+    try {
+      const parsed = JSON.parse(mapeoJsonText || '{}');
+      const parts = path.split('.');
+      let cur: any = parsed;
+      for (const p of parts) {
+        if (cur && typeof cur === 'object' && p in cur) cur = cur[p];
+        else return false;
+      }
+      // Consider present only if it's a non-empty string or a non-null value
+      if (typeof cur === 'string') return cur.trim().length > 0;
+      return cur !== undefined && cur !== null;
+    } catch {
+      return false;
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: 'Copiado', description: `${text} copiado al portapapeles` });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+    }
+  };
+
   const canalLabel = (canal: string) => {
     switch (canal) {
       case 'email': return 'Email';
