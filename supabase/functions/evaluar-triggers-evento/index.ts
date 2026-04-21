@@ -56,6 +56,22 @@ function fmtDate(s: string): string {
   catch { return s; }
 }
 
+// Normaliza un teléfono al formato que espera la API de WhatsApp (Evolution):
+//   - Quita todo lo que no sea dígito (espacios, guiones, paréntesis, '+')
+//   - Si quedan 10 dígitos, asume México móvil → antepone '521'
+//   - Si empieza con '52' y la posición 2 no es '1' y total es 12 dígitos, antepone el '1' (52 + 1 + 10)
+//   - En otros casos, deja los dígitos tal cual
+function normalizarTelefonoWA(raw: string): string {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return `521${digits}`;
+  if (digits.length === 12 && digits.startsWith('52') && digits[2] !== '1') {
+    return `521${digits.slice(2)}`;
+  }
+  return digits;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -123,17 +139,21 @@ Deno.serve(async (req) => {
         .select('correos')
         .eq('id_aviso', aviso.id);
 
-      const manualEmails: { email: string; nombre: string }[] = [];
+      const manualEmails: { email: string; nombre: string; telefono: string }[] = [];
       for (const rd of rolesDest || []) {
         const correos: any = (rd as any).correos;
         const lista: any[] = Array.isArray(correos?.destinatarios) ? correos.destinatarios : [];
         for (const it of lista) {
           const em = typeof it?.email === 'string' ? it.email.trim() : '';
-          if (em.includes('@')) manualEmails.push({ email: em, nombre: it?.nombre || '' });
+          if (em.includes('@')) {
+            const tel = typeof it?.telefono === 'string' ? it.telefono.trim() : '';
+            manualEmails.push({ email: em, nombre: it?.nombre || '', telefono: tel });
+          }
         }
       }
       if (manualEmails.length > 0) {
-        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} correo(s) manual(es) → se enviarán como copia adicional al cliente real`);
+        const conTel = manualEmails.filter(m => m.telefono).length;
+        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} destinatario(s) manual(es) (${conTel} con teléfono) → copia adicional al cliente real`);
       }
 
       const offsets: number[] = (trig.offsets_dias as number[]) || [];
