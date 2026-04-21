@@ -264,6 +264,7 @@ export default function Ejecuciones() {
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="completado">Completado</SelectItem>
+            <SelectItem value="parcial">Parcial</SelectItem>
             <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
