@@ -353,12 +353,13 @@ export default function RastreoPagosSTP() {
                   <TableHead>Razón Rechazo</TableHead>
                   <TableHead>Fecha Creación</TableHead>
                   <TableHead>Tipo de Pago</TableHead>
+                  <TableHead>Evidencia</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
+                    <TableCell colSpan={12} className="text-center py-8">
                       <div className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                         <span className="ml-2">Cargando...</span>
@@ -367,7 +368,7 @@ export default function RastreoPagosSTP() {
                   </TableRow>
                 ) : pagos?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       No se encontraron pagos con los filtros aplicados
                     </TableCell>
                   </TableRow>
