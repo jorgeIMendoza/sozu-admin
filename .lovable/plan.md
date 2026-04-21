@@ -1,61 +1,46 @@
 
 
-## Por qué no aparece el log + qué offset usar
+## Verificar invalidación del PDF al reciclar CLABE en oferta de producto
 
-### Problema 1 — La pantalla "Ejecuciones" no muestra los triggers por evento
+### Pregunta
+Cuando se recicla la CLABE de la oferta 1798 hacia la nueva oferta de producto, ¿se está limpiando la URL del PDF de la oferta 1798 para que se regenere cuando se requiera?
 
-En tu sistema **conviven dos motores de envío** que escriben en tablas distintas:
+### Hallazgos
 
-| Motor | Cuándo se usa | Tabla donde registra |
-|---|---|---|
-| `enviar-aviso-bulk` | Envíos manuales masivos ("Enviar Avisos") | `avisos_ejecuciones` ← **la que lee la pantalla "Ejecuciones"** |
-| `evaluar-triggers-evento` | Recordatorios automáticos por evento (cron) | `avisos_envios_evento` ← **NO se ve en ninguna pantalla** |
+**1. `clearSourceOfferClabes` (src/utils/clabeReuseUtils.ts):**
+Solo hace `UPDATE ofertas SET clabe_stp_tmp_producto = NULL`. **NO toca la columna `url`**, por lo que el PDF de la oferta 1798 conserva su link aunque la CLABE que está impresa adentro ya no le pertenezca.
 
-Por eso aunque el cron se ejecute correctamente a las 10:19, jamás aparecerá un renglón en la pantalla "Ejecuciones" — el aviso "Recordatorio de pago" usa el motor de eventos, no el masivo.
+**2. `OfertaPdfStorageService.validateCriticalData` (src/services/ofertaPdfStorageService.ts):**
+La validación de invalidación lee `clabe_stp_tmp_apartado` de la propiedad — **NO valida `clabe_stp_tmp_producto` de la oferta**. Para ofertas de producto, el cambio de CLABE pasa desapercibido y el PDF viejo se sigue sirviendo.
 
-### Problema 2 — Aun si se viera, hoy no enviaría nada
+**3. Resultado actual:**
+Si alguien descarga el PDF de la oferta 1798 después de que su CLABE fue reciclada, verá una CLABE incorrecta (la que ahora pertenece a la nueva oferta). El link no se invalida automáticamente.
 
-Tu trigger 6 está configurado con `offsets_dias = [-3]`. La lógica actual es:
-`fecha_objetivo = hoy − offset` → hoy (21-abr) − (−3) = **24-abr-2026**
+### Cambio propuesto
 
-Datos reales en `acuerdos_pago` (activos, no pagados):
+**Archivo:** `src/utils/clabeReuseUtils.ts` — función `clearSourceOfferClabes`
+
+Extender el `UPDATE` para también limpiar `url` en las ofertas fuente:
 
 ```text
-18-abr → 1     25-abr → 6     30-abr → 11    07-may → 1
-20-abr → 1     28-abr → 2     04-may → 2     08-may → 1
-22-abr → 1     ── 24-abr ──   05-may → 78    10-may → 3
-                  0 registros                 11-may → 1
+Antes:
+  UPDATE ofertas
+  SET clabe_stp_tmp_producto = NULL
+  WHERE id IN (sourceOfferIds)
+
+Después:
+  UPDATE ofertas
+  SET clabe_stp_tmp_producto = NULL,
+      url = NULL
+  WHERE id IN (sourceOfferIds)
 ```
 
-24-abr tiene **0 acuerdos** → la función corre sin error pero envía 0 correos y no escribe nada en ninguna tabla visible.
+Con esto, la próxima vez que alguien intente descargar el PDF de la oferta fuente, `getExistingUrl` devolverá `null` y el sistema regenerará el PDF con los datos actuales (sin la CLABE que ya fue reasignada).
 
-### Qué offset deberías poner
+### Notas
 
-Recordando la semántica de la UI: **negativo = días ANTES del vencimiento**. Recomiendo dos cambios:
-
-1. **Múltiples offsets** para cubrir varias ventanas de aviso, no solo una:
-   - `[-7, -3, -1]` → recordatorio 7, 3 y 1 día antes del pago.
-   - Con esos offsets, mañana 22-abr enviaría a los pagos del 29-abr (no hay), 25-abr (6 acuerdos) y 23-abr (no hay) → **6 envíos reales mañana** y muchos más los días siguientes (30-abr, 5-may).
-2. **Validar HOY mismo** con un offset que sí tenga datos:
-   - `-1` → mañana 22-abr (1 acuerdo)
-   - `-4` → 25-abr (6 acuerdos)
-   - `-9` → 30-abr (11 acuerdos)
-
-### Solución propuesta (3 acciones)
-
-#### A. Hacer visibles los envíos por evento en la pantalla "Ejecuciones"
-Modificar `src/pages/admin/comunicacion/Ejecuciones.tsx` para que además de leer `avisos_ejecuciones` (envíos masivos) también lea `avisos_envios_evento` agrupado por `(id_aviso, id_trigger, fecha_envio::date, fecha_objetivo)`, y los muestre como filas con:
-- **Trigger**: badge `"evento"` (vs el actual `"manual"`)
-- **Destinatarios / Enviados / Errores**: contados de los estados `enviado`, `parcial`, `error`
-- **Detalle de error**: concatenación de `email_destino + error` para los renglones con `estado='error'` (mismo modal de errores que ya existe)
-
-Así verás cada corrida del cron de las 10:19 con su resultado, igual que ves los envíos masivos.
-
-#### B. Cambiar el offset del trigger 6
-Actualizar `avisos_triggers_evento.offsets_dias` del trigger `id=6` de `[-3]` a `[-7, -3, -1]` (o el conjunto que prefieras). Esto se hace desde la pantalla de administración de avisos, o con un UPDATE.
-
-#### C. Validar inmediatamente sin esperar al cron de mañana
-Llamar la función con `?ignore_window=1&override_offset=-4` para forzar un envío real a los 6 acuerdos del 25-abr y confirmar que el flujo Postmark funciona end-to-end.
-
-### Preguntas antes de implementar
+- El cambio es independiente del fix previo (mover `clearSourceOfferClabes` antes del INSERT en `NewProductOfferDialog.tsx`). Ambos se aplican en la misma intervención.
+- No requiere migración de BD ni cambios de RLS.
+- No afecta a las ofertas que conservan su CLABE — solo a las que la ceden.
+- La regeneración del PDF es bajo demanda (cuando se descarga), no se dispara automáticamente.
 
