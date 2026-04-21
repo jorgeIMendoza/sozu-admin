@@ -125,9 +125,28 @@ export default function RastreoPagosSTP() {
       }
       
       // Enrich pagos with real type
-      return (data || []).map(pago => ({
+      // Fetch evidence URLs (url_cep / url_recibo) from pagos by clave_rastreo
+      const claveRastreos = [...new Set((data || []).map((p) => p.claverastreo).filter(Boolean))];
+      const evidenciaMap: Record<string, string | null> = {};
+      if (claveRastreos.length > 0) {
+        const { data: pagosData } = await supabase
+          .from("pagos")
+          .select("clave_rastreo, url_cep, url_recibo")
+          .in("clave_rastreo", claveRastreos);
+        if (pagosData) {
+          for (const p of pagosData) {
+            if (!p.clave_rastreo) continue;
+            if (evidenciaMap[p.clave_rastreo]) continue; // keep first match
+            const url = (p.url_cep && p.url_cep.trim()) || (p.url_recibo && p.url_recibo.trim()) || null;
+            evidenciaMap[p.clave_rastreo] = url;
+          }
+        }
+      }
+
+      return (data || []).map((pago) => ({
         ...pago,
-        tipo_real: clabeTypeMap[pago.cuenta_beneficiario] || TIPOS_PAGO[pago.id_tipo_pago] || `Tipo ${pago.id_tipo_pago}`
+        tipo_real: clabeTypeMap[pago.cuenta_beneficiario] || TIPOS_PAGO[pago.id_tipo_pago] || `Tipo ${pago.id_tipo_pago}`,
+        evidencia_url: evidenciaMap[pago.claverastreo] ?? null,
       })) as PagoSTP[];
     },
   });
