@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, Save, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Eye } from "lucide-react";
@@ -84,6 +84,7 @@ const NotificacionesConfig = () => {
   const [loadingVars, setLoadingVars] = useState(false);
   const [mapeoJsonText, setMapeoJsonText] = useState<string>('{}');
   const [mapeoJsonError, setMapeoJsonError] = useState<string | null>(null);
+  const mapeoTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({
     nombre_desarrollo: 'Torre Sozu Polanco',
@@ -333,6 +334,60 @@ const NotificacionesConfig = () => {
     }
   };
 
+  // Jump to the JSON key for a given dotted variable path. If missing, insert a stub key.
+  const jumpToJsonKey = (variablePath: string) => {
+    const ta = mapeoTextareaRef.current;
+    if (!ta) return;
+    const parts = variablePath.split('.');
+    const leafKey = parts[parts.length - 1];
+    const text = mapeoJsonText || '';
+    // Try to find "leafKey" (the deepest key) in the JSON text.
+    const keyRegex = new RegExp(`"${leafKey.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}"\\s*:`);
+    const match = keyRegex.exec(text);
+    if (match) {
+      const start = match.index;
+      const end = start + match[0].length;
+      ta.focus();
+      ta.setSelectionRange(start, end);
+      // Scroll the match roughly into view by computing approximate line.
+      const lineNumber = text.slice(0, start).split('\n').length;
+      const lineHeight = 16; // approx for text-xs font
+      ta.scrollTop = Math.max(0, (lineNumber - 3) * lineHeight);
+      toast({ title: 'Variable ubicada', description: `Key "${leafKey}" en el JSON` });
+    } else {
+      // Build a nested stub for the missing path and append/merge it into the JSON.
+      try {
+        const parsed = JSON.parse(text || '{}');
+        const obj = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        let cur: any = obj;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const k = parts[i];
+          if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
+          cur = cur[k];
+        }
+        if (!(leafKey in cur)) cur[leafKey] = '';
+        const newText = JSON.stringify(obj, null, 2);
+        setMapeoJsonText(newText);
+        setEditItem(prev => prev ? { ...prev, mapeo_variables_postmark: obj } : prev);
+        // Focus the newly inserted key after state update.
+        setTimeout(() => {
+          const ta2 = mapeoTextareaRef.current;
+          if (!ta2) return;
+          const m = keyRegex.exec(newText);
+          if (m) {
+            ta2.focus();
+            ta2.setSelectionRange(m.index, m.index + m[0].length);
+            const lineNumber = newText.slice(0, m.index).split('\n').length;
+            ta2.scrollTop = Math.max(0, (lineNumber - 3) * 16);
+          }
+        }, 50);
+        toast({ title: 'Variable agregada', description: `Se agregó "${leafKey}" al JSON` });
+      } catch {
+        toast({ title: 'JSON inválido', description: 'Corrige el JSON antes de saltar a la variable', variant: 'destructive' });
+      }
+    }
+  };
+
   const canalLabel = (canal: string) => {
     switch (canal) {
       case 'email': return 'Email';
@@ -561,10 +616,16 @@ const NotificacionesConfig = () => {
 
                 {templateVars.length > 0 && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Variables que la plantilla espera:</p>
+                    <p className="text-xs text-muted-foreground mb-1">Variables que la plantilla espera (click para ir a la key en el JSON):</p>
                     <div className="flex flex-wrap gap-1">
                       {templateVars.map(v => (
-                        <Badge key={v} variant="secondary" className="font-mono text-xs">{`{{${v}}}`}</Badge>
+                        <Badge
+                          key={v}
+                          variant="secondary"
+                          className="font-mono text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                          onClick={() => jumpToJsonKey(v)}
+                          title="Click para ubicar la key en el JSON"
+                        >{`{{${v}}}`}</Badge>
                       ))}
                     </div>
                   </div>
@@ -590,6 +651,7 @@ const NotificacionesConfig = () => {
                 <div>
                   <Label className="text-xs">Mapeo (JSON)</Label>
                   <Textarea
+                    ref={mapeoTextareaRef}
                     value={mapeoJsonText}
                     onChange={e => {
                       setMapeoJsonText(e.target.value);
