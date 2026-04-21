@@ -40,6 +40,7 @@ interface NotificacionConfig {
   plantilla_wa: string;
   plantilla_email_detalles: string;
   postmark_template_id: number;
+  mapeo_variables_postmark: Record<string, string>;
 }
 
 interface Rol {
@@ -64,7 +65,10 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
   plantilla_wa: '',
   plantilla_email_detalles: '',
   postmark_template_id: 41353048,
+  mapeo_variables_postmark: {},
 };
+
+const SYSTEM_PLACEHOLDERS = ['{nombre_desarrollo}', '{nombre_esquema}', '{id_proyecto}'];
 
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
