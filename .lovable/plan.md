@@ -1,46 +1,38 @@
 
 
-## Verificar invalidación del PDF al reciclar CLABE en oferta de producto
+## Agregar columna "Evidencia" en Rastreo de Pagos STP
 
-### Pregunta
-Cuando se recicla la CLABE de la oferta 1798 hacia la nueva oferta de producto, ¿se está limpiando la URL del PDF de la oferta 1798 para que se regenere cuando se requiera?
+### Objetivo
+En la tabla de Rastreo de Pagos STP (`/admin/rastreo-pagos-stp`), agregar una nueva columna **Evidencia** que muestre el CEP/Recibo de cada pago y permita previsualizarlo en un modal.
 
-### Hallazgos
+### Comportamiento
 
-**1. `clearSourceOfferClabes` (src/utils/clabeReuseUtils.ts):**
-Solo hace `UPDATE ofertas SET clabe_stp_tmp_producto = NULL`. **NO toca la columna `url`**, por lo que el PDF de la oferta 1798 conserva su link aunque la CLABE que está impresa adentro ya no le pertenezca.
+Para cada fila se buscará en la tabla `pagos` (uniendo por `clave_rastreo = pagos_stp_raw.claverastreo`) el primer pago coincidente:
 
-**2. `OfertaPdfStorageService.validateCriticalData` (src/services/ofertaPdfStorageService.ts):**
-La validación de invalidación lee `clabe_stp_tmp_apartado` de la propiedad — **NO valida `clabe_stp_tmp_producto` de la oferta**. Para ofertas de producto, el cambio de CLABE pasa desapercibido y el PDF viejo se sigue sirviendo.
+1. **Si `url_cep` no es null/vacío** → mostrar botón con ícono de ojito 👁 que abre el PDF de `url_cep`.
+2. **Si `url_cep` está vacío pero `url_recibo` no** → mostrar el botón de ojito que abre el PDF de `url_recibo`.
+3. **Si ambos están null/vacíos** → mostrar la leyenda **"Aún sin CEP"** en texto tenue (sin botón).
+4. **Si no existe registro en `pagos`** (el pago STP aún no fue conciliado) → mostrar también **"Aún sin CEP"**.
 
-**3. Resultado actual:**
-Si alguien descarga el PDF de la oferta 1798 después de que su CLABE fue reciclada, verá una CLABE incorrecta (la que ahora pertenece a la nueva oferta). El link no se invalida automáticamente.
+### Cambios técnicos
 
-### Cambio propuesto
+**Archivo:** `src/pages/admin/RastreoPagosSTP.tsx`
 
-**Archivo:** `src/utils/clabeReuseUtils.ts` — función `clearSourceOfferClabes`
+1. **Extender el query** después de obtener `pagos_stp_raw`:
+   - Tomar el listado de `claverastreo` resultante.
+   - Hacer un `select` adicional a `pagos` filtrando por `clave_rastreo IN (...)` trayendo `clave_rastreo, url_cep, url_recibo`.
+   - Construir un mapa `claveRastreo → { url_cep, url_recibo }` y enriquecer cada `PagoSTP` con un campo `evidencia_url: string | null`.
 
-Extender el `UPDATE` para también limpiar `url` en las ofertas fuente:
+2. **Agregar columna en la tabla**:
+   - Header `<TableHead>Evidencia</TableHead>` (al final, después de "Tipo de Pago").
+   - En cada fila: si `evidencia_url` existe, renderizar un botón `Eye` que abre `PdfViewerDialog`. Si no, mostrar `<span className="text-xs text-muted-foreground italic">Aún sin CEP</span>`.
 
-```text
-Antes:
-  UPDATE ofertas
-  SET clabe_stp_tmp_producto = NULL
-  WHERE id IN (sourceOfferIds)
+3. **Modal de preview**: usar el componente existente `PdfViewerDialog` (`src/components/admin/PdfViewerDialog.tsx`) que ya maneja URLs públicas y firmadas de Supabase Storage. Estado local: `const [evidenciaUrl, setEvidenciaUrl] = useState<string | null>(null)`.
 
-Después:
-  UPDATE ofertas
-  SET clabe_stp_tmp_producto = NULL,
-      url = NULL
-  WHERE id IN (sourceOfferIds)
-```
-
-Con esto, la próxima vez que alguien intente descargar el PDF de la oferta fuente, `getExistingUrl` devolverá `null` y el sistema regenerará el PDF con los datos actuales (sin la CLABE que ya fue reasignada).
+4. **Actualizar `colSpan`** de los estados "Cargando" y "Sin resultados" de `11` → `12`.
 
 ### Notas
-
-- El cambio es independiente del fix previo (mover `clearSourceOfferClabes` antes del INSERT en `NewProductOfferDialog.tsx`). Ambos se aplican en la misma intervención.
-- No requiere migración de BD ni cambios de RLS.
-- No afecta a las ofertas que conservan su CLABE — solo a las que la ceden.
-- La regeneración del PDF es bajo demanda (cuando se descarga), no se dispara automáticamente.
+- No requiere migraciones ni cambios en RLS (ya hay acceso de lectura a `pagos` desde el panel admin).
+- Si el pago STP es de tipo Comisión (no genera CEP en el flujo actual), simplemente caerá en el caso "Aún sin CEP".
+- Reutilizamos completamente `PdfViewerDialog`, sin crear componentes nuevos.
 
