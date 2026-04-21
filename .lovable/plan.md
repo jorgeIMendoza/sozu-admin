@@ -1,76 +1,61 @@
 
 
-# Implementación: payload configurable de Postmark por aviso
+## Por qué no aparece el log + qué offset usar
 
-## 1. Migración de base de datos
+### Problema 1 — La pantalla "Ejecuciones" no muestra los triggers por evento
 
-```sql
-ALTER TABLE avisos
-  ADD COLUMN IF NOT EXISTS payload_postmark jsonb;
+En tu sistema **conviven dos motores de envío** que escriben en tablas distintas:
 
-ALTER TABLE avisos_envios_evento
-  ADD COLUMN IF NOT EXISTS payload_enviado jsonb;
+| Motor | Cuándo se usa | Tabla donde registra |
+|---|---|---|
+| `enviar-aviso-bulk` | Envíos manuales masivos ("Enviar Avisos") | `avisos_ejecuciones` ← **la que lee la pantalla "Ejecuciones"** |
+| `evaluar-triggers-evento` | Recordatorios automáticos por evento (cron) | `avisos_envios_evento` ← **NO se ve en ninguna pantalla** |
+
+Por eso aunque el cron se ejecute correctamente a las 10:19, jamás aparecerá un renglón en la pantalla "Ejecuciones" — el aviso "Recordatorio de pago" usa el motor de eventos, no el masivo.
+
+### Problema 2 — Aun si se viera, hoy no enviaría nada
+
+Tu trigger 6 está configurado con `offsets_dias = [-3]`. La lógica actual es:
+`fecha_objetivo = hoy − offset` → hoy (21-abr) − (−3) = **24-abr-2026**
+
+Datos reales en `acuerdos_pago` (activos, no pagados):
+
+```text
+18-abr → 1     25-abr → 6     30-abr → 11    07-may → 1
+20-abr → 1     28-abr → 2     04-may → 2     08-may → 1
+22-abr → 1     ── 24-abr ──   05-may → 78    10-may → 3
+                  0 registros                 11-may → 1
 ```
 
-Sin defaults: `null` significa "usar el payload clásico" (compatibilidad con todos los avisos existentes).
+24-abr tiene **0 acuerdos** → la función corre sin error pero envía 0 correos y no escribe nada en ninguna tabla visible.
 
-## 2. Helper compartido `renderJsonTemplate`
+### Qué offset deberías poner
 
-Función recursiva que recorre cualquier estructura JSON y reemplaza `{{var}}` por el valor del contexto.
+Recordando la semántica de la UI: **negativo = días ANTES del vencimiento**. Recomiendo dos cambios:
 
-- **Strings**: `"Hola {{nombre}}"` → `"Hola Margot"`. Variables faltantes → `""`. Logging warning si la variable no existe.
-- **Objetos**: recorre cada clave y rendea su valor.
-- **Arrays**: rendea cada elemento.
-- **Números/booleans/null**: se devuelven tal cual.
+1. **Múltiples offsets** para cubrir varias ventanas de aviso, no solo una:
+   - `[-7, -3, -1]` → recordatorio 7, 3 y 1 día antes del pago.
+   - Con esos offsets, mañana 22-abr enviaría a los pagos del 29-abr (no hay), 25-abr (6 acuerdos) y 23-abr (no hay) → **6 envíos reales mañana** y muchos más los días siguientes (30-abr, 5-may).
+2. **Validar HOY mismo** con un offset que sí tenga datos:
+   - `-1` → mañana 22-abr (1 acuerdo)
+   - `-4` → 25-abr (6 acuerdos)
+   - `-9` → 30-abr (11 acuerdos)
 
-Se duplica en `enviar-aviso-bulk/index.ts` y `evaluar-triggers-evento/index.ts` (las edge functions no comparten módulos).
+### Solución propuesta (3 acciones)
 
-## 3. Cambios en `evaluar-triggers-evento`
+#### A. Hacer visibles los envíos por evento en la pantalla "Ejecuciones"
+Modificar `src/pages/admin/comunicacion/Ejecuciones.tsx` para que además de leer `avisos_ejecuciones` (envíos masivos) también lea `avisos_envios_evento` agrupado por `(id_aviso, id_trigger, fecha_envio::date, fecha_objetivo)`, y los muestre como filas con:
+- **Trigger**: badge `"evento"` (vs el actual `"manual"`)
+- **Destinatarios / Enviados / Errores**: contados de los estados `enviado`, `parcial`, `error`
+- **Detalle de error**: concatenación de `email_destino + error` para los renglones con `estado='error'` (mismo modal de errores que ya existe)
 
-- Construir `context` con todas las variables del acuerdo: `nombre`, `email`, `telefono`, `asunto`, `texto` (HTML renderizado), `monto` (formateado MXN), `fecha_pago` (formato largo es-MX), `orden`, `cuenta_id`, `offset`.
-- Si `aviso.payload_postmark` existe → `templateModel = renderJsonTemplate(aviso.payload_postmark, context)`.
-- Si no existe → `templateModel = { mensaje: { nombre, texto, asunto } }` (comportamiento actual).
-- Persistir `payload_enviado = templateModel` en `avisos_envios_evento` al actualizar el estado final.
+Así verás cada corrida del cron de las 10:19 con su resultado, igual que ves los envíos masivos.
 
-## 4. Cambios en `enviar-aviso-bulk` (manual / cron)
+#### B. Cambiar el offset del trigger 6
+Actualizar `avisos_triggers_evento.offsets_dias` del trigger `id=6` de `[-3]` a `[-7, -3, -1]` (o el conjunto que prefieras). Esto se hace desde la pantalla de administración de avisos, o con un UPDATE.
 
-- Construir `context` por destinatario: `nombre`, `email`, `asunto`, `texto`.
-- Mismo fallback: si `aviso.payload_postmark` existe se usa el render dinámico, si no, payload clásico.
-- No requiere cambios de schema en `avisos_ejecuciones` (ya existe `detalle_error`); el payload por destinatario no se persiste para evitar inflar la tabla en envíos masivos.
+#### C. Validar inmediatamente sin esperar al cron de mañana
+Llamar la función con `?ignore_window=1&override_offset=-4` para forzar un envío real a los 6 acuerdos del 25-abr y confirmar que el flujo Postmark funciona end-to-end.
 
-## 5. UI — sección "Payload del template" en `AdministrarAvisos.tsx`
-
-Nueva sección colapsable debajo del selector de template Postmark, visible siempre que el aviso tenga template Postmark asignado.
-
-**Componentes:**
-- **Chips de variables disponibles** (click → copia `{{variable}}` al portapapeles + toast). Lista dinámica:
-  - Manual / Cron: `nombre`, `email`, `asunto`, `texto`.
-  - Evento: añade `monto`, `fecha_pago`, `orden`, `cuenta_id`, `offset`, `telefono`.
-- **Textarea con JSON** (font mono, ~10 filas). Default cuando se activa: payload clásico `{"mensaje":{"nombre":"{{nombre}}","texto":"{{texto}}","asunto":"{{asunto}}"}}`.
-- **Validación** al guardar: `JSON.parse` con try/catch; si falla, bloquea con toast de error indicando línea aproximada.
-- **Botón "Probar render"**: abre un Dialog con el JSON renderizado usando valores de ejemplo (`Margot Pérez`, `$5,000.00`, `25 de abril de 2026`, etc.) para validar visualmente.
-- **Toggle "Usar payload personalizado"**: si está apagado, se guarda `payload_postmark = null` (clásico).
-
-## 6. Verificación end-to-end
-
-Tras desplegar:
-1. Confirmar columnas creadas con `supabase--read_query`.
-2. Buscar un aviso por evento existente o uno con template Postmark asignado, configurar un `payload_postmark` custom (por ejemplo `{"mensaje":{"nombre":"{{nombre}}","texto":"{{texto}}","asunto":"{{asunto}}"},"datos":{"monto":"{{monto}}","fecha":"{{fecha_pago}}"}}`).
-3. Localizar un acuerdo activo cuya `fecha_pago` coincida con `hoy + offset` del trigger; si no hay coincidencia, ajustar temporalmente el offset del trigger para forzar el match.
-4. Disparar `evaluar-triggers-evento` con `supabase--curl_edge_functions`.
-5. Consultar `avisos_envios_evento` ordenado por `created_at desc` y mostrar el `payload_enviado` resultante.
-
-## Archivos a modificar
-
-- `supabase/migrations/<timestamp>_payload_postmark.sql` (nuevo)
-- `supabase/functions/evaluar-triggers-evento/index.ts`
-- `supabase/functions/enviar-aviso-bulk/index.ts`
-- `src/pages/admin/comunicacion/AdministrarAvisos.tsx`
-
-## Notas técnicas
-
-- El helper `renderTemplate` ya existe en `evaluar-triggers-evento`; `renderJsonTemplate` lo reutiliza por dentro para los strings.
-- Variables faltantes producen `""` (no `undefined`/`null`) para no romper Postmark.
-- Postmark acepta `TemplateModel` con cualquier forma anidada — el match contra el template visual lo hace por el path completo de llaves.
-- El payload no se valida contra el template real de Postmark (no hay API para ello sin enviar); el "Probar render" sólo valida la sustitución local.
+### Preguntas antes de implementar
 
