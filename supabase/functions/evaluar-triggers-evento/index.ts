@@ -263,12 +263,13 @@ Deno.serve(async (req) => {
           //   1) Cliente real (o email_override si está en filtros) — siempre que tenga email
           //   2) Cada correo manual configurado en la UI (adicionales / copia)
           // Cada destinatario tiene su propia clave de idempotencia para no duplicar envíos.
-          type Dest = { email: string | null; nombre: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
+          type Dest = { email: string | null; nombre: string; telefono: string; tipo: 'cliente' | 'manual'; claveEntidad: string };
           const destinatarios: Dest[] = [];
           if (emailReal) {
             destinatarios.push({
               email: emailReal,
               nombre: persona.nombre_legal || '',
+              telefono: persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : '',
               tipo: 'cliente',
               claveEntidad: `acuerdo:${ac.id}:offset:${offset}`,
             });
@@ -279,6 +280,7 @@ Deno.serve(async (req) => {
             destinatarios.push({
               email: m.email,
               nombre: m.nombre || persona.nombre_legal || '',
+              telefono: m.telefono || '',
               tipo: 'manual',
               claveEntidad: `acuerdo:${ac.id}:offset:${offset}:manual:${m.email}`,
             });
@@ -294,7 +296,7 @@ Deno.serve(async (req) => {
                 clave_entidad: dest.claveEntidad,
                 fecha_objetivo: fechaObjetivo,
                 email_destino: dest.email,
-                telefono_destino: dest.tipo === 'cliente' && persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : null,
+                telefono_destino: dest.telefono ? normalizarTelefonoWA(dest.telefono) : null,
                 canal: channel,
                 estado: 'enviando',
               })
@@ -362,8 +364,10 @@ Deno.serve(async (req) => {
               }
             }
 
-            // WHATSAPP via enviar-notificacion — solo para cliente real (los manuales son solo email)
-            if (dest.tipo === 'cliente' && (channel === 'whatsapp' || channel === 'ambos') && persona.telefono) {
+            // WHATSAPP via enviar-notificacion — para cliente real Y manuales que tengan teléfono.
+            // El cuerpo del WA es el "Contenido del mensaje" (mensaje_html) sin etiquetas, con placeholders renderizados.
+            const telWA = normalizarTelefonoWA(dest.telefono || '');
+            if ((channel === 'whatsapp' || channel === 'ambos') && telWA) {
               try {
                 const waToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN') || '';
                 const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/enviar-notificacion`;
@@ -376,12 +380,13 @@ Deno.serve(async (req) => {
                   },
                   body: JSON.stringify({
                     tipo: 'whatsapp',
-                    telefono: `${persona.clave_pais_telefono || ''}${persona.telefono}`.replace(/\D/g, ''),
+                    telefono: telWA,
                     mensaje: destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
                     origen: 'aviso_evento',
                     aviso_id: aviso.id,
                     trigger_id: trig.id,
                     clave_entidad: dest.claveEntidad,
+                    destinatario_tipo: dest.tipo,
                   }),
                 });
                 if (!r.ok) { okWa = false; errMsg += `wa: ${r.status}; `; }
