@@ -36,7 +36,14 @@ interface ProductPaymentSchemeManagementProps {
 export const ProductPaymentSchemeManagement = ({ productId, productName }: ProductPaymentSchemeManagementProps) => {
   const [open, setOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [orderedSchemes, setOrderedSchemes] = useState<any[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Always fetch count for display in the button
   const { data: schemeCount = 0 } = useQuery({
@@ -73,7 +80,8 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
           activo: true,
           es_manual: false 
         })
-        .order("nombre");
+        .order("orden", { ascending: true })
+        .order("id", { ascending: true });
       
       if (error) {
         console.error("Error fetching product payment schemes:", error);
@@ -84,6 +92,51 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
     },
     enabled: !!productId && productId > 0 && open,
   });
+
+  useEffect(() => {
+    if (schemes) setOrderedSchemes(schemes);
+  }, [schemes]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedSchemes.findIndex((s) => s.id === active.id);
+    const newIndex = orderedSchemes.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(orderedSchemes, oldIndex, newIndex);
+    setOrderedSchemes(reordered);
+
+    setIsSavingOrder(true);
+    try {
+      const updates = reordered.map((s, idx) =>
+        supabase
+          .from("esquemas_pago")
+          .update({ orden: idx + 1 })
+          .eq("id", s.id)
+      );
+      const results = await Promise.all(updates);
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) throw errors[0].error;
+
+      toast({
+        title: "Orden actualizado",
+        description: "El orden de los esquemas se guardó correctamente.",
+      });
+      refetch();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el nuevo orden.",
+        variant: "destructive",
+      });
+      if (schemes) setOrderedSchemes(schemes);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
 
   const handleSchemeAdded = () => {
     setRefreshKey(prev => prev + 1);
