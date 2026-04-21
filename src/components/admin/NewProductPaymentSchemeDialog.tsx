@@ -83,6 +83,18 @@ export const NewProductPaymentSchemeDialog = ({ productId, onSchemeAdded }: NewP
         return;
       }
 
+      // Calcular siguiente orden para este producto
+      const { data: maxOrdenData } = await supabase
+        .from("esquemas_pago")
+        .select("orden")
+        .eq("id_producto", productId)
+        .eq("activo", true)
+        .eq("es_manual", false)
+        .order("orden", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextOrden = ((maxOrdenData?.orden ?? 0) as number) + 1;
+
       const { error } = await supabase
         .from("esquemas_pago")
         .insert([{
@@ -95,6 +107,7 @@ export const NewProductPaymentSchemeDialog = ({ productId, onSchemeAdded }: NewP
           numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
           porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
           es_manual: false,
+          orden: nextOrden,
         }]);
 
       if (error) throw error;
