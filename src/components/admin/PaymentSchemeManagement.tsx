@@ -4,12 +4,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CreditCard, Eye, Edit, Trash2 } from "lucide-react";
+import { CreditCard, Eye, Edit, Trash2, GripVertical } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewPaymentSchemeDialog } from "./NewPaymentSchemeDialog";
 import { EditPaymentSchemeDialog } from "./EditPaymentSchemeDialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useEffect, useState as useStateReact } from "react";
 
 interface PaymentSchemeManagementProps {
   projectId: number;
@@ -33,7 +51,8 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
           activo: true,
           es_manual: false 
         })
-        .order("nombre");
+        .order("orden", { ascending: true })
+        .order("id", { ascending: true });
       
       if (error) {
         console.error("Error fetching payment schemes:", error);
