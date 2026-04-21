@@ -306,6 +306,33 @@ const NotificacionesConfig = () => {
 
   const getRolName = (id: number) => roles.find(r => r.id === id)?.nombre || `Rol ${id}`;
 
+  // Detect if the mapping JSON already provides a value for a key path (e.g. "asunto" or "mensaje.detalles")
+  const mapeoHasPath = (path: string): boolean => {
+    try {
+      const parsed = JSON.parse(mapeoJsonText || '{}');
+      const parts = path.split('.');
+      let cur: any = parsed;
+      for (const p of parts) {
+        if (cur && typeof cur === 'object' && p in cur) cur = cur[p];
+        else return false;
+      }
+      // Consider present only if it's a non-empty string or a non-null value
+      if (typeof cur === 'string') return cur.trim().length > 0;
+      return cur !== undefined && cur !== null;
+    } catch {
+      return false;
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: 'Copiado', description: `${text} copiado al portapapeles` });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+    }
+  };
+
   const canalLabel = (canal: string) => {
     switch (canal) {
       case 'email': return 'Email';
@@ -485,16 +512,6 @@ const NotificacionesConfig = () => {
               </div>
 
               <div>
-                <Label>Asunto del email</Label>
-                <Input
-                  value={editItem.asunto_email}
-                  onChange={e => setEditItem({ ...editItem, asunto_email: e.target.value })}
-                  placeholder="Asunto..."
-                />
-                <p className="text-xs text-muted-foreground mt-1">Placeholders: {'{nombre_desarrollo}'}, {'{nombre_esquema}'}</p>
-              </div>
-
-              <div>
                 <Label>Plantilla de Postmark (Template ID)</Label>
                 <Select
                   value={String(editItem.postmark_template_id ?? 41353048)}
@@ -559,7 +576,13 @@ const NotificacionesConfig = () => {
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {SYSTEM_PLACEHOLDERS.map(p => (
-                      <Badge key={p} variant="outline" className="font-mono text-xs">{p}</Badge>
+                      <Badge
+                        key={p}
+                        variant="outline"
+                        className="font-mono text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                        onClick={() => copyToClipboard(p)}
+                        title="Click para copiar"
+                      >{p}</Badge>
                     ))}
                   </div>
                 </div>
@@ -690,6 +713,34 @@ const NotificacionesConfig = () => {
                 </div>
               </div>
 
+              {!mapeoHasPath('asunto') && (
+                <div>
+                  <Label>Asunto del email</Label>
+                  <Input
+                    value={editItem.asunto_email}
+                    onChange={e => setEditItem({ ...editItem, asunto_email: e.target.value })}
+                    placeholder="Asunto..."
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Placeholders: {'{nombre_desarrollo}'}, {'{nombre_esquema}'}. Se oculta si lo defines en el mapeo como <code>"asunto"</code>.
+                  </p>
+                </div>
+              )}
+
+              {!mapeoHasPath('mensaje.detalles') && (
+                <div>
+                  <Label>Detalles del email (HTML)</Label>
+                  <Textarea
+                    value={editItem.plantilla_email_detalles}
+                    onChange={e => setEditItem({ ...editItem, plantilla_email_detalles: e.target.value })}
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se oculta si lo defines en el mapeo como <code>"mensaje.detalles"</code>.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label>Mensaje WhatsApp</Label>
                 <Textarea
@@ -698,15 +749,6 @@ const NotificacionesConfig = () => {
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground mt-1">Usa *texto* para negritas en WhatsApp</p>
-              </div>
-
-              <div>
-                <Label>Detalles del email (HTML)</Label>
-                <Textarea
-                  value={editItem.plantilla_email_detalles}
-                  onChange={e => setEditItem({ ...editItem, plantilla_email_detalles: e.target.value })}
-                  rows={4}
-                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
