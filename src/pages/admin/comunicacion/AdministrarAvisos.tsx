@@ -273,6 +273,26 @@ export default function AdministrarAvisos() {
   const [payloadEnabled, setPayloadEnabled] = useState<boolean>(false);
   const [payloadJson, setPayloadJson] = useState<string>("");
 
+  // Modal de detalle/preview de un aviso
+  const [detailAviso, setDetailAviso] = useState<Aviso | null>(null);
+  const [detailTriggers, setDetailTriggers] = useState<TriggerEvento[]>([]);
+  const [detailRoles, setDetailRoles] = useState<Array<{ id_rol: number; correos: any }>>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openDetail = async (aviso: Aviso) => {
+    setDetailAviso(aviso);
+    setDetailTriggers([]);
+    setDetailRoles([]);
+    setDetailLoading(true);
+    const [{ data: trigs }, { data: rolesData }] = await Promise.all([
+      supabase.from('avisos_triggers_evento').select('*').eq('id_aviso', aviso.id),
+      supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id),
+    ]);
+    setDetailTriggers((trigs as any) || []);
+    setDetailRoles((rolesData as any) || []);
+    setDetailLoading(false);
+  };
+
   const fetchAvisos = async () => {
     setIsLoading(true);
     const { data } = await supabase.from('avisos').select('*').order('fecha_creacion', { ascending: false });
