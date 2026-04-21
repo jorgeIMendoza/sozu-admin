@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, Save, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Eye } from "lucide-react";
