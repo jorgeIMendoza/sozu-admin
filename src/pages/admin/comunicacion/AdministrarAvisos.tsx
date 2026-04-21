@@ -210,6 +210,29 @@ const CRON_PRESETS = [
   { label: 'Primer día del mes 9am', value: '0 9 1 * *' },
 ];
 
+function describeOffsets(offsets: number[]): string {
+  if (!offsets || offsets.length === 0) return 'sin desfases configurados';
+  const sorted = [...offsets].sort((a, b) => a - b);
+  const parts = sorted.map((o) => {
+    if (o === 0) return 'el mismo día del vencimiento';
+    if (o < 0) return `${Math.abs(o)} día${Math.abs(o) === 1 ? '' : 's'} antes`;
+    return `${o} día${o === 1 ? '' : 's'} después`;
+  });
+  return formatList(parts);
+}
+
+function describeEventTrigger(trigger: TriggerEvento, fuente?: FuenteTrigger): string {
+  const fuenteNombre = fuente?.nombre || 'fuente desconocida';
+  const offsetsTxt = describeOffsets(trigger.offsets_dias || []);
+  const hora = (trigger.hora_envio || '').slice(0, 5);
+  const canalTxt = trigger.canal === 'ambos'
+    ? 'por correo y WhatsApp'
+    : trigger.canal === 'whatsapp'
+    ? 'por WhatsApp'
+    : 'por correo';
+  return `Se dispara automáticamente cuando un registro de "${fuenteNombre}" cumple la condición: ${offsetsTxt} respecto a su fecha objetivo. El envío se realiza ${canalTxt} a las ${hora || '--:--'} (hora México).`;
+}
+
 export default function AdministrarAvisos() {
   const { canCreate, canUpdate, canDelete, isLoading: permLoading } = usePagePermissions('/admin/comunicacion/administrar-avisos');
   const { toast } = useToast();
