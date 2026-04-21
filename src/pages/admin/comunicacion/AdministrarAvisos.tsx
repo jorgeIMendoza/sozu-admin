@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2, Info, Clock, CalendarClock, Bell } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
 import { AvisoPayloadSection } from "@/components/admin/AvisoPayloadSection";
@@ -210,6 +210,29 @@ const CRON_PRESETS = [
   { label: 'Primer día del mes 9am', value: '0 9 1 * *' },
 ];
 
+function describeOffsets(offsets: number[]): string {
+  if (!offsets || offsets.length === 0) return 'sin desfases configurados';
+  const sorted = [...offsets].sort((a, b) => a - b);
+  const parts = sorted.map((o) => {
+    if (o === 0) return 'el mismo día del vencimiento';
+    if (o < 0) return `${Math.abs(o)} día${Math.abs(o) === 1 ? '' : 's'} antes`;
+    return `${o} día${o === 1 ? '' : 's'} después`;
+  });
+  return formatList(parts);
+}
+
+function describeEventTrigger(trigger: TriggerEvento, fuente?: FuenteTrigger): string {
+  const fuenteNombre = fuente?.nombre || 'fuente desconocida';
+  const offsetsTxt = describeOffsets(trigger.offsets_dias || []);
+  const hora = (trigger.hora_envio || '').slice(0, 5);
+  const canalTxt = trigger.canal === 'ambos'
+    ? 'por correo y WhatsApp'
+    : trigger.canal === 'whatsapp'
+    ? 'por WhatsApp'
+    : 'por correo';
+  return `Se dispara automáticamente cuando un registro de "${fuenteNombre}" cumple la condición: ${offsetsTxt} respecto a su fecha objetivo. El envío se realiza ${canalTxt} a las ${hora || '--:--'} (hora México).`;
+}
+
 export default function AdministrarAvisos() {
   const { canCreate, canUpdate, canDelete, isLoading: permLoading } = usePagePermissions('/admin/comunicacion/administrar-avisos');
   const { toast } = useToast();
@@ -249,6 +272,26 @@ export default function AdministrarAvisos() {
   // Payload Postmark personalizado
   const [payloadEnabled, setPayloadEnabled] = useState<boolean>(false);
   const [payloadJson, setPayloadJson] = useState<string>("");
+
+  // Modal de detalle/preview de un aviso
+  const [detailAviso, setDetailAviso] = useState<Aviso | null>(null);
+  const [detailTriggers, setDetailTriggers] = useState<TriggerEvento[]>([]);
+  const [detailRoles, setDetailRoles] = useState<Array<{ id_rol: number; correos: any }>>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openDetail = async (aviso: Aviso) => {
+    setDetailAviso(aviso);
+    setDetailTriggers([]);
+    setDetailRoles([]);
+    setDetailLoading(true);
+    const [{ data: trigs }, { data: rolesData }] = await Promise.all([
+      supabase.from('avisos_triggers_evento').select('*').eq('id_aviso', aviso.id),
+      supabase.from('avisos_roles_destinatarios').select('id_rol, correos').eq('id_aviso', aviso.id),
+    ]);
+    setDetailTriggers((trigs as any) || []);
+    setDetailRoles((rolesData as any) || []);
+    setDetailLoading(false);
+  };
 
   const fetchAvisos = async () => {
     setIsLoading(true);
@@ -596,6 +639,9 @@ export default function AdministrarAvisos() {
                 </TableCell>
                 <TableCell>{new Date(aviso.fecha_creacion).toLocaleDateString('es-MX')}</TableCell>
                 <TableCell className="text-right space-x-2">
+                  <Button variant="ghost" size="icon" onClick={() => openDetail(aviso)} title="Ver detalle de envío">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                   {canUpdate && <Button variant="ghost" size="icon" onClick={() => openEdit(aviso)}><Pencil className="h-4 w-4" /></Button>}
                   {canDelete && <Button variant="ghost" size="icon" onClick={() => setDeleteId(aviso.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                 </TableCell>
@@ -819,6 +865,112 @@ export default function AdministrarAvisos() {
         title="Eliminar Aviso"
         description="¿Estás seguro de que deseas eliminar este aviso? Esta acción no se puede deshacer."
       />
+
+      {/* Detalle de envío del aviso */}
+      <Dialog open={!!detailAviso} onOpenChange={(o) => !o && setDetailAviso(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              {detailAviso?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="py-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : detailAviso && (
+            <div className="space-y-4 text-sm">
+              {/* Estado */}
+              <div className="flex items-center gap-2">
+                <Badge variant={detailAviso.activo ? 'default' : 'secondary'}>
+                  {detailAviso.activo ? 'Activo' : 'Inactivo'}
+                </Badge>
+                <Badge variant="outline">{detailAviso.tipo_envio}</Badge>
+                {detailAviso.modo_trigger === 'evento' && (
+                  <Badge variant="outline">por evento</Badge>
+                )}
+              </div>
+
+              {/* Cuándo se envía */}
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  {detailAviso.modo_trigger === 'evento' ? <CalendarClock className="h-4 w-4 text-primary" /> : <Clock className="h-4 w-4 text-primary" />}
+                  ¿Cuándo se envía?
+                </div>
+                {detailAviso.tipo_envio === 'manual' && (
+                  <p className="text-muted-foreground">
+                    Este aviso es <strong>manual</strong>. Solo se envía cuando alguien lo dispara desde la pantalla "Enviar Avisos".
+                  </p>
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger !== 'evento' && detailAviso.cron_expression && (
+                  <>
+                    <p className="text-foreground">{describeCron(detailAviso.cron_expression)}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{detailAviso.cron_expression} (hora México UTC-6)</p>
+                  </>
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger === 'evento' && (
+                  detailTriggers.length === 0 ? (
+                    <p className="text-muted-foreground italic">No hay triggers de evento configurados.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {detailTriggers.map((trig, idx) => {
+                        const fuente = fuentesTrigger.find(f => f.id === trig.id_fuente);
+                        return (
+                          <div key={idx} className="rounded-md bg-background border p-3 space-y-1">
+                            <p className="text-foreground">{describeEventTrigger(trig, fuente)}</p>
+                            {fuente?.descripcion && (
+                              <p className="text-xs text-muted-foreground">{fuente.descripcion}</p>
+                            )}
+                            {!trig.activo && (
+                              <Badge variant="secondary" className="text-[10px]">Trigger desactivado</Badge>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger !== 'evento' && !detailAviso.cron_expression && (
+                  <p className="text-muted-foreground italic">Este aviso es automático pero no tiene programación cron configurada.</p>
+                )}
+              </div>
+
+              {/* Destinatarios */}
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <Users className="h-4 w-4 text-primary" />
+                  ¿A quién se envía?
+                </div>
+                {detailRoles.length === 0 ? (
+                  <p className="text-muted-foreground italic">Sin roles configurados (los destinatarios se calculan dinámicamente según la fuente del evento).</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {detailRoles.map((r) => {
+                      const rolNombre = roles.find(x => x.id === r.id_rol)?.nombre || `Rol ${r.id_rol}`;
+                      const correosArr = Array.isArray(r.correos) ? r.correos : [];
+                      return (
+                        <li key={r.id_rol} className="flex items-start gap-2">
+                          <Mail className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                          <span>
+                            <strong>{rolNombre}</strong>
+                            {correosArr.length > 0 && (
+                              <span className="text-muted-foreground"> — {correosArr.length} correo{correosArr.length === 1 ? '' : 's'} adicional{correosArr.length === 1 ? '' : 'es'}</span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailAviso(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
