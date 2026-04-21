@@ -1,0 +1,1 @@
+DELETE FROM public.avisos_envios_evento WHERE id_trigger = 5 AND estado = 'simulado';
