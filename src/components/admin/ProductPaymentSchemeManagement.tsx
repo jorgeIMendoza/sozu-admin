@@ -303,35 +303,40 @@ export const ProductPaymentSchemeManagement = ({ productId, productName }: Produ
             <div className="py-8 text-center text-muted-foreground">
               Cargando esquemas de pago...
             </div>
-          ) : schemes && schemes.length > 0 ? (
+          ) : orderedSchemes && orderedSchemes.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {schemes.length} esquema{schemes.length !== 1 ? 's' : ''} encontrado{schemes.length !== 1 ? 's' : ''}
-              </p>
-              <div className="grid grid-cols-1 gap-4">
-                {schemes.map((scheme) => (
-                  <Card key={scheme.id}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <CreditCard className="h-4 w-4" />
-                          <span>{scheme.nombre}</span>
-                        </div>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex space-x-2">
-                        <PaymentSchemeDetailsDialog scheme={scheme} />
-                        <EditProductPaymentSchemeDialog 
-                          scheme={scheme} 
-                          onSchemeUpdated={handleSchemeAdded} 
-                        />
-                        <DeletePaymentSchemeDialog scheme={scheme} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {orderedSchemes.length} esquema{orderedSchemes.length !== 1 ? 's' : ''} encontrado{orderedSchemes.length !== 1 ? 's' : ''}
+                  <span className="ml-2 text-xs italic">(arrastra para reordenar)</span>
+                </p>
+                {isSavingOrder && (
+                  <span className="text-xs text-muted-foreground">Guardando…</span>
+                )}
               </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={orderedSchemes.map((s) => s.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 gap-4">
+                    {orderedSchemes.map((scheme, idx) => (
+                      <SortableProductSchemeCard
+                        key={scheme.id}
+                        scheme={scheme}
+                        displayOrder={idx + 1}
+                        onUpdated={handleSchemeAdded}
+                        DetailsDialog={PaymentSchemeDetailsDialog}
+                        DeleteDialog={DeletePaymentSchemeDialog}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
           ) : (
             <Card>
