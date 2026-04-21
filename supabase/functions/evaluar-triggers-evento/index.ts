@@ -345,67 +345,94 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // EMAIL
-            if ((channel === 'email' || channel === 'ambos') && dest.email) {
-              if (!POSTMARK_TOKEN) { okEmail = false; errMsg += 'POSTMARK_SERVER_TOKEN faltante; '; }
-              else {
-                try {
-                  const templateId = aviso.postmark_template_id || 36978552;
-                  const postmarkBody: any = {
-                    From: 'notificaciones@sozu.com',
-                    To: dest.email,
-                    TemplateId: templateId,
-                    TemplateModel: destTemplateModel,
-                    MessageStream: 'outbound',
-                  };
-                  if (bccList.length > 0) postmarkBody.Bcc = bccList.join(',');
-                  const res = await fetch('https://api.postmarkapp.com/email/withTemplate', {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Postmark-Server-Token': POSTMARK_TOKEN },
-                    body: JSON.stringify(postmarkBody),
-                  });
-                  const body = await res.json();
-                  if (!res.ok || (body?.ErrorCode && body.ErrorCode !== 0)) {
-                    okEmail = false;
-                    errMsg += `email: ${body?.Message || res.status}; `;
-                  }
-                } catch (e) { okEmail = false; errMsg += `email red: ${(e as Error).message}; `; }
-              }
+            // ============================================================
+            // ÚNICO ENVÍO a n8n vía enviar-notificacion.
+            // Contrato del workflow n8n /webhook/manda_notificacion:
+            //   tipo: "wa" | "email" | "ambos"
+            //   telefono: "+<digitos>"  (ej. "+5217221514185")
+            //   email, cc, from, templateId, asunto, mensaje, mensajeWA
+            // n8n se encarga del switch interno (Postmark + Evolution WA).
+            // ============================================================
+            const telDigits = normalizarTelefonoWA(dest.telefono || '');
+            const telWA = telefonoConPlus(telDigits);
+            const textoPlano = destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+            // Mapear canal de la BD ("email"|"whatsapp"|"ambos") al contrato de n8n
+            // ("email"|"wa"|"ambos"). Si pidieron WA pero no hay teléfono, degradar a email.
+            // Si pidieron email pero no hay correo, degradar a wa.
+            let tipoN8N: 'wa' | 'email' | 'ambos' | null = null;
+            if (channel === 'ambos') {
+              if (dest.email && telWA) tipoN8N = 'ambos';
+              else if (dest.email) tipoN8N = 'email';
+              else if (telWA) tipoN8N = 'wa';
+            } else if (channel === 'whatsapp') {
+              if (telWA) tipoN8N = 'wa';
+            } else if (channel === 'email') {
+              if (dest.email) tipoN8N = 'email';
             }
 
-            // WHATSAPP via enviar-notificacion — para cliente real Y manuales que tengan teléfono.
-            // El cuerpo del WA es el "Contenido del mensaje" (mensaje_html) sin etiquetas, con placeholders renderizados.
-            const telWA = normalizarTelefonoWA(dest.telefono || '');
-            if ((channel === 'whatsapp' || channel === 'ambos') && telWA) {
+            if (!tipoN8N) {
+              okEmail = false; okWa = false;
+              errMsg += `sin destino válido (canal=${channel}, email=${!!dest.email}, tel=${!!telWA}); `;
+            } else {
               try {
                 const waToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN') || '';
-                const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/enviar-notificacion`;
-                const r = await fetch(url, {
+                const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/enviar-notificacion`;
+                const templateId = aviso.postmark_template_id || 36978552;
+
+                const payloadN8N: Record<string, unknown> = {
+                  tipo: tipoN8N,
+                  from: 'Notificaciones Sozu <notificaciones@sozu.com>',
+                  templateId,
+                  asunto: destAsunto,
+                  // 'mensaje' es el TemplateModel de Postmark (objeto)
+                  mensaje: destTemplateModel?.mensaje ?? destTemplateModel,
+                  // 'mensajeWA' es texto plano para WhatsApp (Evolution)
+                  mensajeWA: textoPlano,
+                  // contactos
+                  email: dest.email || null,
+                  telefono: telWA || null,
+                  cc: bccList.length > 0 ? bccList.join(',') : null,
+                  // metadata para trazabilidad en n8n (no afecta su switch)
+                  origen: 'aviso_evento',
+                  aviso_id: aviso.id,
+                  trigger_id: trig.id,
+                  clave_entidad: dest.claveEntidad,
+                  destinatario_tipo: dest.tipo,
+                  nombre_usuario: dest.nombre || persona.nombre_legal || '',
+                };
+
+                const r = await fetch(fnUrl, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                     'apikey': waToken,
                   },
-                  body: JSON.stringify({
-                    tipo: 'whatsapp',
-                    telefono: telWA,
-                    mensaje: destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
-                    origen: 'aviso_evento',
-                    aviso_id: aviso.id,
-                    trigger_id: trig.id,
-                    clave_entidad: dest.claveEntidad,
-                    destinatario_tipo: dest.tipo,
-                  }),
+                  body: JSON.stringify(payloadN8N),
                 });
-                if (!r.ok) { okWa = false; errMsg += `wa: ${r.status}; `; }
-              } catch (e) { okWa = false; errMsg += `wa red: ${(e as Error).message}; `; }
+                if (!r.ok) {
+                  const txt = await r.text().catch(() => '');
+                  if (tipoN8N === 'email') okEmail = false;
+                  else if (tipoN8N === 'wa') okWa = false;
+                  else { okEmail = false; okWa = false; }
+                  errMsg += `n8n ${tipoN8N}: ${r.status} ${txt.slice(0, 200)}; `;
+                }
+                // Guardar payload realmente enviado para auditoría
+                await supabaseAdmin
+                  .from('avisos_envios_evento')
+                  .update({ payload_enviado: payloadN8N as any })
+                  .eq('id', ins.id);
+              } catch (e) {
+                okEmail = false; okWa = false;
+                errMsg += `n8n red: ${(e as Error).message}; `;
+              }
             }
 
             const finalEstado = (okEmail && okWa) ? 'enviado' : (okEmail || okWa ? 'parcial' : 'error');
             await supabaseAdmin
               .from('avisos_envios_evento')
-              .update({ estado: finalEstado, error: errMsg || null, payload_enviado: destTemplateModel })
+              .update({ estado: finalEstado, error: errMsg || null })
               .eq('id', ins.id);
 
             if (finalEstado === 'enviado' || finalEstado === 'parcial') summary.sent++;
