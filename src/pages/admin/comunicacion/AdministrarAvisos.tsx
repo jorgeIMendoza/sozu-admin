@@ -639,6 +639,9 @@ export default function AdministrarAvisos() {
                 </TableCell>
                 <TableCell>{new Date(aviso.fecha_creacion).toLocaleDateString('es-MX')}</TableCell>
                 <TableCell className="text-right space-x-2">
+                  <Button variant="ghost" size="icon" onClick={() => openDetail(aviso)} title="Ver detalle de envío">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                   {canUpdate && <Button variant="ghost" size="icon" onClick={() => openEdit(aviso)}><Pencil className="h-4 w-4" /></Button>}
                   {canDelete && <Button variant="ghost" size="icon" onClick={() => setDeleteId(aviso.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                 </TableCell>
