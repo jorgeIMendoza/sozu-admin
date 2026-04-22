@@ -167,6 +167,7 @@ export default function RastreoPagosSTP() {
       estatus: "all",
       fechaDesde: "",
       fechaHasta: "",
+      tipoFecha: "fecha_creacion",
     });
   };
 
