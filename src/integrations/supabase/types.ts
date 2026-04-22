@@ -387,6 +387,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           mensaje_html: string
+          mensajes_whatsapp: Json | null
           modo_trigger: string
           nombre: string
           payload_postmark: Json | null
@@ -401,6 +402,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           mensaje_html: string
+          mensajes_whatsapp?: Json | null
           modo_trigger?: string
           nombre: string
           payload_postmark?: Json | null
@@ -415,6 +417,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           mensaje_html?: string
+          mensajes_whatsapp?: Json | null
           modo_trigger?: string
           nombre?: string
           payload_postmark?: Json | null
@@ -561,6 +564,48 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "fk_avisos_legales_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      avisos_proyectos: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_aviso: number
+          id_proyecto: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_aviso: number
+          id_proyecto: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_aviso?: number
+          id_proyecto?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avisos_proyectos_id_aviso_fkey"
+            columns: ["id_aviso"]
+            isOneToOne: false
+            referencedRelation: "avisos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "avisos_proyectos_id_proyecto_fkey"
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
@@ -8363,6 +8408,7 @@ export type Database = {
         Args: { _permission_name: string; _submenu_path: string }
         Returns: boolean
       }
+      validar_mensajes_whatsapp: { Args: { _mensajes: Json }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
