@@ -1,152 +1,113 @@
 
-## Diagnóstico
+## Objetivo
 
-El usuario `contacto@vivaltainmobiliaria.com` sí existe correctamente en la base de datos como:
+Corregir que `contacto@vivaltainmobiliaria.com` sí aparezca en `Sistema → Usuarios del Sistema` y agregar búsqueda por correo en la vista de `Inmobiliarias`.
+
+## Diagnóstico actualizado
+
+Ya confirmé que en base de datos el usuario sí existe y está correcto:
 
 - `usuarios.email = contacto@vivaltainmobiliaria.com`
-- `usuarios.rol_id = 4`
-- rol `Inmobiliaria`
+- `rol_id = 4` (`Inmobiliaria`)
+- `activo = true`
 - `roles.es_rol_interno = true`
-- `usuarios.activo = true`
-- `usuarios.id_persona = 1876`
+- `id_persona = 1876`
+- la persona ligada también tiene el mismo correo
 
-Y además su persona sí está ligada como inmobiliaria real:
+Además, el código actual de `src/pages/admin/Usuarios.tsx` sí intenta consumir la Edge Function `list-system-users`, y la función en el repositorio sí debería devolver usuarios con rol 4.
 
-- `personas.id = 1876`
-- `entidades_relacionadas.id_tipo_entidad = 5` (`Inmobiliaria`)
-- nombre comercial: `VIVALTA`
+Eso significa que el problema ya no apunta a “datos mal capturados”, sino a una discrepancia entre lo que está en BD y lo que realmente está llegando a la UI. Las causas más probables son:
 
-## Qué está pasando
+1. la función desplegada no coincide con el código actual,
+2. el frontend publicado/preview no está consumiendo la versión correcta,
+3. falta visibilidad de error en la pantalla y el resultado se queda en un estado “vacío” sin explicar qué falló.
 
-La inconsistencia no viene de los datos; viene de que ambas pantallas leen fuentes distintas y con reglas distintas:
+## Cambios a implementar
 
-### 1) Pantalla Inmobiliarias
-`src/pages/admin/Inmobiliarias.tsx`
+### 1) Corregir definitivamente `Usuarios del Sistema`
+Haré el ajuste en dos capas:
 
-Esta pantalla arma la lista desde:
+- Validar y alinear la fuente real que usa la tabla:
+  - asegurar que `src/pages/admin/Usuarios.tsx` consuma la respuesta correcta de `list-system-users`,
+  - redeploy de la Edge Function para garantizar que el código en Supabase sea el mismo que ya está en el repositorio,
+  - verificar la respuesta real de la función con el usuario autenticado.
 
-- `personas`
-- `entidades_relacionadas` con `id_tipo_entidad = 5`
+- Endurecer la UI para que no oculte el problema:
+  - agregar manejo explícito de error en la consulta de usuarios,
+  - mostrar mensaje de error si la función devuelve 401/403/500,
+  - evitar que un fallo termine viéndose como “0 resultados”.
 
-Por eso ahí sí aparece `VIVALTA` y se muestra el email `contacto@vivaltainmobiliaria.com`.
+- Revisar el filtrado en cliente:
+  - confirmar que el usuario rol 4 no sea descartado por filtros adicionales,
+  - mantener la lógica de `Administrador de Proyecto` solo para roles 3 y 4,
+  - conservar búsqueda por nombre/email/rol.
 
-### 2) Pantalla Usuarios del Sistema
-`src/pages/admin/Usuarios.tsx`
+### 2) Agregar búsqueda por correo en `Inmobiliarias`
+Modificaré el filtro actual de `src/pages/admin/Inmobiliarias.tsx` para que también busque por:
 
-Esta pantalla consulta directamente `usuarios` con join a `roles`:
+- `personas.email` de la inmobiliaria,
+- `usuario_email` del usuario principal ligado a la inmobiliaria, cuando exista.
 
-```ts
-.from('usuarios')
-.select(`
-  email,
-  nombre,
-  rol_id,
-  activo,
-  auth_user_id,
-  id_persona,
-  debe_cambiar_password,
-  email_confirmado,
-  roles!inner (nombre, es_rol_interno),
-  personas (nombre_legal, email)
-`)
-.eq('roles.es_rol_interno', true)
-```
+También actualizaré:
 
-Con ese query, el usuario sí debería salir.
-
-## La causa real de la inconsistencia
-
-El problema muy probablemente es **RLS / visibilidad del `SELECT` sobre `usuarios`**.
-
-La política actual encontrada para `usuarios` permite:
-
-- cada usuario ver solo su propio registro
-- solo el `Super Administrador` ver todos los usuarios
-
-No existe una política equivalente para que otros perfiles administrativos vean el universo necesario en “Usuarios del Sistema”.
-
-La migración actual define esto:
-
-```sql
-CREATE POLICY "Users can view own record" ON usuarios FOR SELECT
-  USING (auth_user_id = auth.uid());
-
-CREATE POLICY "Admins can view all users" ON usuarios FOR SELECT
-  USING (EXISTS (
-    SELECT 1
-    FROM usuarios u
-    JOIN roles r ON u.rol_id = r.id
-    WHERE u.auth_user_id = auth.uid()
-      AND r.nombre = 'Super Administrador'
-  ));
-```
-
-## Por qué eso coincide con tu síntoma
-
-Si quien está viendo la pantalla **no es Super Administrador**, el query de `Usuarios del Sistema` no recibe todos los registros, aunque la UI sí exista y aunque en `Inmobiliarias` sí se vea la agencia.
-
-Entonces ocurre esto:
-
-- En `Inmobiliarias`: sí aparece porque se lee desde `personas`/`entidades_relacionadas`
-- En `Usuarios del Sistema`: no aparece porque esa lista depende de `usuarios` y RLS la está recortando
-
-Eso explica perfectamente que al buscar `contacto@vivaltainmobiliaria.com` te muestre `0` resultados aunque el usuario sí exista.
-
-## Qué corregir
-
-### Opción recomendada
-No abrir más el `SELECT` directo sobre `usuarios` para todos. En su lugar:
-
-1. Crear una función SQL o Edge Function de lectura controlada para “Usuarios del Sistema”.
-2. Hacer que esa función aplique la misma lógica de negocio de la UI:
-   - `Super Administrador`: puede ver todos
-   - `Administrador de Proyecto`: solo roles permitidos (`Agente Inmobiliario` e `Inmobiliaria`)
-   - otros roles: sin acceso
-3. Cambiar `src/pages/admin/Usuarios.tsx` para consumir esa fuente segura en vez de leer la tabla `usuarios` directamente.
-
-### Opción mínima
-Ajustar RLS de `usuarios` para permitir lectura adicional a `Administrador de Proyecto`, pero solo para roles administrables. Esto es más delicado porque la tabla contiene información sensible y puede terminar sobreexponiendo datos.
-
-## Implementación propuesta
-
-1. Revisar los permisos reales esperados para `/admin/usuarios`.
-2. Crear una rutina segura de lectura:
-   - idealmente `SECURITY DEFINER`
-   - usando `is_super_admin()` para validación global
-   - respetando que rol 2 solo vea roles 3 y 4
-3. Sustituir en `src/pages/admin/Usuarios.tsx` el query directo a `usuarios` por esa rutina.
-4. Mantener la lógica actual de enriquecimiento de inmobiliaria (`proyectos_acceso`, `entidades_relacionadas`) encima del resultado.
-5. Verificar que la búsqueda por email `contacto@vivaltainmobiliaria.com` ya lo devuelva.
-6. Probar ambos escenarios:
-   - Super Admin
-   - Administrador de Proyecto
+- placeholder del buscador para reflejar que ya acepta correo,
+- conteos por pestaña (`Activos`, `Draft`, `Eliminados`) para que usen el mismo criterio nuevo y no queden inconsistentes.
 
 ## Resultado esperado
 
 Después del ajuste:
 
-- el usuario `contacto@vivaltainmobiliaria.com` seguirá apareciendo en `Inmobiliarias`
-- también aparecerá en `Sistema → Usuarios del Sistema`
-- la visibilidad quedará consistente con el rol del usuario que consulta
-- se evitará romper seguridad abriendo de más la tabla `usuarios`
+### En `Usuarios del Sistema`
+Si buscas `contacto@vivaltainmobiliaria.com`:
+
+- debe aparecer en la tabla,
+- debe mostrarse con rol `Inmobiliaria`,
+- debe seguir respetando permisos según el usuario que consulta.
+
+### En `Inmobiliarias`
+La búsqueda deberá encontrar registros por:
+
+- nombre legal,
+- nombre comercial,
+- RFC,
+- correo de la inmobiliaria,
+- correo del usuario ligado.
+
+## Verificaciones que haré
+
+1. Buscar `contacto@vivaltainmobiliaria.com` en `Usuarios del Sistema` y confirmar que aparezca.
+2. Confirmar que el conteo de `Activos` deje de ser `0` para esa búsqueda.
+3. Buscar el mismo correo en `Inmobiliarias` y confirmar coincidencia.
+4. Probar una búsqueda por nombre/RFC para asegurar que no se rompa el comportamiento actual.
+5. Validar escenario con rol administrativo permitido y sin abrir permisos de más.
 
 ## Detalles técnicos
 
-- Evidencia en código:
-  - `src/pages/admin/Usuarios.tsx` filtra por `roles.es_rol_interno = true`
-  - el rol `Inmobiliaria` (`id = 4`) sí tiene `es_rol_interno = true`
-- Evidencia en datos:
-  - el registro existe y está activo
-  - la persona está ligada a entidad tipo `Inmobiliaria`
-- Causa más probable:
-  - recorte por RLS en `usuarios`, no problema de alta ni de sincronización
+### Archivos involucrados
+- `src/pages/admin/Usuarios.tsx`
+- `src/pages/admin/Inmobiliarias.tsx`
+- `supabase/functions/list-system-users/index.ts`
+
+### Ajuste técnico en Usuarios
+- agregar estado de error del `useQuery`,
+- mostrar error real en vez de presentar vacío,
+- validar/redeploy de la Edge Function para eliminar discrepancia entre código y entorno desplegado.
+
+### Ajuste técnico en Inmobiliarias
+El filtro pasará de esto:
+
+```ts
+nombre_legal || nombre_comercial || rfc
+```
+
+a incluir también:
+
+```ts
+email || usuario_email
+```
+
+y los contadores por tab usarán exactamente el mismo predicado de búsqueda.
 
 ## Nota importante
 
-No parece ser un problema de:
-- email mal guardado
-- rol incorrecto
-- usuario inactivo
-- falta de relación con inmobiliaria
-
-Los datos están bien; la inconsistencia está en la capa de lectura/autorización entre ambas vistas.
+La evidencia actual indica que el registro sí existe correctamente en BD; por eso la corrección debe enfocarse en la capa de lectura/despliegue y no en recrear o editar el usuario.
