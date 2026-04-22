@@ -86,8 +86,8 @@ export default function RastreoPagosSTP() {
       }
       const campoFecha = filters.tipoFecha;
       if (campoFecha === "fecha_operacion") {
-        const desdeCompacta = filters.fechaDesde.replaceAll("-", "");
-        const hastaCompacta = filters.fechaHasta.replaceAll("-", "");
+        const desdeCompacta = filters.fechaDesde.replace(/-/g, "");
+        const hastaCompacta = filters.fechaHasta.replace(/-/g, "");
         const condicionesFechaOperacion: string[] = [];
 
         const buildRange = (desde: string, hasta: string) => {
