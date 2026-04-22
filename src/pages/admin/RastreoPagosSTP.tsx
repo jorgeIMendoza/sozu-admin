@@ -312,7 +312,27 @@ export default function RastreoPagosSTP() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fechaDesde">Desde (Fecha de pago)</Label>
+              <Label htmlFor="tipoFecha">Filtrar fechas por</Label>
+              <Select
+                value={filters.tipoFecha}
+                onValueChange={(value: "fecha_creacion" | "fecha_operacion") =>
+                  setFilters({ ...filters, tipoFecha: value })
+                }
+              >
+                <SelectTrigger id="tipoFecha">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fecha_creacion">Fecha de pago</SelectItem>
+                  <SelectItem value="fecha_operacion">Fecha de operación</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fechaDesde">
+                Desde ({filters.tipoFecha === "fecha_operacion" ? "Fecha de operación" : "Fecha de pago"})
+              </Label>
               <Input
                 id="fechaDesde"
                 type="date"
@@ -322,7 +342,9 @@ export default function RastreoPagosSTP() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fechaHasta">Hasta (Fecha de pago)</Label>
+              <Label htmlFor="fechaHasta">
+                Hasta ({filters.tipoFecha === "fecha_operacion" ? "Fecha de operación" : "Fecha de pago"})
+              </Label>
               <Input
                 id="fechaHasta"
                 type="date"
