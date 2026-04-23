@@ -28,6 +28,26 @@ Deno.serve(async (req) => {
       return (data || []).map((item: any) => item.id_proyecto).filter((id: unknown): id is number => typeof id === 'number');
     };
 
+    const conceptLabelById: Record<number, string> = {
+      2: 'enganche',
+      5: 'parcialidad',
+      4: 'especial',
+      3: 'contraentrega',
+    };
+
+    const formatMonthName = (value: string | null | undefined) => {
+      if (!value) return '';
+      const date = new Date(`${value}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('es-MX', { month: 'long' });
+    };
+
+    const resolveTratamiento = (sexo: string | null | undefined) => {
+      if (sexo === 'F') return 'Sra.';
+      if (sexo === 'M') return 'Sr.';
+      return '';
+    };
+
     const filterRecipientsBySelectedProjects = async (
       rawRecipients: { nombre: string; email: string }[],
       selectedProjectIds: number[],
@@ -268,9 +288,19 @@ Deno.serve(async (req) => {
       const messages = batch.map(recipient => {
         const vars: Record<string, string> = {
           nombre: recipient.nombre || '',
+          tratamiento: '',
           email: recipient.email || '',
           asunto: aviso.asunto || '',
           texto: aviso.mensaje_html || '',
+          monto: '',
+          fecha_pago: '',
+          mes: '',
+          orden: '',
+          departamento: '',
+          producto: '',
+          proyecto: '',
+          cuenta_id: '',
+          offset: '',
         };
         const templateModel = (aviso as any).payload_postmark
           ? renderJsonTemplate((aviso as any).payload_postmark, vars)
