@@ -289,13 +289,18 @@ Deno.serve(async (req) => {
 
         const { data: propiedadesRelacionadas } = await supabaseAdmin
           .from('propiedades')
-          .select('id, id_edificio_modelo')
+          .select('id, id_edificio_modelo, numero_propiedad')
           .in('id', propiedadIds);
 
         const edificioModeloByPropiedad = new Map<number, number>(
           (propiedadesRelacionadas || [])
             .filter((propiedad: any) => propiedad.id && propiedad.id_edificio_modelo)
             .map((propiedad: any) => [propiedad.id, propiedad.id_edificio_modelo])
+        );
+        const numeroPropiedadById = new Map<number, string>(
+          (propiedadesRelacionadas || [])
+            .filter((propiedad: any) => propiedad.id)
+            .map((propiedad: any) => [propiedad.id, propiedad.numero_propiedad || ''])
         );
 
         const edificioModeloIds = [...new Set((propiedadesRelacionadas || []).map((propiedad: any) => propiedad.id_edificio_modelo).filter(Boolean))];
@@ -310,6 +315,17 @@ Deno.serve(async (req) => {
           : { data: [] as any[] };
 
         const proyectoByEdificio = new Map<number, number>(((edificios as any[]) || []).map((edificio: any) => [edificio.id, edificio.id_proyecto]));
+        const proyectoIds = [...new Set(((edificios as any[]) || []).map((edificio: any) => edificio.id_proyecto).filter(Boolean))];
+        const { data: proyectos } = proyectoIds.length > 0
+          ? await supabaseAdmin.from('proyectos').select('id, nombre').in('id', proyectoIds)
+          : { data: [] as any[] };
+        const proyectoNombreById = new Map<number, string>(((proyectos as any[]) || []).map((proyecto: any) => [proyecto.id, proyecto.nombre || '']));
+
+        const productoIds = [...new Set(rowsFilteredByProject.map((ac: any) => ac?.cuentas_cobranza?.ofertas?.id_producto).filter(Boolean))];
+        const { data: productos } = productoIds.length > 0
+          ? await supabaseAdmin.from('productos_servicios').select('id, nombre').in('id', productoIds)
+          : { data: [] as any[] };
+        const productoNombreById = new Map<number, string>(((productos as any[]) || []).map((producto: any) => [producto.id, producto.nombre || '']));
         const rowsFilteredByProject = (rows || []).filter((ac: any) => {
           const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
           const idEdificioModelo = idPropiedad ? edificioModeloByPropiedad.get(idPropiedad) : undefined;
