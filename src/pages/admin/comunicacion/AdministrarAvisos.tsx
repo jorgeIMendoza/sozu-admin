@@ -306,7 +306,7 @@ export default function AdministrarAvisos() {
   const fetchAvisos = async () => {
     setIsLoading(true);
     const { data } = await supabase.from('avisos').select('*').order('fecha_creacion', { ascending: false });
-    setAvisos(data || []);
+    setAvisos(((data as any[]) || []) as Aviso[]);
     setIsLoading(false);
   };
 
