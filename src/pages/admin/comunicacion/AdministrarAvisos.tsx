@@ -4,6 +4,7 @@ import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,7 @@ interface Aviso {
   nombre: string;
   asunto: string;
   mensaje_html: string;
+  mensajes_whatsapp?: string[] | null;
   tipo_envio: string;
   cron_expression: string | null;
   activo: boolean;
@@ -37,6 +39,11 @@ interface Aviso {
   postmark_template_id: number;
   modo_trigger?: string | null;
   payload_postmark?: any;
+}
+
+interface ProyectoPublicado {
+  id: number;
+  nombre: string;
 }
 
 interface Rol {
@@ -257,7 +264,9 @@ export default function AdministrarAvisos() {
   const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
   const [postmarkTemplateId, setPostmarkTemplateId] = useState<string>("36978552");
-  const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
+  const [selectedProyectos, setSelectedProyectos] = useState<number[]>([]);
+  const [proyectosPublicados, setProyectosPublicados] = useState<ProyectoPublicado[]>([]);
+  const [mensajesWhatsapp, setMensajesWhatsapp] = useState<string[]>(["", "", ""]);
   const [postmarkTemplates, setPostmarkTemplates] = useState<PostmarkTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
