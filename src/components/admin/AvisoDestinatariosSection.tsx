@@ -37,8 +37,9 @@ interface Props {
   onToggleRole: (rolId: number) => void;
   destinatarios: Destinatario[];
   onDestinatariosChange: (destinatarios: Destinatario[]) => void;
-  selectedProyectos?: string[];
-  onSelectedProyectosChange?: (proyectos: string[]) => void;
+  selectedProyectos?: number[];
+  onSelectedProyectosChange?: (proyectos: number[]) => void;
+  availableProjectOptions?: Array<{ id: number; nombre: string }>;
 }
 
 export function AvisoDestinatariosSection({
@@ -49,6 +50,7 @@ export function AvisoDestinatariosSection({
   onDestinatariosChange,
   selectedProyectos = [],
   onSelectedProyectosChange,
+  availableProjectOptions = [],
 }: Props) {
   const { toast } = useToast();
   const [loadingRolId, setLoadingRolId] = useState<number | null>(null);
@@ -63,7 +65,6 @@ export function AvisoDestinatariosSection({
 
   const [pool, setPool] = useState<PoolItem[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [availableProyectos, setAvailableProyectos] = useState<string[]>([]);
   const [clienteProyectoMap, setClienteProyectoMap] = useState<Map<string, string[]>>(new Map());
 
   const isClienteSelected = selectedRoles.includes(CLIENTE_ROL_ID);
