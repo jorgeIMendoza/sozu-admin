@@ -310,6 +310,11 @@ export default function AdministrarAvisos() {
     setIsLoading(false);
   };
 
+  const resolveSelectedProjectIds = () =>
+    proyectosPublicados
+      .filter((proyecto) => selectedProyectos.includes(proyecto.nombre))
+      .map((proyecto) => proyecto.id);
+
   const fetchRoles = async () => {
     const { data } = await supabase.from('roles').select('id, nombre').eq('activo', true).order('nombre');
     setRoles(data || []);
@@ -551,9 +556,7 @@ export default function AdministrarAvisos() {
       });
     }
 
-    const proyectoIdsSeleccionados = proyectosPublicados
-      .filter((proyecto) => selectedProyectos.includes(proyecto.nombre))
-      .map((proyecto) => proyecto.id);
+    const proyectoIdsSeleccionados = resolveSelectedProjectIds();
     await supabase.from('avisos_proyectos').delete().eq('id_aviso', avisoId);
     if (proyectoIdsSeleccionados.length > 0) {
       await supabase.from('avisos_proyectos').insert(
