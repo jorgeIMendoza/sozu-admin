@@ -96,6 +96,13 @@ const TIPOS_PAGO_OPTIONS = [
 
 const DEFAULT_TIPOS_PAGO = TIPOS_PAGO_OPTIONS.map((item) => item.id);
 
+const getPersonalizadoConfig = (personalizado?: boolean) => ({
+  label: personalizado ? "Prendido" : "Apagado",
+  description: personalizado
+    ? "Envía un mensaje individual a cada correo y/o WhatsApp con su personalización correspondiente."
+    : "Envía un solo mensaje consolidado a la lista completa de correos y/o WhatsApps configurados.",
+});
+
 const getTiposPagoSeleccionados = (tipos?: number[] | null) => {
   const seleccionados = Array.isArray(tipos) && tipos.length > 0 ? tipos : DEFAULT_TIPOS_PAGO;
   return TIPOS_PAGO_OPTIONS.filter((tipo) => seleccionados.includes(tipo.id));
@@ -737,6 +744,7 @@ export default function AdministrarAvisos() {
               <TableHead>Template ID</TableHead>
               <TableHead>Desarrollos</TableHead>
               <TableHead>Pagos a notificar</TableHead>
+              <TableHead>Personalizado</TableHead>
               <TableHead>Activo</TableHead>
               <TableHead>Fecha Creación</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -744,9 +752,9 @@ export default function AdministrarAvisos() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8">Cargando...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay avisos</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay avisos</TableCell></TableRow>
             ) : pagedAvisos.map(aviso => (
               <TableRow key={aviso.id}>
                 <TableCell className="font-medium">{aviso.nombre}</TableCell>
@@ -808,6 +816,11 @@ export default function AdministrarAvisos() {
                       </Badge>
                     ))}
                   </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={aviso.personalizado ? "default" : "secondary"}>
+                    {getPersonalizadoConfig(aviso.personalizado).label}
+                  </Badge>
                 </TableCell>
                 <TableCell>
                   <Switch checked={aviso.activo} onCheckedChange={() => canUpdate && toggleActivo(aviso)} disabled={!canUpdate} />
@@ -1171,6 +1184,21 @@ export default function AdministrarAvisos() {
                 {detailAviso.tipo_envio === 'automatico' && detailAviso.modo_trigger !== 'evento' && !detailAviso.cron_expression && (
                   <p className="text-muted-foreground italic">Este aviso es automático pero no tiene programación cron configurada.</p>
                 )}
+              </div>
+
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <Info className="h-4 w-4 text-primary" />
+                  ¿Está personalizado?
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={detailAviso.personalizado ? 'default' : 'secondary'}>
+                    {getPersonalizadoConfig(detailAviso.personalizado).label}
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground">
+                  <strong>Qué significa:</strong> {getPersonalizadoConfig(detailAviso.personalizado).description}
+                </p>
               </div>
 
               {/* Destinatarios */}
