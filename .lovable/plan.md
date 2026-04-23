@@ -1,62 +1,65 @@
 
-Objetivo: evitar que el aviso se vuelva a enviar automáticamente dentro de la misma ventana de tolerancia del cron si la primera ejecución ya se envió con éxito, pero conservar la posibilidad de reenviar cuando el disparo sea explícitamente manual.
+Objetivo: dejar de registrar en `avisos_ejecuciones` las corridas del cron que caen dentro de la tolerancia pero que en realidad ya no deben ejecutar nada porque el primer envío exitoso de esa misma ventana ya ocurrió.
 
 Diagnóstico confirmado
-- `evaluar-triggers-evento` usa `withinSendWindow(..., toleranceMin = 2)`, así que una hora configurada como `22:20` también puede ejecutarse en `22:21` y `22:22` si sigue dentro de la tolerancia.
-- Después del cambio reciente, los destinatarios manuales usan una `claveEntidad` con `executionId`:
-  `trigger:{id}:offset:{offset}:fecha:{fechaObjetivo}:manual:{email}:exec:{executionId}`
-- Eso hace que cada corrida dentro de la misma ventana inserte nuevos registros en `avisos_envios_evento`, por lo que el cron ya no detecta “duplicado” y vuelve a enviar.
-- Hoy no existe una protección separada por “ventana de ejecución exitosa” para destinatarios manuales automáticos.
+- En `supabase/functions/evaluar-triggers-evento/index.ts`, el log de `avisos_ejecuciones` se crea apenas pasa `withinSendWindow(...)`.
+- Después, en el bloque de destinatarios manuales, sí existe la validación que detecta envíos exitosos previos en la misma ventana (`getSuccessfulManualRecipients`).
+- Cuando esa validación encuentra que ya se envió bien, hoy la función no vuelve a mandar el aviso, pero sí deja una fila en `avisos_ejecuciones` con motivo como:
+  `Ya enviado exitosamente en esta ventana; reenvío automático omitido`.
+- Eso explica por qué aparece la fila de las 10:49 p. m.: no fue un nuevo envío real, pero sí se creó el registro antes de decidir que ya no había nada que ejecutar.
 
-Qué se va a cambiar
-1. Separar “corrida automática del cron” de “reenvío manual explícito”
-- Mantener la clave con `executionId` solo para casos de reenvío manual explícito.
-- Para corridas automáticas del cron, antes de enviar a destinatarios manuales, validar si ya hubo una ejecución exitosa previa del mismo aviso/trigger/offset/fecha objetivo dentro de esa ventana.
+Qué se va a corregir
+1. Diferir la creación del log hasta confirmar que sí habrá trabajo real
+- No crear `avisos_ejecuciones` inmediatamente al entrar en ventana.
+- Primero resolver si existen destinatarios efectivos por enviar para esa combinación de:
+  - aviso
+  - trigger
+  - offset
+  - fecha objetivo
+  - origen de ejecución
 
-2. Agregar una validación previa de éxito ya registrado
-- En el bloque del lote manual consolidado, consultar `avisos_envios_evento` buscando registros previos del mismo:
-  - `id_aviso`
-  - `id_trigger`
-  - `fecha_objetivo`
-  - destinatario manual
-  - estado exitoso (`enviado` o equivalente válido)
-- Si ya existe al menos un envío exitoso de esa corrida lógica, omitir el nuevo envío automático aunque todavía siga dentro de la tolerancia.
+2. No registrar corridas automáticas ya satisfechas en la misma ventana
+- Para origen `cron`, si todos los destinatarios manuales ya tienen envío exitoso previo para esa ventana, la función debe:
+  - omitir el envío,
+  - no crear fila en `avisos_ejecuciones`,
+  - solo dejar traza en `summary.details` / logs internos si hace falta depuración.
+- En otras palabras: si no habrá envío ni error ni trabajo pendiente, no debe existir registro visible en la pantalla de Ejecuciones.
 
-3. No romper el reenvío manual explícito
-- Introducir un indicador claro en la función para distinguir origen:
-  - automático/cron
-  - manual explícito
-- Cuando el origen sea manual explícito, omitir esa validación de bloqueo por ventana y seguir permitiendo claves con `executionId`.
+3. Mantener registro solo cuando realmente “sí tocaba ejecutar”
+Se conservará el log cuando ocurra cualquiera de estos casos:
+- hay destinatarios nuevos que sí se van a enviar,
+- hubo error de consulta o procesamiento,
+- hubo destinatarios evaluados reales aunque el resultado sea parcial o error,
+- el disparo sea manual explícito y se quiera auditar ese intento.
 
-4. Dejar trazabilidad clara en el log
-- La corrida debe seguir registrándose en `avisos_ejecuciones`.
-- Cuando se omita por esta nueva regla, guardar un motivo legible como:
-  - `Ya enviado exitosamente en esta ventana; reenvío automático omitido`
-- Así el usuario verá la corrida, pero con explicación de por qué no volvió a salir.
-
-Archivos a modificar
-- `supabase/functions/evaluar-triggers-evento/index.ts`
-- Si ya existe un disparo manual desde UI o función interna para este flujo, revisar también el punto donde se invoca para enviar un flag/origen explícito.
+4. Conservar el comportamiento actual fuera de ventana
+- Las corridas fuera de `withinSendWindow(...)` seguirán sin registrarse, como ya quedó ajustado antes.
+- El cambio nuevo cubre el caso restante: “está dentro de ventana, pero ya quedó satisfecha por una corrida previa exitosa”.
 
 Implementación propuesta
-- Añadir un parámetro/origen de ejecución en `evaluar-triggers-evento` para distinguir automático vs manual.
-- Crear una validación helper para detectar si ya hubo envío exitoso previo del lote manual para ese `trigger + offset + fechaObjetivo`.
-- Aplicar esa validación solo al bloque de `manualAccum` cuando la corrida sea automática.
-- Mantener:
-  - la tolerancia de ventana actual,
-  - la bitácora en `avisos_ejecuciones`,
-  - la idempotencia estable de clientes reales,
-  - el `executionId` para reenvíos manuales explícitos.
+- Reestructurar el loop principal en `supabase/functions/evaluar-triggers-evento/index.ts` para separar:
+  1. validaciones previas,
+  2. determinación de destinatarios efectivos,
+  3. creación del log solo cuando sí proceda.
+- En el flujo de destinatarios manuales:
+  - ejecutar `getSuccessfulManualRecipients(...)` antes de `createExecutionLog(...)` cuando el origen sea `cron`,
+  - filtrar destinatarios ya satisfechos,
+  - si después del filtro no queda ninguno, hacer `continue` sin crear registro.
+- Mantener `createExecutionLog(...)` antes del primer insert real o antes de cualquier caso que sí deba quedar auditado.
+- No cambiar la idempotencia de clientes reales ni el soporte de reenvío manual explícito.
+
+Archivo a modificar
+- `supabase/functions/evaluar-triggers-evento/index.ts`
 
 Resultado esperado
-- Si el cron corre a las 10:20 y envía bien, la corrida de las 10:21 ya no volverá a mandar el aviso aunque siga dentro de la tolerancia.
-- El sistema seguirá mostrando la segunda corrida en el log, pero marcada como omitida por envío exitoso previo.
-- Si el usuario dispara un reenvío manual explícito, sí podrá volver a enviarse.
+- Si el cron envía correctamente a las 10:48, la corrida de las 10:49 dentro de la misma tolerancia ya no enviará nada y tampoco aparecerá en `avisos_ejecuciones`.
+- La vista de Ejecuciones mostrará solo corridas que realmente ejecutaron algo relevante o que fallaron.
+- Dejará de verse “ruido” de intentos automáticos ya satisfechos.
 
 Validación posterior
-- Configurar un aviso con destinatarios manuales y tolerancia activa.
-- Verificar:
-  1. que la primera corrida automática envíe correctamente,
-  2. que la siguiente corrida dentro de la tolerancia no reenvíe,
-  3. que el log registre la segunda como omitida con motivo claro,
-  4. que un disparo manual explícito sí vuelva a enviar.
+- Probar un aviso con destinatarios manuales en una hora exacta.
+- Verificar que:
+  1. la primera corrida automática cree log y envíe,
+  2. la siguiente corrida dentro de tolerancia no cree log si ya todo quedó enviado exitosamente,
+  3. una corrida fuera de ventana tampoco cree log,
+  4. un reenvío manual explícito siga pudiendo registrarse y ejecutarse.
