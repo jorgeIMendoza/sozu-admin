@@ -1,82 +1,67 @@
 
-Objetivo: hacer que el aviso de “Recordatorio de pago” genere un registro nuevo en el log cada vez que corre el proceso, aunque el envío real quede omitido por idempotencia, para que la vista de Ejecuciones refleje cada corrida y no parezca que “se reemplaza” por la última.
+Objetivo: permitir reenvíos manuales del aviso cuando corresponda haciendo que la clave de idempotencia cambie por corrida solo para destinatarios manuales, sin romper la protección anti-duplicado de los envíos reales a clientes.
 
 Diagnóstico confirmado
-- La vista `Ejecuciones.tsx` hoy no muestra una bitácora real de corridas de avisos por evento; reconstruye filas “sintéticas” agrupando `avisos_envios_evento` por minuto.
-- En `evaluar-triggers-evento`, la tabla `avisos_envios_evento` tiene un `UNIQUE (id_trigger, clave_entidad)`.
-- Para el aviso de recordatorio, `clave_entidad` es estable:
-  - cliente real: `acuerdo:{id}:offset:{offset}`
-  - modo manual consolidado: `trigger:{id}:offset:{offset}:fecha:{fechaObjetivo}:manual:{email}`
-- Resultado:
-  - la primera corrida inserta el registro;
-  - las siguientes corridas dentro del mismo escenario ya no insertan nada y solo loguean “ya enviado, omitiendo”;
-  - como la UI depende de nuevos inserts en `avisos_envios_evento`, no aparece una nueva fila por ejecución.
+- En `supabase/functions/evaluar-triggers-evento/index.ts`, la clave manual hoy es estable:
+  `trigger:{id}:offset:{offset}:fecha:{fechaObjetivo}:manual:{email}`
+- Esa clave choca contra el `UNIQUE (id_trigger, clave_entidad)` de `avisos_envios_evento`.
+- Resultado: si el aviso ya se envió una vez a esos destinatarios manuales para esa fecha objetivo, cualquier corrida posterior queda bloqueada como “ya enviado”, aunque sí se quiera reenviar manualmente.
+- La lógica de clientes reales usa otra clave (`acuerdo:{id}:offset:{offset}`) y esa sí debe seguir siendo estable para evitar duplicados reales.
 
-Qué se va a construir
-1. Registrar cada corrida de aviso por evento en `avisos_ejecuciones`
-- Crear un registro explícito al inicio de cada ejecución de trigger/offset en `avisos_ejecuciones`.
-- Guardar:
-  - `id_aviso`
-  - `tipo_trigger = 'evento'`
-  - `fecha_ejecucion`
-  - totales
-  - estado final
-  - detalle del resultado
-- Ese registro debe existir aunque:
-  - no haya acuerdos,
-  - esté fuera de ventana,
-  - ya se hubiera enviado antes,
-  - todos los destinatarios sean omitidos por duplicado.
+Qué se va a cambiar
+1. Usar el identificador de corrida existente como parte de la clave manual
+- Aprovechar `executionId`, que ya se crea al inicio de cada corrida en `avisos_ejecuciones`.
+- Construir la clave manual con ese identificador, por ejemplo:
+  `trigger:{id}:offset:{offset}:fecha:{fechaObjetivo}:manual:{email}:exec:{executionId}`
+- Aplicarlo únicamente en el bloque de `manualAccum` / envío consolidado manual.
 
-2. Mantener `avisos_envios_evento` solo para auditoría de destinatarios/envíos
-- Conservar la protección anti-duplicado actual para no reenviar el mismo aviso varias veces al mismo destinatario.
-- No usar esa tabla como fuente principal de “corridas” en la pantalla de Ejecuciones.
-- Seguir guardando ahí el detalle por destinatario y payload enviado.
+2. Mantener intacta la idempotencia para clientes reales
+- No modificar la clave:
+  `acuerdo:{id}:offset:{offset}`
+- Así se conserva la protección actual contra reenvíos accidentales al cliente final.
 
-3. Ajustar la lógica de `evaluar-triggers-evento`
-- Crear un acumulador por corrida con contadores claros:
-  - acuerdos encontrados
-  - destinatarios evaluados
-  - enviados
-  - omitidos por idempotencia
-  - errores
-  - motivo principal
-- Al finalizar cada trigger/offset:
-  - actualizar el registro de `avisos_ejecuciones` con estado consistente:
-    - `completado`
-    - `parcial`
-    - `error`
-    - o equivalente legible si fue “omitido/ya enviado”
-- Incluir en `detalle_error` o en un resumen textual mensajes como:
-  - “Ya enviado previamente; ejecución omitida”
-  - “Sin acuerdos elegibles”
-  - “Fuera de ventana de envío”
+3. Ajustar el comportamiento del lote manual consolidado
+- Al cambiar la clave por corrida, el bloque que hoy entra en:
+  `ya enviado, omitiendo lote consolidado`
+  dejará de dispararse por una corrida anterior.
+- Cada ejecución manual podrá registrar sus propios inserts en `avisos_envios_evento` y enviar nuevamente a los destinatarios configurados.
+- La consolidación del lote manual se mantiene; solo cambia la semilla de idempotencia.
 
-4. Corregir la vista `Ejecuciones.tsx`
-- Dejar de sintetizar las ejecuciones de evento desde `avisos_envios_evento`.
-- Tomar `avisos_ejecuciones` como fuente principal del listado.
-- Si hace falta, usar `avisos_envios_evento` solo para abrir detalle fino por destinatario o enriquecer datos secundarios.
-- Mostrar filas separadas por cada corrida real, incluso si dos corridas del mismo aviso ocurrieron con un minuto de diferencia.
-
-5. Homologar lo que verá el usuario
-- Cuando una corrida no envíe nada porque ya había sido enviada, debe verse como una fila nueva con su hora real.
-- Esa fila debe explicar el motivo, en lugar de desaparecer del log.
-- Así el historial mostrará algo como:
-  - 21:50 enviado
-  - 21:51 omitido por ya enviado
-  - 21:52 fuera de ventana
-  en vez de aparentar una sola ejecución.
+4. Preservar trazabilidad clara
+- Seguir registrando cada corrida en `avisos_ejecuciones`.
+- Mantener el `executionId` como referencia implícita de esa corrida.
+- Si conviene para auditoría futura, enriquecer `summary.details` y/o `payloadN8N` con:
+  - `execution_id`
+  - `clave_entidad_base` sin sufijo de corrida
+  para distinguir “misma intención” vs “corrida distinta”.
 
 Archivos a modificar
 - `supabase/functions/evaluar-triggers-evento/index.ts`
-- `src/pages/admin/comunicacion/Ejecuciones.tsx`
 
-Trabajo de base de datos requerido
-- Revisar si `avisos_ejecuciones` ya tiene columnas suficientes para guardar motivo/resumen de una corrida de evento.
-- Si no las tiene, agregar por migración los campos mínimos necesarios para auditoría clara.
-- No se eliminará el `UNIQUE` de `avisos_envios_evento`, porque sigue siendo útil para evitar reenvíos duplicados.
+Implementación propuesta
+- Localizar el punto donde se arma `manualAccum.set(...)`.
+- Reemplazar `claveEntidad` manual para concatenar `executionId`.
+- Asegurar que `executionId` exista antes de construir destinatarios manuales; hoy ya se crea al inicio del loop por `offset`, por lo que encaja sin rediseño mayor.
+- Mantener sin cambios:
+  - inserciones/updates de `avisos_ejecuciones`
+  - `UNIQUE` de `avisos_envios_evento`
+  - claves de clientes reales
+  - lógica de canal/email/WhatsApp
 
-Resultado esperado
-- Cada vez que el cron ejecute el aviso de recordatorio, aparecerá una nueva fila en el log.
-- El sistema no volverá a mandar el mismo aviso solo por crear la bitácora.
-- La pantalla dejará de dar la impresión de que el aviso “se reemplaza por el último” y mostrará la historia real de ejecuciones con su motivo.
+Impacto esperado
+- Un envío manual podrá reenviarse en una corrida posterior aunque ya exista uno previo del mismo aviso/offset/fecha.
+- Los avisos reales a clientes seguirán protegidos contra duplicados.
+- El log mostrará nuevas ejecuciones y nuevos registros manuales por cada corrida permitida.
+
+Base de datos
+- No se requiere migración para este ajuste.
+- El cambio se apoya en tablas y columnas existentes:
+  - `avisos_ejecuciones.id`
+  - `avisos_envios_evento.clave_entidad`
+
+Validación posterior
+- Probar una corrida manual del mismo aviso dos veces.
+- Verificar que:
+  1. ambas corridas generen registros nuevos en `avisos_envios_evento`,
+  2. ambas aparezcan en `avisos_ejecuciones`,
+  3. los envíos a clientes reales sigan omitiéndose cuando ya exista la clave estable del acuerdo.
