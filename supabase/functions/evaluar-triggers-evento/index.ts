@@ -56,6 +56,30 @@ function fmtDate(s: string): string {
   catch { return s; }
 }
 
+const DEFAULT_TIPOS_PAGO = [2, 5, 4, 3];
+
+function formatMonthName(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-MX', { month: 'long' });
+}
+
+function resolveTratamiento(sexo: string | null | undefined): string {
+  if (sexo === 'F') return 'Sra.';
+  if (sexo === 'M') return 'Sr.';
+  return '';
+}
+
+function pickRandomWhatsappMessage(mensajesWhatsapp: unknown, fallbackHtml: string): string {
+  const variants = Array.isArray(mensajesWhatsapp)
+    ? mensajesWhatsapp.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  if (variants.length === 0) return fallbackHtml || '';
+  const index = Math.floor(Math.random() * variants.length);
+  return variants[index];
+}
+
 // Normaliza un teléfono al formato que espera la API de WhatsApp (Evolution):
 //   - Quita todo lo que no sea dígito (espacios, guiones, paréntesis, '+')
 //   - Si quedan 10 dígitos, asume México móvil → antepone '521'
