@@ -672,6 +672,15 @@ export default function AdministrarAvisos() {
     );
   };
 
+  const toggleTipoPago = (tipoId: number, checked: boolean) => {
+    setTiposPagoNotificables((prev) => {
+      if (checked) {
+        return prev.includes(tipoId) ? prev : [...prev, tipoId];
+      }
+      return prev.filter((id) => id !== tipoId);
+    });
+  };
+
   const filtered = avisos.filter(a => a.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
   const { paginated: pagedAvisos, page, setPage, totalPages, total, from, to } = usePagination(filtered, 50);
 
@@ -824,7 +833,11 @@ export default function AdministrarAvisos() {
               </div>
               <div>
                 <Label>Contenido del mensaje</Label>
-                <RichTextEditor value={mensajeHtml} onChange={setMensajeHtml} />
+                <RichTextEditor
+                  value={mensajeHtml}
+                  onChange={setMensajeHtml}
+                  placeholders={tipoEnvio === 'automatico' && modoTrigger === 'evento' ? EVENT_PLACEHOLDERS : undefined}
+                />
               </div>
               <div className="space-y-3">
                 <Label>Mensajes de WhatsApp</Label>
@@ -848,6 +861,11 @@ export default function AdministrarAvisos() {
                     </div>
                   ))}
                 </div>
+                {tipoEnvio === 'automatico' && modoTrigger === 'evento' && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Placeholders disponibles: {EVENT_PLACEHOLDERS.map(({ key }) => <code key={key} className="mr-1">{`{{${key}}}`}</code>)}
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -956,6 +974,26 @@ export default function AdministrarAvisos() {
                           <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
                         </div>
                       </div>
+                      <div className="space-y-2">
+                        <Label>Tipos de pago a notificar</Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Solo se intentará notificar acuerdos de pago con estos conceptos.
+                        </p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {TIPOS_PAGO_OPTIONS.map((tipo) => {
+                            const checked = tiposPagoNotificables.includes(tipo.id);
+                            return (
+                              <label key={tipo.id} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) => toggleTipoPago(tipo.id, value === true)}
+                                />
+                                <span>{tipo.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div>
                         <Label>Canal</Label>
                         <Select value={eventoCanal} onValueChange={(v) => setEventoCanal(v as any)}>
@@ -977,7 +1015,7 @@ export default function AdministrarAvisos() {
                         </p>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        Variables disponibles en asunto y mensaje: <code>{'{{nombre}}'}</code>, <code>{'{{monto}}'}</code>, <code>{'{{fecha_pago}}'}</code>, <code>{'{{orden}}'}</code>, <code>{'{{cuenta_id}}'}</code>, <code>{'{{offset}}'}</code>.
+                        Variables disponibles en asunto y mensaje: {EVENT_PLACEHOLDERS.map(({ key }) => <code key={key} className="mr-1">{`{{${key}}}`}</code>)}
                       </p>
                     </div>
                   )}
