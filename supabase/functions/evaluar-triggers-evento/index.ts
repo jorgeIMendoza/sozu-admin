@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
                 email: m.email,
                 nombre: m.nombre || persona.nombre_legal || '',
                 telefono: m.telefono || '',
-                claveEntidad: `${claveEntidadManualBase}:exec:${executionId ?? 'sin-ejecucion'}`,
+                claveEntidad: buildManualEntityKey(claveEntidadManualBase, executionOrigin, executionId),
                 asunto: destAsunto,
                 html: destHtml,
                 textoPlano,
@@ -708,7 +708,39 @@ Deno.serve(async (req) => {
 
         if (manualAccum.size > 0 && rowsFilteredByProject.length > 0) {
           const channel = trig.canal as string;
-          const destinatariosManual = Array.from(manualAccum.values());
+          let destinatariosManual = Array.from(manualAccum.values());
+          if (executionOrigin === 'cron') {
+            const successfulEmails = await getSuccessfulManualRecipients(
+              supabaseAdmin,
+              aviso.id,
+              trig.id,
+              fechaObjetivo,
+              destinatariosManual.map((dest) => dest.email),
+            );
+
+            if (successfulEmails.size > 0) {
+              const omitidosPrevios = destinatariosManual.filter((dest) => successfulEmails.has(dest.email));
+              if (omitidosPrevios.length > 0) {
+                metrics.omitidos += omitidosPrevios.length;
+                addMotivo(metrics, 'Ya enviado exitosamente en esta ventana; reenvío automático omitido');
+                console.log(`${tag} trigger ${trig.id} offset ${offset}: ${omitidosPrevios.length} destinatario(s) manual(es) omitido(s) por éxito previo en ventana`);
+                summary.details.push({
+                  trigger_id: trig.id,
+                  offset,
+                  fecha_objetivo: fechaObjetivo,
+                  consolidado: true,
+                  skipped_successful_window: omitidosPrevios.map((dest) => dest.email),
+                });
+              }
+              destinatariosManual = destinatariosManual.filter((dest) => !successfulEmails.has(dest.email));
+            }
+          }
+
+          if (destinatariosManual.length === 0) {
+            await finalizeExecutionLog(supabaseAdmin, executionId, metrics);
+            continue;
+          }
+
           metrics.destinatarios = destinatariosManual.length;
 
           const insertedIds: number[] = [];
