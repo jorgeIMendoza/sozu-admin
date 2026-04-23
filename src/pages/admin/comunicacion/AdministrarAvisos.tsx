@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2, Info, Clock, CalendarClock, Bell } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
@@ -39,6 +40,7 @@ interface Aviso {
   postmark_template_id: number;
   modo_trigger?: string | null;
   payload_postmark?: any;
+  tipos_pago_notificables?: number[] | null;
 }
 
 interface AvisoProyectoRow {
@@ -83,6 +85,29 @@ interface TriggerEvento {
   filtros?: any;
   activo: boolean;
 }
+
+const TIPOS_PAGO_OPTIONS = [
+  { id: 2, label: "Enganche", placeholder: "enganche" },
+  { id: 5, label: "Parcialidad", placeholder: "parcialidad" },
+  { id: 4, label: "Especial", placeholder: "especial" },
+  { id: 3, label: "Contraentrega", placeholder: "contraentrega" },
+] as const;
+
+const DEFAULT_TIPOS_PAGO = TIPOS_PAGO_OPTIONS.map((item) => item.id);
+
+const EVENT_PLACEHOLDERS = [
+  { key: "nombre", label: "Nombre del cliente" },
+  { key: "tratamiento", label: "Sr./Sra. según sexo" },
+  { key: "monto", label: "Monto del pago" },
+  { key: "fecha_pago", label: "Fecha de vencimiento" },
+  { key: "mes", label: "Mes de la fecha de pago" },
+  { key: "orden", label: "Número de parcialidad" },
+  { key: "departamento", label: "Número del departamento" },
+  { key: "producto", label: "Nombre del producto" },
+  { key: "proyecto", label: "Nombre del desarrollo" },
+  { key: "cuenta_id", label: "ID de cuenta de cobranza" },
+  { key: "offset", label: "Días respecto al vencimiento" },
+];
 
 const DIAS_SEMANA: Record<string, string> = { '0': 'domingo', '1': 'lunes', '2': 'martes', '3': 'miércoles', '4': 'jueves', '5': 'viernes', '6': 'sábado', '7': 'domingo' };
 const MESES: Record<string, string> = { '1': 'enero', '2': 'febrero', '3': 'marzo', '4': 'abril', '5': 'mayo', '6': 'junio', '7': 'julio', '8': 'agosto', '9': 'septiembre', '10': 'octubre', '11': 'noviembre', '12': 'diciembre' };
@@ -287,6 +312,7 @@ export default function AdministrarAvisos() {
   const [eventoHora, setEventoHora] = useState<string>('10:00');
   const [eventoCanal, setEventoCanal] = useState<'email' | 'whatsapp' | 'ambos'>('email');
   const [eventoActivo, setEventoActivo] = useState<boolean>(true);
+  const [tiposPagoNotificables, setTiposPagoNotificables] = useState<number[]>(DEFAULT_TIPOS_PAGO);
 
   // Payload Postmark personalizado
   const [payloadEnabled, setPayloadEnabled] = useState<boolean>(false);
@@ -400,6 +426,7 @@ export default function AdministrarAvisos() {
     setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
     setEventoOffsets('-5,-3,-1');
     setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
+    setTiposPagoNotificables(DEFAULT_TIPOS_PAGO);
     setPayloadEnabled(false);
     setPayloadJson("");
     setDialogOpen(true);
@@ -415,6 +442,11 @@ export default function AdministrarAvisos() {
       ? [...aviso.mensajes_whatsapp.slice(0, 3), ...Array(Math.max(0, 3 - aviso.mensajes_whatsapp.length)).fill("")]
       : ["", "", ""]);
     setModoTrigger((aviso.modo_trigger as any) || 'cron');
+    setTiposPagoNotificables(
+      Array.isArray(aviso.tipos_pago_notificables) && aviso.tipos_pago_notificables.length > 0
+        ? aviso.tipos_pago_notificables
+        : DEFAULT_TIPOS_PAGO
+    );
 
     // Load payload personalizado
     if (aviso.payload_postmark) {
@@ -555,6 +587,7 @@ export default function AdministrarAvisos() {
       postmark_template_id: templateId,
       modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
       payload_postmark: payloadPostmark,
+      tipos_pago_notificables: tiposPagoNotificables.length > 0 ? tiposPagoNotificables : DEFAULT_TIPOS_PAGO,
     };
 
     let avisoId: number;
@@ -637,6 +670,15 @@ export default function AdministrarAvisos() {
     setSelectedRoles(prev =>
       prev.includes(rolId) ? prev.filter(r => r !== rolId) : [...prev, rolId]
     );
+  };
+
+  const toggleTipoPago = (tipoId: number, checked: boolean) => {
+    setTiposPagoNotificables((prev) => {
+      if (checked) {
+        return prev.includes(tipoId) ? prev : [...prev, tipoId];
+      }
+      return prev.filter((id) => id !== tipoId);
+    });
   };
 
   const filtered = avisos.filter(a => a.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -791,7 +833,11 @@ export default function AdministrarAvisos() {
               </div>
               <div>
                 <Label>Contenido del mensaje</Label>
-                <RichTextEditor value={mensajeHtml} onChange={setMensajeHtml} />
+                <RichTextEditor
+                  value={mensajeHtml}
+                  onChange={setMensajeHtml}
+                  placeholders={tipoEnvio === 'automatico' && modoTrigger === 'evento' ? EVENT_PLACEHOLDERS : undefined}
+                />
               </div>
               <div className="space-y-3">
                 <Label>Mensajes de WhatsApp</Label>
@@ -815,6 +861,11 @@ export default function AdministrarAvisos() {
                     </div>
                   ))}
                 </div>
+                {tipoEnvio === 'automatico' && modoTrigger === 'evento' && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Placeholders disponibles: {EVENT_PLACEHOLDERS.map(({ key }) => <code key={key} className="mr-1">{`{{${key}}}`}</code>)}
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -923,6 +974,26 @@ export default function AdministrarAvisos() {
                           <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
                         </div>
                       </div>
+                      <div className="space-y-2">
+                        <Label>Tipos de pago a notificar</Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Solo se intentará notificar acuerdos de pago con estos conceptos.
+                        </p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {TIPOS_PAGO_OPTIONS.map((tipo) => {
+                            const checked = tiposPagoNotificables.includes(tipo.id);
+                            return (
+                              <label key={tipo.id} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) => toggleTipoPago(tipo.id, value === true)}
+                                />
+                                <span>{tipo.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div>
                         <Label>Canal</Label>
                         <Select value={eventoCanal} onValueChange={(v) => setEventoCanal(v as any)}>
@@ -944,7 +1015,7 @@ export default function AdministrarAvisos() {
                         </p>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        Variables disponibles en asunto y mensaje: <code>{'{{nombre}}'}</code>, <code>{'{{monto}}'}</code>, <code>{'{{fecha_pago}}'}</code>, <code>{'{{orden}}'}</code>, <code>{'{{cuenta_id}}'}</code>, <code>{'{{offset}}'}</code>.
+                        Variables disponibles en asunto y mensaje: {EVENT_PLACEHOLDERS.map(({ key }) => <code key={key} className="mr-1">{`{{${key}}}`}</code>)}
                       </p>
                     </div>
                   )}

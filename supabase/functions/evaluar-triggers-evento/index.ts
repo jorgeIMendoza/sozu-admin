@@ -56,6 +56,30 @@ function fmtDate(s: string): string {
   catch { return s; }
 }
 
+const DEFAULT_TIPOS_PAGO = [2, 5, 4, 3];
+
+function formatMonthName(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-MX', { month: 'long' });
+}
+
+function resolveTratamiento(sexo: string | null | undefined): string {
+  if (sexo === 'F') return 'Sra.';
+  if (sexo === 'M') return 'Sr.';
+  return '';
+}
+
+function pickRandomWhatsappMessage(mensajesWhatsapp: unknown, fallbackHtml: string): string {
+  const variants = Array.isArray(mensajesWhatsapp)
+    ? mensajesWhatsapp.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  if (variants.length === 0) return fallbackHtml || '';
+  const index = Math.floor(Math.random() * variants.length);
+  return variants[index];
+}
+
 // Normaliza un teléfono al formato que espera la API de WhatsApp (Evolution):
 //   - Quita todo lo que no sea dígito (espacios, guiones, paréntesis, '+')
 //   - Si quedan 10 dígitos, asume México móvil → antepone '521'
@@ -119,7 +143,7 @@ Deno.serve(async (req) => {
       .from('avisos_triggers_evento')
       .select(`
         id, id_aviso, id_fuente, offsets_dias, hora_envio, canal, filtros, activo,
-        avisos:avisos!inner ( id, nombre, asunto, mensaje_html, postmark_template_id, activo, modo_trigger, payload_postmark ),
+          avisos:avisos!inner ( id, nombre, asunto, mensaje_html, mensajes_whatsapp, postmark_template_id, activo, modo_trigger, payload_postmark, tipos_pago_notificables ),
         fuente:aviso_triggers_fuentes!inner ( id, clave, activo )
       `)
       .eq('activo', true);
@@ -217,7 +241,8 @@ Deno.serve(async (req) => {
               id_propiedad,
               ofertas:ofertas!fk_ccob_oferta!inner (
                 id,
-                personas:personas!fk_ofertas_persona_lead!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
+                id_producto,
+                personas:personas!fk_ofertas_persona_lead!inner ( id, nombre_legal, email, telefono, clave_pais_telefono, sexo )
               )
             )
           `)
@@ -225,11 +250,11 @@ Deno.serve(async (req) => {
           .eq('pago_completado', false)
           .eq('fecha_pago', fechaObjetivo);
 
-        // Optional concepto filter
         const filtros: any = trig.filtros || {};
-        if (Array.isArray(filtros.id_concepto) && filtros.id_concepto.length > 0) {
-          q = q.in('id_concepto', filtros.id_concepto);
-        }
+        const tiposPagoConfigurados = Array.isArray(aviso.tipos_pago_notificables) && aviso.tipos_pago_notificables.length > 0
+          ? aviso.tipos_pago_notificables
+          : DEFAULT_TIPOS_PAGO;
+        q = q.in('id_concepto', tiposPagoConfigurados);
 
         // Modo prueba/auditoría:
         //   filtros.email_override: redirige TODOS los envíos a ese correo (ignora email del cliente)
@@ -264,13 +289,18 @@ Deno.serve(async (req) => {
 
         const { data: propiedadesRelacionadas } = await supabaseAdmin
           .from('propiedades')
-          .select('id, id_edificio_modelo')
+          .select('id, id_edificio_modelo, numero_propiedad')
           .in('id', propiedadIds);
 
         const edificioModeloByPropiedad = new Map<number, number>(
           (propiedadesRelacionadas || [])
             .filter((propiedad: any) => propiedad.id && propiedad.id_edificio_modelo)
             .map((propiedad: any) => [propiedad.id, propiedad.id_edificio_modelo])
+        );
+        const numeroPropiedadById = new Map<number, string>(
+          (propiedadesRelacionadas || [])
+            .filter((propiedad: any) => propiedad.id)
+            .map((propiedad: any) => [propiedad.id, propiedad.numero_propiedad || ''])
         );
 
         const edificioModeloIds = [...new Set((propiedadesRelacionadas || []).map((propiedad: any) => propiedad.id_edificio_modelo).filter(Boolean))];
@@ -285,6 +315,10 @@ Deno.serve(async (req) => {
           : { data: [] as any[] };
 
         const proyectoByEdificio = new Map<number, number>(((edificios as any[]) || []).map((edificio: any) => [edificio.id, edificio.id_proyecto]));
+        const proyectoIds = [...new Set(((edificios as any[]) || []).map((edificio: any) => edificio.id_proyecto).filter(Boolean))];
+        const { data: proyectos } = proyectoIds.length > 0
+          ? await supabaseAdmin.from('proyectos').select('id, nombre').in('id', proyectoIds)
+          : { data: [] as any[] };
         const rowsFilteredByProject = (rows || []).filter((ac: any) => {
           const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
           const idEdificioModelo = idPropiedad ? edificioModeloByPropiedad.get(idPropiedad) : undefined;
@@ -292,6 +326,13 @@ Deno.serve(async (req) => {
           const idProyecto = idEdificio ? proyectoByEdificio.get(idEdificio) : undefined;
           return !!idProyecto && selectedProjectIds.includes(idProyecto);
         });
+
+        const proyectoNombreById = new Map<number, string>(((proyectos as any[]) || []).map((proyecto: any) => [proyecto.id, proyecto.nombre || '']));
+        const productoIds = [...new Set(rowsFilteredByProject.map((ac: any) => ac?.cuentas_cobranza?.ofertas?.id_producto).filter(Boolean))];
+        const { data: productos } = productoIds.length > 0
+          ? await supabaseAdmin.from('productos_servicios').select('id, nombre').in('id', productoIds)
+          : { data: [] as any[] };
+        const productoNombreById = new Map<number, string>(((productos as any[]) || []).map((producto: any) => [producto.id, producto.nombre || '']));
 
         if (rowsFilteredByProject.length === 0) {
           console.log(`${tag} trigger ${trig.id} offset ${offset}: sin acuerdos en desarrollos habilitados`);
@@ -324,6 +365,14 @@ Deno.serve(async (req) => {
           const persona: any = cc?.ofertas?.personas;
           if (!persona) continue;
 
+          const idPropiedad = cc?.id_propiedad;
+          const idEdificioModelo = idPropiedad ? edificioModeloByPropiedad.get(idPropiedad) : undefined;
+          const idEdificio = idEdificioModelo ? edificioByModelo.get(idEdificioModelo) : undefined;
+          const idProyecto = idEdificio ? proyectoByEdificio.get(idEdificio) : undefined;
+          const numeroDepartamento = idPropiedad ? (numeroPropiedadById.get(idPropiedad) || '') : '';
+          const nombreProyecto = idProyecto ? (proyectoNombreById.get(idProyecto) || '') : '';
+          const nombreProducto = cc?.ofertas?.id_producto ? (productoNombreById.get(cc.ofertas.id_producto) || '') : '';
+
           const claveEntidad = `acuerdo:${ac.id}:offset:${offset}`;
           const channel = trig.canal as string;
 
@@ -333,11 +382,16 @@ Deno.serve(async (req) => {
           // Build template variables
           const vars: Record<string, string> = {
             nombre: persona.nombre_legal || '',
+            tratamiento: resolveTratamiento(persona.sexo),
             email: persona.email || '',
             telefono: persona.telefono ? `${persona.clave_pais_telefono || ''}${persona.telefono}` : '',
             monto: fmtMoney(Number(ac.monto || 0)),
             fecha_pago: fmtDate(ac.fecha_pago as string),
+            mes: formatMonthName(ac.fecha_pago as string),
             orden: String(ac.orden || ''),
+            departamento: numeroDepartamento,
+            producto: nombreProducto,
+            proyecto: nombreProyecto,
             offset: String(offset),
             cuenta_id: String(cc.id),
             asunto: '',
@@ -368,7 +422,8 @@ Deno.serve(async (req) => {
               const destTemplateModel = aviso.payload_postmark
                 ? renderJsonTemplate(aviso.payload_postmark, destVars)
                 : { mensaje: { nombre: m.nombre || persona.nombre_legal || '', texto: destHtml, asunto: destAsunto } };
-              const textoPlano = destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+              const mensajeWaTpl = pickRandomWhatsappMessage(aviso.mensajes_whatsapp, aviso.mensaje_html || '');
+              const textoPlano = renderTemplate(mensajeWaTpl, destVars).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
               manualAccum.set(key, {
                 email: m.email,
                 nombre: m.nombre || persona.nombre_legal || '',
@@ -456,7 +511,8 @@ Deno.serve(async (req) => {
             // ============================================================
             const telDigits = normalizarTelefonoWA(dest.telefono || '');
             const telWA = telefonoConPlus(telDigits);
-            const textoPlano = destHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            const mensajeWaTpl = pickRandomWhatsappMessage(aviso.mensajes_whatsapp, aviso.mensaje_html || '');
+            const textoPlano = renderTemplate(mensajeWaTpl, destVars).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
             // Mapear canal de la BD ("email"|"whatsapp"|"ambos") al contrato de n8n
             // ("email"|"wa"|"ambos"). Si pidieron WA pero no hay teléfono, degradar a email.

@@ -393,6 +393,7 @@ export type Database = {
           payload_postmark: Json | null
           postmark_template_id: number
           tipo_envio: string
+          tipos_pago_notificables: number[]
         }
         Insert: {
           activo?: boolean
@@ -408,6 +409,7 @@ export type Database = {
           payload_postmark?: Json | null
           postmark_template_id?: number
           tipo_envio?: string
+          tipos_pago_notificables?: number[]
         }
         Update: {
           activo?: boolean
@@ -423,6 +425,7 @@ export type Database = {
           payload_postmark?: Json | null
           postmark_template_id?: number
           tipo_envio?: string
+          tipos_pago_notificables?: number[]
         }
         Relationships: []
       }
