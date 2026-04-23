@@ -32,6 +32,10 @@ export default function InmobConfiguracion() {
   const [copiarDireccion, setCopiarDireccion] = useState(false);
   const [isNewRepLegalDialogOpen, setIsNewRepLegalDialogOpen] = useState(false);
   const [isNewRepComDialogOpen, setIsNewRepComDialogOpen] = useState(false);
+  const [isEditRepLegalDialogOpen, setIsEditRepLegalDialogOpen] = useState(false);
+  const [isEditRepComDialogOpen, setIsEditRepComDialogOpen] = useState(false);
+  const [repLegalForm, setRepLegalForm] = useState({ nombre_legal: "", email: "", telefono: "" });
+  const [repComForm, setRepComForm] = useState({ nombre_legal: "", email: "", telefono: "" });
 
 
 
@@ -136,34 +140,50 @@ export default function InmobConfiguracion() {
     },
   });
 
-  // Fetch representante legal name
-  const { data: repLegalNombre } = useQuery({
+  // Fetch representante legal data
+  const { data: repLegalData } = useQuery({
     queryKey: ["inmob-config-rep-legal", persona?.id_entidad_relacionada_rep_leg],
     queryFn: async () => {
       const repLegId = persona?.id_entidad_relacionada_rep_leg;
       if (!repLegId) return null;
       const { data } = await supabase
         .from("entidades_relacionadas")
-        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .select("id, id_persona, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email, telefono)")
         .eq("id", repLegId)
         .single() as any;
-      return data?.personas?.nombre_legal || null;
+      return data
+        ? {
+            entidadId: data.id,
+            personaId: data.id_persona,
+            nombre_legal: data.personas?.nombre_legal || "",
+            email: data.personas?.email || "",
+            telefono: data.personas?.telefono || "",
+          }
+        : null;
     },
     enabled: !!persona?.id_entidad_relacionada_rep_leg,
   });
 
-  // Fetch representante comercial name
-  const { data: repComNombre } = useQuery({
+  // Fetch representante comercial data
+  const { data: repComData } = useQuery({
     queryKey: ["inmob-config-rep-com", persona?.id_entidad_relacionada_rep_com],
     queryFn: async () => {
       const repComId = persona?.id_entidad_relacionada_rep_com;
       if (!repComId) return null;
       const { data } = await supabase
         .from("entidades_relacionadas")
-        .select("personas!entidades_relacionadas_id_persona_fkey(nombre_legal)")
+        .select("id, id_persona, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, email, telefono)")
         .eq("id", repComId)
         .single() as any;
-      return data?.personas?.nombre_legal || null;
+      return data
+        ? {
+            entidadId: data.id,
+            personaId: data.id_persona,
+            nombre_legal: data.personas?.nombre_legal || "",
+            email: data.personas?.email || "",
+            telefono: data.personas?.telefono || "",
+          }
+        : null;
     },
     enabled: !!persona?.id_entidad_relacionada_rep_com,
   });
@@ -234,6 +254,56 @@ export default function InmobConfiguracion() {
     },
     onError: (error: any) => {
       toast.error(`Error al crear representante comercial: ${error.message}`);
+    },
+  });
+
+  const saveRepLegalMutation = useMutation({
+    mutationFn: async () => {
+      if (!repLegalData?.personaId) throw new Error("No se encontró el representante legal.");
+
+      const { error } = await supabase
+        .from("personas")
+        .update({
+          nombre_legal: repLegalForm.nombre_legal.trim() || null,
+          email: repLegalForm.email.trim().toLowerCase() || null,
+          telefono: repLegalForm.telefono.trim() || null,
+        })
+        .eq("id", repLegalData.personaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-legal"] });
+      setIsEditRepLegalDialogOpen(false);
+      toast.success("Representante legal actualizado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Error al actualizar representante legal.");
+    },
+  });
+
+  const saveRepComMutation = useMutation({
+    mutationFn: async () => {
+      if (!repComData?.personaId) throw new Error("No se encontró el representante comercial.");
+
+      const { error } = await supabase
+        .from("personas")
+        .update({
+          nombre_legal: repComForm.nombre_legal.trim() || null,
+          email: repComForm.email.trim().toLowerCase() || null,
+          telefono: repComForm.telefono.trim() || null,
+        })
+        .eq("id", repComData.personaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inmob-config-rep-com"] });
+      setIsEditRepComDialogOpen(false);
+      toast.success("Representante comercial actualizado correctamente.");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Error al actualizar representante comercial.");
     },
   });
 
