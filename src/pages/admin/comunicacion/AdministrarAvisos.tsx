@@ -619,7 +619,7 @@ export default function AdministrarAvisos() {
       </div>
       <div style="background: #eef2ff; padding: 8px 16px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #4338ca;">
         <strong>Destinatarios:</strong> ${destinatarios.length} seleccionado${destinatarios.length !== 1 ? 's' : ''}
-        ${selectedProyectos.length > 0 ? ` | <strong>Proyectos:</strong> ${selectedProyectos.join(', ')}` : ''}
+        ${selectedProyectos.length > 0 ? ` | <strong>Desarrollos:</strong> ${selectedProyectos.join(', ')}` : ''}
         | <strong>Template ID:</strong> ${postmarkTemplateId}
       </div>
       <div style="padding: 16px;">
@@ -738,6 +738,29 @@ export default function AdministrarAvisos() {
               <div>
                 <Label>Contenido del mensaje</Label>
                 <RichTextEditor value={mensajeHtml} onChange={setMensajeHtml} />
+              </div>
+              <div className="space-y-3">
+                <Label>Mensajes de WhatsApp</Label>
+                <p className="text-xs text-muted-foreground">
+                  Captura 3 variantes obligatorias y distintas. Al enviar por WhatsApp se elegirá una al azar.
+                </p>
+                <div className="space-y-3">
+                  {mensajesWhatsapp.map((mensaje, index) => (
+                    <div key={index} className="space-y-1.5">
+                      <Label className="text-xs">Mensaje {index + 1}</Label>
+                      <Textarea
+                        value={mensaje}
+                        onChange={(e) => {
+                          const next = [...mensajesWhatsapp];
+                          next[index] = e.target.value;
+                          setMensajesWhatsapp(next);
+                        }}
+                        placeholder={`Mensaje de WhatsApp ${index + 1}`}
+                        className="min-h-[96px]"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -894,6 +917,7 @@ export default function AdministrarAvisos() {
                 onDestinatariosChange={setDestinatarios}
                 selectedProyectos={selectedProyectos}
                 onSelectedProyectosChange={setSelectedProyectos}
+                availableProjectOptions={proyectosPublicados.map((proyecto) => proyecto.nombre)}
               />
             </div>
 
