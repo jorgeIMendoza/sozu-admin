@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ execution_origin: 'cron' }),
       });
       const evBody = await evRes.text();
       console.log(`[${timeStr}] evaluar-triggers-evento status=${evRes.status} body=${evBody.substring(0, 400)}`);
