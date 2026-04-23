@@ -1057,16 +1057,16 @@ export type Database = {
       }
       borrar_bancos_banxico: {
         Row: {
-          "Clave de la institución": number | null
-          "Nombre de la institución": string | null
+          clave_institucion: number | null
+          nombre_banco: string | null
         }
         Insert: {
-          "Clave de la institución"?: number | null
-          "Nombre de la institución"?: string | null
+          clave_institucion?: number | null
+          nombre_banco?: string | null
         }
         Update: {
-          "Clave de la institución"?: number | null
-          "Nombre de la institución"?: string | null
+          clave_institucion?: number | null
+          nombre_banco?: string | null
         }
         Relationships: []
       }
@@ -1481,15 +1481,30 @@ export type Database = {
         }
         Relationships: []
       }
-      borrar_historico_claves_rastreo: {
+      borrar_historico_completo: {
         Row: {
-          clave_rastreo: string | null
+          clave_rastreo: string
+          cuenta_beneficiario: string | null
+          fecha_liquidacion: string | null
+          importe: string | null
+          institucion_destino: number | null
+          institucion_origen: string | null
         }
         Insert: {
-          clave_rastreo?: string | null
+          clave_rastreo: string
+          cuenta_beneficiario?: string | null
+          fecha_liquidacion?: string | null
+          importe?: string | null
+          institucion_destino?: number | null
+          institucion_origen?: string | null
         }
         Update: {
-          clave_rastreo?: string | null
+          clave_rastreo?: string
+          cuenta_beneficiario?: string | null
+          fecha_liquidacion?: string | null
+          importe?: string | null
+          institucion_destino?: number | null
+          institucion_origen?: string | null
         }
         Relationships: []
       }
@@ -6680,6 +6695,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      resultado_historico: {
+        Row: {
+          clave_institucion: number | null
+          clave_rastreo: string
+          cuenta_beneficiario: string | null
+          fecha_liquidacion: string | null
+          importe: string | null
+          institucion_destino: number | null
+        }
+        Insert: {
+          clave_institucion?: number | null
+          clave_rastreo: string
+          cuenta_beneficiario?: string | null
+          fecha_liquidacion?: string | null
+          importe?: string | null
+          institucion_destino?: number | null
+        }
+        Update: {
+          clave_institucion?: number | null
+          clave_rastreo?: string
+          cuenta_beneficiario?: string | null
+          fecha_liquidacion?: string | null
+          importe?: string | null
+          institucion_destino?: number | null
+        }
+        Relationships: []
       }
       roles: {
         Row: {
