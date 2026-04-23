@@ -347,9 +347,22 @@ Deno.serve(async (req) => {
           }
         }
       }
-      if (manualEmails.length > 0) {
+      // NUEVA SEMÁNTICA: la lista manual opera como WHITELIST sobre el email del cliente real del acuerdo.
+      // Se usa nombre/telefono del manual como override cuando coinciden; si la lista está vacía,
+      // se notifica a todos los clientes reales que cumplan la condición del trigger.
+      const manualOverridesByEmail = new Map<string, { nombre: string; telefono: string }>();
+      const manualEmailsSet = new Set<string>();
+      for (const m of manualEmails) {
+        const key = m.email.toLowerCase();
+        manualEmailsSet.add(key);
+        if (!manualOverridesByEmail.has(key)) {
+          manualOverridesByEmail.set(key, { nombre: m.nombre || '', telefono: m.telefono || '' });
+        }
+      }
+      const hasManualWhitelist = manualEmailsSet.size > 0;
+      if (hasManualWhitelist) {
         const conTel = manualEmails.filter((m) => m.telefono).length;
-        console.log(`${tag} trigger ${trig.id}: ${manualEmails.length} destinatario(s) manual(es) (${conTel} con teléfono) → REEMPLAZAN al cliente real`);
+        console.log(`${tag} trigger ${trig.id}: ${manualEmailsSet.size} correo(s) manual(es) cargados (${conTel} con teléfono) → operan como whitelist sobre el email del cliente del acuerdo`);
       }
 
       const offsets: number[] = (trig.offsets_dias as number[]) || [];
