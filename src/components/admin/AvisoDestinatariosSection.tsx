@@ -275,11 +275,6 @@ export function AvisoDestinatariosSection({
         }
       }
       setLoadingRolId(null);
-    } else {
-      // If deselecting Cliente, clear project filter
-      if (rolId === CLIENTE_ROL_ID && onSelectedProyectosChange) {
-        onSelectedProyectosChange([]);
-      }
     }
   };
 
@@ -435,15 +430,15 @@ export function AvisoDestinatariosSection({
         </div>
       </div>
 
-      {/* Project filter - only shown when Cliente role is selected */}
-      {isClienteSelected && availableProjectOptions.length > 0 && (
+      {/* Project filter */}
+      {availableProjectOptions.length > 0 && (
         <div>
           <Label className="flex items-center gap-1.5 mb-1.5">
             <Building2 className="h-4 w-4" />
             Desarrollos habilitados para este aviso
           </Label>
           <p className="text-xs text-muted-foreground mb-2">
-            Selecciona los desarrollos publicados por Sozu donde este aviso estará activo.
+            Selecciona los desarrollos publicados por Sozu donde este aviso estará activo. Por default todos quedan habilitados.
           </p>
           <MultiSelectFilter
             values={selectedProyectos}
