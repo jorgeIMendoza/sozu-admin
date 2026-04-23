@@ -80,6 +80,16 @@ function telefonoConPlus(digits: string): string {
   return digits.startsWith('+') ? digits : `+${digits}`;
 }
 
+async function getSelectedProjectIds(supabaseAdmin: ReturnType<typeof createClient>, avisoId: number): Promise<number[]> {
+  const { data } = await supabaseAdmin
+    .from('avisos_proyectos')
+    .select('id_proyecto')
+    .eq('id_aviso', avisoId)
+    .eq('activo', true);
+
+  return (data || []).map((item: any) => item.id_proyecto).filter((id: unknown): id is number => typeof id === 'number');
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -135,6 +145,13 @@ Deno.serve(async (req) => {
 
       if (!ignoreWindow && !withinSendWindow(trig.hora_envio as string, mexNow)) {
         console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): fuera de ventana hora_envio=${trig.hora_envio}`);
+        summary.skipped++;
+        continue;
+      }
+
+      const selectedProjectIds = await getSelectedProjectIds(supabaseAdmin, aviso.id);
+      if (selectedProjectIds.length === 0) {
+        console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): sin desarrollos habilitados`);
         summary.skipped++;
         continue;
       }
@@ -197,6 +214,7 @@ Deno.serve(async (req) => {
             id, fecha_pago, monto, orden, id_concepto, id_cuenta_cobranza, activo, pago_completado,
             cuentas_cobranza:cuentas_cobranza!fk_acpago_cuenta!inner (
               id,
+              id_propiedad,
               ofertas:ofertas!fk_ccob_oferta!inner (
                 id,
                 personas:personas!fk_ofertas_persona_lead!inner ( id, nombre_legal, email, telefono, clave_pais_telefono )
@@ -233,6 +251,53 @@ Deno.serve(async (req) => {
 
         console.log(`${tag} trigger ${trig.id} offset ${offset} fecha=${fechaObjetivo} → ${rows?.length || 0} acuerdos`);
 
+        const acuerdosFiltrados = (rows || []).filter((ac: any) => {
+          const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
+          return !!idPropiedad;
+        });
+
+        const propiedadIds = [...new Set(acuerdosFiltrados.map((ac: any) => ac.cuentas_cobranza.id_propiedad))];
+        if (propiedadIds.length === 0) {
+          console.log(`${tag} trigger ${trig.id} offset ${offset}: sin propiedades relacionadas para filtrar desarrollos`);
+          continue;
+        }
+
+        const { data: propiedadesRelacionadas } = await supabaseAdmin
+          .from('propiedades')
+          .select('id, id_edificio_modelo')
+          .in('id', propiedadIds);
+
+        const edificioModeloByPropiedad = new Map<number, number>(
+          (propiedadesRelacionadas || [])
+            .filter((propiedad: any) => propiedad.id && propiedad.id_edificio_modelo)
+            .map((propiedad: any) => [propiedad.id, propiedad.id_edificio_modelo])
+        );
+
+        const edificioModeloIds = [...new Set((propiedadesRelacionadas || []).map((propiedad: any) => propiedad.id_edificio_modelo).filter(Boolean))];
+        const { data: edificiosModelos } = edificioModeloIds.length > 0
+          ? await supabaseAdmin.from('edificios_modelos').select('id, id_edificio').in('id', edificioModeloIds)
+          : { data: [] as any[] };
+
+        const edificioByModelo = new Map<number, number>(((edificiosModelos as any[]) || []).map((modelo: any) => [modelo.id, modelo.id_edificio]));
+        const edificioIds = [...new Set(((edificiosModelos as any[]) || []).map((modelo: any) => modelo.id_edificio).filter(Boolean))];
+        const { data: edificios } = edificioIds.length > 0
+          ? await supabaseAdmin.from('edificios').select('id, id_proyecto').in('id', edificioIds)
+          : { data: [] as any[] };
+
+        const proyectoByEdificio = new Map<number, number>(((edificios as any[]) || []).map((edificio: any) => [edificio.id, edificio.id_proyecto]));
+        const rowsFilteredByProject = (rows || []).filter((ac: any) => {
+          const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
+          const idEdificioModelo = idPropiedad ? edificioModeloByPropiedad.get(idPropiedad) : undefined;
+          const idEdificio = idEdificioModelo ? edificioByModelo.get(idEdificioModelo) : undefined;
+          const idProyecto = idEdificio ? proyectoByEdificio.get(idEdificio) : undefined;
+          return !!idProyecto && selectedProjectIds.includes(idProyecto);
+        });
+
+        if (rowsFilteredByProject.length === 0) {
+          console.log(`${tag} trigger ${trig.id} offset ${offset}: sin acuerdos en desarrollos habilitados`);
+          continue;
+        }
+
         // ============================================================
         // Acumuladores para envío CONSOLIDADO por (trigger, offset).
         // - Si hay manualEmails: deduplicamos por email/teléfono y enviamos
@@ -254,7 +319,7 @@ Deno.serve(async (req) => {
           templateModel: any;
         }> = new Map();
 
-        for (const ac of rows || []) {
+        for (const ac of rowsFilteredByProject) {
           const cc: any = (ac as any).cuentas_cobranza;
           const persona: any = cc?.ofertas?.personas;
           if (!persona) continue;
@@ -485,7 +550,7 @@ Deno.serve(async (req) => {
         // coma. Generamos UN registro de auditoría por destinatario único
         // (con clave por trigger+offset+manual_email para idempotencia).
         // ============================================================
-        if (manualAccum.size > 0 && (rows?.length || 0) > 0) {
+        if (manualAccum.size > 0 && rowsFilteredByProject.length > 0) {
           const channel = trig.canal as string;
           const destinatariosManual = Array.from(manualAccum.values());
 
@@ -598,7 +663,7 @@ Deno.serve(async (req) => {
                   aviso_id: aviso.id,
                   trigger_id: trig.id,
                   total_destinatarios: destinatariosManual.length,
-                  total_acuerdos: rows?.length || 0,
+                   total_acuerdos: rowsFilteredByProject.length,
                   nombre_usuario: base.nombre,
                 };
 
@@ -636,12 +701,12 @@ Deno.serve(async (req) => {
               else summary.errors += insertedIds.length;
             }
 
-            console.log(`${tag} envío consolidado: ${destinatariosManual.length} destinatario(s) manual(es), ${rows?.length || 0} acuerdo(s), tipo=${tipoN8N}, ok=${okBatch}`);
+            console.log(`${tag} envío consolidado: ${destinatariosManual.length} destinatario(s) manual(es), ${rowsFilteredByProject.length} acuerdo(s), tipo=${tipoN8N}, ok=${okBatch}`);
             summary.details.push({
               trigger_id: trig.id,
               consolidado: true,
               destinatarios_manual: destinatariosManual.length,
-              acuerdos: rows?.length || 0,
+              acuerdos: rowsFilteredByProject.length,
               tipo: tipoN8N,
               ok: okBatch,
             });
