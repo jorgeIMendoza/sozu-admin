@@ -481,11 +481,12 @@ Deno.serve(async (req) => {
                 : { mensaje: { nombre: m.nombre || persona.nombre_legal || '', texto: destHtml, asunto: destAsunto } };
               const mensajeWaTpl = pickRandomWhatsappMessage(aviso.mensajes_whatsapp, aviso.mensaje_html || '');
               const textoPlano = renderTemplate(mensajeWaTpl, destVars).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+              const claveEntidadManualBase = `trigger:${trig.id}:offset:${offset}:fecha:${fechaObjetivo}:manual:${m.email}`;
               manualAccum.set(key, {
                 email: m.email,
                 nombre: m.nombre || persona.nombre_legal || '',
                 telefono: m.telefono || '',
-                claveEntidad: `trigger:${trig.id}:offset:${offset}:fecha:${fechaObjetivo}:manual:${m.email}`,
+                claveEntidad: `${claveEntidadManualBase}:exec:${executionId ?? 'sin-ejecucion'}`,
                 asunto: destAsunto,
                 html: destHtml,
                 textoPlano,
