@@ -1,65 +1,89 @@
 
-Objetivo: dejar de registrar en `avisos_ejecuciones` las corridas del cron que caen dentro de la tolerancia pero que en realidad ya no deben ejecutar nada porque el primer envío exitoso de esa misma ventana ya ocurrió.
+Objetivo: agregar un switch llamado `Personalizado` en la configuración del aviso para controlar cómo se envían los destinatarios configurados (manuales y por rol), de forma que:
+- prendido: cada destinatario reciba su propio correo y/o WhatsApp con variables renderizadas para su caso;
+- apagado: se conserve el envío consolidado actual, donde sale un solo mensaje a la lista completa.
 
-Diagnóstico confirmado
-- En `supabase/functions/evaluar-triggers-evento/index.ts`, el log de `avisos_ejecuciones` se crea apenas pasa `withinSendWindow(...)`.
-- Después, en el bloque de destinatarios manuales, sí existe la validación que detecta envíos exitosos previos en la misma ventana (`getSuccessfulManualRecipients`).
-- Cuando esa validación encuentra que ya se envió bien, hoy la función no vuelve a mandar el aviso, pero sí deja una fila en `avisos_ejecuciones` con motivo como:
-  `Ya enviado exitosamente en esta ventana; reenvío automático omitido`.
-- Eso explica por qué aparece la fila de las 10:49 p. m.: no fue un nuevo envío real, pero sí se creó el registro antes de decidir que ya no había nada que ejecutar.
+Qué se va a construir
 
-Qué se va a corregir
-1. Diferir la creación del log hasta confirmar que sí habrá trabajo real
-- No crear `avisos_ejecuciones` inmediatamente al entrar en ventana.
-- Primero resolver si existen destinatarios efectivos por enviar para esa combinación de:
-  - aviso
-  - trigger
-  - offset
-  - fecha objetivo
-  - origen de ejecución
+1. Persistir la nueva preferencia del aviso
+- Agregar un campo booleano en `avisos` para guardar el modo `personalizado`, con valor por defecto `false` para no romper el comportamiento actual.
+- Leer y guardar ese valor desde la pantalla de `Administrar Avisos`.
 
-2. No registrar corridas automáticas ya satisfechas en la misma ventana
-- Para origen `cron`, si todos los destinatarios manuales ya tienen envío exitoso previo para esa ventana, la función debe:
-  - omitir el envío,
-  - no crear fila en `avisos_ejecuciones`,
-  - solo dejar traza en `summary.details` / logs internos si hace falta depuración.
-- En otras palabras: si no habrá envío ni error ni trabajo pendiente, no debe existir registro visible en la pantalla de Ejecuciones.
+2. Añadir el switch “Personalizado” en la UI
+- En `src/pages/admin/comunicacion/AdministrarAvisos.tsx`, incorporar un `Switch` con la etiqueta exacta `Personalizado`.
+- Ubicarlo junto a la configuración de envío del aviso para que quede claro que afecta el modo de entrega.
+- Al editar un aviso existente, cargar el valor guardado.
+- Al crear uno nuevo, iniciar apagado para conservar compatibilidad con los avisos actuales.
 
-3. Mantener registro solo cuando realmente “sí tocaba ejecutar”
-Se conservará el log cuando ocurra cualquiera de estos casos:
-- hay destinatarios nuevos que sí se van a enviar,
-- hubo error de consulta o procesamiento,
-- hubo destinatarios evaluados reales aunque el resultado sea parcial o error,
-- el disparo sea manual explícito y se quiera auditar ese intento.
+3. Cambiar la lógica del envío por evento
+- En `supabase/functions/evaluar-triggers-evento/index.ts`, usar el nuevo flag del aviso para bifurcar el flujo de destinatarios configurados:
+  - `personalizado = false`: mantener el flujo consolidado actual (`manualAccum` + un solo payload con CSV de emails/teléfonos).
+  - `personalizado = true`: enviar uno por uno a cada destinatario configurado, reutilizando el patrón individual que hoy ya existe para cliente real.
+- En el modo personalizado:
+  - generar `asunto`, `mensaje`, `mensajeWA` y `payload_postmark` por destinatario;
+  - mandar `email` y/o `telefono` individual, no listas CSV;
+  - registrar un renglón por destinatario en `avisos_envios_evento`;
+  - mantener la idempotencia y la regla reciente de no duplicar corridas automáticas satisfechas dentro de la tolerancia.
 
-4. Conservar el comportamiento actual fuera de ventana
-- Las corridas fuera de `withinSendWindow(...)` seguirán sin registrarse, como ya quedó ajustado antes.
-- El cambio nuevo cubre el caso restante: “está dentro de ventana, pero ya quedó satisfecha por una corrida previa exitosa”.
+4. Mantener la personalización correcta
+- Con `personalizado = true`, la personalización debe seguir basándose en los datos del acuerdo/cuenta que se esté evaluando:
+  - `{{nombre}}`, `{{monto}}`, `{{fecha_pago}}`, `{{orden}}`, `{{departamento}}`, `{{producto}}`, `{{proyecto}}`, etc.
+- Para destinatarios manuales o por rol, cada envío saldrá separado pero con los valores del acuerdo correspondiente.
+- Cuando un mismo aviso aplique a múltiples acuerdos en la corrida, el envío se hará por destinatario y por contexto de acuerdo, en lugar de mezclar todo en un solo mensaje masivo.
 
-Implementación propuesta
-- Reestructurar el loop principal en `supabase/functions/evaluar-triggers-evento/index.ts` para separar:
-  1. validaciones previas,
-  2. determinación de destinatarios efectivos,
-  3. creación del log solo cuando sí proceda.
-- En el flujo de destinatarios manuales:
-  - ejecutar `getSuccessfulManualRecipients(...)` antes de `createExecutionLog(...)` cuando el origen sea `cron`,
-  - filtrar destinatarios ya satisfechos,
-  - si después del filtro no queda ninguno, hacer `continue` sin crear registro.
-- Mantener `createExecutionLog(...)` antes del primer insert real o antes de cualquier caso que sí deba quedar auditado.
-- No cambiar la idempotencia de clientes reales ni el soporte de reenvío manual explícito.
+5. Conservar el comportamiento actual cuando esté apagado
+- Si `Personalizado` está apagado, se mantiene exactamente el patrón que hoy viste en logs:
+  - un solo payload;
+  - `to` y/o `numero` en CSV;
+  - mismo contenido para toda la lista.
+- Esto evita cambios inesperados en avisos ya activos.
 
-Archivo a modificar
+6. Revisar el envío manual desde la pantalla “Enviar Avisos”
+- El envío manual general hoy usa `supabase/functions/enviar-aviso-bulk/index.ts`.
+- Extender esa función para respetar también el nuevo flag:
+  - apagado: seguir usando lote masivo;
+  - prendido: enviar individualmente a cada destinatario con su render por destinatario.
+- Así el comportamiento será consistente tanto en avisos manuales como en automáticos.
+
+Archivos a tocar
+- `src/pages/admin/comunicacion/AdministrarAvisos.tsx`
 - `supabase/functions/evaluar-triggers-evento/index.ts`
+- `supabase/functions/enviar-aviso-bulk/index.ts`
+- `src/integrations/supabase/types.ts` se actualizará automáticamente después del cambio de base de datos; no se edita manualmente.
+
+Cambio de base de datos
+- Crear migración para añadir a `avisos` un campo booleano, por ejemplo:
+  - `personalizado boolean not null default false`
+- No se requiere nueva tabla.
+
+Diseño técnico
+```text
+Aviso.personalizado = false
+  -> destinatarios configurados
+  -> 1 payload consolidado
+  -> to/telefono como CSV
+  -> mismo contenido para todos
+
+Aviso.personalizado = true
+  -> destinatarios configurados
+  -> N payloads individuales
+  -> un email/telefono por request
+  -> contenido renderizado por destinatario/contexto
+```
 
 Resultado esperado
-- Si el cron envía correctamente a las 10:48, la corrida de las 10:49 dentro de la misma tolerancia ya no enviará nada y tampoco aparecerá en `avisos_ejecuciones`.
-- La vista de Ejecuciones mostrará solo corridas que realmente ejecutaron algo relevante o que fallaron.
-- Dejará de verse “ruido” de intentos automáticos ya satisfechos.
+- El switch `Personalizado` permitirá elegir entre:
+  - envío masivo no personalizado;
+  - envío individual personalizado.
+- El caso que mostraste del 22 de abril dejará de agrupar correos y WhatsApps cuando el switch esté prendido.
+- Los avisos actuales no cambiarán de comportamiento hasta que actives el switch.
 
 Validación posterior
-- Probar un aviso con destinatarios manuales en una hora exacta.
-- Verificar que:
-  1. la primera corrida automática cree log y envíe,
-  2. la siguiente corrida dentro de tolerancia no cree log si ya todo quedó enviado exitosamente,
-  3. una corrida fuera de ventana tampoco cree log,
-  4. un reenvío manual explícito siga pudiendo registrarse y ejecutarse.
+- Crear o editar un aviso de recordatorio de pago con varios correos/teléfonos configurados.
+- Probar con `Personalizado` apagado:
+  1. debe seguir saliendo un solo payload consolidado.
+- Probar con `Personalizado` prendido:
+  2. deben salir múltiples requests, uno por destinatario;
+  3. cada request debe llevar solo un correo y/o un WhatsApp;
+  4. el contenido debe venir renderizado con los placeholders correctos;
+  5. la bitácora `avisos_envios_evento` debe registrar un envío por destinatario.
