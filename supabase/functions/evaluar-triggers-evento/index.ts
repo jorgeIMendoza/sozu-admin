@@ -568,6 +568,7 @@ Deno.serve(async (req) => {
           }];
 
           for (const dest of destinatarios) {
+            executionId = await ensureExecutionLog(supabaseAdmin, executionId, aviso.id, executionOrigin);
             metrics.destinatarios++;
 
             const { data: ins, error: insErr } = await supabaseAdmin
@@ -748,11 +749,15 @@ Deno.serve(async (req) => {
           }
 
           if (destinatariosManual.length === 0) {
-            await finalizeExecutionLog(supabaseAdmin, executionId, metrics);
             continue;
           }
 
+          executionId = await ensureExecutionLog(supabaseAdmin, executionId, aviso.id, executionOrigin);
           metrics.destinatarios = destinatariosManual.length;
+
+          for (const d of destinatariosManual) {
+            d.claveEntidad = buildManualEntityKey(d.claveEntidadBase, executionOrigin, executionId);
+          }
 
           const insertedIds: number[] = [];
           let yaEnviado = false;
@@ -928,7 +933,9 @@ Deno.serve(async (req) => {
           addMotivo(metrics, 'Sin destinatarios válidos para notificar');
         }
 
-        await finalizeExecutionLog(supabaseAdmin, executionId, metrics);
+        if (executionId) {
+          await finalizeExecutionLog(supabaseAdmin, executionId, metrics);
+        }
       }
     }
 
