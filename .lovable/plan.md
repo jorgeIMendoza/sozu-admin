@@ -1,65 +1,64 @@
 
 
-## Problema identificado
+## Diagnóstico
 
-El aviso `Recordatorio de pago 3 dia antes` (id 5) tiene:
-- 6 acuerdos elegibles hoy con offset -2 (clientes reales: Abraham, Edgar, José Ramón ×2, Luis Gabriel, Ricardo).
-- 390 correos cargados manualmente en `avisos_roles_destinatarios.correos.destinatarios` (padrón completo de clientes).
+Después de revisar BD y código, el agente **SÍ existe** y está correctamente vinculado:
 
-La lógica actual en `evaluar-triggers-evento` aplica los manuales como destinatarios que **REEMPLAZAN al cliente real** y los itera **por cada acuerdo encontrado**. Resultado:
-- Personalizado prendido: 6 acuerdos × 390 manuales = **hasta 2,340 envíos** (cada cliente del padrón recibe el recordatorio de los 6 acuerdos ajenos).
-- Personalizado apagado: 6 acuerdos × 1 payload consolidado, cada uno a la lista CSV de 390 correos = los 390 reciben el mensaje 6 veces.
+- Usuario `ivandelatorre_@hotmail.com` → `id_persona=2483`, `rol_id=3` (Agente Inmobiliario), `activo=true`.
+- Relación `entidades_relacionadas` id=3604: `id_persona=2483` ↔ `id_persona_duena_lead=2687` (Invierte y Vive MX), `id_tipo_entidad=19`, `activo=true`. ✅
 
-Esto es lo que estás viendo en producción.
+El motivo por el cual la pestaña "Activos (0)" no lo muestra es **una RLS faltante en la tabla `usuarios`**.
 
-## Comportamiento correcto esperado
+### Causa raíz
 
-Cuando un aviso de evento (acuerdo de pago) tiene una lista manual de destinatarios cargada:
-- la lista manual debe tratarse como **filtro/whitelist por email del cliente real**, no como reemplazo;
-- si el aviso aplica a 6 acuerdos, deben salir **6 envíos** dirigidos al email del cliente real de cada acuerdo, siempre que ese email esté presente en la lista manual cargada;
-- si el aviso no tiene lista manual, debe seguir disparándose al email del cliente real de cada acuerdo (comportamiento actual ya correcto).
+El hook `useInmobAgents` ejecuta tres queries:
+1. `entidades_relacionadas` filtrando por `id_persona_duena_lead = 2687` y `id_tipo_entidad = 19` → devuelve `id_persona=2483` ✅ (la RLS de esta tabla permite el caso `id_tipo_entidad NOT IN (2,7)`).
+2. `usuarios.select(email, id_persona, activo).in('id_persona', [2483])` → **devuelve 0 filas** ❌
+3. `personas` → no se ejecuta porque no hay usuarios.
 
-Adicionalmente:
-- los nombre/teléfono/etc del manual se usan **solo como override** cuando el email manual coincide con el del acuerdo (por ejemplo si el manual trae teléfono y el cliente real no lo tiene en `personas`);
-- el modo `personalizado` sigue controlando si el render es individual con `{{nombre}}`, `{{monto}}`, etc. (que ya es el caso porque el universo final es 1 cliente real por acuerdo).
+Las políticas SELECT actuales sobre `public.usuarios` son:
+- `Super admins can view all users` — solo Super Admin.
+- `Internal roles can view all users` — solo roles internos (Sozu).
+- `Users can view own record` — solo el propio registro.
+- `Anon puede verificar email de clientes` — solo `rol_id = 23`.
+
+**Una Inmobiliaria (rol 4) no califica en ninguna**, por lo que `usuarios` se filtra a vacío y el hook devuelve `[]`. Por eso la lista aparece en cero, los filtros tampoco encuentran al agente, y los demás portales del Inmob (Pipeline, Comisiones, Citas, Reportes) que también dependen de `useInmobAgents` están afectados con el mismo problema.
 
 ## Cambios
 
-### `supabase/functions/evaluar-triggers-evento/index.ts`
-1. Cambiar la semántica de `manualEmails`:
-   - dejar de tratarlos como "reemplazan al cliente real";
-   - construir un `Map<emailLower, { nombre, telefono }>` (`manualOverridesByEmail`) y un `Set<emailLower>` (`manualEmailsSet`).
-2. En el loop por acuerdo (`for (const ac of rowsFilteredByProject)`):
-   - calcular `emailReal` del cliente del acuerdo;
-   - si hay lista manual y `emailReal` no está en `manualEmailsSet`, saltar el acuerdo (con log y motivo "cliente del acuerdo no está en la lista manual");
-   - si está, tomar nombre/teléfono del manual cuando exista; si no, usar los del cliente real.
-3. Eliminar el bloque `if (manualEmails.length > 0) { ... }` que iteraba `manualEmails` por acuerdo (líneas 564–724) y la ruta `manualAccum` consolidada que envía a todos los manuales (líneas 887+).
-4. Mantener el resto del flujo (un envío por acuerdo, idempotencia por `acuerdo:{id}:offset:{n}`, modo personalizado para render por acuerdo, ventana de tolerancia, omitidos por reenvío automático).
-5. Actualizar el log: en vez de `"X destinatario(s) manual(es) → REEMPLAZAN al cliente real"`, escribir `"X correo(s) manual(es) cargados → operan como whitelist sobre el email del cliente del acuerdo"`.
+### 1. Migración: nueva policy SELECT en `public.usuarios`
 
-### `supabase/functions/enviar-aviso-bulk/index.ts`
-Aplicar la misma corrección al envío manual desde "Enviar Avisos" cuando el aviso es de evento: la lista cargada actúa como whitelist sobre el cliente real del acuerdo, no como universo independiente.
+Crear una policy que permita a una Inmobiliaria (rol 4) leer los registros de `usuarios` cuyo `email` corresponda a un agente vinculado a esa inmobiliaria vía `entidades_relacionadas` tipo 19. Reutilizar la función ya existente `is_inmob_agent_owner(text)` (SECURITY DEFINER, evita recursión RLS):
 
-### UI `src/pages/admin/comunicacion/AdministrarAvisos.tsx`
-- Añadir un texto de ayuda corto debajo de la sección de "Destinatarios" del aviso que aclare:
-  - "La lista manual funciona como whitelist sobre el email del cliente real del acuerdo. Si la dejas vacía, se notifica a todos los clientes que cumplan la condición del trigger."
-- Sin cambios funcionales adicionales.
+```sql
+CREATE POLICY "Inmob owners can view their agents"
+ON public.usuarios
+FOR SELECT
+TO authenticated
+USING ( public.is_inmob_agent_owner(email) );
+```
 
-### Sin cambios de base de datos
-No se requiere migración; la información necesaria ya está en `avisos_roles_destinatarios.correos.destinatarios` y `personas.email`.
+Esa función ya cubre los casos:
+- Super Admin / Admin Proyecto → acceso total (devuelve true para cualquier email).
+- Inmobiliaria (rol 4) con `id_persona` → ve solo a sus agentes tipo 19.
+- Agentes (rol 3/9) consultando agentes de su misma inmobiliaria.
+- Inmobiliarias secundarias resueltas vía `proyectos_acceso`.
 
-## Resultado esperado tras el fix
+No reemplaza ni rompe las policies existentes; se agrega como condición OR.
 
-Para el aviso 5 ejecutado hoy (con offset -2 → fecha objetivo 2026-04-25):
-- 6 acuerdos elegibles;
-- emails reales: `elabrahamql@gmail.com`, `egrizo@hotmail.com`, `ing.escobar.mtz@gmail.com` (×2 acuerdos), `importacioneschavez@hotmail.com`, `doc_lyn@hotmail.com`;
-- los 5 emails únicos están dentro de los 390 manuales cargados;
-- saldrán **6 envíos personalizados, uno por acuerdo, al cliente real correspondiente** (uno de ellos repetido al mismo email pero por dos acuerdos distintos del mismo cliente, lo cual es correcto y queda diferenciado por `clave_entidad`).
+### 2. Sin cambios de código frontend
 
-## Validación posterior
+`useInmobAgents`, `InmobAgentes`, `InmobPipeline`, `InmobComisiones`, `InmobCitas`, `InmobReportes` y `InmobDashboard` ya tienen la lógica correcta. Una vez aplicada la policy, todos verán a sus agentes automáticamente.
 
-1. Forzar una corrida del trigger 47 a una hora controlada y verificar en `avisos_envios_evento` que se crean exactamente 6 filas, una por acuerdo, cada una al email del cliente real.
-2. Confirmar en logs que aparece `"6 correo(s) manual(es) cargados → whitelist"` y que no se itera 390×6.
-3. Crear un acuerdo de prueba cuyo email NO esté en la lista manual y verificar que se omite con motivo "cliente fuera de whitelist".
-4. Quitar la lista manual del aviso y verificar que se siguen mandando 6 envíos a los 6 clientes reales.
+### 3. Validación posterior
+
+Tras la migración, verificar:
+- `invierteyvivemx@gmail.com` ve a Félix Iván De La Torre Ramírez en la pestaña **Activos**.
+- KPIs de Pipeline/Comisiones/Citas para esa inmobiliaria reflejan los datos del agente.
+- Sozu (rol 1) sigue viendo todos los usuarios sin cambios.
+- Un agente de OTRA inmobiliaria no aparece en la lista de Invierte y Vive (la función filtra por `id_persona_duena_lead`).
+
+## Resultado esperado
+
+La inmobiliaria `invierteyvivemx@gmail.com` (y cualquier otra inmobiliaria rol 4) podrá ver correctamente a sus agentes vinculados en todos los módulos del Portal Inmobiliaria, sin exponer datos de agentes de otras inmobiliarias.
 
