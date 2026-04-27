@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2, Info, Clock, CalendarClock, Bell } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users, Mail, Loader2, Info, Clock, CalendarClock, Bell, Copy } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
 import { AvisoDestinatariosSection } from "@/components/admin/AvisoDestinatariosSection";
 import { AvisoPayloadSection } from "@/components/admin/AvisoPayloadSection";
