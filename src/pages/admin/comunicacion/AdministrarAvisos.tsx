@@ -744,7 +744,16 @@ export default function AdministrarAvisos() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Administrar Avisos</h1>
         {canCreate && (
-          <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Nuevo Aviso</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setDuplicateSearch(""); setDuplicateOpen(true); }}
+              disabled={avisos.length === 0}
+            >
+              <Copy className="h-4 w-4 mr-2" />Duplicar aviso
+            </Button>
+            <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Nuevo Aviso</Button>
+          </div>
         )}
       </div>
 
