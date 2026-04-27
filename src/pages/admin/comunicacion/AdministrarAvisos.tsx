@@ -525,6 +525,20 @@ export default function AdministrarAvisos() {
     setDialogOpen(true);
   };
 
+  const openDuplicate = async (aviso: Aviso) => {
+    // Carga toda la configuración del aviso seleccionado y la deja lista
+    // para crear un NUEVO aviso (editingAviso = null) con un nombre prefijado.
+    await openEdit(aviso);
+    setEditingAviso(null);
+    setNombre(`Copia de ${aviso.nombre}`);
+    setDuplicateOpen(false);
+    setDuplicateSearch("");
+    toast({
+      title: "Aviso duplicado",
+      description: "Se cargaron los datos. Ajusta lo necesario y guarda para crear el nuevo aviso.",
+    });
+  };
+
   const handleSave = async () => {
     if (!nombre || !asunto || !mensajeHtml) {
       toast({ title: "Error", description: "Nombre, asunto y mensaje son requeridos", variant: "destructive" });
