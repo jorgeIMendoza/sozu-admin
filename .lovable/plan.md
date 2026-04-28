@@ -1,50 +1,57 @@
-# Plan: Inyectar `URL_WA_base` / `instanciaWA` en notificaciones de pago manual
 
-## Problema
+## Diagnóstico
 
-Cuando se aplica un **pago manual** desde `AddManualPaymentDialog`, el frontend llama directamente al webhook de N8N `${N8N_WEBHOOK_BASE_URL}/aplicaPago`. Ese workflow internamente arma el payload de notificación (con `templateId`, `mensajeWA`, recibo PDF, etc.) y dispara el envío de Email + WhatsApp, pero **nunca recibe** los campos `URL_WA_base`, `instanciaWA` ni `urlEndpointWA`. Resultado: WhatsApp termina usando un valor por defecto/cableado ("Pruebas de todo") en vez de la instancia real definida en el secret `INSTANCIA_EVOLUTION_WHATSAPP`.
+El log de Supabase muestra "No results found" para `enviar-notificacion`. Esto confirma que **la función nunca se ejecutó** en el flujo del usuario. La razón es que existen **5 puntos de llamada directa** al webhook de N8N que no pasan por `enviar-notificacion`, por lo que **nunca se inyecta `urlEndpointWA`** y N8N recibe el payload incompleto.
 
-A diferencia, el flujo de avisos automáticos pasa por la edge function `enviar-notificacion` que sí inyecta esos campos desde los secrets antes de reenviar a N8N.
+## Archivos con `fetch` directo a `${N8N_WEBHOOK_BASE_URL}/aplicaPago` que hay que migrar
 
-## Solución
+| Archivo | Línea | Acción |
+|---|---|---|
+| `src/pages/admin/DetalleCuentaCobranza.tsx` | 1063 | `genera_acuerdo_para_cuenta_cobranza` |
+| `src/pages/admin/Propiedades.tsx` | 3616 | (acción de generación de cuenta) |
+| `src/pages/admin/Propiedades.tsx` | 3795 | (segunda acción) |
+| `src/components/admin/CancelCuentaDialog.tsx` | 584 | cancelación de cuenta |
+| `src/components/admin/EditCuentaCobranzaDialog.tsx` | 1518 | edición de cuenta |
 
-Hacer que el flujo de pago manual también pase por una capa de proxy que inyecte la configuración WA desde los secrets. Como el endpoint de N8N en este caso es **`/aplicaPago`** (no `/manda_notificacion`) y el payload tiene una estructura distinta, lo más limpio es **extender la edge function `enviar-notificacion`** para soportar un endpoint configurable, o crear una helper análoga.
+> Nota: `AddManualPaymentDialog.tsx` ya está bien (línea 559 usa `supabase.functions.invoke('enviar-notificacion')` con `n8nPath: 'aplicaPago'`).
 
-### Cambios
+## Cambios
 
-**1. `supabase/functions/enviar-notificacion/index.ts`**
+### 1. Reemplazar cada `fetch` directo por `supabase.functions.invoke`
 
-- Aceptar un campo opcional `n8nPath` en el body (ej: `"aplicaPago"`). Si no viene, mantener el comportamiento actual (`manda_notificacion`).
-- Inyectar siempre `URL_WA_base`, `instanciaWA` y además `urlEndpointWA` (alias por compatibilidad con N8N) en el `enrichedBody`, sin importar el endpoint destino.
-- Mantener el reenvío del header `apikey` (`EVOLUTION_WA_COBRANZA_TOKEN`).
+Patrón a aplicar en cada uno de los 5 puntos:
 
-**2. `src/components/admin/AddManualPaymentDialog.tsx`** (línea 541-561)
+```ts
+// ANTES (saltaba la edge function -> N8N recibía sin urlEndpointWA)
+const webhookResponse = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload),
+});
 
-- Reemplazar el `fetch` directo a `${N8N_WEBHOOK_BASE_URL}/aplicaPago` por:
-  ```ts
-  await supabase.functions.invoke('enviar-notificacion', {
-    body: { ...webhookBody, n8nPath: 'aplicaPago' },
-    headers: { apikey: EVOLUTION_WA_COBRANZA_TOKEN } // si aplica
-  })
-  ```
-- Mantener exactamente el mismo `webhookBody` que hoy se envía; los campos WA los añadirá la edge function.
+// DESPUÉS (pasa por enviar-notificacion -> inyecta urlEndpointWA, instanciaWA, URL_WA_base)
+const { data: notifData, error: notifError } = await supabase.functions.invoke(
+  'enviar-notificacion',
+  { body: { ...payload, n8nPath: 'aplicaPago' } }
+);
+if (notifError) {
+  console.error('[aplicaPago via enviar-notificacion] error:', notifError);
+}
+```
 
-**3. Validar otros flujos análogos** (mismo bug latente):
-- `src/components/admin/CancelCuentaDialog.tsx` (`/aplicaPago`)
-- `src/components/admin/EditCuentaCobranzaDialog.tsx` (`/aplicaPago`)
-- `src/components/admin/FacturasTab.tsx` (`/generaFactura`)
+Para los puntos donde el código posterior leía `webhookResponse.ok` o `webhookResponse.status`, se adaptará a:
+- `if (!notifError && notifData?.n8nStatus && notifData.n8nStatus < 400) { ... }`
 
-Si el equipo confirma que también disparan notificaciones WA por dentro del workflow, aplicar el mismo enrutamiento por `enviar-notificacion` con el `n8nPath` correspondiente. (Para el alcance inmediato me limito a **pago manual**; los demás se pueden hacer en una segunda iteración si confirmas.)
+### 2. Verificación post-cambio
 
-## Verificación post-deploy
+- Hacer un pago manual real desde el frontend.
+- Confirmar en https://supabase.com/dashboard/project/tzmhgfjmddkfyffkkmto/functions/enviar-notificacion/logs que aparece:
+  - `[enviar-notificacion] INVOKED`
+  - `[enviar-notificacion] PAYLOAD OUT to N8N` con `urlEndpointWA` presente
+- Verificar que N8N ya recibe el campo y el WhatsApp se envía.
 
-1. Aplicar un pago manual de prueba.
-2. En **Edge Function logs** de `enviar-notificacion`, confirmar el log:
-   `WA config -> URL_WA_base: ... | instanciaWA: <valor real del secret>`
-3. En N8N (`aplicaPago`), inspeccionar el body recibido y verificar que `URL_WA_base`, `instanciaWA` y `urlEndpointWA` ya estén presentes con los valores correctos (no "Pruebas de todo").
-4. Confirmar que el WhatsApp llega al cliente desde la instancia productiva.
+## Resultado esperado
 
-## Alcance
-
-- **Sí** incluye: edge function `enviar-notificacion` + `AddManualPaymentDialog.tsx`.
-- **No** incluye (a menos que lo apruebes ahora): cancelación de cuenta, edición de cuenta y generación de factura. Avísame y lo agrego al mismo plan.
+- 100% de los flujos de "aplicar pago / cancelar / editar / esquema" pasan por `enviar-notificacion`.
+- La edge function inyecta `URL_WA_base`, `instanciaWA` y `urlEndpointWA` desde los secrets antes de reenviar a N8N.
+- Los logs de la edge function dejan de estar vacíos y N8N recibe el payload completo.
