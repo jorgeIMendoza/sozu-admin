@@ -552,16 +552,14 @@ export function AddManualPaymentDialog({
           environment: ENVIRONMENT
         };
 
-        const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookBody),
+        // Enrutar a través de enviar-notificacion para que inyecte
+        // URL_WA_base / instanciaWA / urlEndpointWA desde los secrets
+        const { error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+          body: { ...webhookBody, n8nPath: 'aplicaPago' },
         });
 
-        if (!response.ok) {
-          console.error('Webhook call failed:', response.statusText);
+        if (notifError) {
+          console.error('enviar-notificacion (aplicaPago) failed:', notifError);
         }
       } catch (error) {
         console.error('Error calling webhook:', error);
