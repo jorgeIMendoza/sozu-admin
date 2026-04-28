@@ -3790,22 +3790,19 @@ const Propiedades = () => {
       
       console.log('🚀 Generando cuenta de cobranza:', requestBody);
       
-      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+        body: {
           ...requestBody,
-          environment: ENVIRONMENT
-        }),
+          environment: ENVIRONMENT,
+          n8nPath: 'aplicaPago',
+        },
       });
 
-      if (!response.ok) {
+      if (notifError || (notifData?.n8nStatus ?? 500) >= 400) {
         throw new Error('Error al generar cuenta de cobranza');
       }
 
-      const responseData = await response.json().catch(() => ({}));
+      const responseData = notifData?.n8nResponse ?? {};
 
       // Si es oferta de propiedad (no producto), actualizar estatus a "Apartado" (4)
       if (!isProductOffer && propertyId) {
