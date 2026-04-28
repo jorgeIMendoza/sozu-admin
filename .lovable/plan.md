@@ -1,72 +1,49 @@
+## Problema
 
-## Diagnóstico: dónde se usa `manda_notificacion`
+Para el trigger 56 ("Recordatorio 3 días antes", `hora_envio=09:00`), la ventana de ejecución real es **09:00:00 – 09:02:00 MX** (2 min). El resto del día (los otros ~1438 minutos) el cron lo evalúa pero sale temprano con un `console.log` "fuera de ventana" y un `continue`. Esos logs viven en Supabase sólo unas pocas horas y se pierden.
 
-El endpoint `https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/manda_notificacion` está **hardcodeado en un único lugar**:
+Resultado: cuando preguntas "¿se ejecutó hoy?" no hay forma confiable de saberlo, porque:
 
-- **`supabase/functions/enviar-notificacion/index.ts`** (línea 8) — única definición de `N8N_WEBHOOK_URL`.
+- Los logs de la ventana 09:00–09:02 ya rotaron.
+- La tabla `avisos_ejecuciones_log` sólo se crea **después** de pasar la validación de ventana, así que si la ventana pasó pero no había acuerdos que calificaran, no queda ningún rastro.
+- La tabla `avisos_envios_evento` está vacía (sólo se llena si efectivamente se envía algo).
 
-Esta edge function actúa como **proxy centralizado**. Todos los demás puntos del sistema NO llaman al webhook directamente; pasan por `enviar-notificacion`.
+## Solución propuesta
 
-### Callers del proxy `enviar-notificacion` (no requieren cambios)
+Hacer que **cada vez que el trigger entra en su ventana de envío se inserte una fila persistente en `avisos_ejecuciones_log`**, aunque no haya destinatarios o todo se filtre. Así siempre puedes verificar después: "¿corrió hoy a las 09:00? ¿Cuántos evaluados, cuántos enviados, qué motivos?"
 
-**Frontend** (vía `supabase.functions.invoke('enviar-notificacion', ...)`):
-1. `src/pages/admin/ComisionesExternas.tsx` (línea 435)
-2. `src/pages/admin/Inmobiliarias.tsx` (líneas 581 y 1168)
+### Cambios en `supabase/functions/evaluar-triggers-evento/index.ts`
 
-**Edge Functions** (vía fetch a `${SUPABASE_URL}/functions/v1/enviar-notificacion`):
-3. `supabase/functions/enviar-aviso-bulk/index.ts` (línea 326) — envío masivo de avisos de cobranza
-4. `supabase/functions/evaluar-triggers-evento/index.ts` (línea 707) — disparadores cron de notificaciones
-5. `supabase/functions/generar-factura-comision-sozu/index.ts` (línea 287)
-6. `supabase/functions/notificar-agentes/index.ts` (línea 274)
-7. `supabase/functions/registro-inmobiliaria-publica/index.ts` (línea 344)
-8. `supabase/functions/timbrar-factura-comision-sozu/index.ts` (línea 230)
+1. **Mover `ensureExecutionLog` para que se cree justo al entrar en ventana** (antes de cualquier filtro de proyectos/destinatarios). Hoy se crea más adelante, dentro de algunos `continue` y dentro del flujo de envío.
 
-**Conclusión**: como todo pasa por la edge function proxy, basta con modificar **un solo archivo** para que el endpoint sea dinámico.
+2. **Cuando `withinSendWindow` devuelve `false`**: ya no llamar al log (igual que hoy). Pero cuando devuelve `true`, **crear inmediatamente** el `avisos_ejecuciones_log` con `estado='ejecutado_sin_destinatarios'` por default, y al final actualizarlo con los contadores reales (`evaluados`, `enviados`, `errores`, `motivos`). Así, aunque el flujo termine en 0 envíos, queda el registro.
 
-El secreto `N8N_WEBHOOK_BASE_URL` ya existe en el entorno (lo usan `generar-factura-comision-sozu`, `timbrar-factura-comision-sozu` y `trigger-sat-notification`), por lo que no hace falta crearlo.
+3. **Agregar columna `motivo_principal` o un campo JSON `metricas`** en `avisos_ejecuciones_log` si no existe (revisar primero su schema). Si ya tiene esos campos, sólo asegurar que se llenen.
 
----
+4. **Loguear también un `console.log` resumen** en cada entrada en ventana, con formato fácil de buscar: `[trigger 56 IN-WINDOW] evaluados=X, candidatos=Y, enviados=Z, motivos=[...]`.
 
-## Plan de cambios
+### Cómo lo verificarás después
 
-### 1. Modificar `supabase/functions/enviar-notificacion/index.ts`
-
-Reemplazar la constante hardcodeada por una construcción dinámica desde el secreto:
-
-```ts
-const n8nBaseUrl = Deno.env.get('N8N_WEBHOOK_BASE_URL');
-if (!n8nBaseUrl) {
-  return new Response(
-    JSON.stringify({ error: 'N8N_WEBHOOK_BASE_URL no está configurado' }),
-    { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-}
-const N8N_WEBHOOK_URL = `${n8nBaseUrl.replace(/\/$/, '')}/manda_notificacion`;
+```sql
+-- ¿Corrió el trigger 56 hoy a su hora?
+SELECT id, fecha_ejecucion, estado, evaluados, enviados, errores, motivos
+FROM avisos_ejecuciones_log
+WHERE id_aviso = 6  -- Recordatorio 3 días antes
+  AND fecha_ejecucion::date = current_date
+ORDER BY fecha_ejecucion DESC;
 ```
 
-- Se normaliza la base eliminando una posible barra final.
-- Se concatena `/manda_notificacion` para preservar el path exacto.
-- Se valida que el secreto exista, devolviendo 500 con mensaje claro si falta.
-- La validación se hace dentro del handler (no a nivel de módulo) para devolver un error HTTP útil en lugar de romper el cold start.
+Si hay fila → corrió. Si no hay fila → el cron no entró a la ventana (y entonces hay que mirar el cron de pg_cron).
 
-### 2. Redeploy automático
+### Pasos exactos
 
-Lovable redespliega `enviar-notificacion` automáticamente al guardar el archivo.
+1. Consultar el schema de `avisos_ejecuciones_log` para confirmar columnas disponibles.
+2. Si falta alguna columna (ej. `metricas jsonb`), crear migración para agregarla.
+3. Modificar `evaluar-triggers-evento/index.ts` para:
+   - Crear el log de ejecución apenas el trigger entra en ventana.
+   - Garantizar `finalizeExecutionLog` siempre al final del bloque del trigger (en `try/finally`).
+4. Probar con `?ignore_window=1` para forzar una ejecución y verificar que se cree la fila aunque no haya envíos.
 
-### 3. Cómo alternar entre producción y test después del cambio
+## Resultado
 
-Se hace **únicamente** actualizando el secreto `N8N_WEBHOOK_BASE_URL` en Supabase Edge Function Secrets, sin tocar código:
-
-- Producción: `https://automatizacion-n8n.fbqqbe.easypanel.host/webhook`
-- Pruebas: `https://automatizacion-n8n.fbqqbe.easypanel.host/webhook-test`
-
-> Nota importante: este secreto también lo consumen otras 3 edge functions (facturación SAT, timbrado, trigger SAT). Cambiarlo a `webhook-test` afectará también a esos flujos. Si se necesita aislar solo las notificaciones, se podría introducir un secreto separado (ej. `N8N_NOTIFICACION_BASE_URL`) con fallback a `N8N_WEBHOOK_BASE_URL`. Esto NO se incluye en el plan; solo se menciona como consideración.
-
----
-
-## Resultado esperado
-
-- El endpoint `manda_notificacion` deja de estar hardcodeado.
-- Cambiar de `webhook` (prod) a `webhook-test` (pruebas) se hace en segundos desde la configuración de secretos de Supabase.
-- Todas las rutas que envían notificaciones (avisos de cobranza, registro de inmobiliarias, comisiones externas, facturas Sozu, notificación de agentes, triggers de eventos) heredarán automáticamente el cambio porque todas pasan por el proxy `enviar-notificacion`.
-- Cero cambios necesarios en frontend ni en las otras 8 funciones que invocan al proxy.
+A partir de mañana, podrás consultar en cualquier momento si el trigger 56 corrió a las 09:00 MX, qué evaluó y por qué no envió (si fue el caso), sin depender de los logs efímeros de Edge Functions.
