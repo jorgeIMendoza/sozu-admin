@@ -16,7 +16,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
+import { ENVIRONMENT } from "@/lib/config";
 import { Textarea } from "@/components/ui/textarea";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { CurrencyInput } from "@/components/ui/currency-input";
