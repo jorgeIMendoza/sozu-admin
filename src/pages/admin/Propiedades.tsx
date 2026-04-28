@@ -3613,12 +3613,9 @@ const Propiedades = () => {
       const currentOffer = selectedPropertyOffers?.find(offer => offer.id === offerId);
       if (currentOffer?.cuenta_cobranza_id && currentOffer?.cuenta_es_aprobado) {
         try {
-          const webhookResponse = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+            body: {
+              n8nPath: 'aplicaPago',
               siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
               id_oferta: offerId,
               id_propiedad: selectedPropertyId,
@@ -3626,16 +3623,17 @@ const Propiedades = () => {
               clabe_stp: currentOffer.cuenta_clabe_stp || '',
               rfc_curp_ordenante: currentOffer?.lead_rfc || '',
               environment: ENVIRONMENT
-            }),
+            },
           });
+          const webhookOk = !notifError && (notifData?.n8nStatus ?? 500) < 400;
 
-          if (webhookResponse.ok) {
+          if (webhookOk) {
             toast({
               title: "Acuerdo generado",
               description: "Se ha generado el acuerdo de pago para la cuenta de cobranza",
             });
           } else {
-            console.error('Webhook response not ok:', webhookResponse.status);
+            console.error('Webhook (via enviar-notificacion) not ok:', notifData?.n8nStatus, notifError);
           }
         } catch (webhookError) {
           console.error('Error calling webhook:', webhookError);
@@ -3792,22 +3790,19 @@ const Propiedades = () => {
       
       console.log('🚀 Generando cuenta de cobranza:', requestBody);
       
-      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+        body: {
           ...requestBody,
-          environment: ENVIRONMENT
-        }),
+          environment: ENVIRONMENT,
+          n8nPath: 'aplicaPago',
+        },
       });
 
-      if (!response.ok) {
+      if (notifError || (notifData?.n8nStatus ?? 500) >= 400) {
         throw new Error('Error al generar cuenta de cobranza');
       }
 
-      const responseData = await response.json().catch(() => ({}));
+      const responseData = notifData?.n8nResponse ?? {};
 
       // Si es oferta de propiedad (no producto), actualizar estatus a "Apartado" (4)
       if (!isProductOffer && propertyId) {

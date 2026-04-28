@@ -1060,12 +1060,9 @@ export default function DetalleCuentaCobranza() {
 
       // Make webhook call to generate agreement
       try {
-        const webhookResponse = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+          body: {
+            n8nPath: 'aplicaPago',
             siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
             id_oferta: offerData.id,
             id_propiedad: offerData.id_propiedad,
@@ -1073,10 +1070,12 @@ export default function DetalleCuentaCobranza() {
             clabe_stp: cuentaDetalle.clabe_stp || '',
             rfc_curp_ordenante: offerData.lead_rfc || '',
             environment: ENVIRONMENT
-          }),
+          },
         });
+        const webhookOk = !notifError && (notifData?.n8nStatus ?? 500) < 400;
+        const webhookStatus = notifData?.n8nStatus ?? 0;
 
-        if (webhookResponse.ok) {
+        if (webhookOk) {
           // Registrar en log de actividad
           await registrarCreacion(
             'acuerdos_pago',
@@ -1097,17 +1096,17 @@ export default function DetalleCuentaCobranza() {
             description: "Se ha generado el acuerdo de pago para la cuenta de cobranza",
           });
         } else {
-          console.error('Webhook response not ok:', webhookResponse.status);
+          console.error('Webhook (via enviar-notificacion) not ok:', webhookStatus, notifError);
           await registrarCreacion(
             'acuerdos_pago',
             {
               id_cuenta_cobranza: cuentaDetalle.id,
               id_oferta: offerData.id,
-              webhook_status: webhookResponse.status
+              webhook_status: webhookStatus
             },
             'generar_acuerdo_pago_desde_cuenta',
             'error',
-            `Webhook respondió con status ${webhookResponse.status}`
+            `Webhook respondió con status ${webhookStatus}`
           );
         }
       } catch (webhookError) {
