@@ -391,6 +391,12 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Trigger entra en ventana → SIEMPRE crear log persistente
+        // para poder verificar después que sí se ejecutó, aunque
+        // termine sin destinatarios o sin envíos.
+        executionId = await ensureExecutionLog(supabaseAdmin, executionId, aviso.id, executionOrigin);
+        console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}") IN-WINDOW → execution_log_id=${executionId} fecha_objetivo=${fechaObjetivo} offset=${offset}`);
+
         if (selectedProjectIds.length === 0) {
           console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): sin desarrollos habilitados`);
           addMotivo(metrics, 'Sin desarrollos habilitados');
