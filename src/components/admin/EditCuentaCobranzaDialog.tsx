@@ -1515,28 +1515,24 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuen
       const rfc_curp_ordenante = ofertaData.personas?.rfc || ofertaData.personas?.curp || '';
       
       // 4. Llamar al webhook
-      const webhookResponse = await fetch(`${N8N_WEBHOOK_BASE_URL}/aplicaPago`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+        body: {
+          n8nPath: 'aplicaPago',
+          siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
+          id_oferta: ofertaData.id,
+          id_propiedad: ofertaData.id_propiedad || null,
+          id_cuenta_cobranza: cuentaDetalle.id,
+          clabe_stp: cuentaDetalle.clabe_stp || '',
+          rfc_curp_ordenante: rfc_curp_ordenante,
+          environment: ENVIRONMENT
         },
-      body: JSON.stringify({
-        siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
-        id_oferta: ofertaData.id,
-        id_propiedad: ofertaData.id_propiedad || null,
-        id_cuenta_cobranza: cuentaDetalle.id,
-        clabe_stp: cuentaDetalle.clabe_stp || '',
-        rfc_curp_ordenante: rfc_curp_ordenante,
-        environment: ENVIRONMENT
-      }),
       });
-      
-      if (!webhookResponse.ok) {
-        throw new Error(`Error en webhook: ${webhookResponse.statusText}`);
+
+      if (notifError || (notifData?.n8nStatus ?? 500) >= 400) {
+        throw new Error(`Error en webhook: ${notifError?.message || notifData?.n8nStatus}`);
       }
-      
-      const result = await webhookResponse.json();
-      return result;
+
+      return notifData?.n8nResponse ?? {};
     },
     onSuccess: () => {
       toast.success("Acuerdo de pago creado y pagos aplicados exitosamente");
