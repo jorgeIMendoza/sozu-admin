@@ -693,11 +693,26 @@ export default function AdministrarAvisos() {
     // Persist event-trigger config: one row per aviso (delete + insert for simplicity)
     await supabase.from('avisos_triggers_evento').delete().eq('id_aviso', avisoId);
     if (tipoEnvio === 'automatico' && modoTrigger === 'evento' && eventoFuenteId) {
+      // Si hay cron_expression, la hora la define el cron. Derivamos HH:MM
+      // del cron para que el valor en BD sea coherente (sólo informativo).
+      let horaParaGuardar = `${eventoHora}:00`;
+      if (cronExpression && cronExpression.trim()) {
+        const parts = cronExpression.trim().split(/\s+/);
+        if (parts.length === 5) {
+          const min = parseInt(parts[0], 10);
+          const hr = parseInt(parts[1], 10);
+          if (Number.isFinite(min) && Number.isFinite(hr) && min >= 0 && min < 60 && hr >= 0 && hr < 24) {
+            horaParaGuardar = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`;
+          } else {
+            horaParaGuardar = '00:00:00';
+          }
+        }
+      }
       const { error: trigErr } = await supabase.from('avisos_triggers_evento').insert({
         id_aviso: avisoId,
         id_fuente: parseInt(eventoFuenteId, 10),
         offsets_dias: parsedOffsets,
-        hora_envio: `${eventoHora}:00`,
+        hora_envio: horaParaGuardar,
         canal: eventoCanal,
         activo: eventoActivo,
       });
