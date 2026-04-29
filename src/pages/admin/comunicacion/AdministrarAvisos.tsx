@@ -120,6 +120,11 @@ const EVENT_PLACEHOLDERS = [
   { key: "proyecto", label: "Nombre del desarrollo" },
   { key: "cuenta_id", label: "ID de cuenta de cobranza" },
   { key: "offset", label: "Días respecto al vencimiento" },
+  { key: "lista_adeudos", label: "Tabla HTML con todos los adeudos (sólo modo Acumulado)" },
+  { key: "lista_adeudos_texto", label: "Lista plana de adeudos para WhatsApp (sólo Acumulado)" },
+  { key: "total_adeudo", label: "Suma total de los adeudos del cliente (sólo Acumulado)" },
+  { key: "cantidad_acuerdos", label: "Cantidad de pagos vencidos del cliente (sólo Acumulado)" },
+  { key: "fecha_mas_antigua", label: "Fecha del adeudo más antiguo (sólo Acumulado)" },
 ];
 
 const DIAS_SEMANA: Record<string, string> = { '0': 'domingo', '1': 'lunes', '2': 'martes', '3': 'miércoles', '4': 'jueves', '5': 'viernes', '6': 'sábado', '7': 'domingo' };
