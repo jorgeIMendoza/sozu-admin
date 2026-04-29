@@ -410,6 +410,7 @@ export function JuicioTerminadoDialog({
       setAccionSeleccionada('liberar');
       setTipoCancelacion("2");
       setMontoCancelacion(0);
+      setNuevoPrecioLista(0);
       onClose();
     } catch (error) {
       console.error('Error finishing lawsuit:', error);
