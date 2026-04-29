@@ -622,7 +622,12 @@ export default function AdministrarAvisos() {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
       mensajes_whatsapp: whatsappLimpios,
       personalizado,
-      cron_expression: (tipoEnvio === 'automatico' && modoTrigger === 'cron') ? cronExpression : null,
+      cron_expression:
+        tipoEnvio === 'automatico'
+          ? (modoTrigger === 'cron'
+              ? cronExpression
+              : (cronExpression ? cronExpression : null))
+          : null,
       activo, fecha_actualizacion: new Date().toISOString(),
       postmark_template_id: templateId,
       modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
