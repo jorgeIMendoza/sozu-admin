@@ -35,6 +35,7 @@ export function JuicioTerminadoDialog({
   const [accionSeleccionada, setAccionSeleccionada] = useState<AccionJuicio>('liberar');
   const [tipoCancelacion, setTipoCancelacion] = useState<string>("2"); // 2=demanda, 3=negociación
   const [montoCancelacion, setMontoCancelacion] = useState<number>(0);
+  const [nuevoPrecioLista, setNuevoPrecioLista] = useState<number>(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -345,9 +346,11 @@ export function JuicioTerminadoDialog({
         const { error: propError } = await supabase
           .from('propiedades')
           .update({ 
-            id_estatus_disponibilidad: 2, // Disponible
+            id_estatus_disponibilidad: 1, // Inventario (queda como draft)
+            es_aprobado: false, // Borrador: requiere segunda revisión manual antes de publicarse
             clabe_stp_tmp_apartado: nuevaClabe,
-            fecha_actualizacion: new Date().toISOString()
+            fecha_actualizacion: new Date().toISOString(),
+            ...(nuevoPrecioLista > 0 ? { precio_lista: nuevoPrecioLista } : {})
           })
           .eq('id', propiedadId);
 
@@ -355,7 +358,7 @@ export function JuicioTerminadoDialog({
 
         toast({
           title: "Juicio terminado",
-          description: "La cuenta ha sido cancelada y la propiedad liberada exitosamente",
+          description: "Cuenta cancelada. La propiedad quedó en Inventario como borrador y requiere aprobación manual antes de publicarse.",
         });
       } else {
         // OPCIÓN 2: Cambiar a Vendido (Mantener compra)
@@ -407,6 +410,7 @@ export function JuicioTerminadoDialog({
       setAccionSeleccionada('liberar');
       setTipoCancelacion("2");
       setMontoCancelacion(0);
+      setNuevoPrecioLista(0);
       onClose();
     } catch (error) {
       console.error('Error finishing lawsuit:', error);
@@ -455,7 +459,7 @@ export function JuicioTerminadoDialog({
                     Liberar propiedad
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Cancela la cuenta de cobranza y pone la propiedad en estado "Disponible"
+                    Cancela la cuenta de cobranza y devuelve la propiedad a "Inventario" como borrador. Requiere una segunda revisión manual antes de publicarse.
                   </p>
                 </div>
               </div>
@@ -529,6 +533,21 @@ export function JuicioTerminadoDialog({
               </p>
             </div>
           </div>
+
+          {/* Nuevo precio de lista (solo al liberar) */}
+          {accionSeleccionada === 'liberar' && (
+            <div className="space-y-2 p-4 border rounded-lg bg-amber-50/40 dark:bg-amber-950/20">
+              <Label>Nuevo precio de lista (opcional)</Label>
+              <CurrencyInput
+                value={nuevoPrecioLista * 100}
+                onChange={(value) => setNuevoPrecioLista(value / 100)}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Si se captura un valor mayor a 0, se actualizará el precio de lista de la propiedad al regresarla a Inventario. La propiedad quedará como <strong>borrador</strong> y no será visible hasta que se apruebe manualmente.
+              </p>
+            </div>
+          )}
 
           {/* File Upload */}
           <div className="space-y-2">
