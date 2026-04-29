@@ -421,12 +421,24 @@ Deno.serve(async (req) => {
 
         const isProximo = fuente.clave === 'acuerdo_pago_proximo';
         const isVencido = fuente.clave === 'acuerdo_pago_vencido';
+        const isAcumulado = fuente.clave === 'acuerdos_vencidos_acumulados';
 
         if (!ignoreWindow && !withinSendWindow(trig.hora_envio as string, mexNow)) {
           console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): fuera de ventana hora_envio=${trig.hora_envio}`);
           addMotivo(metrics, `Fuera de ventana de envío (${trig.hora_envio})`);
           summary.skipped++;
           continue;
+        }
+
+        // Si el aviso tiene cron_expression, en modo evento la usamos como
+        // "gate de día" (ej. "0 9 30 * *" sólo dispara el día 30 a las 9:00).
+        if (aviso.cron_expression && typeof aviso.cron_expression === 'string') {
+          if (!cronMatchesDay(aviso.cron_expression, mexNow)) {
+            console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): cron_expression "${aviso.cron_expression}" no matchea hoy → omitido`);
+            addMotivo(metrics, `Cron del aviso no aplica hoy (${aviso.cron_expression})`);
+            summary.skipped++;
+            continue;
+          }
         }
 
         // Trigger entra en ventana → SIEMPRE crear log persistente
@@ -443,7 +455,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        if (!isProximo && !isVencido) {
+        if (!isProximo && !isVencido && !isAcumulado) {
           console.log(`${tag} fuente "${fuente.clave}" no soportada en V1`);
           addMotivo(metrics, `Fuente no soportada: ${fuente.clave}`);
           metrics.errores++;
@@ -469,7 +481,7 @@ Deno.serve(async (req) => {
           `)
           .eq('activo', true)
           .eq('pago_completado', false)
-          .eq('fecha_pago', fechaObjetivo);
+          [isAcumulado ? 'lte' : 'eq']('fecha_pago', fechaObjetivo);
 
         const filtros: any = trig.filtros || {};
         const tiposPagoConfigurados = Array.isArray(aviso.tipos_pago_notificables) && aviso.tipos_pago_notificables.length > 0
