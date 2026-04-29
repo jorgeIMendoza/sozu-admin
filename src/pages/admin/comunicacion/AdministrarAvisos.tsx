@@ -1078,19 +1078,13 @@ export default function AdministrarAvisos() {
                           );
                         })()}
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Offsets en días</Label>
-                          <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
-                            placeholder="-5,-3,-1" className="font-mono" />
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
-                          </p>
-                        </div>
-                        <div>
-                          <Label>Hora de envío (México UTC-6)</Label>
-                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
-                        </div>
+                      <div>
+                        <Label>Offsets en días</Label>
+                        <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
+                          placeholder="-5,-3,-1" className="font-mono" />
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>Cron de día permitido (opcional)</Label>
@@ -1110,13 +1104,22 @@ export default function AdministrarAvisos() {
                           className="font-mono"
                         />
                         <p className="text-[11px] text-muted-foreground">
-                          Si lo dejas vacío, se evalúa todos los días a la <strong>hora de envío</strong>. Si lo capturas, sólo se evaluará en los días/horas que matchee la expresión.
+                          Si lo dejas vacío, se evalúa todos los días a la <strong>hora de envío</strong>. Si lo capturas, el cron define <strong>día y hora exactos</strong>; la hora de envío se ignora.
                         </p>
                         {cronError && <p className="text-sm text-destructive">{cronError}</p>}
                         {!cronError && cronExpression && (
                           <p className="text-sm text-primary">{describeCron(cronExpression)}</p>
                         )}
                       </div>
+                      {!(cronExpression && cronExpression.trim()) && (
+                        <div>
+                          <Label>Hora de envío (México UTC-6)</Label>
+                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Hora a la que el cron general evaluará este aviso cada día (cuando no hay expresión cron).
+                          </p>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label>Tipos de pago a notificar</Label>
                         <p className="text-[11px] text-muted-foreground">
