@@ -1031,13 +1031,33 @@ export default function AdministrarAvisos() {
                   {modoTrigger === 'evento' && (
                     <div className="space-y-3 border rounded-md p-3 bg-muted/30">
                       <div>
-                        <Label>Fecha base</Label>
-                        <div className="rounded-md border bg-background px-3 py-2 text-sm">
-                          <code className="text-primary">acuerdos_pago.fecha_pago</code>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          Se evalúa sobre acuerdos activos no pagados. Usa offsets <strong>negativos</strong> para enviar antes del vencimiento (recordatorios) y <strong>positivos</strong> para enviar después (cobranza vencida).
-                        </p>
+                        <Label>Fuente del evento</Label>
+                        <Select value={eventoFuenteId} onValueChange={setEventoFuenteId}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona una fuente" /></SelectTrigger>
+                          <SelectContent>
+                            {fuentesTrigger.map((f) => (
+                              <SelectItem key={f.id} value={String(f.id)}>{f.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {(() => {
+                          const f = fuentesTrigger.find(x => String(x.id) === eventoFuenteId);
+                          if (!f) return null;
+                          if (f.clave === 'acuerdos_vencidos_acumulados') {
+                            return (
+                              <div className="mt-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-[12px] text-foreground">
+                                <strong>Modo Acumulado:</strong> en cada disparo se notificará <strong>un solo correo por cliente</strong> con la lista completa de sus pagos cuya <code>fecha_pago ≤ (hoy − offset)</code>, sin pagar y activos.
+                                Usa <strong>offset 0</strong> para evaluar al día. Para correr el día 30 de cada mes a las 9:00, usa la expresión cron <code>0 9 30 * *</code> de abajo.
+                                Variables nuevas disponibles: <code>{`{{lista_adeudos}}`}</code>, <code>{`{{lista_adeudos_texto}}`}</code>, <code>{`{{total_adeudo}}`}</code>, <code>{`{{cantidad_acuerdos}}`}</code>, <code>{`{{fecha_mas_antigua}}`}</code>.
+                              </div>
+                            );
+                          }
+                          return (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              Se evalúa sobre acuerdos activos no pagados. Usa offsets <strong>negativos</strong> para enviar antes del vencimiento (recordatorios) y <strong>positivos</strong> para enviar después (cobranza vencida).
+                            </p>
+                          );
+                        })()}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -1052,6 +1072,31 @@ export default function AdministrarAvisos() {
                           <Label>Hora de envío (México UTC-6)</Label>
                           <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
                         </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cron de día permitido (opcional)</Label>
+                        <Input
+                          value={cronExpression}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCronExpression(val);
+                            if (val.trim()) {
+                              const result = validateCron(val);
+                              setCronError(result.valid ? "" : result.error || "Expresión inválida");
+                            } else {
+                              setCronError("");
+                            }
+                          }}
+                          placeholder="Ej. 0 9 30 * * (sólo día 30 de cada mes a las 9:00)"
+                          className="font-mono"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Si lo dejas vacío, se evalúa todos los días a la <strong>hora de envío</strong>. Si lo capturas, sólo se evaluará en los días/horas que matchee la expresión.
+                        </p>
+                        {cronError && <p className="text-sm text-destructive">{cronError}</p>}
+                        {!cronError && cronExpression && (
+                          <p className="text-sm text-primary">{describeCron(cronExpression)}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label>Tipos de pago a notificar</Label>
