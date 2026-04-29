@@ -571,9 +571,13 @@ export default function AdministrarAvisos() {
           toast({ title: "Error", description: "Ingresa al menos un offset de días (ej. -5,-3,-1)", variant: "destructive" });
           return;
         }
-        if (!/^\d{2}:\d{2}$/.test(eventoHora)) {
-          toast({ title: "Error", description: "Hora de envío inválida (formato HH:MM)", variant: "destructive" });
-          return;
+        // Si NO hay cron, la hora de envío es obligatoria. Si SÍ hay cron,
+        // el cron manda y la hora se deriva de él (ignorada en runtime).
+        if (!cronExpression || !cronExpression.trim()) {
+          if (!/^\d{2}:\d{2}$/.test(eventoHora)) {
+            toast({ title: "Error", description: "Hora de envío inválida (formato HH:MM)", variant: "destructive" });
+            return;
+          }
         }
         // cron_expression es OPCIONAL en modo evento (gate de día). Si la
         // capturó el usuario, validamos su sintaxis.
@@ -689,11 +693,26 @@ export default function AdministrarAvisos() {
     // Persist event-trigger config: one row per aviso (delete + insert for simplicity)
     await supabase.from('avisos_triggers_evento').delete().eq('id_aviso', avisoId);
     if (tipoEnvio === 'automatico' && modoTrigger === 'evento' && eventoFuenteId) {
+      // Si hay cron_expression, la hora la define el cron. Derivamos HH:MM
+      // del cron para que el valor en BD sea coherente (sólo informativo).
+      let horaParaGuardar = `${eventoHora}:00`;
+      if (cronExpression && cronExpression.trim()) {
+        const parts = cronExpression.trim().split(/\s+/);
+        if (parts.length === 5) {
+          const min = parseInt(parts[0], 10);
+          const hr = parseInt(parts[1], 10);
+          if (Number.isFinite(min) && Number.isFinite(hr) && min >= 0 && min < 60 && hr >= 0 && hr < 24) {
+            horaParaGuardar = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`;
+          } else {
+            horaParaGuardar = '00:00:00';
+          }
+        }
+      }
       const { error: trigErr } = await supabase.from('avisos_triggers_evento').insert({
         id_aviso: avisoId,
         id_fuente: parseInt(eventoFuenteId, 10),
         offsets_dias: parsedOffsets,
-        hora_envio: `${eventoHora}:00`,
+        hora_envio: horaParaGuardar,
         canal: eventoCanal,
         activo: eventoActivo,
       });
@@ -1059,19 +1078,13 @@ export default function AdministrarAvisos() {
                           );
                         })()}
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Offsets en días</Label>
-                          <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
-                            placeholder="-5,-3,-1" className="font-mono" />
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
-                          </p>
-                        </div>
-                        <div>
-                          <Label>Hora de envío (México UTC-6)</Label>
-                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
-                        </div>
+                      <div>
+                        <Label>Offsets en días</Label>
+                        <Input value={eventoOffsets} onChange={e => setEventoOffsets(e.target.value)}
+                          placeholder="-5,-3,-1" className="font-mono" />
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Negativos = antes de la fecha, positivos = después. Ej. <code>-5,-3,-1</code> o <code>1,3,7</code>.
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>Cron de día permitido (opcional)</Label>
@@ -1091,13 +1104,22 @@ export default function AdministrarAvisos() {
                           className="font-mono"
                         />
                         <p className="text-[11px] text-muted-foreground">
-                          Si lo dejas vacío, se evalúa todos los días a la <strong>hora de envío</strong>. Si lo capturas, sólo se evaluará en los días/horas que matchee la expresión.
+                          Si lo dejas vacío, se evalúa todos los días a la <strong>hora de envío</strong>. Si lo capturas, el cron define <strong>día y hora exactos</strong>; la hora de envío se ignora.
                         </p>
                         {cronError && <p className="text-sm text-destructive">{cronError}</p>}
                         {!cronError && cronExpression && (
                           <p className="text-sm text-primary">{describeCron(cronExpression)}</p>
                         )}
                       </div>
+                      {!(cronExpression && cronExpression.trim()) && (
+                        <div>
+                          <Label>Hora de envío (México UTC-6)</Label>
+                          <Input type="time" value={eventoHora} onChange={e => setEventoHora(e.target.value)} />
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Hora a la que el cron general evaluará este aviso cada día (cuando no hay expresión cron).
+                          </p>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label>Tipos de pago a notificar</Label>
                         <p className="text-[11px] text-muted-foreground">
