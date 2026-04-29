@@ -58,6 +58,44 @@ function fmtDate(s: string): string {
 
 const DEFAULT_TIPOS_PAGO = [2, 5, 4, 3];
 
+// ──────────────────────────────────────────────────────────────────────────
+// Cron matching (replicado de ejecutar-avisos-cron). Cuando un aviso en
+// modo evento tiene cron_expression, lo usamos como "gate del día": sólo
+// se evalúa si la expresión matchea la fecha/hora actual de México.
+// ──────────────────────────────────────────────────────────────────────────
+function cronFieldMatches(field: string, value: number): boolean {
+  if (field === '*') return true;
+  if (field.startsWith('*/')) {
+    const step = parseInt(field.slice(2), 10);
+    return Number.isFinite(step) && step > 0 && value % step === 0;
+  }
+  if (field.includes('-') && !field.includes(',')) {
+    const [min, max] = field.split('-').map(Number);
+    return value >= min && value <= max;
+  }
+  for (const part of field.split(',')) {
+    if (part.includes('-')) {
+      const [min, max] = part.split('-').map(Number);
+      if (value >= min && value <= max) return true;
+    } else if (parseInt(part, 10) === value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cronMatchesDay(cronExpr: string, mexNow: Date): boolean {
+  // Para barrido diario sólo nos importa día-mes, mes y día-semana.
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const dayOfMonth = mexNow.getDate();
+  const month = mexNow.getMonth() + 1;
+  const dayOfWeek = mexNow.getDay();
+  return cronFieldMatches(parts[2], dayOfMonth)
+    && cronFieldMatches(parts[3], month)
+    && cronFieldMatches(parts[4], dayOfWeek);
+}
+
 function formatMonthName(value: string | null | undefined): string {
   if (!value) return '';
   const date = new Date(`${value}T00:00:00`);
