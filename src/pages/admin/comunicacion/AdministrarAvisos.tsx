@@ -575,6 +575,15 @@ export default function AdministrarAvisos() {
           toast({ title: "Error", description: "Hora de envío inválida (formato HH:MM)", variant: "destructive" });
           return;
         }
+        // cron_expression es OPCIONAL en modo evento (gate de día). Si la
+        // capturó el usuario, validamos su sintaxis.
+        if (cronExpression && cronExpression.trim()) {
+          const cronValidation = validateCron(cronExpression);
+          if (!cronValidation.valid) {
+            toast({ title: "Expresión cron inválida", description: cronValidation.error, variant: "destructive" });
+            return;
+          }
+        }
       }
     }
 
