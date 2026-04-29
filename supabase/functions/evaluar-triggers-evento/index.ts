@@ -440,19 +440,24 @@ Deno.serve(async (req) => {
         const isVencido = fuente.clave === 'acuerdo_pago_vencido';
         const isAcumulado = fuente.clave === 'acuerdos_vencidos_acumulados';
 
-        if (!ignoreWindow && !withinSendWindow(trig.hora_envio as string, mexNow)) {
-          console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): fuera de ventana hora_envio=${trig.hora_envio}`);
-          addMotivo(metrics, `Fuera de ventana de envío (${trig.hora_envio})`);
-          summary.skipped++;
-          continue;
-        }
+        // Lógica de ventana de disparo:
+        //  - Si el aviso tiene cron_expression: el CRON manda (día + hora exactos).
+        //    Se ignora `hora_envio` del trigger.
+        //  - Si NO tiene cron: comportamiento clásico con ventana `hora_envio`
+        //    (ej. offsets -5,-3,-1 disparados todos los días a la hora fija).
+        const hasCron = !!aviso.cron_expression && typeof aviso.cron_expression === 'string' && aviso.cron_expression.trim().length > 0;
 
-        // Si el aviso tiene cron_expression, en modo evento la usamos como
-        // "gate de día" (ej. "0 9 30 * *" sólo dispara el día 30 a las 9:00).
-        if (aviso.cron_expression && typeof aviso.cron_expression === 'string') {
-          if (!cronMatchesDay(aviso.cron_expression, mexNow)) {
-            console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): cron_expression "${aviso.cron_expression}" no matchea hoy → omitido`);
-            addMotivo(metrics, `Cron del aviso no aplica hoy (${aviso.cron_expression})`);
+        if (hasCron) {
+          if (!ignoreWindow && !cronMatchesNow(aviso.cron_expression as string, mexNow)) {
+            console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): cron_expression "${aviso.cron_expression}" no matchea ahora → omitido`);
+            addMotivo(metrics, `Cron del aviso no aplica ahora (${aviso.cron_expression})`);
+            summary.skipped++;
+            continue;
+          }
+        } else {
+          if (!ignoreWindow && !withinSendWindow(trig.hora_envio as string, mexNow)) {
+            console.log(`${tag} trigger ${trig.id} (aviso "${aviso.nombre}"): fuera de ventana hora_envio=${trig.hora_envio}`);
+            addMotivo(metrics, `Fuera de ventana de envío (${trig.hora_envio})`);
             summary.skipped++;
             continue;
           }
