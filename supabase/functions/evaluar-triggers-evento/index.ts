@@ -96,6 +96,23 @@ function cronMatchesDay(cronExpr: string, mexNow: Date): boolean {
     && cronFieldMatches(parts[4], dayOfWeek);
 }
 
+// Cuando el aviso tiene cron_expression, el cron manda sobre día Y hora.
+// En ese caso ignoramos `hora_envio` del trigger y validamos minuto+hora+día.
+function cronMatchesNow(cronExpr: string, mexNow: Date): boolean {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const minute = mexNow.getMinutes();
+  const hour = mexNow.getHours();
+  const dayOfMonth = mexNow.getDate();
+  const month = mexNow.getMonth() + 1;
+  const dayOfWeek = mexNow.getDay();
+  return cronFieldMatches(parts[0], minute)
+    && cronFieldMatches(parts[1], hour)
+    && cronFieldMatches(parts[2], dayOfMonth)
+    && cronFieldMatches(parts[3], month)
+    && cronFieldMatches(parts[4], dayOfWeek);
+}
+
 function formatMonthName(value: string | null | undefined): string {
   if (!value) return '';
   const date = new Date(`${value}T00:00:00`);
