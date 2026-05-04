@@ -1055,6 +1055,48 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_auditoria_pagos: {
+        Row: {
+          actualizado_en_prod: boolean | null
+          clave_rastreo: string | null
+          diferencia: number | null
+          es_correcto: boolean | null
+          fecha_analisis: string | null
+          filas_en_grupo: number | null
+          id: number
+          id_cuenta_cobranza: number | null
+          monto_actual_sistema: number
+          monto_real_pdf: number | null
+          url_evidencia: string | null
+        }
+        Insert: {
+          actualizado_en_prod?: boolean | null
+          clave_rastreo?: string | null
+          diferencia?: number | null
+          es_correcto?: boolean | null
+          fecha_analisis?: string | null
+          filas_en_grupo?: number | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          monto_actual_sistema: number
+          monto_real_pdf?: number | null
+          url_evidencia?: string | null
+        }
+        Update: {
+          actualizado_en_prod?: boolean | null
+          clave_rastreo?: string | null
+          diferencia?: number | null
+          es_correcto?: boolean | null
+          fecha_analisis?: string | null
+          filas_en_grupo?: number | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          monto_actual_sistema?: number
+          monto_real_pdf?: number | null
+          url_evidencia?: string | null
+        }
+        Relationships: []
+      }
       borrar_bancos_banxico: {
         Row: {
           clave_institucion: number | null
