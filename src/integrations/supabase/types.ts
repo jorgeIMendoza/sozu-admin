@@ -1747,6 +1747,7 @@ export type Database = {
           monto: number | null
           numero_propiedad: string | null
           pago: string | null
+          pago_aplicado: number | null
           proyecto: string | null
           url_cep: string | null
           url_recibo: string | null
@@ -1761,6 +1762,7 @@ export type Database = {
           monto?: number | null
           numero_propiedad?: string | null
           pago?: string | null
+          pago_aplicado?: number | null
           proyecto?: string | null
           url_cep?: string | null
           url_recibo?: string | null
@@ -1775,6 +1777,7 @@ export type Database = {
           monto?: number | null
           numero_propiedad?: string | null
           pago?: string | null
+          pago_aplicado?: number | null
           proyecto?: string | null
           url_cep?: string | null
           url_recibo?: string | null
