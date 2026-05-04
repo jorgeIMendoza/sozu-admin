@@ -1062,6 +1062,7 @@ export type Database = {
           diferencia: number | null
           es_correcto: boolean | null
           fecha_analisis: string | null
+          fecha_pago_sistema: string | null
           filas_en_grupo: number | null
           id: number
           id_cuenta_cobranza: number | null
@@ -1075,6 +1076,7 @@ export type Database = {
           diferencia?: number | null
           es_correcto?: boolean | null
           fecha_analisis?: string | null
+          fecha_pago_sistema?: string | null
           filas_en_grupo?: number | null
           id?: never
           id_cuenta_cobranza?: number | null
@@ -1088,6 +1090,7 @@ export type Database = {
           diferencia?: number | null
           es_correcto?: boolean | null
           fecha_analisis?: string | null
+          fecha_pago_sistema?: string | null
           filas_en_grupo?: number | null
           id?: never
           id_cuenta_cobranza?: number | null
