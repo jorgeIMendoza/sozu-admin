@@ -1059,6 +1059,7 @@ export type Database = {
         Row: {
           actualizado_en_prod: boolean | null
           clave_rastreo: string | null
+          coincide_prorrateo: boolean | null
           diferencia: number | null
           es_correcto: boolean | null
           fecha_analisis: string | null
@@ -1068,34 +1069,42 @@ export type Database = {
           id_cuenta_cobranza: number | null
           monto_actual_sistema: number
           monto_real_pdf: number | null
+          monto_unitario_grupo: number | null
+          requiere_revision_manual: boolean | null
           url_evidencia: string | null
         }
         Insert: {
           actualizado_en_prod?: boolean | null
           clave_rastreo?: string | null
+          coincide_prorrateo?: boolean | null
           diferencia?: number | null
           es_correcto?: boolean | null
           fecha_analisis?: string | null
           fecha_pago_sistema?: string | null
           filas_en_grupo?: number | null
-          id?: never
+          id?: number
           id_cuenta_cobranza?: number | null
           monto_actual_sistema: number
           monto_real_pdf?: number | null
+          monto_unitario_grupo?: number | null
+          requiere_revision_manual?: boolean | null
           url_evidencia?: string | null
         }
         Update: {
           actualizado_en_prod?: boolean | null
           clave_rastreo?: string | null
+          coincide_prorrateo?: boolean | null
           diferencia?: number | null
           es_correcto?: boolean | null
           fecha_analisis?: string | null
           fecha_pago_sistema?: string | null
           filas_en_grupo?: number | null
-          id?: never
+          id?: number
           id_cuenta_cobranza?: number | null
           monto_actual_sistema?: number
           monto_real_pdf?: number | null
+          monto_unitario_grupo?: number | null
+          requiere_revision_manual?: boolean | null
           url_evidencia?: string | null
         }
         Relationships: []
