@@ -813,7 +813,13 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
 
   if (!comisionistas || comisionistas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
 
-  const comMap = new Map<number, any>(comisionistas.map((c: any) => [c.id_cuenta_cobranza, c]));
+  // Prefer inmobiliaria's own comisionista record; fall back to agent's record
+  const comMap = new Map<number, any>();
+  (comisionistas as any[]).forEach((c: any) => {
+    const existing = comMap.get(c.id_cuenta_cobranza);
+    const isInmob = (c.email_usuario || "").toLowerCase() === (inmobEmail || "").toLowerCase();
+    if (!existing || isInmob) comMap.set(c.id_cuenta_cobranza, c);
+  });
 
   // Get property info
   const propIds = [...new Set(ofertas.filter((o: any) => o.id_propiedad).map((o: any) => o.id_propiedad))] as number[];
