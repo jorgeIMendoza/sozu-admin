@@ -403,6 +403,10 @@ export default function InmobComisiones() {
                             </Button>
                           ) : isSozu ? (
                             <span className="text-xs text-muted-foreground">Sin factura</span>
+                          ) : r.estatus !== "Pendiente factura" ? (
+                            <span className="text-[11px] text-muted-foreground" title="La factura podrá subirse cuando admin apruebe la comisión">
+                              Pendiente de aprobación
+                            </span>
                           ) : (
                             <FacturaUploadButton
                               cuentaId={r.cuentaId}
