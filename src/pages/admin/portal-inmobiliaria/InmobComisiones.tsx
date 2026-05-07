@@ -803,11 +803,12 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   const cuentaIds = cuentas.map((c: any) => c.id);
 
   // Get comisionistas for this inmobiliaria
+  const comisionistasEmails = [...new Set([inmobEmail, ...agentEmails].filter(Boolean))];
   const { data: comisionistas } = await (supabase as any)
     .from("comisionistas")
     .select("id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
     .in("id_cuenta_cobranza", cuentaIds)
-    .eq("email_usuario", inmobEmail)
+    .in("email_usuario", comisionistasEmails)
     .eq("activo", true);
 
   if (!comisionistas || comisionistas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
