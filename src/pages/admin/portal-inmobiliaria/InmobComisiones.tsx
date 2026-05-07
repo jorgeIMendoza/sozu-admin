@@ -803,16 +803,23 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   const cuentaIds = cuentas.map((c: any) => c.id);
 
   // Get comisionistas for this inmobiliaria
+  const comisionistasEmails = [...new Set([inmobEmail, ...agentEmails].filter(Boolean))];
   const { data: comisionistas } = await (supabase as any)
     .from("comisionistas")
-    .select("id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
+    .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
     .in("id_cuenta_cobranza", cuentaIds)
-    .eq("email_usuario", inmobEmail)
+    .in("email_usuario", comisionistasEmails)
     .eq("activo", true);
 
   if (!comisionistas || comisionistas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
 
-  const comMap = new Map<number, any>(comisionistas.map((c: any) => [c.id_cuenta_cobranza, c]));
+  // Prefer inmobiliaria's own comisionista record; fall back to agent's record
+  const comMap = new Map<number, any>();
+  (comisionistas as any[]).forEach((c: any) => {
+    const existing = comMap.get(c.id_cuenta_cobranza);
+    const isInmob = (c.email_usuario || "").toLowerCase() === (inmobEmail || "").toLowerCase();
+    if (!existing || isInmob) comMap.set(c.id_cuenta_cobranza, c);
+  });
 
   // Get property info
   const propIds = [...new Set(ofertas.filter((o: any) => o.id_propiedad).map((o: any) => o.id_propiedad))] as number[];
