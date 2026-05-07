@@ -127,6 +127,7 @@ async function fetchAllComisionistas() {
           id,
           precio_final,
           url_factura_comision,
+          es_pagada_comision_venta,
           acuerdos_pago!fk_acpago_cuenta(
             id_concepto,
             pago_completado,
