@@ -425,6 +425,80 @@ const AgentComisiones = () => {
   );
 };
 
+function AgentFacturaUploadButton({
+  cuentaId,
+  agentEmail,
+  personaId,
+  onUploaded,
+  track,
+}: {
+  cuentaId: number;
+  agentEmail: string;
+  personaId: number;
+  onUploaded: () => void;
+  track: ReturnType<typeof useCtaTracker>['track'];
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const path = `facturas-comision/${cuentaId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+
+      const { error: insertError } = await (supabase as any).from('documentos').insert({
+        id_cuenta_cobranza: cuentaId,
+        id_tipo_documento: 46,
+        url: publicUrl,
+        id_persona: personaId,
+        numero: agentEmail,
+        activo: true,
+      });
+      if (insertError) throw insertError;
+
+      toast.success('Factura subida correctamente');
+      onUploaded();
+    } catch (err: any) {
+      console.error('Error uploading factura:', err);
+      toast.error('Error al subir la factura');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleUpload(f);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => {
+          track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
+          fileRef.current?.click();
+        }}
+        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[hsl(var(--agent-primary))] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
+      >
+        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+        {uploading ? 'Subiendo...' : 'Subir factura'}
+      </button>
+    </>
+  );
+}
+
 function CheckItem({ label, done }: { label: string; done: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
