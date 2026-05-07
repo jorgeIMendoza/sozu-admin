@@ -826,6 +826,14 @@ export default function ComisionesExternas() {
                         {/* Comisionistas Externos */}
                         <div>
                           <h4 className="font-semibold mb-2 text-sm">Comisionistas Externos</h4>
+                          {!cuenta.es_pagada_comision_venta && (
+                            <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300">
+                              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div>
+                                <strong>Comisión Sozu aún no pagada.</strong> Puedes aprobar y permitir que el externo suba su factura, pero el pago al externo se habilitará una vez que Sozu cobre su comisión.
+                              </div>
+                            </div>
+                          )}
                           <Table>
                             <TableHeader>
                               <TableRow>
