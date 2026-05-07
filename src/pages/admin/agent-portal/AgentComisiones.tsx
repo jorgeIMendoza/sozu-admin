@@ -150,19 +150,27 @@ const AgentComisiones = () => {
         }
       }
 
-      const { data: facturas } = await (supabase as any)
-        .from('documentos')
-        .select('id, id_tipo_documento')
-        .eq('id_persona', personaId)
-        .eq('id_tipo_documento', 46)
-        .eq('activo', true);
-      const hasFactura = (facturas || []).length > 0;
+      const cuentaIdsForFactura = comisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean);
+      const { data: facturas } = cuentaIdsForFactura.length > 0
+        ? await (supabase as any)
+            .from('documentos')
+            .select('id, id_cuenta_cobranza, url')
+            .in('id_cuenta_cobranza', cuentaIdsForFactura)
+            .eq('id_tipo_documento', 46)
+            .eq('activo', true)
+        : { data: [] };
+      const facturaUrlMap = new Map<number, string>();
+      (facturas || []).forEach((f: any) => {
+        if (f.id_cuenta_cobranza) facturaUrlMap.set(f.id_cuenta_cobranza, f.url || '');
+      });
 
       return comisionistas.map((c: any) => {
         const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
         const precioFinal = cuenta?.precio_final || 0;
         const montoComision = precioFinal * (c.porcentaje_comision || 0) / 100;
         const propSold = cuenta?.id_estatus_disponibilidad === 5;
+        const facturaUrl = facturaUrlMap.get(c.id_cuenta_cobranza) || null;
+        const hasFactura = facturaUrlMap.has(c.id_cuenta_cobranza);
 
         let detailedStatus: string;
         if (c.pagada) {
@@ -186,6 +194,7 @@ const AgentComisiones = () => {
           monto_comision: montoComision,
           detailed_status: detailedStatus,
           cuenta_cobranza_label: formatCuentaCobranzaId(c.id_cuenta_cobranza, cuenta?.tipo),
+          factura_url: facturaUrl,
         };
       });
     },
