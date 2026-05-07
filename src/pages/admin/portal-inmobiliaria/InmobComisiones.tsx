@@ -806,7 +806,7 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
   const comisionistasEmails = [...new Set([inmobEmail, ...agentEmails].filter(Boolean))];
   const { data: comisionistas } = await (supabase as any)
     .from("comisionistas")
-    .select("id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
+    .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
     .in("id_cuenta_cobranza", cuentaIds)
     .in("email_usuario", comisionistasEmails)
     .eq("activo", true);
