@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Check, Upload, Eye, FileText, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, Upload, Eye, FileText, Search, AlertCircle, AlertTriangle } from "lucide-react";
 import { format, parseISO, endOfMonth, subMonths, isBefore, isEqual } from "date-fns";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
@@ -806,7 +806,8 @@ export default function ComisionesExternas() {
                         Pagada
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+                        <AlertCircle className="h-3 w-3" />
                         Pendiente
                       </Badge>
                     )}
