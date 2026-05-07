@@ -888,12 +888,12 @@ async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string
     const oferta = ofertaMap.get(cuenta.id_oferta);
     const prop = oferta?.id_propiedad ? propMap.get(oferta.id_propiedad) : null;
     const estatusPropId = prop?.id_estatus_disponibilidad;
+    const esProducto = !!oferta?.id_producto;
 
-    if (estatusPropId && estatusPropId >= VENDIDO_ID) {
-      totalGenerada += comision;
-    } else {
-      continue;
-    }
+    // Include if: property is sold (>=5), OR it's a product offer (no direct property), OR commission is already approved/paid
+    const include = (estatusPropId && estatusPropId >= VENDIDO_ID) || esProducto || com.aprobada || com.pagada;
+    if (!include) continue;
+    totalGenerada += comision;
 
     const em = prop ? emMap.get(prop.id_edificio_modelo) : null;
     const edif = em ? edifMap.get(em.id_edificio) : null;
