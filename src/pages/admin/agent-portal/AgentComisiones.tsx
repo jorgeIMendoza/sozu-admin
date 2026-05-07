@@ -387,6 +387,17 @@ const AgentComisiones = () => {
                         Ver comprobante
                       </a>
                     )}
+                    {c.factura_url && (
+                      <a
+                        href={c.factura_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-[hsl(var(--agent-primary))] font-medium underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Ver factura
+                      </a>
+                    )}
                   </div>
                   {c.precio_final > 0 && (
                     <span className="text-[10px] text-[hsl(var(--agent-text-secondary))]">
@@ -394,6 +405,17 @@ const AgentComisiones = () => {
                     </span>
                   )}
                 </div>
+                {c.detailed_status === 'factura_requerida' && !c.factura_url && agentEmail && personaId && (
+                  <div className="mt-3">
+                    <AgentFacturaUploadButton
+                      cuentaId={c.id_cuenta_cobranza}
+                      agentEmail={agentEmail}
+                      personaId={personaId}
+                      onUploaded={() => queryClient.invalidateQueries({ queryKey: ['agent-comisiones', agentEmail] })}
+                      track={track}
+                    />
+                  </div>
+                )}
               </div>
             );
           })
