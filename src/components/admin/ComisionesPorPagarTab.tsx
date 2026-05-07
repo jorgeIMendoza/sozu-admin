@@ -325,19 +325,24 @@ export default function ComisionesPorPagarTab({
                           {formatCurrency(com.montoPendiente)}
                         </TableCell>
                         <TableCell>
-                          {com.cuentas.length > 0 && (canUpdate || isSuperAdmin) && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPagarTodasDialog('comisionista', com);
-                              }}
-                            >
-                              <Upload className="h-4 w-4 mr-1" />
-                              Pagar Todas ({com.cuentas.length})
-                            </Button>
-                          )}
+                          {com.cuentas.length > 0 && (canUpdate || isSuperAdmin) && (() => {
+                            const liberables = com.cuentas.filter((c: any) => c.esPagadaComisionVenta).length;
+                            return (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPagarTodasDialog('comisionista', { ...com, cuentas: com.cuentas.filter((c: any) => c.esPagadaComisionVenta) });
+                                }}
+                                disabled={liberables === 0}
+                                title={liberables === 0 ? 'Ninguna cuenta tiene la comisión Sozu pagada todavía' : liberables < com.cuentas.length ? `${com.cuentas.length - liberables} cuenta(s) bloqueadas: Sozu aún no cobra` : ''}
+                              >
+                                <Upload className="h-4 w-4 mr-1" />
+                                Pagar Todas ({liberables}/{com.cuentas.length})
+                              </Button>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                       {expandedItems.has(com.email) && (
@@ -539,6 +544,8 @@ export default function ComisionesPorPagarTab({
                                   e.stopPropagation();
                                   openPagarTodasDialog('cuenta', cuenta);
                                 }}
+                                disabled={!cuenta.esPagadaComisionVenta}
+                                title={!cuenta.esPagadaComisionVenta ? 'La comisión Sozu debe estar pagada antes de liberar el pago al externo' : ''}
                               >
                                 <Upload className="h-4 w-4 mr-1" />
                                 Pagar Todas ({cuenta.comisionistas.length})
