@@ -776,42 +776,39 @@ async function fetchSozuComisiones(agentEmails: string[], dateRanges: { start: s
 async function fetchExternalComisiones(agentEmails: string[], inmobEmail: string, dateRanges: { start: string; end: string }[]) {
   if (!inmobEmail) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
 
-  let query = (supabase as any)
-    .from("ofertas")
-    .select("id, email_creador, id_propiedad, id_producto, fecha_creacion")
-    .in("email_creador", agentEmails)
-    .eq("activo", true);
-
-  if (dateRanges.length > 0) {
-    const orClauses = dateRanges.map(r => `and(fecha_creacion.gte.${r.start},fecha_creacion.lte.${r.end})`).join(",");
-    query = query.or(orClauses);
-  }
-
-  const { data: ofertas } = await query;
-  if (!ofertas || ofertas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
-
-  const ofertaIds = ofertas.map((o: any) => o.id);
-
-  const { data: cuentas } = await (supabase as any)
-    .from("cuentas_cobranza")
-    .select("id, id_oferta, precio_final, activo, fecha_pago_comision, es_pagada_comision_venta")
-    .in("id_oferta", ofertaIds)
-    .is("id_cuenta_cobranza_padre", null);
-
-  if (!cuentas || cuentas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
-
-  const cuentaIds = cuentas.map((c: any) => c.id);
-
-  // Get comisionistas for this inmobiliaria
+  // Start from comisionistas: agency email OR any of its agents (covers ofertas created by Sozu where the agent was added as comisionista)
   const comisionistasEmails = [...new Set([inmobEmail, ...agentEmails].filter(Boolean))];
   const { data: comisionistas } = await (supabase as any)
     .from("comisionistas")
     .select("id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago")
-    .in("id_cuenta_cobranza", cuentaIds)
     .in("email_usuario", comisionistasEmails)
     .eq("activo", true);
 
   if (!comisionistas || comisionistas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
+
+  const cuentaIds = [...new Set((comisionistas as any[]).map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
+  if (cuentaIds.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
+
+  const { data: cuentas } = await (supabase as any)
+    .from("cuentas_cobranza")
+    .select("id, id_oferta, precio_final, activo, fecha_pago_comision, es_pagada_comision_venta")
+    .in("id", cuentaIds)
+    .is("id_cuenta_cobranza_padre", null);
+
+  if (!cuentas || cuentas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
+
+  const ofertaIds = [...new Set(cuentas.map((c: any) => c.id_oferta).filter(Boolean))] as number[];
+  let ofertasQuery = (supabase as any)
+    .from("ofertas")
+    .select("id, email_creador, id_propiedad, id_producto, fecha_creacion")
+    .in("id", ofertaIds)
+    .eq("activo", true);
+  if (dateRanges.length > 0) {
+    const orClauses = dateRanges.map(r => `and(fecha_creacion.gte.${r.start},fecha_creacion.lte.${r.end})`).join(",");
+    ofertasQuery = ofertasQuery.or(orClauses);
+  }
+  const { data: ofertas } = await ofertasQuery;
+  if (!ofertas || ofertas.length === 0) return { rows: [], kpis: { totalGenerada: 0, pagadas: 0, pendientes: 0, enRevision: 0, programadas: 0 } };
 
   // Prefer inmobiliaria's own comisionista record; fall back to agent's record
   const comMap = new Map<number, any>();
