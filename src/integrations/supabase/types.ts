@@ -941,6 +941,57 @@ export type Database = {
           },
         ]
       }
+      borra_extraccion_ceps_eddy: {
+        Row: {
+          banco_emisor: string | null
+          banco_receptor: string | null
+          criterio_busqueda: string | null
+          cuenta_beneficiaria: string | null
+          detalle_error: string | null
+          estado_procesamiento: string | null
+          fecha_pago_extraida: string | null
+          fecha_procesamiento: string | null
+          id_cuenta_cobranza: number | null
+          id_pago: number
+          monto_extraido: number | null
+          nombre_legal: string | null
+          pago_a_banco: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          banco_emisor?: string | null
+          banco_receptor?: string | null
+          criterio_busqueda?: string | null
+          cuenta_beneficiaria?: string | null
+          detalle_error?: string | null
+          estado_procesamiento?: string | null
+          fecha_pago_extraida?: string | null
+          fecha_procesamiento?: string | null
+          id_cuenta_cobranza?: number | null
+          id_pago: number
+          monto_extraido?: number | null
+          nombre_legal?: string | null
+          pago_a_banco?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          banco_emisor?: string | null
+          banco_receptor?: string | null
+          criterio_busqueda?: string | null
+          cuenta_beneficiaria?: string | null
+          detalle_error?: string | null
+          estado_procesamiento?: string | null
+          fecha_pago_extraida?: string | null
+          fecha_procesamiento?: string | null
+          id_cuenta_cobranza?: number | null
+          id_pago?: number
+          monto_extraido?: number | null
+          nombre_legal?: string | null
+          pago_a_banco?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: []
+      }
       borrar_acuerdos_pago_manto_stagin: {
         Row: {
           fecha_pago: string | null
