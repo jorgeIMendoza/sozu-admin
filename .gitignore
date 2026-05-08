@@ -25,3 +25,8 @@ dist-ssr
 
 # Firebase config (generated dynamically by workflow)
 firebase.json
+
+# Environment variables (only .env.example is tracked)
+.env
+.env.development
+.env.production
