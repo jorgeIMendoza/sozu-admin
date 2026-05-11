@@ -1,61 +1,100 @@
-## Diagnóstico
 
-### Portal Inmobiliaria (`src/pages/admin/portal-inmobiliaria/InmobComisiones.tsx`)
-El componente `FacturaUploadButton` SÍ existe (línea 112) y se renderiza en línea 407 dentro de la columna FACTURA. Pero:
+# Portal Escrituración — Plan de implementación
 
-- Sólo aparece cuando `r.facturaUrl` está vacía Y `!isSozu`.
-- Está habilitado únicamente si `r.estatus === "Pendiente factura"` (línea 412).
-- El estatus `"Pendiente factura"` se asigna sólo si `com.aprobada === true && !facturaSet.has(cuentaId)` (línea 901–902).
+Voy a crear un nuevo portal `Portal Escrituración`, espejando la estructura del proyecto "SOZU Property Suite" pero adaptado a la convención que ya tenemos (`Portal Cobranza`, `Portal Inmobiliaria`, etc.). Reutilizamos `AdminLayout` con un layout dedicado y todas las pantallas vivirán bajo `/admin/portal-escrituracion/*`.
 
-Resultado actual: si el admin no ha presionado "Aprobar" en `ComisionesExternas`, las filas se quedan en `"En revisión"` y el botón aparece **deshabilitado** (gris). Esto coincide con lo que el usuario está viendo: el cambio reciente permite aprobar antes de que Sozu cobre, pero en producción esas comisiones aún no han sido aprobadas por admin, así que el botón sigue inactivo.
+Como en el proyecto de referencia el "tema central" es la escrituración (con `escrituracion`, `notarias`, `credito`, `expedientes`, `entregas`, `daiku`, `postventa`, `portal cliente`, `reportes`, `usuarios`, `auditoría`, `configuración`), tomaré sólo lo relevante al **cierre legal + entrega**, que es la columna vertebral de "Escrituración". Los módulos restantes ya existen en otros portales (Cobranza, Cliente, etc.).
 
-### Portal Agente (`src/pages/admin/agent-portal/AgentComisiones.tsx`)
-**No existe ningún botón de subir factura.** El portal sólo calcula el estatus `factura_requerida` (línea 170) pero no renderiza UI para subirla. El agente queda bloqueado: ve "Factura requerida" pero no puede actuar.
+## Alcance del Portal Escrituración
 
----
+Menú (sidebar propio, mismo estilo que `PortalCobranzaLayout`):
 
-## Plan
+```text
+Operación
+ ├─ Dashboard
+ ├─ Expedientes (pipeline)
+ ├─ Unidades en escrituración
+ └─ Crédito hipotecario
 
-### 1. Portal Agente — agregar botón "Subir factura" (cambio mayor)
+Cierre legal
+ ├─ Pipeline notarial
+ ├─ Notarías
+ ├─ Notarios
+ └─ Avalúos
 
-En `AgentComisiones.tsx`, dentro de la tarjeta de cada comisión:
+Documentación
+ ├─ Expedientes / PLD
+ ├─ Borradores
+ └─ Plantillas de escritura
 
-- Cuando `c.detailed_status === 'factura_requerida'`, mostrar un botón "Subir factura" debajo del badge de estatus.
-- Crear un componente `AgentFacturaUploadButton` (puede vivir en el mismo archivo) que replique la lógica de `FacturaUploadButton` del portal inmobiliaria:
-  - Acepta sólo `.pdf`.
-  - Sube a `storage/documentos` en path `facturas-comision/{cuentaId}/{timestamp}-{file}`.
-  - Inserta fila en `documentos` con `id_tipo_documento = 46`, `id_cuenta_cobranza`, `id_persona = personaId`, `numero = agentEmail`, `activo = true`.
-  - Tras éxito, invalida la query `['agent-comisiones', agentEmail]`.
-- Agregar tracking con `useCtaTracker` (`elementId: 'btn_subir_factura_agent'`).
-- También mostrar enlace "Ver factura" cuando ya exista (conviene jalar `url` de `documentos` tipo 46 en el query y mapearlo a la fila como `facturaUrl`).
+Entrega
+ ├─ Programación de firmas
+ ├─ Entregas físicas
+ └─ Inscripción RPP
 
-### 2. Portal Inmobiliaria — confirmar visibilidad del botón
+Sistema
+ ├─ Reportes
+ ├─ Auditoría
+ └─ Configuración
+```
 
-`FacturaUploadButton` ya está implementado y enlazado correctamente. La causa de que no aparezca en producción es que las filas que el usuario espera ver con botón están en estatus distinto a `"Pendiente factura"` (probablemente `"En revisión"` porque admin aún no aprueba). No se requiere cambio funcional, pero para evitar confusión:
+Todas las páginas usarán **mock data** (estilo del repo de referencia) con KPIs, tablas, filtros, paneles y badges. Reutilizamos los componentes shadcn ya presentes (`Card`, `Badge`, `Table`, `Tabs`, `Progress`) y los patrones visuales de `PortalCobranza` para conservar coherencia con SOZU Admin.
 
-- Reemplazar el span "Sin factura" / botón deshabilitado por un mensaje contextual claro en la celda FACTURA cuando la comisión aún no esté aprobada: "Pendiente de aprobación admin" (tooltip explicativo).
-- Cuando `r.estatus === "Pendiente factura"` el botón aparece habilitado (ya funciona).
-- En el `Sheet` de detalle (línea 526), aplicar el mismo tratamiento.
+## Pasos de ejecución (te diré "siguiente" entre cada uno)
 
-### 3. Confirmación con el usuario antes de implementar
+### Paso 1 — Base de datos (SQL que tú ejecutarás)
+- Insertar `menus` nuevo: `Portal Escrituración` (orden tras `Portal Cobranza`).
+- Insertar 5 grupos lógicos como submenus padre + ~17 submenús hijos con `vista_front_end = '/admin/portal-escrituracion/...'`.
+- Insertar permisos `leer/crear/actualizar/eliminar/exportar/aprobar` por submenu.
+- Asignar TODOS los permisos al rol Super Admin (rol_id = 1) — esto es lo único que pides explícito.
+- Como `is_super_admin()` ya da bypass global, esto es redundante en runtime pero deja la matriz limpia para futuros roles.
 
-Conservar la regla "factura sólo después de aprobación admin" (ya confirmado). No se modifica `ComisionesExternas.tsx` ni la lógica de aprobación.
+Entrego un único bloque SQL para que lo ejecutes tú (no DDL, sólo `INSERT`s).
 
----
+### Paso 2 — Layout, ruteo y guardas
+- Crear `src/components/admin/portal-escrituracion/PortalEscrituracionLayout.tsx` (clon adaptado de `PortalCobranzaLayout`).
+- Registrar `if (location.pathname.startsWith("/admin/portal-escrituracion"))` en `AdminLayout.tsx`.
+- En `PermissionRoute.tsx`, permitir el portal sólo si `profile.rol_id === 1` (Super Admin), igual que se hace para `portal-cobranza`.
+- Rutas perezosas en `App.tsx` con `lazyRetry`.
 
-## Detalles técnicos
+### Paso 3 — Dashboard + KPIs
+- `EscDashboard.tsx`: KPIs (Expedientes activos, Pipeline MXN, En riesgo, Escrituras del mes), gráficos `recharts` (cobranza semanal del cierre, distribución por notaría, pie de status), tabla "Próximas firmas".
 
-**Archivos a modificar:**
-- `src/pages/admin/agent-portal/AgentComisiones.tsx` — agregar componente upload + lógica de fetch de `url` factura para mostrar "Ver factura".
-- `src/pages/admin/portal-inmobiliaria/InmobComisiones.tsx` — mejorar UX del botón cuando está deshabilitado (tooltip + label).
+### Paso 4 — Pipeline notarial (módulo estrella)
+- `EscExpedientes.tsx`: réplica del `escrituracion.tsx` del repo de referencia: barra de etapas (Expediente → Avalúo → Instrucción → Borrador → VoBo → Firma → Registro → Entrega), tabla filtrable, panel de detalle con milestones, alta de expediente.
 
-**Sin cambios:**
-- Tipos generados de Supabase.
-- Edge functions.
-- Lógica de aprobación en `ComisionesExternas.tsx`.
+### Paso 5 — Notarías + Notarios + Avalúos
+- `EscNotarias.tsx`, `EscNotarios.tsx`, `EscAvaluos.tsx`: listas con búsqueda, tarjetas por notaría (titular, zona, carga, SLA), tabla de avalúos con banco y monto.
 
-**Validación post-implementación:**
-1. Como agente con comisión `aprobada=true` y sin documento tipo 46 → debe ver botón "Subir factura" habilitado.
-2. Tras subir → estatus pasa a "Programada" y se ve enlace "Ver factura".
-3. Como inmobiliaria con la misma condición → botón habilitado en columna FACTURA.
-4. Como inmobiliaria/agente con comisión sin aprobar → mensaje claro "Pendiente de aprobación admin" (no botón muerto).
+### Paso 6 — Documentación
+- `EscExpedientesPLD.tsx`, `EscBorradores.tsx`, `EscPlantillas.tsx`: checklists, estado por documento, previsualización mock.
+
+### Paso 7 — Entrega
+- `EscFirmas.tsx` (calendario simple por semana), `EscEntregasFisicas.tsx` (lista con checklist), `EscInscripcionRPP.tsx`.
+
+### Paso 8 — Crédito hipotecario
+- `EscCredito.tsx`: pipeline por banco, montos autorizados/dispersados, SLAs por institución.
+
+### Paso 9 — Sistema
+- `EscReportes.tsx`, `EscAuditoria.tsx`, `EscConfiguracion.tsx` con placeholders accionables (no inventamos lógica de backend).
+
+### Paso 10 — QA visual y verificación
+- Probar navegación entre submenús con Super Admin.
+- Verificar build limpio.
+- Confirmar que el submenu se renderiza vía `useDynamicMenus` (basta con los INSERTs del Paso 1).
+
+## Detalle técnico
+
+- **Rutas:** `/admin/portal-escrituracion/{dashboard, expedientes, unidades, credito, pipeline, notarias, notarios, avaluos, pld, borradores, plantillas, firmas, entregas, rpp, reportes, auditoria, configuracion}`.
+- **Acceso:** sólo `rol_id = 1` (Super Admin) entra por ahora. Para sumar otros roles luego basta otorgarles los permisos del Paso 1.
+- **Mock data:** archivos `src/data/escrituracion/*.ts` (similar a `src/data/cobranza/*.ts`) con tipados y constantes — sin tocar la BD.
+- **Diseño:** mismos tokens semánticos (`bg-primary`, `text-muted-foreground`, etc.), badges `StatusBadge` adaptados a `Badge` shadcn con variantes ya existentes.
+- **Restricciones de tu workspace:** no ejecutaré DDL ni edge functions. El SQL del Paso 1 te lo entrego para que lo corras tú; el resto es 100% front-end + mock.
+
+## Lo que NO incluye este plan (lo aclaro por transparencia)
+
+- No conecto el portal a tablas reales (`propiedades`, `cuentas_cobranza`, `notarias`, etc.) en esta entrega; lo definimos luego módulo por módulo cuando me digas qué consultas usar.
+- No creo `is_escrituracion_*` policies en RLS (no hay tablas nuevas).
+- No agrego subdomain branding (`escrituracion.sozu.com`); el portal vive bajo `admin.sozu.com/admin/portal-escrituracion`. Si lo quieres como subdominio, lo agrego en una fase posterior.
+
+¿Arrancamos por el **Paso 1 (SQL de menús + permisos Super Admin)** y luego seguimos con el **Paso 2 (layout + rutas)**, o prefieres que ejecute Pasos 1–3 de corrido en cuanto apruebes?
