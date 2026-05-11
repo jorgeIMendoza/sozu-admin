@@ -196,10 +196,10 @@ export interface EntregaFisica {
 }
 
 export const ENTREGAS: EntregaFisica[] = [
-  { id: "ENT-1", expedienteId: "ESC-2044", cliente: "Ernesto Gómez",  unidad: "B-1104",project: undefined as any, fechaProgramada: "07 May 2026", checklist: { llaves: true, manuales: true, controlAcceso: true, tarjeton: true }, estado: "ejecutada" },
-  { id: "ENT-2", expedienteId: "ESC-2048", cliente: "Laura Sánchez",  unidad: "B-808", project: undefined as any, fechaProgramada: "05 May 2026", checklist: { llaves: true, manuales: true, controlAcceso: false, tarjeton: true }, estado: "con_observaciones" },
-  { id: "ENT-3", expedienteId: "ESC-2042", cliente: "Joel Herrera",   unidad: "703",   project: undefined as any, fechaProgramada: "11 May 2026", checklist: { llaves: false, manuales: false, controlAcceso: false, tarjeton: false }, estado: "programada" },
-  { id: "ENT-4", expedienteId: "ESC-2041", cliente: "Jorge Acosta",   unidad: "305B",  project: undefined as any, fechaProgramada: "14 May 2026", checklist: { llaves: false, manuales: false, controlAcceso: false, tarjeton: false }, estado: "programada" },
+  { id: "ENT-1", expedienteId: "ESC-2044", cliente: "Ernesto Gómez",  unidad: "B-1104", fechaProgramada: "07 May 2026", checklist: { llaves: true, manuales: true, controlAcceso: true, tarjeton: true },   estado: "ejecutada" },
+  { id: "ENT-2", expedienteId: "ESC-2048", cliente: "Laura Sánchez",  unidad: "B-808",  fechaProgramada: "05 May 2026", checklist: { llaves: true, manuales: true, controlAcceso: false, tarjeton: true },  estado: "con_observaciones" },
+  { id: "ENT-3", expedienteId: "ESC-2042", cliente: "Joel Herrera",   unidad: "703",    fechaProgramada: "11 May 2026", checklist: { llaves: false, manuales: false, controlAcceso: false, tarjeton: false }, estado: "programada" },
+  { id: "ENT-4", expedienteId: "ESC-2041", cliente: "Jorge Acosta",   unidad: "305B",   fechaProgramada: "14 May 2026", checklist: { llaves: false, manuales: false, controlAcceso: false, tarjeton: false }, estado: "programada" },
 ];
 
 export interface InscripcionRPP {
