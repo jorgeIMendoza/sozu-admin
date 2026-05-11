@@ -351,7 +351,10 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
  
        sortedMenuIds.forEach(menuId => {
          const menuData = menuMap.get(menuId)!;
-         const menuIcon = iconMapByMenuId[menuId] || Settings;
+          const isPortalByName = /^Portal\s/i.test(menuData.menuNombre);
+          const menuIcon =
+            iconMapByMenuId[menuId] ||
+            (isPortalByName && /escritura/i.test(menuData.menuNombre) ? ScrollText : Settings);
  
           // Dashboard es especial - es un menu sin hijos que lleva directo a /admin
           if (menuId === DASHBOARD_MENU_ID && menuData.children.length === 1) {
@@ -361,7 +364,7 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
               icon: menuData.children[0].icon,
               menuId,
             });
-          } else if (PORTAL_MENU_IDS.has(menuId) && menuData.children.length > 0) {
+          } else if ((PORTAL_MENU_IDS.has(menuId) || isPortalByName) && menuData.children.length > 0) {
             // Portales: enlace directo al primer submenú, sin desplegable
             // Verificar si TODOS los submenus originales del menú tienen solo_usuarioa=true
             const allSubmenusOfMenu = (submenusData as unknown as RawSubmenu[])?.filter(s => s.menu_id === menuId && s.vista_front_end) || [];
@@ -385,19 +388,6 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
        });
  
        setMenuItems(items);
-
-        // Inject Portal Escrituración (Super Admin only, virtual entry)
-        // until DB menus/permissions are seeded.
-        if (isSuperAdmin && !items.some((i) => i.title === 'Portal Escrituración')) {
-          items.push({
-            title: 'Portal Escrituración',
-            href: '/admin/portal-escrituracion/dashboard',
-            icon: ScrollText,
-            menuId: 9999,
-            isPortal: true,
-          });
-          setMenuItems([...items]);
-        }
        hasLoadedOnce.current = true;
      } catch (err) {
        console.error('Error in fetchDynamicMenus:', err);
