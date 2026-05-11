@@ -385,19 +385,6 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
        });
  
        setMenuItems(items);
-
-        // Inject Portal Escrituración (Super Admin only, virtual entry)
-        // until DB menus/permissions are seeded.
-        if (isSuperAdmin && !items.some((i) => i.title === 'Portal Escrituración')) {
-          items.push({
-            title: 'Portal Escrituración',
-            href: '/admin/portal-escrituracion/dashboard',
-            icon: ScrollText,
-            menuId: 9999,
-            isPortal: true,
-          });
-          setMenuItems([...items]);
-        }
        hasLoadedOnce.current = true;
      } catch (err) {
        console.error('Error in fetchDynamicMenus:', err);
