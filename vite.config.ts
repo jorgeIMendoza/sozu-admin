@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { VitePWA } from 'vite-plugin-pwa';
 import { writeFileSync, mkdirSync } from 'fs';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -48,86 +47,6 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    VitePWA({
-      registerType: 'prompt',
-      injectRegister: null,
-      devOptions: {
-        enabled: false
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
-              },
-              networkTimeoutSeconds: 10
-            }
-          },
-          {
-            urlPattern: /\.(?:js|css)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'static-resources',
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'image-cache',
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-              }
-            }
-          }
-        ]
-      },
-      includeAssets: ['app-icon.png'],
-      manifest: {
-        name: 'SOZU Admin - Panel de Administración',
-        short_name: 'SOZU Admin',
-        description: 'Panel de administración para gestión de proyectos inmobiliarios SOZU',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
-        display: 'browser',
-        orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
-        icons: [
-          {
-            src: 'app-icon.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'app-icon.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'app-icon.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
-          }
-        ]
-      }
-    })
   ].filter(Boolean),
   resolve: {
     alias: {
