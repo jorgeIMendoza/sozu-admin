@@ -356,7 +356,7 @@ const Bodegas = () => {
   const handleUpdate = async (id: number, data: Partial<Bodega>) => {
     try {
       // Exclude readonly fields  
-      const { id: _, proyecto_nombre, numero_propiedad, activo, ...updateData } = data;
+      const { id: _, proyecto_nombre, numero_propiedad, activo, precio_m2, precio_final, ...updateData } = data;
       
       const { error } = await supabase
         .from('bodegas')

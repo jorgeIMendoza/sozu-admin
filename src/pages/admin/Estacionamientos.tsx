@@ -358,7 +358,7 @@ const Estacionamientos = () => {
   const handleUpdate = async (id: number, data: Partial<Estacionamiento>) => {
     try {
       // Exclude readonly fields
-      const { id: _, proyecto_nombre, numero_propiedad, tipo_nombre, activo, ...updateData } = data;
+      const { id: _, proyecto_nombre, numero_propiedad, tipo_nombre, activo, precio_m2, precio_final, ...updateData } = data;
       
       const { error } = await supabase
         .from('estacionamientos')
