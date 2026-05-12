@@ -2141,29 +2141,11 @@ export default function DetalleCuentaCobranza() {
   // Mutation to update comprador
   const updateCompradorMutation = useMutation({
     mutationFn: async (data: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, pendingDocuments, tempBankAccounts, tempBeneficiaries, porcentaje_comision, id, ...personaUpdate } = data;
       const { error } = await supabase
         .from('personas')
-        .update({
-          nombre_legal: data.nombre_legal,
-          email: data.email,
-          telefono: data.telefono,
-          clave_pais_telefono: data.clave_pais_telefono,
-          rfc: data.rfc,
-          curp: data.curp,
-          fecha_nacimiento: data.fecha_nacimiento,
-          nacionalidad: data.nacionalidad,
-          estado_civil: data.estado_civil,
-          genero: data.genero,
-          regimen_fiscal: data.regimen_fiscal,
-          uso_cfdi: data.uso_cfdi,
-          direccion_fiscal: data.direccion_fiscal,
-          codigo_postal: data.codigo_postal,
-          colonia: data.colonia,
-          municipio: data.municipio,
-          estado: data.estado,
-          pais: data.pais,
-        })
-        .eq('id', data.id);
+        .update(personaUpdate as any)
+        .eq('id', id);
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
