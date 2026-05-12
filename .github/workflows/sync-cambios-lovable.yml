@@ -56,11 +56,38 @@ jobs:
           git fetch origin cambios_lovable
           git checkout cambios_lovable
 
+      - name: Backup env files from cambios_lovable
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          mkdir -p /tmp/cambios-lovable-env
+          for file in .env .env.development; do
+            if [ -f "$file" ]; then
+              cp "$file" "/tmp/cambios-lovable-env/${file##*/}"
+            fi
+          done
+
       - name: Pull from main
         if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
         run: |
           git pull origin main --no-edit --rebase=false
           echo "Successfully synced cambios_lovable with main"
+
+      - name: Restore env files after sync
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          restored=false
+          for file in .env .env.development; do
+            backup="/tmp/cambios-lovable-env/${file##*/}"
+            if [ -f "$backup" ]; then
+              cp "$backup" "$file"
+              restored=true
+            fi
+          done
+
+          if [ "$restored" = true ]; then
+            git add .env .env.development
+            git commit -m "chore: preserve env files during cambios_lovable sync" || echo "No env changes to commit"
+          fi
 
       - name: Push cambios_lovable
         if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
