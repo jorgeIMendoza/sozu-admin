@@ -1033,7 +1033,7 @@ export function VerificationComparator({
       if (Object.keys(personaUpdate).length > 0) {
         const { error } = await supabase
           .from("personas")
-          .update(personaUpdate)
+          .update(personaUpdate as any)
           .eq("id", personaId);
         if (error) throw error;
       }
