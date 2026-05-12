@@ -1,14 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/config";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
-
+console.log("Debug - SUPABASE_URL:", SUPABASE_URL);
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
 });
