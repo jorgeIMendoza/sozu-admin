@@ -59,7 +59,7 @@ jobs:
       - name: Pull from main
         if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
         run: |
-          git pull origin main --no-edit
+          git pull origin main --no-edit --rebase=false
           echo "Successfully synced cambios_lovable with main"
 
       - name: Push cambios_lovable

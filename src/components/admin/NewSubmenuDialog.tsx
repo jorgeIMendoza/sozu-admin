@@ -124,7 +124,7 @@ export function NewSubmenuDialog({ open, onOpenChange, menus, existingSubmenus =
           vista_front_end: vistaFrontEnd,
           orden: nextOrden,
           activo: true,
-          solo_usuarioA: soloUsuarioA,
+          solo_usuarioa: soloUsuarioA,
         })
         .select('id')
         .single();

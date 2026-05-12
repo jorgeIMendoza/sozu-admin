@@ -288,7 +288,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
         usuarioUpdateData.fecha_actualizacion = new Date().toISOString();
         await supabase
           .from('usuarios')
-          .update(usuarioUpdateData)
+          .update(usuarioUpdateData as any)
           .eq('email', profile.email);
       }
 
