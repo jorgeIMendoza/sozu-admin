@@ -188,7 +188,7 @@ export default function MiInformacion() {
           }
           await supabase
             .from('usuarios')
-            .update(phoneUpdateData)
+            .update(phoneUpdateData as any)
             .eq('email', usuarioData.email);
         }
       }
