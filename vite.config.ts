@@ -2,9 +2,33 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+
+function parseSimpleEnvFile(filePath: string) {
+  if (!existsSync(filePath)) return {} as Record<string, string>;
+
+  return readFileSync(filePath, 'utf8')
+    .split(/\r?\n/)
+    .reduce((acc, line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return acc;
+
+      const separatorIndex = trimmed.indexOf('=');
+      if (separatorIndex === -1) return acc;
+
+      const key = trimmed.slice(0, separatorIndex).trim();
+      const rawValue = trimmed.slice(separatorIndex + 1).trim();
+      const value = rawValue.replace(/^['"]|['"]$/g, '');
+
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  const localDevelopmentEnv = parseSimpleEnvFile('.env.development');
+
   // Generate build timestamp for versioning (using LOCAL time, not UTC)
   const now = new Date();
   // Forzar zona horaria Mexico (UTC-6)
@@ -21,6 +45,7 @@ export default defineConfig(({ mode }) => {
   define: {
     __APP_VERSION__: JSON.stringify('2.4.0'),
     __BUILD_TIMESTAMP__: JSON.stringify(`${buildDate}.${buildTime}`),
+    __LOCAL_DEVELOPMENT_ENV__: JSON.stringify(localDevelopmentEnv),
   },
   server: {
     host: "::",
