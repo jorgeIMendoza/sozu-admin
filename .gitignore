@@ -28,5 +28,3 @@ firebase.json
 
 # Environment variables (only .env.example is tracked)
 .env
-.env.development
-.env.production
