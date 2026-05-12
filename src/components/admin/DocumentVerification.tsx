@@ -1058,7 +1058,7 @@ export function VerificationComparator({
       // Update the main document
       const { error: docError } = await supabase
         .from("documentos")
-        .update(docUpdate)
+        .update(docUpdate as any)
         .eq("id", documentId);
       if (docError) throw docError;
 
