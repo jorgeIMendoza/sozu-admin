@@ -48,32 +48,47 @@ function requireJwt(name: string, value: unknown, fallback?: string): string {
   return v;
 }
 
+const localDevelopmentEnv: Record<string, string> = import.meta.env.DEV
+  ? __LOCAL_DEVELOPMENT_ENV__
+  : {};
+
+function getPreferredEnv(name: string, runtimeValue: unknown): unknown {
+  const localValue = localDevelopmentEnv[name];
+  if (typeof localValue === 'string' && localValue.trim() !== '') {
+    return localValue;
+  }
+
+  return runtimeValue;
+}
+
 // Supabase Configuration (required)
 export const SUPABASE_PROJECT_ID = requireEnv(
   'VITE_SUPABASE_PROJECT_ID',
-  import.meta.env.VITE_SUPABASE_PROJECT_ID,
+  getPreferredEnv('VITE_SUPABASE_PROJECT_ID', import.meta.env.VITE_SUPABASE_PROJECT_ID),
   'supabase-dev'
 );
 export const SUPABASE_URL = requireUrl(
   'VITE_SUPABASE_URL',
-  import.meta.env.VITE_SUPABASE_URL,
+  getPreferredEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL),
   'https://supabase-dev.sozu.com'
 );
 export const SUPABASE_PUBLISHABLE_KEY = requireJwt(
   'VITE_SUPABASE_PUBLISHABLE_KEY',
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE'
+  getPreferredEnv('VITE_SUPABASE_PUBLISHABLE_KEY', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY),
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2BBNWN8Bu4GE'
 );
 
 // N8N Webhook Configuration (required)
 export const N8N_WEBHOOK_BASE_URL = requireUrl(
   'VITE_N8N_WEBHOOK_BASE_URL',
-  import.meta.env.VITE_N8N_WEBHOOK_BASE_URL,
+  getPreferredEnv('VITE_N8N_WEBHOOK_BASE_URL', import.meta.env.VITE_N8N_WEBHOOK_BASE_URL),
   'https://n8n-dev.sozu.com/webhook'
 );
 
 // Environment Configuration (optional, defaults to 'preview')
-export const ENVIRONMENT = (import.meta.env.VITE_ENVIRONMENT || 'preview').trim();
+export const ENVIRONMENT = String(
+  getPreferredEnv('VITE_ENVIRONMENT', import.meta.env.VITE_ENVIRONMENT) || 'preview'
+).trim();
 
 // App Version (injected at build time)
 export const APP_VERSION = `v${__APP_VERSION__}-${__BUILD_TIMESTAMP__}`;
