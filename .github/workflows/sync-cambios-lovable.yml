@@ -1,0 +1,86 @@
+name: Sync cambios_lovable with main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-cambios-lovable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "Jorge Mendoza"
+          git config user.email "jorge.mendoza@sozu.com"
+
+      - name: Check if merge came from cambios_lovable
+        id: check_origin
+        run: |
+          # Obtener el último commit en main
+          LAST_COMMIT=$(git rev-parse HEAD)
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+
+          # Buscar si hay un merge commit
+          if git log -1 --pretty=%B | grep -qi "merge pull request"; then
+            # Extraer la rama de origen del merge
+            MERGE_COMMIT=$(git log -1 --pretty=%H)
+
+            # Verificar si este commit está en cambios_lovable
+            if git branch -r --contains $MERGE_COMMIT | grep -q "origin/cambios_lovable"; then
+              echo "origin_is_cambios_lovable=true" >> $GITHUB_OUTPUT
+              echo "Merge originated from cambios_lovable - no sync needed"
+            else
+              echo "origin_is_cambios_lovable=false" >> $GITHUB_OUTPUT
+              echo "Merge from external branch detected - sync needed"
+            fi
+          else
+            # Si no es merge, asumir que no viene de cambios_lovable
+            echo "origin_is_cambios_lovable=false" >> $GITHUB_OUTPUT
+            echo "Direct commit detected - sync needed"
+          fi
+
+      - name: Checkout cambios_lovable branch
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          git fetch origin cambios_lovable
+          git checkout cambios_lovable
+
+      - name: Pull from main
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          git pull origin main --no-edit
+          echo "Successfully synced cambios_lovable with main"
+
+      - name: Push cambios_lovable
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          git push origin cambios_lovable
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create notification comment
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commit = context.payload.head_commit;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number || 0,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Auto-sync:** rama `cambios_lovable` actualizada con cambios de `main`'
+            }).catch(() => {
+              // Si no hay issue, solo loguear
+              console.log('Auto-sync completed for cambios_lovable');
+            });

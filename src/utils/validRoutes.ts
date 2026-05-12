@@ -114,6 +114,24 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-cobranza/reportes',
   '/admin/portal-cobranza/configuracion',
   '/admin/portal-cobranza/expediente/:id',
+  // Portal Escrituración
+  '/admin/portal-escrituracion/dashboard',
+  '/admin/portal-escrituracion/expedientes',
+  '/admin/portal-escrituracion/unidades',
+  '/admin/portal-escrituracion/credito',
+  '/admin/portal-escrituracion/pipeline',
+  '/admin/portal-escrituracion/notarias',
+  '/admin/portal-escrituracion/notarios',
+  '/admin/portal-escrituracion/avaluos',
+  '/admin/portal-escrituracion/pld',
+  '/admin/portal-escrituracion/borradores',
+  '/admin/portal-escrituracion/plantillas',
+  '/admin/portal-escrituracion/firmas',
+  '/admin/portal-escrituracion/entregas',
+  '/admin/portal-escrituracion/rpp',
+  '/admin/portal-escrituracion/reportes',
+  '/admin/portal-escrituracion/auditoria',
+  '/admin/portal-escrituracion/configuracion',
 ]);
 
 export function isValidRoute(route: string): boolean {

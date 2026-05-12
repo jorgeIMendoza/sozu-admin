@@ -163,6 +163,23 @@ const CobranzaInputsObra = lazyRetry(() => import("./pages/admin/portal-cobranza
 const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
 const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
 const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
+const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
+const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
+const EscUnidades = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscUnidades })));
+const EscCredito = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCredito })));
+const EscPipeline = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPipeline })));
+const EscNotarias = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscNotarias })));
+const EscNotarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscNotarios })));
+const EscAvaluos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAvaluos })));
+const EscPLD = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPLD })));
+const EscBorradores = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscBorradores })));
+const EscPlantillas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPlantillas })));
+const EscFirmas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscFirmas })));
+const EscEntregas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregas })));
+const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRPP })));
+const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
+const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
+const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -457,6 +474,23 @@ const App = () => (
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
                   <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
+                  <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
+                  <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
+                  <Route path="portal-escrituracion/unidades" element={<EscUnidades />} />
+                  <Route path="portal-escrituracion/credito" element={<EscCredito />} />
+                  <Route path="portal-escrituracion/pipeline" element={<EscPipeline />} />
+                  <Route path="portal-escrituracion/notarias" element={<EscNotarias />} />
+                  <Route path="portal-escrituracion/notarios" element={<EscNotarios />} />
+                  <Route path="portal-escrituracion/avaluos" element={<EscAvaluos />} />
+                  <Route path="portal-escrituracion/pld" element={<EscPLD />} />
+                  <Route path="portal-escrituracion/borradores" element={<EscBorradores />} />
+                  <Route path="portal-escrituracion/plantillas" element={<EscPlantillas />} />
+                  <Route path="portal-escrituracion/firmas" element={<EscFirmas />} />
+                  <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
+                  <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
+                  <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
+                  <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
+                  <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
