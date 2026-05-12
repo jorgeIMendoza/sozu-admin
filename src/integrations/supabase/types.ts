@@ -941,52 +941,64 @@ export type Database = {
           },
         ]
       }
-      borra_extraccion_ceps_eddy: {
+      borra_extraccion_ceps_solo: {
         Row: {
           banco_emisor: string | null
           banco_receptor: string | null
+          clave_rastreo: string | null
           criterio_busqueda: string | null
           cuenta_beneficiaria: string | null
           detalle_error: string | null
           estado_procesamiento: string | null
           fecha_pago_extraida: string | null
+          fecha_pago_sistema: string | null
           fecha_procesamiento: string | null
           id_cuenta_cobranza: number | null
           id_pago: number
           monto_extraido: number | null
           nombre_legal: string | null
+          numero_referencia: string | null
+          obtener_cep: boolean | null
           pago_a_banco: string | null
           url_recibo: string | null
         }
         Insert: {
           banco_emisor?: string | null
           banco_receptor?: string | null
+          clave_rastreo?: string | null
           criterio_busqueda?: string | null
           cuenta_beneficiaria?: string | null
           detalle_error?: string | null
           estado_procesamiento?: string | null
           fecha_pago_extraida?: string | null
+          fecha_pago_sistema?: string | null
           fecha_procesamiento?: string | null
           id_cuenta_cobranza?: number | null
           id_pago: number
           monto_extraido?: number | null
           nombre_legal?: string | null
+          numero_referencia?: string | null
+          obtener_cep?: boolean | null
           pago_a_banco?: string | null
           url_recibo?: string | null
         }
         Update: {
           banco_emisor?: string | null
           banco_receptor?: string | null
+          clave_rastreo?: string | null
           criterio_busqueda?: string | null
           cuenta_beneficiaria?: string | null
           detalle_error?: string | null
           estado_procesamiento?: string | null
           fecha_pago_extraida?: string | null
+          fecha_pago_sistema?: string | null
           fecha_procesamiento?: string | null
           id_cuenta_cobranza?: number | null
           id_pago?: number
           monto_extraido?: number | null
           nombre_legal?: string | null
+          numero_referencia?: string | null
+          obtener_cep?: boolean | null
           pago_a_banco?: string | null
           url_recibo?: string | null
         }
@@ -8180,6 +8192,69 @@ export type Database = {
       }
     }
     Views: {
+      v_borra_extraccion_ceps_solo: {
+        Row: {
+          banco_emisor: string | null
+          banco_receptor: string | null
+          clave_rastreo: string | null
+          criterio_busqueda: string | null
+          cuenta_beneficiaria: string | null
+          detalle_error: string | null
+          estado_procesamiento: string | null
+          fecha_pago_extraida: string | null
+          fecha_pago_sistema: string | null
+          fecha_procesamiento: string | null
+          id_cuenta_cobranza: number | null
+          id_pago: number | null
+          monto_extraido: number | null
+          nombre_legal: string | null
+          numero_referencia: string | null
+          obtener_cep: boolean | null
+          pago_a_banco: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          banco_emisor?: string | null
+          banco_receptor?: string | null
+          clave_rastreo?: string | null
+          criterio_busqueda?: string | null
+          cuenta_beneficiaria?: string | null
+          detalle_error?: string | null
+          estado_procesamiento?: string | null
+          fecha_pago_extraida?: string | null
+          fecha_pago_sistema?: string | null
+          fecha_procesamiento?: string | null
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto_extraido?: number | null
+          nombre_legal?: string | null
+          numero_referencia?: string | null
+          obtener_cep?: boolean | null
+          pago_a_banco?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          banco_emisor?: string | null
+          banco_receptor?: string | null
+          clave_rastreo?: string | null
+          criterio_busqueda?: string | null
+          cuenta_beneficiaria?: string | null
+          detalle_error?: string | null
+          estado_procesamiento?: string | null
+          fecha_pago_extraida?: string | null
+          fecha_pago_sistema?: string | null
+          fecha_procesamiento?: string | null
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto_extraido?: number | null
+          nombre_legal?: string | null
+          numero_referencia?: string | null
+          obtener_cep?: boolean | null
+          pago_a_banco?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: []
+      }
       v_pagos_detalle: {
         Row: {
           fecha_pago: string | null

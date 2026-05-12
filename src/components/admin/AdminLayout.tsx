@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "next-themes";
 import { AgentPortalLayout } from "./agent-portal/AgentPortalLayout";
+import { PortalEscrituracionLayout } from "./portal-escrituracion/PortalEscrituracionLayout";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
 
@@ -44,6 +45,10 @@ export const AdminLayout = () => {
   // Use PortalCobranzaLayout for portal cobranza routes
   if (location.pathname.startsWith("/admin/portal-cobranza")) {
     return <PortalCobranzaLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-escrituracion")) {
+    return <PortalEscrituracionLayout />;
   }
 
   return (
