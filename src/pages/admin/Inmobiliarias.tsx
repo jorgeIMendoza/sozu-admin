@@ -828,7 +828,7 @@ export default function Inmobiliarias() {
           }
           await supabase
             .from('usuarios')
-            .update(phoneUpdateData)
+            .update(phoneUpdateData as any)
             .eq('email', usuarioData.email);
         }
       }
