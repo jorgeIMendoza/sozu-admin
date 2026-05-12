@@ -85,9 +85,23 @@ jobs:
           done
 
           if [ "$restored" = true ]; then
+            if [ ! -f .env ] && [ -f .env.development ]; then
+              cp .env.development .env
+            fi
+
+            if [ ! -f .env.development ] && [ -f .env ]; then
+              cp .env .env.development
+            fi
+
             git add .env .env.development
             git commit -m "chore: preserve env files during cambios_lovable sync" || echo "No env changes to commit"
           fi
+
+      - name: Verify env files remain present
+        if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
+        run: |
+          test -f .env
+          test -f .env.development
 
       - name: Push cambios_lovable
         if: steps.check_origin.outputs.origin_is_cambios_lovable == 'false'
