@@ -26,7 +26,7 @@ export function EscDashboard() {
 
   return (
     <>
-      <PageHeader title="Dashboard de Escrituración" description="Vista ejecutiva del cierre legal · datos demostrativos" />
+      <PageHeader title="Portal de Escrituración" description="Vista ejecutiva del cierre legal · datos demostrativos" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="Expedientes activos" value={total} icon={ScrollText} hint="Pipeline total" />
         <Kpi label="Pipeline en MXN" value={fmtMxn(pipeline)} icon={Banknote} tone="primary" />
