@@ -180,6 +180,21 @@ const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituraci
 const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
 const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
 
+// Portal Alta Dirección
+const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
+const AltaDireccionCitas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCitas })));
+const AltaDireccionProspectos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionProspectos })));
+const AltaDireccionPipeline = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionPipeline })));
+const AltaDireccionOfertas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionOfertas })));
+const AltaDireccionCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCobranza })));
+const AltaDireccionContratos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionContratos })));
+const AltaDireccionFacturas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionFacturas })));
+const AltaDireccionComisiones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionComisiones })));
+const AltaDireccionRedComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionRedComercial })));
+const AltaDireccionReportes = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionReportes })));
+const AltaDireccionAuditoria = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionAuditoria })));
+const AltaDireccionConfiguracion = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionConfiguracion })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -489,6 +504,19 @@ const App = () => (
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
                   <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
+                  <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
+                  <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
+                  <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
+                  <Route path="portal-alta-direccion/pipeline" element={<AltaDireccionPipeline />} />
+                  <Route path="portal-alta-direccion/ofertas" element={<AltaDireccionOfertas />} />
+                  <Route path="portal-alta-direccion/cobranza" element={<AltaDireccionCobranza />} />
+                  <Route path="portal-alta-direccion/contratos" element={<AltaDireccionContratos />} />
+                  <Route path="portal-alta-direccion/facturas" element={<AltaDireccionFacturas />} />
+                  <Route path="portal-alta-direccion/comisiones" element={<AltaDireccionComisiones />} />
+                  <Route path="portal-alta-direccion/red-comercial" element={<AltaDireccionRedComercial />} />
+                  <Route path="portal-alta-direccion/reportes" element={<AltaDireccionReportes />} />
+                  <Route path="portal-alta-direccion/auditoria" element={<AltaDireccionAuditoria />} />
+                  <Route path="portal-alta-direccion/configuracion" element={<AltaDireccionConfiguracion />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
