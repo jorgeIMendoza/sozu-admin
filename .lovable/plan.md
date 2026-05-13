@@ -1,100 +1,120 @@
+## Objetivo
 
-# Portal Escrituración — Plan de implementación
+1. Implementar **multi-rol** (un mismo email puede tener varios roles).
+2. Cuando se intente dar de alta un email que ya existe con otro rol, **notificar a quien lo está dando de alta y pedir confirmación explícita** antes de agregar el nuevo rol.
+3. **Caso puntual:** dejar a `luis.munoz@investimento.mx` con ambos roles **3 (Agente Inmobiliario)** y **23 (Cliente)** activos.
 
-Voy a crear un nuevo portal `Portal Escrituración`, espejando la estructura del proyecto "SOZU Property Suite" pero adaptado a la convención que ya tenemos (`Portal Cobranza`, `Portal Inmobiliaria`, etc.). Reutilizamos `AdminLayout` con un layout dedicado y todas las pantallas vivirán bajo `/admin/portal-escrituracion/*`.
+---
 
-Como en el proyecto de referencia el "tema central" es la escrituración (con `escrituracion`, `notarias`, `credito`, `expedientes`, `entregas`, `daiku`, `postventa`, `portal cliente`, `reportes`, `usuarios`, `auditoría`, `configuración`), tomaré sólo lo relevante al **cierre legal + entrega**, que es la columna vertebral de "Escrituración". Los módulos restantes ya existen en otros portales (Cobranza, Cliente, etc.).
+## Arquitectura
 
-## Alcance del Portal Escrituración
-
-Menú (sidebar propio, mismo estilo que `PortalCobranzaLayout`):
+### 1. Tabla `user_roles` (nueva)
 
 ```text
-Operación
- ├─ Dashboard
- ├─ Expedientes (pipeline)
- ├─ Unidades en escrituración
- └─ Crédito hipotecario
-
-Cierre legal
- ├─ Pipeline notarial
- ├─ Notarías
- ├─ Notarios
- └─ Avalúos
-
-Documentación
- ├─ Expedientes / PLD
- ├─ Borradores
- └─ Plantillas de escritura
-
-Entrega
- ├─ Programación de firmas
- ├─ Entregas físicas
- └─ Inscripción RPP
-
-Sistema
- ├─ Reportes
- ├─ Auditoría
- └─ Configuración
+user_roles
+├── id (uuid pk)
+├── email (text, lower)
+├── rol_id (int → roles.id)
+├── activo (boolean default true)
+├── es_principal (boolean)        -- rol "default" para login
+├── creado_por (text email)
+├── fecha_creacion / fecha_actualizacion
+└── UNIQUE (email, rol_id)
 ```
 
-Todas las páginas usarán **mock data** (estilo del repo de referencia) con KPIs, tablas, filtros, paneles y badges. Reutilizamos los componentes shadcn ya presentes (`Card`, `Badge`, `Table`, `Tabs`, `Progress`) y los patrones visuales de `PortalCobranza` para conservar coherencia con SOZU Admin.
+- RLS: lectura para `is_super_admin()` y para el propio usuario; escritura solo service role / super admin.
+- Helper: `public.user_has_role(_email text, _rol_id int) returns boolean`.
+- `usuarios.rol_id` se conserva como **rol principal** (compatibilidad con todo el código existente). `user_roles` lleva el catálogo completo.
 
-## Pasos de ejecución (te diré "siguiente" entre cada uno)
+> Por la regla de proyecto, el DDL se entrega como SQL para que tú lo ejecutes manualmente en dev y prod (no se ejecuta desde Lovable).
 
-### Paso 1 — Base de datos (SQL que tú ejecutarás)
-- Insertar `menus` nuevo: `Portal Escrituración` (orden tras `Portal Cobranza`).
-- Insertar 5 grupos lógicos como submenus padre + ~17 submenús hijos con `vista_front_end = '/admin/portal-escrituracion/...'`.
-- Insertar permisos `leer/crear/actualizar/eliminar/exportar/aprobar` por submenu.
-- Asignar TODOS los permisos al rol Super Admin (rol_id = 1) — esto es lo único que pides explícito.
-- Como `is_super_admin()` ya da bypass global, esto es redundante en runtime pero deja la matriz limpia para futuros roles.
+### 2. Backfill general
 
-Entrego un único bloque SQL para que lo ejecutes tú (no DDL, sólo `INSERT`s).
+Insert masivo: copiar `(email, rol_id)` actual de `usuarios` a `user_roles` con `es_principal = true, activo = true`.
 
-### Paso 2 — Layout, ruteo y guardas
-- Crear `src/components/admin/portal-escrituracion/PortalEscrituracionLayout.tsx` (clon adaptado de `PortalCobranzaLayout`).
-- Registrar `if (location.pathname.startsWith("/admin/portal-escrituracion"))` en `AdminLayout.tsx`.
-- En `PermissionRoute.tsx`, permitir el portal sólo si `profile.rol_id === 1` (Super Admin), igual que se hace para `portal-cobranza`.
-- Rutas perezosas en `App.tsx` con `lazyRetry`.
+### 3. Caso puntual `luis.munoz@investimento.mx`
 
-### Paso 3 — Dashboard + KPIs
-- `EscDashboard.tsx`: KPIs (Expedientes activos, Pipeline MXN, En riesgo, Escrituras del mes), gráficos `recharts` (cobranza semanal del cierre, distribución por notaría, pie de status), tabla "Próximas firmas".
+DML adicional al backfill (lo entrego como SQL para que tú lo ejecutes):
 
-### Paso 4 — Pipeline notarial (módulo estrella)
-- `EscExpedientes.tsx`: réplica del `escrituracion.tsx` del repo de referencia: barra de etapas (Expediente → Avalúo → Instrucción → Borrador → VoBo → Firma → Registro → Entrega), tabla filtrable, panel de detalle con milestones, alta de expediente.
+```sql
+-- 1. Asegurar rol 3 (Agente) — ya saldrá del backfill, idempotente:
+INSERT INTO public.user_roles (email, rol_id, activo, es_principal, creado_por)
+VALUES ('luis.munoz@investimento.mx', 3, true, true, 'system-backfill')
+ON CONFLICT (email, rol_id) DO UPDATE SET activo = true;
 
-### Paso 5 — Notarías + Notarios + Avalúos
-- `EscNotarias.tsx`, `EscNotarios.tsx`, `EscAvaluos.tsx`: listas con búsqueda, tarjetas por notaría (titular, zona, carga, SLA), tabla de avalúos con banco y monto.
+-- 2. Agregar rol 23 (Cliente) como rol secundario:
+INSERT INTO public.user_roles (email, rol_id, activo, es_principal, creado_por)
+VALUES ('luis.munoz@investimento.mx', 23, true, false, 'system-fix-luis')
+ON CONFLICT (email, rol_id) DO UPDATE SET activo = true;
 
-### Paso 6 — Documentación
-- `EscExpedientesPLD.tsx`, `EscBorradores.tsx`, `EscPlantillas.tsx`: checklists, estado por documento, previsualización mock.
+-- 3. NO se modifica usuarios.rol_id (sigue como 3 = Agente, su rol principal).
+-- 4. Disparar el flujo de confirmación de email para portal clientes
+--    (se hace desde la UI invocando "Reenviar confirmación" sobre ese email,
+--     o llamando manualmente a create-client-user con confirmAddRole=true).
+```
 
-### Paso 7 — Entrega
-- `EscFirmas.tsx` (calendario simple por semana), `EscEntregasFisicas.tsx` (lista con checklist), `EscInscripcionRPP.tsx`.
+### 4. Edge Function `create-client-user` (modificada)
 
-### Paso 8 — Crédito hipotecario
-- `EscCredito.tsx`: pipeline por banco, montos autorizados/dispersados, SLAs por institución.
+Nuevo contrato:
 
-### Paso 9 — Sistema
-- `EscReportes.tsx`, `EscAuditoria.tsx`, `EscConfiguracion.tsx` con placeholders accionables (no inventamos lógica de backend).
+**Body:** `{ email, nombre, id_persona, confirmAddRole?: boolean }`
 
-### Paso 10 — QA visual y verificación
-- Probar navegación entre submenús con Super Admin.
-- Verificar build limpio.
-- Confirmar que el submenu se renderiza vía `useDynamicMenus` (basta con los INSERTs del Paso 1).
+**Lógica:**
+1. Buscar usuario por email en `usuarios`.
+2. **No existe** → crear como hoy con rol 23 + insertar en `user_roles`.
+3. **Existe y ya tiene rol 23 activo** en `user_roles` → flujo actual (solo reenvío de confirmación).
+4. **Existe con otro rol** y `confirmAddRole !== true` → **no modifica nada**, responde HTTP **409**:
+   ```json
+   {
+     "status": "role_conflict",
+     "existingRoles": [{ "id": 3, "nombre": "Agente Inmobiliario" }],
+     "message": "El email ya está registrado como Agente Inmobiliario. ¿Deseas agregarle también el rol Cliente?"
+   }
+   ```
+5. **`confirmAddRole === true`** → insertar `user_roles(email, rol_id=23, es_principal=false, activo=true)` (sin tocar `usuarios.rol_id`) y enviar correo de confirmación para activar acceso al portal de clientes.
 
-## Detalle técnico
+> Por la regla de proyecto, el código Deno se entrega para que tú lo despliegues manualmente.
 
-- **Rutas:** `/admin/portal-escrituracion/{dashboard, expedientes, unidades, credito, pipeline, notarias, notarios, avaluos, pld, borradores, plantillas, firmas, entregas, rpp, reportes, auditoria, configuracion}`.
-- **Acceso:** sólo `rol_id = 1` (Super Admin) entra por ahora. Para sumar otros roles luego basta otorgarles los permisos del Paso 1.
-- **Mock data:** archivos `src/data/escrituracion/*.ts` (similar a `src/data/cobranza/*.ts`) con tipados y constantes — sin tocar la BD.
-- **Diseño:** mismos tokens semánticos (`bg-primary`, `text-muted-foreground`, etc.), badges `StatusBadge` adaptados a `Badge` shadcn con variantes ya existentes.
-- **Restricciones de tu workspace:** no ejecutaré DDL ni edge functions. El SQL del Paso 1 te lo entrego para que lo corras tú; el resto es 100% front-end + mock.
+### 5. Frontend
 
-## Lo que NO incluye este plan (lo aclaro por transparencia)
+**a) Modal de confirmación**
+- En `src/pages/admin/UsuariosClientes.tsx` (alta individual y sincronización masiva): capturar respuesta `409 / status: "role_conflict"`.
+- Abrir `<AlertDialog>`:
+  > "El correo **{email}** ya está registrado como **{existingRoleName}**. ¿Deseas agregarle también el rol **Cliente** para que pueda acceder al portal de clientes con la misma cuenta?"
+  > Botones: **Cancelar** / **Sí, agregar rol Cliente**.
+- Al confirmar → reinvocar la edge function con `confirmAddRole: true`.
+- En sync masiva: acumular conflictos y mostrar un único modal final con la lista, checkboxes individuales y "Confirmar todos".
 
-- No conecto el portal a tablas reales (`propiedades`, `cuentas_cobranza`, `notarias`, etc.) en esta entrega; lo definimos luego módulo por módulo cuando me digas qué consultas usar.
-- No creo `is_escrituracion_*` policies en RLS (no hay tablas nuevas).
-- No agrego subdomain branding (`escrituracion.sozu.com`); el portal vive bajo `admin.sozu.com/admin/portal-escrituracion`. Si lo quieres como subdominio, lo agrego en una fase posterior.
+**b) Lectura de roles**
+- `AuthContext.fetchProfile`: además del `get_current_user_profile`, traer `user_roles` activos del email autenticado y exponerlos como `profile.roles: number[]`.
+- `usePermissions`, `useAllowedMenus`, guards de rutas, sidebar y selector multi-portal: usar `profile.roles` (fallback a `[profile.rol_id]`) para decidir qué portales/menús mostrar.
+- Selector multi-portal existente (memoria `multi-role-login-selector`): poblar opciones desde `profile.roles`. Cambiar de portal **no requiere** modificar `usuarios.rol_id`; basta con setear el portal activo en contexto/localStorage y redirigir al subdominio correspondiente.
 
-¿Arrancamos por el **Paso 1 (SQL de menús + permisos Super Admin)** y luego seguimos con el **Paso 2 (layout + rutas)**, o prefieres que ejecute Pasos 1–3 de corrido en cuanto apruebes?
+---
+
+## Flujo de Luis tras los cambios
+
+1. Backfill + DML puntual → `user_roles` queda con filas (luis, 3, principal) y (luis, 23, secundario).
+2. `usuarios.rol_id` se queda en 3 (no rompe nada de lo existente como Agente).
+3. Desde "Sistema → Usuarios Clientes" aparecerá Luis (porque ahora la lista filtra por presencia de rol 23 en `user_roles`, no solo por `rol_id`).
+4. Luis puede entrar a `agentes.sozu.com` (rol 3) y a `clientes.sozu.com` (rol 23) con el mismo email/password.
+
+---
+
+## Entregables
+
+1. **SQL** (DDL `user_roles` + RLS + helper + backfill + DML puntual de Luis) — para ejecución manual.
+2. **Código Deno** actualizado de `create-client-user` — para deploy manual.
+3. **Cambios frontend** (Lovable los aplica):
+   - Hook `useCreateClientUserWithConfirmation`.
+   - Modal de conflicto en `UsuariosClientes.tsx` (alta individual + sync masiva).
+   - Ajuste en `AuthContext` para cargar `profile.roles`.
+   - Ajuste en hooks de permisos / sidebar / selector multi-portal para considerar todos los roles activos.
+   - Ajuste del filtro "Usuarios Clientes" para listar también a quienes tengan rol 23 en `user_roles` (no solo `usuarios.rol_id = 23`).
+
+## Fuera de alcance
+
+- Trigger automático tras pago de apartado (vive en N8N): a futuro, ajustarlo para que llame con `confirmAddRole: true` cuando el contexto sea claramente "el cliente pagó".
+- UI completa de gestión multi-rol en `ChangeUserRoleDialog` (hoy es selector único; queda igual y solo cambia el rol principal).
+
+¿Procedo?
