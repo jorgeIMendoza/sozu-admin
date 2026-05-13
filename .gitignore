@@ -28,3 +28,6 @@ dist-ssr
 
 # Firebase config (generated dynamically by workflow)
 firebase.json
+
+# Manual execution scripts (DDLs, DMLs, edge functions)
+Ejecuciones_manuales/
