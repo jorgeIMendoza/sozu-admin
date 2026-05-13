@@ -82,3 +82,17 @@ Accesible a través del MCP oficial de Supabase Cloud (`mcp__plugin_supabase_sup
 ```bash
 npm run dev   # arranca en http://localhost:5173
 ```
+
+---
+
+## Reglas de Base de Datos
+
+### DDL (CREATE, ALTER, DROP, TRUNCATE...)
+**Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el SQL y pedirle al usuario que lo ejecute él mismo en la BD.
+
+### DML
+- **SELECT, INSERT, UPDATE:** Se pueden ejecutar, pero siempre se debe mostrar el SQL antes de correrlo y esperar aprobación explícita del usuario.
+- **DELETE:** Prohibido ejecutarlo. Solo generar el SQL y solicitar al usuario que lo ejecute él mismo en la BD.
+
+### Edge Functions
+**Prohibido crear o modificar Edge Functions bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el código Deno y pedirle al usuario que lo despliegue o modifique manualmente.
