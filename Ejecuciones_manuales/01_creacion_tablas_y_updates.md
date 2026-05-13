@@ -24,21 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_rol   ON public.user_roles (rol_id);
 ## 2) Función + Trigger: normalizar email
 
 ```sql
-CREATE OR REPLACE FUNCTION public.user_roles_normalize_email()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.email := lower(btrim(NEW.email));
-  NEW.fecha_actualizacion := now();
-  RETURN NEW;
-END;
-$$;
 
-DROP TRIGGER IF EXISTS trg_user_roles_normalize ON public.user_roles;
-CREATE TRIGGER trg_user_roles_normalize
-BEFORE INSERT OR UPDATE ON public.user_roles
-FOR EACH ROW EXECUTE FUNCTION public.user_roles_normalize_email();
 ```
 
 ## 3) RLS
