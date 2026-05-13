@@ -96,3 +96,30 @@ npm run dev   # arranca en http://localhost:5173
 
 ### Edge Functions
 **Prohibido crear o modificar Edge Functions bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el código Deno y pedirle al usuario que lo despliegue o modifique manualmente.
+
+---
+
+## Archivos de Ejecución Manual
+
+Todo código que el usuario deba ejecutar manualmente (DDLs, DELETEs, Edge Functions, funciones de BD, etc.) debe guardarse en archivos `.md` dentro de la carpeta `Ejecuciones_manuales/` en la raíz del proyecto.
+
+### Reglas
+- Cada archivo agrupa comandos por propósito o contexto, no por tipo. Ejemplos de nombres:
+  - `creacion_tablas_usuarios.md` — DDLs de nuevas tablas
+  - `migracion_datos_pagos.md` — DMLs de migración
+  - `actualizacion_edge_send-email.md` — código de una Edge Function
+- Si ya existe un archivo relevante para la tarea en curso, agregar el nuevo contenido al final de ese archivo en lugar de crear uno nuevo.
+- Cada bloque dentro del archivo debe tener un encabezado descriptivo y la fecha en que fue generado.
+- Siempre avisar al usuario qué archivo fue creado o actualizado con el contenido a ejecutar.
+
+### Formato de cada bloque dentro del archivo
+
+```md
+## [Descripción breve] — YYYY-MM-DD
+
+\`\`\`sql
+-- SQL aquí
+\`\`\`
+
+> Instrucciones adicionales si aplica.
+```
