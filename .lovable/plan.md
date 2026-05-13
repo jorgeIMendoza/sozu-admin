@@ -1,120 +1,88 @@
-## Objetivo
+# Portal de Alta Dirección
 
-1. Implementar **multi-rol** (un mismo email puede tener varios roles).
-2. Cuando se intente dar de alta un email que ya existe con otro rol, **notificar a quien lo está dando de alta y pedir confirmación explícita** antes de agregar el nuevo rol.
-3. **Caso puntual:** dejar a `luis.munoz@investimento.mx` con ambos roles **3 (Agente Inmobiliario)** y **23 (Cliente)** activos.
+Crear un nuevo portal ejecutivo `/admin/portal-alta-direccion/*` inspirado en el proyecto **Sozu Executive Suite**, con vista 360° para directivos: dashboard financiero/comercial, pipeline, cobranza, contratos, facturas, comisiones, red comercial, citas, ofertas, reportes, auditoría y configuración. Acceso restringido a **Super Admin (rol_id === 1)**, mismo patrón que Portal Escrituración.
 
----
+## Estrategia de datos (mixta)
+- **De BD real (consultas read-only):** propiedades, desarrollos/proyectos, cuentas de cobranza, ofertas, contratos, comisiones, usuarios/personas, citas, facturas. Reutilizar hooks existentes (`useCuentasCobranzaPaginadas`, `useCobranzaDashboard`, `useInventarioDisponible`, etc.) cuando aplique.
+- **Mock data** (en `src/data/altaDireccion/mockData.ts`) para módulos sin tabla clara aún: tendencias mensuales agregadas, KPIs ejecutivos compuestos, auditoría ejemplo.
+- Cada página marca claramente con un `Pill` "Datos en vivo" o "Demo" cuando la fuente sea mock.
 
-## Arquitectura
+## Permisos
+- Super Admin (rol_id 1) — todo el portal.
+- Bloqueo en `PermissionRoute.tsx` análogo al de Portal Escrituración.
+- Sin DDL/DML — no se requieren cambios de BD ni nueva tabla de roles.
 
-### 1. Tabla `user_roles` (nueva)
+## Estructura del portal
 
 ```text
-user_roles
-├── id (uuid pk)
-├── email (text, lower)
-├── rol_id (int → roles.id)
-├── activo (boolean default true)
-├── es_principal (boolean)        -- rol "default" para login
-├── creado_por (text email)
-├── fecha_creacion / fecha_actualizacion
-└── UNIQUE (email, rol_id)
+/admin/portal-alta-direccion/
+├── dashboard                  Dashboard ejecutivo (KPIs financieros + 3 gráficas recharts)
+├── citas                      Citas comerciales (vivo: configuracion_citas_horarios)
+├── prospectos                 Prospectos / leads (vivo: leads)
+├── pipeline                   Pipeline de oportunidades por etapa
+├── ofertas                    Ofertas + aprobaciones (vivo: ofertas)
+│
+├── cobranza                   Resumen cobranza (vivo: cuentas_cobranza, hook existente)
+├── contratos                  Contratos (vivo: documentos_propiedad / mifiel)
+├── facturas                   Facturas emitidas (vivo: facturas)
+├── comisiones                 Comisiones aprobadas/pagadas (vivo: comisiones)
+│
+├── red-comercial              Personas (agentes, brokers, embajadores) (vivo: usuarios)
+├── reportes                   Reportes ejecutivos (mix vivo + agregados mock)
+├── auditoria                  Bitácora (mock)
+└── configuracion              Preferencias del portal (mock)
 ```
 
-- RLS: lectura para `is_super_admin()` y para el propio usuario; escritura solo service role / super admin.
-- Helper: `public.user_has_role(_email text, _rol_id int) returns boolean`.
-- `usuarios.rol_id` se conserva como **rol principal** (compatibilidad con todo el código existente). `user_roles` lleva el catálogo completo.
+## Cambios en código (frontend únicamente)
 
-> Por la regla de proyecto, el DDL se entrega como SQL para que tú lo ejecutes manualmente en dev y prod (no se ejecuta desde Lovable).
+**Nuevos archivos**
+- `src/components/admin/portal-alta-direccion/PortalAltaDireccionLayout.tsx` — sidebar con 3 grupos (Comercial, Operación, Administración) + header, basado en el de Portal Escrituración.
+- `src/components/admin/portal-alta-direccion/ui.tsx` — `Kpi`, `Panel`, `PageHeader`, `Pill` (idéntico patrón).
+- `src/components/admin/portal-alta-direccion/GlobalFilterBar.tsx` — filtros globales (proyecto, canal, periodo, búsqueda) con contexto local.
+- `src/contexts/AltaDireccionFiltersContext.tsx` — provider para los filtros globales.
+- `src/data/altaDireccion/mockData.ts` — series mensuales, KPIs compuestos, eventos auditoría.
+- `src/pages/admin/portal-alta-direccion/` — un archivo por página (Dashboard, Citas, Prospectos, Pipeline, Ofertas, Cobranza, Contratos, Facturas, Comisiones, RedComercial, Reportes, Auditoria, Configuracion). 13 archivos.
+- `src/hooks/useAltaDireccionDashboard.ts` — agrega métricas de varias tablas (counts) en una sola query.
 
-### 2. Backfill general
+**Archivos a modificar**
+- `src/App.tsx` — registrar 13 rutas lazy `portal-alta-direccion/*`.
+- `src/components/admin/AdminLayout.tsx` — agregar branch `if (location.pathname.startsWith("/admin/portal-alta-direccion")) return <PortalAltaDireccionLayout />`.
+- `src/components/auth/PermissionRoute.tsx` — agregar guard que solo deja pasar a `rol_id === 1`.
+- `src/utils/validRoutes.ts` — agregar las 13 rutas.
+- `src/components/admin/AdminSidebar.tsx` — entrada "Portal Alta Dirección" visible solo para Super Admin (estilo `ExternalLink`, igual a Portal Cobranza).
 
-Insert masivo: copiar `(email, rol_id)` actual de `usuarios` a `user_roles` con `es_principal = true, activo = true`.
+## Permisos al Super Admin
+No se requiere DDL/DML. La autorización se hace en el cliente con `profile.rol_id === 1`. Si quieres también ocultarlo del menú dinámico para otros roles ya queda automáticamente fuera porque no se registra en `submenus`.
 
-### 3. Caso puntual `luis.munoz@investimento.mx`
+## Plan de ejecución (en pasos / chats separados)
 
-DML adicional al backfill (lo entrego como SQL para que tú lo ejecutes):
+**Paso 1 — Esqueleto**
+- Layout, ui.tsx, FilterBar/contexto, ruteo en App.tsx, guard en PermissionRoute, AdminLayout branch, validRoutes, entrada en AdminSidebar para Super Admin.
+- Páginas vacías (placeholder con PageHeader) para validar navegación.
 
-```sql
--- 1. Asegurar rol 3 (Agente) — ya saldrá del backfill, idempotente:
-INSERT INTO public.user_roles (email, rol_id, activo, es_principal, creado_por)
-VALUES ('luis.munoz@investimento.mx', 3, true, true, 'system-backfill')
-ON CONFLICT (email, rol_id) DO UPDATE SET activo = true;
+**Paso 2 — Dashboard ejecutivo + datos mixtos**
+- `useAltaDireccionDashboard` con counts agregados (propiedades vendidas/apartadas/disponibles, ofertas pendientes, cuentas cobranza vencidas, comisiones devengadas).
+- 3 gráficas recharts (ingresos por desarrollo, ingresos por canal, tendencia mensual) — agregados mock.
+- 12 KPIs en 3 filas, badge "Datos en vivo" / "Demo" por tarjeta.
 
--- 2. Agregar rol 23 (Cliente) como rol secundario:
-INSERT INTO public.user_roles (email, rol_id, activo, es_principal, creado_por)
-VALUES ('luis.munoz@investimento.mx', 23, true, false, 'system-fix-luis')
-ON CONFLICT (email, rol_id) DO UPDATE SET activo = true;
+**Paso 3 — Comercial (Citas, Prospectos, Pipeline, Ofertas)**
+- Tablas read-only con paginación usando hooks existentes; drawers de detalle simples.
 
--- 3. NO se modifica usuarios.rol_id (sigue como 3 = Agente, su rol principal).
--- 4. Disparar el flujo de confirmación de email para portal clientes
---    (se hace desde la UI invocando "Reenviar confirmación" sobre ese email,
---     o llamando manualmente a create-client-user con confirmAddRole=true).
-```
+**Paso 4 — Operación (Cobranza, Contratos, Facturas, Comisiones)**
+- KPIs + tablas resumen con datos vivos (sin acciones de edición — es vista ejecutiva).
 
-### 4. Edge Function `create-client-user` (modificada)
+**Paso 5 — Administración (Red Comercial, Reportes, Auditoría, Configuración)**
+- Red Comercial: lista de agentes/brokers/embajadores (vivo).
+- Reportes: tarjetas con descargas (placeholder).
+- Auditoría / Configuración: mock.
 
-Nuevo contrato:
+**Paso 6 — QA y pulido**
+- Verificar acceso bloqueado para roles ≠ 1, navegación, breakpoints mobile, performance del dashboard.
 
-**Body:** `{ email, nombre, id_persona, confirmAddRole?: boolean }`
+## Detalles técnicos clave
+- Sidebar reutiliza patrón visual de `PortalEscrituracionLayout` (244px fijo en desktop, Sheet en mobile, grupos con label uppercase tracking-widest).
+- Reglas de terminología: "Desarrollo", "Departamento", "Disponible", "2 citas", 2 decimales en montos, emails normalizados.
+- Sin edge functions, sin DDL, sin DML — todo es UI + hooks de lectura. Por lo tanto **no se generan archivos en `Ejecuciones_manuales/`** en esta entrega.
+- Solo Super Admin lo ve; no se toca el sistema dinámico de menús (`submenus` / `usuarios_submenus_excluidos`).
 
-**Lógica:**
-1. Buscar usuario por email en `usuarios`.
-2. **No existe** → crear como hoy con rol 23 + insertar en `user_roles`.
-3. **Existe y ya tiene rol 23 activo** en `user_roles` → flujo actual (solo reenvío de confirmación).
-4. **Existe con otro rol** y `confirmAddRole !== true` → **no modifica nada**, responde HTTP **409**:
-   ```json
-   {
-     "status": "role_conflict",
-     "existingRoles": [{ "id": 3, "nombre": "Agente Inmobiliario" }],
-     "message": "El email ya está registrado como Agente Inmobiliario. ¿Deseas agregarle también el rol Cliente?"
-   }
-   ```
-5. **`confirmAddRole === true`** → insertar `user_roles(email, rol_id=23, es_principal=false, activo=true)` (sin tocar `usuarios.rol_id`) y enviar correo de confirmación para activar acceso al portal de clientes.
-
-> Por la regla de proyecto, el código Deno se entrega para que tú lo despliegues manualmente.
-
-### 5. Frontend
-
-**a) Modal de confirmación**
-- En `src/pages/admin/UsuariosClientes.tsx` (alta individual y sincronización masiva): capturar respuesta `409 / status: "role_conflict"`.
-- Abrir `<AlertDialog>`:
-  > "El correo **{email}** ya está registrado como **{existingRoleName}**. ¿Deseas agregarle también el rol **Cliente** para que pueda acceder al portal de clientes con la misma cuenta?"
-  > Botones: **Cancelar** / **Sí, agregar rol Cliente**.
-- Al confirmar → reinvocar la edge function con `confirmAddRole: true`.
-- En sync masiva: acumular conflictos y mostrar un único modal final con la lista, checkboxes individuales y "Confirmar todos".
-
-**b) Lectura de roles**
-- `AuthContext.fetchProfile`: además del `get_current_user_profile`, traer `user_roles` activos del email autenticado y exponerlos como `profile.roles: number[]`.
-- `usePermissions`, `useAllowedMenus`, guards de rutas, sidebar y selector multi-portal: usar `profile.roles` (fallback a `[profile.rol_id]`) para decidir qué portales/menús mostrar.
-- Selector multi-portal existente (memoria `multi-role-login-selector`): poblar opciones desde `profile.roles`. Cambiar de portal **no requiere** modificar `usuarios.rol_id`; basta con setear el portal activo en contexto/localStorage y redirigir al subdominio correspondiente.
-
----
-
-## Flujo de Luis tras los cambios
-
-1. Backfill + DML puntual → `user_roles` queda con filas (luis, 3, principal) y (luis, 23, secundario).
-2. `usuarios.rol_id` se queda en 3 (no rompe nada de lo existente como Agente).
-3. Desde "Sistema → Usuarios Clientes" aparecerá Luis (porque ahora la lista filtra por presencia de rol 23 en `user_roles`, no solo por `rol_id`).
-4. Luis puede entrar a `agentes.sozu.com` (rol 3) y a `clientes.sozu.com` (rol 23) con el mismo email/password.
-
----
-
-## Entregables
-
-1. **SQL** (DDL `user_roles` + RLS + helper + backfill + DML puntual de Luis) — para ejecución manual.
-2. **Código Deno** actualizado de `create-client-user` — para deploy manual.
-3. **Cambios frontend** (Lovable los aplica):
-   - Hook `useCreateClientUserWithConfirmation`.
-   - Modal de conflicto en `UsuariosClientes.tsx` (alta individual + sync masiva).
-   - Ajuste en `AuthContext` para cargar `profile.roles`.
-   - Ajuste en hooks de permisos / sidebar / selector multi-portal para considerar todos los roles activos.
-   - Ajuste del filtro "Usuarios Clientes" para listar también a quienes tengan rol 23 en `user_roles` (no solo `usuarios.rol_id = 23`).
-
-## Fuera de alcance
-
-- Trigger automático tras pago de apartado (vive en N8N): a futuro, ajustarlo para que llame con `confirmAddRole: true` cuando el contexto sea claramente "el cliente pagó".
-- UI completa de gestión multi-rol en `ChangeUserRoleDialog` (hoy es selector único; queda igual y solo cambia el rol principal).
-
-¿Procedo?
+¿Procedo con el Paso 1 (esqueleto del portal navegable) tras tu aprobación, y los pasos 2-6 los vamos liberando uno por uno en chats subsecuentes?

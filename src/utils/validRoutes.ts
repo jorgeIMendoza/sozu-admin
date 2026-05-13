@@ -132,6 +132,20 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-escrituracion/reportes',
   '/admin/portal-escrituracion/auditoria',
   '/admin/portal-escrituracion/configuracion',
+  // Portal Alta Dirección
+  '/admin/portal-alta-direccion/dashboard',
+  '/admin/portal-alta-direccion/citas',
+  '/admin/portal-alta-direccion/prospectos',
+  '/admin/portal-alta-direccion/pipeline',
+  '/admin/portal-alta-direccion/ofertas',
+  '/admin/portal-alta-direccion/cobranza',
+  '/admin/portal-alta-direccion/contratos',
+  '/admin/portal-alta-direccion/facturas',
+  '/admin/portal-alta-direccion/comisiones',
+  '/admin/portal-alta-direccion/red-comercial',
+  '/admin/portal-alta-direccion/reportes',
+  '/admin/portal-alta-direccion/auditoria',
+  '/admin/portal-alta-direccion/configuracion',
 ]);
 
 export function isValidRoute(route: string): boolean {
