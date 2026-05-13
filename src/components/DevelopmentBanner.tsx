@@ -6,7 +6,7 @@ export function DevelopmentBanner() {
     return (
       <div className="w-full bg-blue-300 text-blue-900 py-2 px-4 text-center font-bold text-sm flex items-center justify-center gap-2">
         <Eye className="h-4 w-4" />
-        AMBIENTE DE PREVIEW
+        AMBIENTE DE PREVIEW 🚨
       </div>
     );
   }

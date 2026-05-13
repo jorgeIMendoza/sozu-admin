@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(claude mcp *)",
+      "Bash(Test-NetConnection -ComputerName supabase-dev.sozu.com -Port 5432 -WarningAction SilentlyContinue)",
+      "Bash(Select-Object TcpTestSucceeded, RemotePort)",
+      "mcp__supabase-dev__query",
+      "PowerShell(Test-NetConnection *)",
+      "Bash(gh pr create --title 'Primera entrada desde Antigravity' --body ' *)",
+      "Bash(gh pr *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}
