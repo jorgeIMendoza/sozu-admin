@@ -1,100 +1,88 @@
+# Portal de Alta Dirección
 
-# Portal Escrituración — Plan de implementación
+Crear un nuevo portal ejecutivo `/admin/portal-alta-direccion/*` inspirado en el proyecto **Sozu Executive Suite**, con vista 360° para directivos: dashboard financiero/comercial, pipeline, cobranza, contratos, facturas, comisiones, red comercial, citas, ofertas, reportes, auditoría y configuración. Acceso restringido a **Super Admin (rol_id === 1)**, mismo patrón que Portal Escrituración.
 
-Voy a crear un nuevo portal `Portal Escrituración`, espejando la estructura del proyecto "SOZU Property Suite" pero adaptado a la convención que ya tenemos (`Portal Cobranza`, `Portal Inmobiliaria`, etc.). Reutilizamos `AdminLayout` con un layout dedicado y todas las pantallas vivirán bajo `/admin/portal-escrituracion/*`.
+## Estrategia de datos (mixta)
+- **De BD real (consultas read-only):** propiedades, desarrollos/proyectos, cuentas de cobranza, ofertas, contratos, comisiones, usuarios/personas, citas, facturas. Reutilizar hooks existentes (`useCuentasCobranzaPaginadas`, `useCobranzaDashboard`, `useInventarioDisponible`, etc.) cuando aplique.
+- **Mock data** (en `src/data/altaDireccion/mockData.ts`) para módulos sin tabla clara aún: tendencias mensuales agregadas, KPIs ejecutivos compuestos, auditoría ejemplo.
+- Cada página marca claramente con un `Pill` "Datos en vivo" o "Demo" cuando la fuente sea mock.
 
-Como en el proyecto de referencia el "tema central" es la escrituración (con `escrituracion`, `notarias`, `credito`, `expedientes`, `entregas`, `daiku`, `postventa`, `portal cliente`, `reportes`, `usuarios`, `auditoría`, `configuración`), tomaré sólo lo relevante al **cierre legal + entrega**, que es la columna vertebral de "Escrituración". Los módulos restantes ya existen en otros portales (Cobranza, Cliente, etc.).
+## Permisos
+- Super Admin (rol_id 1) — todo el portal.
+- Bloqueo en `PermissionRoute.tsx` análogo al de Portal Escrituración.
+- Sin DDL/DML — no se requieren cambios de BD ni nueva tabla de roles.
 
-## Alcance del Portal Escrituración
-
-Menú (sidebar propio, mismo estilo que `PortalCobranzaLayout`):
+## Estructura del portal
 
 ```text
-Operación
- ├─ Dashboard
- ├─ Expedientes (pipeline)
- ├─ Unidades en escrituración
- └─ Crédito hipotecario
-
-Cierre legal
- ├─ Pipeline notarial
- ├─ Notarías
- ├─ Notarios
- └─ Avalúos
-
-Documentación
- ├─ Expedientes / PLD
- ├─ Borradores
- └─ Plantillas de escritura
-
-Entrega
- ├─ Programación de firmas
- ├─ Entregas físicas
- └─ Inscripción RPP
-
-Sistema
- ├─ Reportes
- ├─ Auditoría
- └─ Configuración
+/admin/portal-alta-direccion/
+├── dashboard                  Dashboard ejecutivo (KPIs financieros + 3 gráficas recharts)
+├── citas                      Citas comerciales (vivo: configuracion_citas_horarios)
+├── prospectos                 Prospectos / leads (vivo: leads)
+├── pipeline                   Pipeline de oportunidades por etapa
+├── ofertas                    Ofertas + aprobaciones (vivo: ofertas)
+│
+├── cobranza                   Resumen cobranza (vivo: cuentas_cobranza, hook existente)
+├── contratos                  Contratos (vivo: documentos_propiedad / mifiel)
+├── facturas                   Facturas emitidas (vivo: facturas)
+├── comisiones                 Comisiones aprobadas/pagadas (vivo: comisiones)
+│
+├── red-comercial              Personas (agentes, brokers, embajadores) (vivo: usuarios)
+├── reportes                   Reportes ejecutivos (mix vivo + agregados mock)
+├── auditoria                  Bitácora (mock)
+└── configuracion              Preferencias del portal (mock)
 ```
 
-Todas las páginas usarán **mock data** (estilo del repo de referencia) con KPIs, tablas, filtros, paneles y badges. Reutilizamos los componentes shadcn ya presentes (`Card`, `Badge`, `Table`, `Tabs`, `Progress`) y los patrones visuales de `PortalCobranza` para conservar coherencia con SOZU Admin.
+## Cambios en código (frontend únicamente)
 
-## Pasos de ejecución (te diré "siguiente" entre cada uno)
+**Nuevos archivos**
+- `src/components/admin/portal-alta-direccion/PortalAltaDireccionLayout.tsx` — sidebar con 3 grupos (Comercial, Operación, Administración) + header, basado en el de Portal Escrituración.
+- `src/components/admin/portal-alta-direccion/ui.tsx` — `Kpi`, `Panel`, `PageHeader`, `Pill` (idéntico patrón).
+- `src/components/admin/portal-alta-direccion/GlobalFilterBar.tsx` — filtros globales (proyecto, canal, periodo, búsqueda) con contexto local.
+- `src/contexts/AltaDireccionFiltersContext.tsx` — provider para los filtros globales.
+- `src/data/altaDireccion/mockData.ts` — series mensuales, KPIs compuestos, eventos auditoría.
+- `src/pages/admin/portal-alta-direccion/` — un archivo por página (Dashboard, Citas, Prospectos, Pipeline, Ofertas, Cobranza, Contratos, Facturas, Comisiones, RedComercial, Reportes, Auditoria, Configuracion). 13 archivos.
+- `src/hooks/useAltaDireccionDashboard.ts` — agrega métricas de varias tablas (counts) en una sola query.
 
-### Paso 1 — Base de datos (SQL que tú ejecutarás)
-- Insertar `menus` nuevo: `Portal Escrituración` (orden tras `Portal Cobranza`).
-- Insertar 5 grupos lógicos como submenus padre + ~17 submenús hijos con `vista_front_end = '/admin/portal-escrituracion/...'`.
-- Insertar permisos `leer/crear/actualizar/eliminar/exportar/aprobar` por submenu.
-- Asignar TODOS los permisos al rol Super Admin (rol_id = 1) — esto es lo único que pides explícito.
-- Como `is_super_admin()` ya da bypass global, esto es redundante en runtime pero deja la matriz limpia para futuros roles.
+**Archivos a modificar**
+- `src/App.tsx` — registrar 13 rutas lazy `portal-alta-direccion/*`.
+- `src/components/admin/AdminLayout.tsx` — agregar branch `if (location.pathname.startsWith("/admin/portal-alta-direccion")) return <PortalAltaDireccionLayout />`.
+- `src/components/auth/PermissionRoute.tsx` — agregar guard que solo deja pasar a `rol_id === 1`.
+- `src/utils/validRoutes.ts` — agregar las 13 rutas.
+- `src/components/admin/AdminSidebar.tsx` — entrada "Portal Alta Dirección" visible solo para Super Admin (estilo `ExternalLink`, igual a Portal Cobranza).
 
-Entrego un único bloque SQL para que lo ejecutes tú (no DDL, sólo `INSERT`s).
+## Permisos al Super Admin
+No se requiere DDL/DML. La autorización se hace en el cliente con `profile.rol_id === 1`. Si quieres también ocultarlo del menú dinámico para otros roles ya queda automáticamente fuera porque no se registra en `submenus`.
 
-### Paso 2 — Layout, ruteo y guardas
-- Crear `src/components/admin/portal-escrituracion/PortalEscrituracionLayout.tsx` (clon adaptado de `PortalCobranzaLayout`).
-- Registrar `if (location.pathname.startsWith("/admin/portal-escrituracion"))` en `AdminLayout.tsx`.
-- En `PermissionRoute.tsx`, permitir el portal sólo si `profile.rol_id === 1` (Super Admin), igual que se hace para `portal-cobranza`.
-- Rutas perezosas en `App.tsx` con `lazyRetry`.
+## Plan de ejecución (en pasos / chats separados)
 
-### Paso 3 — Dashboard + KPIs
-- `EscDashboard.tsx`: KPIs (Expedientes activos, Pipeline MXN, En riesgo, Escrituras del mes), gráficos `recharts` (cobranza semanal del cierre, distribución por notaría, pie de status), tabla "Próximas firmas".
+**Paso 1 — Esqueleto**
+- Layout, ui.tsx, FilterBar/contexto, ruteo en App.tsx, guard en PermissionRoute, AdminLayout branch, validRoutes, entrada en AdminSidebar para Super Admin.
+- Páginas vacías (placeholder con PageHeader) para validar navegación.
 
-### Paso 4 — Pipeline notarial (módulo estrella)
-- `EscExpedientes.tsx`: réplica del `escrituracion.tsx` del repo de referencia: barra de etapas (Expediente → Avalúo → Instrucción → Borrador → VoBo → Firma → Registro → Entrega), tabla filtrable, panel de detalle con milestones, alta de expediente.
+**Paso 2 — Dashboard ejecutivo + datos mixtos**
+- `useAltaDireccionDashboard` con counts agregados (propiedades vendidas/apartadas/disponibles, ofertas pendientes, cuentas cobranza vencidas, comisiones devengadas).
+- 3 gráficas recharts (ingresos por desarrollo, ingresos por canal, tendencia mensual) — agregados mock.
+- 12 KPIs en 3 filas, badge "Datos en vivo" / "Demo" por tarjeta.
 
-### Paso 5 — Notarías + Notarios + Avalúos
-- `EscNotarias.tsx`, `EscNotarios.tsx`, `EscAvaluos.tsx`: listas con búsqueda, tarjetas por notaría (titular, zona, carga, SLA), tabla de avalúos con banco y monto.
+**Paso 3 — Comercial (Citas, Prospectos, Pipeline, Ofertas)**
+- Tablas read-only con paginación usando hooks existentes; drawers de detalle simples.
 
-### Paso 6 — Documentación
-- `EscExpedientesPLD.tsx`, `EscBorradores.tsx`, `EscPlantillas.tsx`: checklists, estado por documento, previsualización mock.
+**Paso 4 — Operación (Cobranza, Contratos, Facturas, Comisiones)**
+- KPIs + tablas resumen con datos vivos (sin acciones de edición — es vista ejecutiva).
 
-### Paso 7 — Entrega
-- `EscFirmas.tsx` (calendario simple por semana), `EscEntregasFisicas.tsx` (lista con checklist), `EscInscripcionRPP.tsx`.
+**Paso 5 — Administración (Red Comercial, Reportes, Auditoría, Configuración)**
+- Red Comercial: lista de agentes/brokers/embajadores (vivo).
+- Reportes: tarjetas con descargas (placeholder).
+- Auditoría / Configuración: mock.
 
-### Paso 8 — Crédito hipotecario
-- `EscCredito.tsx`: pipeline por banco, montos autorizados/dispersados, SLAs por institución.
+**Paso 6 — QA y pulido**
+- Verificar acceso bloqueado para roles ≠ 1, navegación, breakpoints mobile, performance del dashboard.
 
-### Paso 9 — Sistema
-- `EscReportes.tsx`, `EscAuditoria.tsx`, `EscConfiguracion.tsx` con placeholders accionables (no inventamos lógica de backend).
+## Detalles técnicos clave
+- Sidebar reutiliza patrón visual de `PortalEscrituracionLayout` (244px fijo en desktop, Sheet en mobile, grupos con label uppercase tracking-widest).
+- Reglas de terminología: "Desarrollo", "Departamento", "Disponible", "2 citas", 2 decimales en montos, emails normalizados.
+- Sin edge functions, sin DDL, sin DML — todo es UI + hooks de lectura. Por lo tanto **no se generan archivos en `Ejecuciones_manuales/`** en esta entrega.
+- Solo Super Admin lo ve; no se toca el sistema dinámico de menús (`submenus` / `usuarios_submenus_excluidos`).
 
-### Paso 10 — QA visual y verificación
-- Probar navegación entre submenús con Super Admin.
-- Verificar build limpio.
-- Confirmar que el submenu se renderiza vía `useDynamicMenus` (basta con los INSERTs del Paso 1).
-
-## Detalle técnico
-
-- **Rutas:** `/admin/portal-escrituracion/{dashboard, expedientes, unidades, credito, pipeline, notarias, notarios, avaluos, pld, borradores, plantillas, firmas, entregas, rpp, reportes, auditoria, configuracion}`.
-- **Acceso:** sólo `rol_id = 1` (Super Admin) entra por ahora. Para sumar otros roles luego basta otorgarles los permisos del Paso 1.
-- **Mock data:** archivos `src/data/escrituracion/*.ts` (similar a `src/data/cobranza/*.ts`) con tipados y constantes — sin tocar la BD.
-- **Diseño:** mismos tokens semánticos (`bg-primary`, `text-muted-foreground`, etc.), badges `StatusBadge` adaptados a `Badge` shadcn con variantes ya existentes.
-- **Restricciones de tu workspace:** no ejecutaré DDL ni edge functions. El SQL del Paso 1 te lo entrego para que lo corras tú; el resto es 100% front-end + mock.
-
-## Lo que NO incluye este plan (lo aclaro por transparencia)
-
-- No conecto el portal a tablas reales (`propiedades`, `cuentas_cobranza`, `notarias`, etc.) en esta entrega; lo definimos luego módulo por módulo cuando me digas qué consultas usar.
-- No creo `is_escrituracion_*` policies en RLS (no hay tablas nuevas).
-- No agrego subdomain branding (`escrituracion.sozu.com`); el portal vive bajo `admin.sozu.com/admin/portal-escrituracion`. Si lo quieres como subdominio, lo agrego en una fase posterior.
-
-¿Arrancamos por el **Paso 1 (SQL de menús + permisos Super Admin)** y luego seguimos con el **Paso 2 (layout + rutas)**, o prefieres que ejecute Pasos 1–3 de corrido en cuanto apruebes?
+¿Procedo con el Paso 1 (esqueleto del portal navegable) tras tu aprobación, y los pasos 2-6 los vamos liberando uno por uno en chats subsecuentes?

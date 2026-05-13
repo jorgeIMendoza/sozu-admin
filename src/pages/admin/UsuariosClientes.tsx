@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Key, Loader2, RotateCcw, RefreshCcw, ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { Search, Key, Loader2, RotateCcw, RefreshCcw, ChevronLeft, ChevronRight, Mail, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
@@ -31,6 +32,13 @@ export default function UsuariosClientes() {
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const [roleConflicts, setRoleConflicts] = useState<Array<{
+    email: string;
+    nombre: string | null;
+    existingRoleName: string;
+  }>>([]);
+  const [selectedConflicts, setSelectedConflicts] = useState<Set<string>>(new Set());
+  const [isConfirmingConflicts, setIsConfirmingConflicts] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -144,33 +152,104 @@ export default function UsuariosClientes() {
   const syncUsersMutation = useMutation({
     mutationFn: async () => {
       const usersWithoutAuth = usuarios.filter(u => !u.auth_user_id && u.activo);
-      
+      const conflicts: Array<{ email: string; nombre: string | null; existingRoleName: string }> = [];
+      let okCount = 0;
+
       for (const user of usersWithoutAuth) {
         const response = await supabase.functions.invoke('create-client-user', {
-          body: { 
+          body: {
             email: user.email,
             nombre: user.nombre || user.personas?.nombre_legal,
           },
         });
 
-        if (response.error) {
-          console.error(`Error syncing user ${user.email}:`, response.error);
+        // FunctionsHttpError: el body real está en response.error.context.json()
+        const data: any = response.data
+          ?? (await (response.error as any)?.context?.json?.().catch(() => null));
+
+        if (data?.status === 'role_conflict') {
+          const existingRoleName = data?.existingRoles?.[0]?.nombre ?? 'otro rol';
+          conflicts.push({ email: user.email, nombre: user.nombre, existingRoleName });
+          continue;
         }
+
+        if (response.error && data?.status !== 'role_conflict') {
+          console.error(`Error syncing user ${user.email}:`, response.error);
+          continue;
+        }
+
+        okCount += 1;
       }
 
-      return usersWithoutAuth.length;
+      return { okCount, conflicts };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ okCount, conflicts }) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios-clientes'] });
-      toast({ 
-        title: "Sincronización completada", 
-        description: `Se enviaron correos de confirmación a ${count} usuarios.` 
-      });
+      if (okCount > 0) {
+        toast({
+          title: "Sincronización parcial",
+          description: `Se enviaron correos de confirmación a ${okCount} usuario(s).`,
+        });
+      }
+      if (conflicts.length > 0) {
+        setRoleConflicts(conflicts);
+        setSelectedConflicts(new Set(conflicts.map(c => c.email)));
+      } else if (okCount === 0) {
+        toast({ title: "Sin cambios", description: "No había usuarios pendientes de sincronizar." });
+      }
     },
     onError: (error) => {
       toast({ title: "Error", description: `Error al sincronizar: ${error.message}`, variant: "destructive" });
     },
   });
+
+  // Confirm role conflicts: re-invoke with confirmAddRole=true for selected emails
+  const confirmConflictsMutation = useMutation({
+    mutationFn: async () => {
+      const targets = roleConflicts.filter(c => selectedConflicts.has(c.email));
+      let okCount = 0;
+      const errors: string[] = [];
+      for (const c of targets) {
+        const { data, error } = await supabase.functions.invoke('create-client-user', {
+          body: { email: c.email, nombre: c.nombre, confirmAddRole: true },
+        });
+        if (error || data?.error) {
+          errors.push(`${c.email}: ${error?.message ?? data?.error}`);
+        } else {
+          okCount += 1;
+        }
+      }
+      return { okCount, errors };
+    },
+    onSuccess: ({ okCount, errors }) => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios-clientes'] });
+      toast({
+        title: "Multi-rol agregado",
+        description: `Se agregó el rol Cliente a ${okCount} usuario(s).${errors.length ? ` (${errors.length} error(es))` : ''}`,
+      });
+      setRoleConflicts([]);
+      setSelectedConflicts(new Set());
+      setIsConfirmingConflicts(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: `${error.message}`, variant: "destructive" });
+      setIsConfirmingConflicts(false);
+    },
+  });
+
+  const toggleConflict = (email: string) => {
+    setSelectedConflicts(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email); else next.add(email);
+      return next;
+    });
+  };
+
+  const allSelected = roleConflicts.length > 0 && selectedConflicts.size === roleConflicts.length;
+  const toggleAll = () => {
+    if (allSelected) setSelectedConflicts(new Set());
+    else setSelectedConflicts(new Set(roleConflicts.map(c => c.email)));
+  };
 
   // Count users without auth
   const usersWithoutAuth = useMemo(() => 
@@ -428,6 +507,77 @@ export default function UsuariosClientes() {
                 <RotateCcw className="h-4 w-4 mr-2" />
               )}
               Resetear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Role Conflict Dialog */}
+      <AlertDialog
+        open={roleConflicts.length > 0}
+        onOpenChange={(open) => { if (!open && !isConfirmingConflicts) { setRoleConflicts([]); setSelectedConflicts(new Set()); } }}
+      >
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Emails ya registrados con otro rol
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Los siguientes emails ya tienen una cuenta en la plataforma con otro rol.
+                  Selecciona los que deseas que <strong>también</strong> tengan el rol <strong>Cliente</strong>
+                  (podrán entrar al portal de clientes con la misma cuenta sin perder su rol actual).
+                </p>
+                <div className="border rounded-md max-h-80 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
+                        </TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Rol actual</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roleConflicts.map(c => (
+                        <TableRow key={c.email}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedConflicts.has(c.email)}
+                              onCheckedChange={() => toggleConflict(c.email)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{c.email}</TableCell>
+                          <TableCell>{c.nombre ?? '—'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{c.existingRoleName}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isConfirmingConflicts}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                setIsConfirmingConflicts(true);
+                confirmConflictsMutation.mutate();
+              }}
+              disabled={isConfirmingConflicts || selectedConflicts.size === 0}
+            >
+              {isConfirmingConflicts ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Sí, agregar rol Cliente ({selectedConflicts.size})
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
