@@ -19,7 +19,14 @@
       "PowerShell(Test-Path *)",
       "PowerShell(python --version 2>&1)",
       "PowerShell(python3 --version 2>&1)",
-      "Bash(sort -k5 -n -r)"
+      "Bash(sort -k5 -n -r)",
+      "Bash(git rev-list *)",
+      "Bash(git rm *)",
+      "Bash(git checkout *)",
+      "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/**)",
+      "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/frontend/**)",
+      "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/database/**)",
+      "Bash(git -C \"C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu\\\\sozu-docs\" status --short)"
     ]
   },
   "enableAllProjectMcpServers": true,
