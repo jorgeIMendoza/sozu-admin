@@ -30,7 +30,7 @@ dist-ssr
 firebase.json
 
 # Manual execution scripts (DDLs, DMLs, edge functions)
-Ejecuciones_manuales/
+Ejecuciones_manuales/*
 
 # Lovable internal
 .lovable/*
