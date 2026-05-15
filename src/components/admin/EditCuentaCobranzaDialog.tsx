@@ -185,14 +185,15 @@ interface EditCuentaCobranzaDialogProps {
   cuenta: CuentaCobranza;
   onClose: () => void;
   onUpdate: () => void;
+  initialTab?: string;
 }
 
-export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate }: EditCuentaCobranzaDialogProps) {
+export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab }: EditCuentaCobranzaDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canUpdate: canUpdateCuenta, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
   const { registrarActualizacion, registrarEliminacion } = useActivityLogger();
-  const [activeTab, setActiveTab] = useState('propiedad');
+  const [activeTab, setActiveTab] = useState(initialTab || 'propiedad');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [porcentaje, setPorcentaje] = useState('');

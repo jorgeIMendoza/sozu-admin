@@ -35,6 +35,7 @@ export interface RelacionPagosFilters {
   tipoCuenta?: 'propiedad' | 'producto' | null;
   page: number;
   pageSize: number;
+  enabled?: boolean;
 }
 
 export interface RelacionPagosResult {
@@ -96,6 +97,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
       };
     },
     staleTime: 30_000,
+    enabled: filters.enabled !== false,
   });
 
   return {

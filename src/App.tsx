@@ -163,6 +163,7 @@ const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/C
 const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
 const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
+const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
 const EscUnidades = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscUnidades })));
 const EscCredito = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCredito })));
@@ -488,6 +489,7 @@ const App = () => (
                   <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
+                  <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
                   <Route path="portal-escrituracion/unidades" element={<EscUnidades />} />
                   <Route path="portal-escrituracion/credito" element={<EscCredito />} />

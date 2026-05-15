@@ -9,62 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   EXPEDIENTES, STAGES, HEALTH_META, NOTARIAS, NOTARIOS, AVALUOS, DOCS_PLD,
   BORRADORES, PLANTILLAS, CITAS_FIRMA, ENTREGAS, INSCRIPCIONES, CREDITOS,
   fmtMxn,
 } from "@/data/escrituracion/mockData";
+import { DashboardEscrituracion } from "./DashboardEscrituracion";
+import { RelacionPagos } from "./RelacionPagos";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
-  const total = EXPEDIENTES.length;
-  const enRiesgo = EXPEDIENTES.filter((e) => e.health === "at_risk" || e.health === "delayed").length;
-  const concluidos = EXPEDIENTES.filter((e) => e.health === "done").length;
-  const pipeline = EXPEDIENTES.filter((e) => e.health !== "done").reduce((s, e) => s + e.amount, 0);
+  return <DashboardEscrituracion />;
+}
 
-  return (
-    <>
-      <PageHeader title="Portal de Escrituración" description="Vista ejecutiva del cierre legal · datos demostrativos" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Expedientes activos" value={total} icon={ScrollText} hint="Pipeline total" />
-        <Kpi label="Pipeline en MXN" value={fmtMxn(pipeline)} icon={Banknote} tone="primary" />
-        <Kpi label="En riesgo / retrasados" value={enRiesgo} icon={AlertTriangle} tone="warning" hint="SLA vencido" />
-        <Kpi label="Escrituras entregadas" value={concluidos} icon={CheckCircle2} tone="info" hint="Mes en curso" />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Panel title="Distribución por etapa" description="Expedientes por paso del workflow" className="xl:col-span-2">
-          <div className="flex flex-wrap gap-2">
-            {STAGES.map((s) => {
-              const c = EXPEDIENTES.filter((e) => e.stage === s.key).length;
-              return (
-                <div key={s.key} className="rounded-lg border border-border bg-card px-3 py-2 min-w-[140px]">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums">{c}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
-        <Panel title="Próximas firmas" description="Esta semana">
-          <ul className="space-y-2">
-            {CITAS_FIRMA.slice(0, 5).map((c) => (
-              <li key={c.id} className="flex items-center justify-between border-b last:border-0 border-border pb-2 last:pb-0">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{c.cliente}</p>
-                  <p className="text-xs text-muted-foreground truncate">{c.notary} · {c.fecha} {c.hora}</p>
-                </div>
-                <Pill>{c.estado.replace("_", " ")}</Pill>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      </div>
-    </>
-  );
+// ============================ Relación de Pagos ============================
+export function EscRelacionPagos() {
+  return <RelacionPagos />;
 }
 
 // ============================ Expedientes ============================
