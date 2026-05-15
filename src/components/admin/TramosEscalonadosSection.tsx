@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { mesesEntreFechas } from "@/utils/escalonadoUtils";
 
 export interface Tramo {
   orden: number;
@@ -23,10 +24,13 @@ interface TramosEscalonadosSectionProps {
   onEnabledChange: (enabled: boolean) => void;
   tramos: Tramo[];
   onTramosChange: (tramos: Tramo[]) => void;
-  totalMensualidades: number;
+  /** Optional total. When 0/undefined the section drives the count itself (escalonado-only schemes). */
+  totalMensualidades?: number;
   visible: boolean;
   /** When true, shows a fixed-amount input per tramo */
   allowFixedAmount?: boolean;
+  /** Reference date used to compute number of months from a tramo's fecha_limite. Defaults to today. */
+  fechaReferencia?: Date | string;
 }
 
 export const TramosEscalonadosSection = ({
@@ -34,23 +38,30 @@ export const TramosEscalonadosSection = ({
   onEnabledChange,
   tramos,
   onTramosChange,
-  totalMensualidades,
+  totalMensualidades = 0,
   visible,
   allowFixedAmount = true,
+  fechaReferencia,
 }: TramosEscalonadosSectionProps) => {
   if (!visible) return null;
 
   const sumTramos = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
-  const isValid = sumTramos === totalMensualidades;
-  const remaining = totalMensualidades - sumTramos;
+  // When totalMensualidades is 0 the scheme is driven exclusively by the tramos
+  // (typical escalonado-only setup): skip the equality check and just require sum > 0.
+  const standaloneMode = !totalMensualidades || totalMensualidades <= 0;
+  const isValid = standaloneMode ? sumTramos > 0 : sumTramos === totalMensualidades;
+  const remaining = standaloneMode ? 0 : totalMensualidades - sumTramos;
 
   const hasAnyMonto = tramos.some(t => t.monto_mensualidad && t.monto_mensualidad > 0);
+  const refDate = fechaReferencia
+    ? (typeof fechaReferencia === 'string' ? new Date(fechaReferencia) : fechaReferencia)
+    : new Date();
 
   const addTramo = () => {
     if (tramos.length >= 3) return;
     const newTramo: Tramo = {
       orden: tramos.length + 1,
-      numero_mensualidades: remaining > 0 ? remaining : 0,
+      numero_mensualidades: !standaloneMode && remaining > 0 ? remaining : 0,
     };
     onTramosChange([...tramos, newTramo]);
   };
@@ -63,20 +74,29 @@ export const TramosEscalonadosSection = ({
   };
 
   const updateTramo = (index: number, field: keyof Tramo, value: number | string | undefined) => {
-    const updated = tramos.map((t, i) =>
-      i === index ? { ...t, [field]: value } : t
-    );
+    const updated = tramos.map((t, i) => {
+      if (i !== index) return t;
+      const next: Tramo = { ...t, [field]: value } as Tramo;
+      // When fecha_limite is set, derive numero_mensualidades from it
+      if (field === 'fecha_limite') {
+        if (value) {
+          next.numero_mensualidades = mesesEntreFechas(refDate, value as string);
+        }
+      }
+      // When user types a numero_mensualidades > 0, drop fecha_limite to keep them mutually exclusive
+      if (field === 'numero_mensualidades' && (value as number) > 0) {
+        next.fecha_limite = undefined;
+      }
+      return next;
+    });
     onTramosChange(updated);
   };
 
   const handleToggle = (checked: boolean) => {
     onEnabledChange(checked);
     if (checked && tramos.length === 0) {
-      const half = Math.floor(totalMensualidades / 2);
-      onTramosChange([
-        { orden: 1, numero_mensualidades: half },
-        { orden: 2, numero_mensualidades: totalMensualidades - half },
-      ]);
+      // Always start with a single empty tramo so the user defines it explicitly.
+      onTramosChange([{ orden: 1, numero_mensualidades: 0 }]);
     }
     if (!checked) {
       onTramosChange([]);
@@ -108,9 +128,10 @@ export const TramosEscalonadosSection = ({
       {enabled && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Divide las {totalMensualidades} mensualidades en bloques. La suma debe ser igual al total.
-            {allowFixedAmount && (
-              <> Opcionalmente define un monto fijo por mensualidad en cada tramo.</>
+            {standaloneMode ? (
+              <>Define hasta 3 tramos con su monto fijo por mensualidad. Para cada tramo escribe <b>el número de mensualidades</b> o una <b>fecha límite</b> (no ambos).</>
+            ) : (
+              <>Divide las {totalMensualidades} mensualidades en bloques. La suma debe ser igual al total.{allowFixedAmount && (<> Opcionalmente define un monto fijo por mensualidad en cada tramo.</>)}</>
             )}
           </p>
 
@@ -123,13 +144,19 @@ export const TramosEscalonadosSection = ({
                 <Input
                   type="number"
                   min="1"
-                  max={totalMensualidades}
+                  max={standaloneMode ? undefined : totalMensualidades}
                   value={tramo.numero_mensualidades || ""}
                   onChange={(e) => updateTramo(index, "numero_mensualidades", parseInt(e.target.value) || 0)}
                   className="h-8"
                   placeholder="Meses"
+                  disabled={!!tramo.fecha_limite}
                 />
                 <span className="text-xs text-muted-foreground shrink-0">meses</span>
+                {tramo.fecha_limite && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    (calculado)
+                  </span>
+                )}
                 {tramos.length > 1 && (
                   <Button
                     type="button"
@@ -172,6 +199,7 @@ export const TramosEscalonadosSection = ({
                       <Button
                         type="button"
                         variant="outline"
+                        disabled={!tramo.fecha_limite && (tramo.numero_mensualidades || 0) > 0}
                         className={cn(
                           "h-7 text-xs justify-start font-normal flex-1",
                           !tramo.fecha_limite && "text-muted-foreground"
@@ -226,12 +254,12 @@ export const TramosEscalonadosSection = ({
             )}
             <div className="ml-auto">
               <Badge variant={isValid ? "default" : "destructive"} className="text-xs">
-                {sumTramos}/{totalMensualidades} meses
+                {standaloneMode ? `${sumTramos} meses` : `${sumTramos}/${totalMensualidades} meses`}
               </Badge>
             </div>
           </div>
 
-          {!isValid && sumTramos > 0 && (
+          {!isValid && sumTramos > 0 && !standaloneMode && (
             <p className="text-xs text-destructive">
               {remaining > 0
                 ? `Faltan ${remaining} mensualidades por asignar.`
@@ -241,9 +269,9 @@ export const TramosEscalonadosSection = ({
 
           {allowFixedAmount && hasAnyMonto && (
             <p className="text-xs text-muted-foreground border-t pt-2">
-              💡 Al definir montos fijos, el porcentaje de mensualidades se ignorará y el restante irá a contra-entrega automáticamente al generar la oferta.
+              💡 Al definir montos fijos, el porcentaje de mensualidades se ignora y el restante va a contra-entrega automáticamente al generar la oferta.
               {tramos.some(t => t.fecha_limite) && (
-                <> Si defines una fecha límite, el número de mensualidades se calculará desde la fecha de generación de la oferta hasta esa fecha.</>
+                <> Si defines una fecha límite, el número de mensualidades se calcula desde {format(refDate, "dd/MM/yyyy", { locale: es })} hasta esa fecha.</>
               )}
             </p>
           )}
