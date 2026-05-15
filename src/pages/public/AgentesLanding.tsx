@@ -2,6 +2,9 @@ import { ArrowRight, Shield, BarChart3, Building2, Users, CheckCircle } from "lu
 import { Button } from "@/components/ui/button";
 import sozuLogo from "@/assets/sozu-logo-black.png";
 import heroImage from "@/assets/hero-agents.jpg";
+import { getPortalHost } from "@/lib/portalUrls";
+
+const AGENTES_HOST = getPortalHost("agentes");
 
 const features = [
   {
@@ -44,12 +47,12 @@ export default function AgentesLanding() {
           <div className="flex items-center justify-between h-16">
             <img src={sozuLogo} alt="Sozu" className="h-7 sm:h-8" />
             <div className="flex items-center gap-3">
-              <a href="https://agentes.sozu.com/login">
+              <a href={`${AGENTES_HOST}/login`}>
                 <Button variant="ghost" className="text-sm font-medium text-[hsl(0,0%,34%)] hover:text-[hsl(0,0%,0%)]">
                   Acceder
                 </Button>
               </a>
-              <a href="https://agentes.sozu.com/registro">
+              <a href={`${AGENTES_HOST}/registro`}>
                 <Button className="text-sm font-medium bg-[hsl(158,64%,38%)] hover:bg-[hsl(158,64%,32%)] text-white rounded-full px-6">
                   Registrarme
                 </Button>
@@ -73,7 +76,7 @@ export default function AgentesLanding() {
                 Administra tu inversión o comercializa proyectos con total claridad y control.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <a href="https://agentes.sozu.com/login">
+                <a href={`${AGENTES_HOST}/login`}>
                   <Button
                     size="lg"
                     variant="outline"
@@ -82,7 +85,7 @@ export default function AgentesLanding() {
                     Acceder a mi cuenta
                   </Button>
                 </a>
-                <a href="https://agentes.sozu.com/registro">
+                <a href={`${AGENTES_HOST}/registro`}>
                   <Button
                     size="lg"
                     className="w-full sm:w-auto rounded-full px-8 bg-[hsl(158,64%,38%)] hover:bg-[hsl(158,64%,32%)] text-white font-semibold"
@@ -161,7 +164,7 @@ export default function AgentesLanding() {
               <p className="text-[hsl(0,0%,34%)] mb-8">
                 Regístrate en menos de 2 minutos y comienza a comercializar proyectos inmobiliarios.
               </p>
-              <a href="https://agentes.sozu.com/registro">
+              <a href={`${AGENTES_HOST}/registro`}>
                 <Button
                   size="lg"
                   className="rounded-full px-10 bg-[hsl(158,64%,38%)] hover:bg-[hsl(158,64%,32%)] text-white font-semibold"
