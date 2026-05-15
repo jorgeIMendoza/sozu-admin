@@ -1139,6 +1139,181 @@ export type Database = {
         }
         Relationships: []
       }
+      borrar_audit_errores: {
+        Row: {
+          error_descripcion: string
+          fecha_registro: string
+          id: number
+          id_pago_origen: number | null
+          intentos: number
+          requiere_revision_humana: boolean
+          tipo_documento: string | null
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          error_descripcion: string
+          fecha_registro?: string
+          id?: number
+          id_pago_origen?: number | null
+          intentos?: number
+          requiere_revision_humana?: boolean
+          tipo_documento?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          error_descripcion?: string
+          fecha_registro?: string
+          id?: number
+          id_pago_origen?: number | null
+          intentos?: number
+          requiere_revision_humana?: boolean
+          tipo_documento?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: []
+      }
+      borrar_audit_pagos: {
+        Row: {
+          actualizado_en: string
+          clabe_stp: string | null
+          clave_rastreo: string | null
+          coincide_prorrateo: boolean | null
+          confianza_extraccion: number | null
+          creado_en: string
+          diferencia: number | null
+          error_extraccion: string | null
+          fecha_acordada: string | null
+          fecha_analisis: string | null
+          fecha_pago_sistema: string | null
+          fecha_validacion: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          id_pago_origen: number | null
+          metadata_desglose: Json | null
+          metodo_extraccion: string | null
+          metodo_pago: string | null
+          monto_extraido: number | null
+          monto_sistema: number
+          numero_propiedad: string | null
+          padre_id: number | null
+          pago_aplicado_sistema: number | null
+          proyecto: string | null
+          status: string
+          tipo_pago: string | null
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Insert: {
+          actualizado_en?: string
+          clabe_stp?: string | null
+          clave_rastreo?: string | null
+          coincide_prorrateo?: boolean | null
+          confianza_extraccion?: number | null
+          creado_en?: string
+          diferencia?: number | null
+          error_extraccion?: string | null
+          fecha_acordada?: string | null
+          fecha_analisis?: string | null
+          fecha_pago_sistema?: string | null
+          fecha_validacion?: string | null
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago_origen?: number | null
+          metadata_desglose?: Json | null
+          metodo_extraccion?: string | null
+          metodo_pago?: string | null
+          monto_extraido?: number | null
+          monto_sistema: number
+          numero_propiedad?: string | null
+          padre_id?: number | null
+          pago_aplicado_sistema?: number | null
+          proyecto?: string | null
+          status?: string
+          tipo_pago?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Update: {
+          actualizado_en?: string
+          clabe_stp?: string | null
+          clave_rastreo?: string | null
+          coincide_prorrateo?: boolean | null
+          confianza_extraccion?: number | null
+          creado_en?: string
+          diferencia?: number | null
+          error_extraccion?: string | null
+          fecha_acordada?: string | null
+          fecha_analisis?: string | null
+          fecha_pago_sistema?: string | null
+          fecha_validacion?: string | null
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago_origen?: number | null
+          metadata_desglose?: Json | null
+          metodo_extraccion?: string | null
+          metodo_pago?: string | null
+          monto_extraido?: number | null
+          monto_sistema?: number
+          numero_propiedad?: string | null
+          padre_id?: number | null
+          pago_aplicado_sistema?: number | null
+          proyecto?: string | null
+          status?: string
+          tipo_pago?: string | null
+          url_cep?: string | null
+          url_recibo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "borrar_audit_pagos_padre_id_fkey"
+            columns: ["padre_id"]
+            isOneToOne: false
+            referencedRelation: "borrar_audit_pagos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      borrar_audit_splits: {
+        Row: {
+          coincide: boolean
+          documentos_procesados: Json
+          fecha_split: string
+          id: number
+          pago_original_id: number
+          pago_original_monto: number
+          suma_montos_hijos: number
+        }
+        Insert: {
+          coincide: boolean
+          documentos_procesados: Json
+          fecha_split?: string
+          id?: number
+          pago_original_id: number
+          pago_original_monto: number
+          suma_montos_hijos: number
+        }
+        Update: {
+          coincide?: boolean
+          documentos_procesados?: Json
+          fecha_split?: string
+          id?: number
+          pago_original_id?: number
+          pago_original_monto?: number
+          suma_montos_hijos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "borrar_audit_splits_pago_original_id_fkey"
+            columns: ["pago_original_id"]
+            isOneToOne: false
+            referencedRelation: "borrar_audit_pagos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       borrar_bancos_banxico: {
         Row: {
           clave_institucion: number | null
@@ -7767,6 +7942,47 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          activo: boolean
+          creado_por: string | null
+          email: string
+          es_principal: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: string
+          rol_id: number
+        }
+        Insert: {
+          activo?: boolean
+          creado_por?: string | null
+          email: string
+          es_principal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          rol_id: number
+        }
+        Update: {
+          activo?: boolean
+          creado_por?: string | null
+          email?: string
+          es_principal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          rol_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_rol_id_fkey"
+            columns: ["rol_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       uso_cfdi: {
         Row: {
           activo: boolean | null
@@ -8792,6 +9008,10 @@ export type Database = {
       user_has_internal_role: { Args: { _user_id: string }; Returns: boolean }
       user_has_permission: {
         Args: { _permission_name: string; _submenu_path: string }
+        Returns: boolean
+      }
+      user_has_role: {
+        Args: { _email: string; _rol_id: number }
         Returns: boolean
       }
       validar_mensajes_whatsapp: { Args: { _mensajes: Json }; Returns: boolean }

@@ -3,13 +3,26 @@ import type { EmailOtpType } from '@supabase/supabase-js';
 import { CheckCircle, Mail } from 'lucide-react';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
+import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
 
-const getPortalHost = (portal: string | null) => {
-  return portal === 'clientes' ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
+const resolvePortalKey = (portal: string | null): PortalKey => {
+  switch (portal) {
+    case 'clientes':
+      return 'clientes';
+    case 'agentes':
+      return 'agentes';
+    case 'admin':
+      return 'admin';
+    case 'inmobiliarias':
+    default:
+      return 'inmobiliarias';
+  }
 };
 
+const portalHostFor = (portal: string | null) => getPortalHost(resolvePortalKey(portal));
+
 const getPortalUrl = (portal: string | null, destination: string | null) => {
-  const host = getPortalHost(portal);
+  const host = portalHostFor(portal);
   const path = destination === 'login' ? '/auth/login' : '/auth/change-password';
   return `${host}${path}`;
 };
@@ -30,7 +43,7 @@ const getOtpType = (type: string | null): EmailOtpType => {
 
 export default function ConfirmacionEmail() {
   const calledRef = useRef(false);
-  const [ctaUrl, setCtaUrl] = useState('https://inmobiliarias.sozu.com/auth/change-password');
+  const [ctaUrl, setCtaUrl] = useState(`${getPortalHost('inmobiliarias')}/auth/change-password`);
   const [ctaLabel, setCtaLabel] = useState('Ir a Cambiar Contraseña');
 
   useEffect(() => {
@@ -45,7 +58,7 @@ export default function ConfirmacionEmail() {
     const tokenHash = params.get('token_hash');
     const otpType = params.get('type');
     const currentHost = window.location.hostname;
-    const requestedHost = new URL(getPortalHost(portal)).hostname;
+    const requestedHost = new URL(portalHostFor(portal)).hostname;
 
     setCtaUrl(getPortalUrl(portal, destination));
     setCtaLabel(destination === 'login' ? 'Ir a Iniciar Sesión' : 'Ir a Cambiar Contraseña');
