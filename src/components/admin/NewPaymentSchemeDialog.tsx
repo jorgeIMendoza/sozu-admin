@@ -24,9 +24,12 @@ const formSchema = z.object({
   const mensualidades = parseFloat(data.porcentaje_mensualidades) || 0;
   const entrega = parseFloat(data.porcentaje_entrega) || 0;
   const total = enganche + mensualidades + entrega;
+  // Tramos-driven schemes set mensualidades=0 and entrega=0; the contra-entrega is derived
+  // automatically when the offer is generated, so we don't require the 100% sum in that case.
+  if (mensualidades === 0 && entrega === 0) return enganche > 0 && enganche <= 100;
   return Math.abs(total - 100) < 0.01;
 }, {
-  message: "Los porcentajes deben sumar exactamente 100%",
+  message: "Los porcentajes deben sumar 100% (o usar esquema escalonado con mensualidades=0 y entrega=0)",
   path: ["porcentaje_entrega"],
 });
 
@@ -60,15 +63,8 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
 
   const mensualidadesPct = parseFloat(watchedMensualidades || "0");
   const numMensualidades = parseInt(watchedNumMensualidades || "0");
-  const showTramos = numMensualidades > 1;
-
-  // Reset tramos when conditions no longer met
-  useEffect(() => {
-    if (!showTramos && tramosEnabled) {
-      setTramosEnabled(false);
-      setTramos([]);
-    }
-  }, [showTramos, tramosEnabled]);
+  // The escalonado section is always available so the user can pick "tramos-only" mode.
+  const showTramos = true;
 
   const remainingPercentage = 100 - (parseFloat(watchedEnganche || "0") + parseFloat(watchedMensualidades || "0"));
 
@@ -78,6 +74,15 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
       form.setValue("numero_mensualidades", "0");
     }
   }, [watchedMensualidades, tramosEnabled, form]);
+
+  // When tramos-mode is enabled, force the % mensualidades, % entrega and num. mensualidades fields to zero.
+  useEffect(() => {
+    if (tramosEnabled) {
+      form.setValue("porcentaje_mensualidades", "0");
+      form.setValue("porcentaje_entrega", "0");
+      form.setValue("numero_mensualidades", "0");
+    }
+  }, [tramosEnabled, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
     if (event) {
@@ -90,8 +95,9 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
       const mensualidades = parseFloat(values.porcentaje_mensualidades);
       const entrega = parseFloat(values.porcentaje_entrega);
       const total = enganche + mensualidades + entrega;
-      
-      if (Math.abs(total - 100) >= 0.01) {
+      const tramosMode = tramosEnabled && tramos.length > 0;
+
+      if (!tramosMode && Math.abs(total - 100) >= 0.01) {
         toast({
           title: "Error de validación",
           description: "Los porcentajes de enganche, mensualidades y entrega deben sumar exactamente 100%",
@@ -100,14 +106,22 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
         return;
       }
 
-      // Validate tramos if enabled
-      if (tramosEnabled && tramos.length > 0) {
+      // Validate tramos if enabled (tramos-driven schemes)
+      if (tramosMode) {
         const sumTramos = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
-        const totalMens = parseInt(values.numero_mensualidades) || 0;
-        if (sumTramos !== totalMens) {
+        if (sumTramos <= 0) {
           toast({
             title: "Error de validación",
-            description: `La suma de mensualidades en los tramos (${sumTramos}) debe ser igual al total de mensualidades (${totalMens}).`,
+            description: "Cada tramo debe tener un número de mensualidades o una fecha límite que resuelva a más de 0 meses.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const tramoInvalido = tramos.find(t => !t.monto_mensualidad || t.monto_mensualidad <= 0);
+        if (tramoInvalido) {
+          toast({
+            title: "Error de validación",
+            description: "Cada tramo escalonado debe tener un monto por mensualidad mayor a 0.",
             variant: "destructive",
           });
           return;
@@ -119,13 +133,13 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
         id_producto: null,
         nombre: values.nombre,
         porcentaje_enganche: enganche || 0,
-        porcentaje_mensualidades: mensualidades || 0,
-        porcentaje_entrega: entrega || 0,
-        numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+        porcentaje_mensualidades: tramosMode ? 0 : (mensualidades || 0),
+        porcentaje_entrega: tramosMode ? 0 : (entrega || 0),
+        numero_mensualidades: tramosMode ? 0 : (parseInt(values.numero_mensualidades) || 0),
         porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
       };
 
-      if (tramosEnabled && tramos.length > 0) {
+      if (tramosMode) {
         insertData.tramos_mensualidad = tramos;
       }
 
@@ -236,9 +250,12 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                 name="porcentaje_mensualidades"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Porcentaje Mensualidades (%)</FormLabel>
+                    <FormLabel>
+                      Porcentaje Mensualidades (%)
+                      {tramosEnabled && <span className="ml-1 text-xs text-muted-foreground">(escalonado)</span>}
+                    </FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" {...field} />
+                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" disabled={tramosEnabled} {...field} value={tramosEnabled ? "0" : field.value} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -254,14 +271,16 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                   <FormItem>
                     <FormLabel>
                       Porcentaje Entrega (%) 
-                      {remainingPercentage !== 100 && (
+                      {tramosEnabled ? (
+                        <span className="ml-1 text-xs text-muted-foreground">(se calcula al generar la oferta)</span>
+                      ) : remainingPercentage !== 100 && (
                         <span className="text-sm text-muted-foreground ml-1">
                           (Restante: {remainingPercentage.toFixed(2)}%)
                         </span>
                       )}
                     </FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" {...field} />
+                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" disabled={tramosEnabled} {...field} value={tramosEnabled ? "0" : field.value} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -273,12 +292,17 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                 render={({ field }) => {
                   return (
                     <FormItem>
-                      <FormLabel>Número de Mensualidades</FormLabel>
+                      <FormLabel>
+                        Número de Mensualidades
+                        {tramosEnabled && <span className="ml-1 text-xs text-muted-foreground">(en tramos)</span>}
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="number" min="0" 
                           placeholder="12" 
+                          disabled={tramosEnabled}
                           {...field}
+                          value={tramosEnabled ? "0" : field.value}
                         />
                       </FormControl>
                       <FormMessage />
