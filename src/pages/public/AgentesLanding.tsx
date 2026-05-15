@@ -2,6 +2,9 @@ import { ArrowRight, Shield, BarChart3, Building2, Users, CheckCircle } from "lu
 import { Button } from "@/components/ui/button";
 import sozuLogo from "@/assets/sozu-logo-black.png";
 import heroImage from "@/assets/hero-agents.jpg";
+import { getPortalHost } from "@/lib/portalUrls";
+
+const AGENTES_HOST = getPortalHost("agentes");
 
 const features = [
   {
