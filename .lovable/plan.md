@@ -1,24 +1,24 @@
-## Objetivo
+## Problema
 
-1. Mostrar el cintillo de ambiente (banner amarillo "AMBIENTE DE DESARROLLO") en los subdominios `*-dev.sozu.com` (agentes-dev, inmobiliarias-dev, clientes-dev, admin-dev), no solo cuando `VITE_ENVIRONMENT` lo indique.
-2. Eliminar URLs hardcodeadas a `agentes.sozu.com` / `inmobiliarias.sozu.com` en las landings y páginas públicas, para que en desarrollo apunten a los hosts `-dev`.
+El `DevelopmentBanner` ya se renderiza globalmente en `App.tsx` y aparece en el DOM en la landing de agentes, pero la barra de navegación de `AgentesLanding.tsx` está posicionada como `fixed top-0 left-0 right-0 z-50`, lo que la saca del flujo y la coloca encima del banner, ocultándolo visualmente.
 
-## Cambios
+## Cambio
 
-### 1. `src/components/DevelopmentBanner.tsx`
-Agregar detección por hostname: si `window.location.hostname` termina en `-dev.sozu.com`, mostrar el cintillo amarillo de "AMBIENTE DE DESARROLLO" aunque `ENVIRONMENT` no sea `development`/`preview`. Esto cubre el caso donde el build se publica con `VITE_ENVIRONMENT=production` pero se sirve en el subdominio dev.
+### `src/pages/public/AgentesLanding.tsx`
 
-### 2. `src/pages/public/AgentesLanding.tsx`
-Reemplazar los 4 `href="https://agentes.sozu.com/..."` (Acceder, Registrarme, Acceder a mi cuenta, Convertirme en Agente, Registrarme como Agente) por URLs construidas con `getPortalHost('agentes')` de `@/lib/portalUrls`. Resultado: en preview/dev apuntarán a `agentes-dev.sozu.com`.
+Cambiar la `<nav>` de `fixed` a `sticky`:
 
-### 3. `src/pages/public/Registro.tsx`
-Reemplazar los 2 `href="https://agentes.sozu.com/login"` por `${getPortalHost('agentes')}/login`. Los enlaces a `www.sozu.com` (términos, privacidad) se dejan intactos porque son sitios institucionales, no portales del producto.
+- Antes: `className="fixed top-0 left-0 right-0 z-50 bg-white/95 ..."`
+- Después: `className="sticky top-0 z-40 bg-white/95 ..."`
 
-### 4. `src/pages/public/RegistroInmobiliaria.tsx`
-Reemplazar los 2 `href="https://inmobiliarias.sozu.com/login"` por `${getPortalHost('inmobiliarias')}/login`. Igual, `www.sozu.com` se respeta.
+Con `sticky` la barra:
+1. Permanece pegada al hacer scroll (mismo UX que tenía con `fixed`).
+2. Sigue dentro del flujo normal del documento, por lo que el `DevelopmentBanner` (renderizado antes en el árbol) queda **arriba** y visible.
 
-## Notas técnicas
+Como el navbar ya no estará "flotando" sobre contenido inicial, también se puede reducir el padding superior del hero (`pt-24 sm:pt-32`) que existía únicamente para compensar el navbar fijo. Lo dejaré en `pt-12 sm:pt-16` para mantener buen espaciado sin doble margen.
 
-- `getPortalHost(portal)` ya existe en `src/lib/portalUrls.ts` y devuelve `https://{portal}.sozu.com` en producción o `https://{portal}-dev.sozu.com` en cualquier otro ambiente, según `ENVIRONMENT`.
-- El banner ya está montado globalmente en `App.tsx` dentro de `<BrowserRouter>`, por lo que el fix solo requiere ampliar la condición de visibilidad dentro del propio componente.
-- No se tocan rutas, lógica de auth ni edge functions.
+## Otras landings
+
+`Registro.tsx` y `RegistroInmobiliaria.tsx` no tienen navbar `fixed`, así que el banner ya se ve correctamente ahí — no requieren cambios.
+
+`AgentesLanding` es la única afectada.
