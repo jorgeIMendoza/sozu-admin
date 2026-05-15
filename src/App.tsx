@@ -194,6 +194,13 @@ const AltaDireccionRedComercial = lazyRetry(() => import("./pages/admin/portal-a
 const AltaDireccionReportes = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionReportes })));
 const AltaDireccionAuditoria = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionAuditoria })));
 const AltaDireccionConfiguracion = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionConfiguracion })));
+const AltaDireccionNotificaciones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionNotificacionesPage"));
+const AltaDireccionBandejaValidaciones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionBandejaValidacionesPage"));
+const AltaDireccionCicloVenta = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionCicloVentaPage"));
+const AltaDireccionFacturasPorCobrar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorCobrarPage"));
+const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorPagarPage"));
+const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
+const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -517,6 +524,13 @@ const App = () => (
                   <Route path="portal-alta-direccion/reportes" element={<AltaDireccionReportes />} />
                   <Route path="portal-alta-direccion/auditoria" element={<AltaDireccionAuditoria />} />
                   <Route path="portal-alta-direccion/configuracion" element={<AltaDireccionConfiguracion />} />
+                  <Route path="portal-alta-direccion/notificaciones" element={<AltaDireccionNotificaciones />} />
+                  <Route path="portal-alta-direccion/bandeja" element={<AltaDireccionBandejaValidaciones />} />
+                  <Route path="portal-alta-direccion/ciclo-venta" element={<AltaDireccionCicloVenta />} />
+                  <Route path="portal-alta-direccion/facturas-por-cobrar" element={<AltaDireccionFacturasPorCobrar />} />
+                  <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
+                  <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
+                  <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
