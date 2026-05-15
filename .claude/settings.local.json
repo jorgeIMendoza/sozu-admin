@@ -26,7 +26,12 @@
       "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/**)",
       "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/frontend/**)",
       "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/docs/database/**)",
-      "Bash(git -C \"C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu\\\\sozu-docs\" status --short)"
+      "Bash(git -C \"C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu\\\\sozu-docs\" status --short)",
+      "Bash(graphify *)",
+      "Bash(python *)",
+      "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/**)",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)"
     ]
   },
   "enableAllProjectMcpServers": true,
