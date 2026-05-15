@@ -4,12 +4,15 @@ import { Building2, UserCheck, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import { getPortalHost } from "@/lib/portalUrls";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const INMOB_HOST = getPortalHost("inmobiliarias");
 
 type RepLegalData = {
   nombre: string;
@@ -157,7 +160,7 @@ export default function RegistroInmobiliaria() {
           <p className="text-xs mb-7" style={{ color: 'hsl(0 0% 55%)' }}>
             Si tienes preguntas, contacta a nuestro equipo de soporte.
           </p>
-          <a href="https://inmobiliarias.sozu.com/login" className="block">
+          <a href={`${INMOB_HOST}/login`} className="block">
             <button type="button" className="login-btn-outline">Ir a iniciar sesión</button>
           </a>
         </div>
@@ -274,7 +277,7 @@ export default function RegistroInmobiliaria() {
             {registerMutation.isPending ? "Registrando..." : "Registrarme como Inmobiliaria"}
           </button>
 
-          <a href="https://inmobiliarias.sozu.com/login" className="block">
+          <a href={`${INMOB_HOST}/login`} className="block">
             <button type="button" className="login-btn-outline">¿Ya tienes cuenta? Inicia sesión</button>
           </a>
         </form>
