@@ -4,6 +4,9 @@ import { UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import { getPortalHost } from "@/lib/portalUrls";
+
+const AGENTES_HOST = getPortalHost("agentes");
 
 export default function Registro() {
   const { toast } = useToast();
