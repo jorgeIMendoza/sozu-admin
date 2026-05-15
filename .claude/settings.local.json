@@ -35,7 +35,8 @@
       "Read(//c/Users/menco/.claude/skills/**)",
       "Read(//c/Users/menco/.claude/plugins/**)",
       "Bash(git -C \"C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu\\\\sozu-docs\" pull)",
-      "Bash(start *)"
+      "Bash(start *)",
+      "Bash(git -C 'C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu$repo' status --short)"
     ]
   },
   "enableAllProjectMcpServers": true,
