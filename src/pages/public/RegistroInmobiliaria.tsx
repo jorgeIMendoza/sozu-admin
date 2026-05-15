@@ -4,12 +4,15 @@ import { Building2, UserCheck, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import { getPortalHost } from "@/lib/portalUrls";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const INMOB_HOST = getPortalHost("inmobiliarias");
 
 type RepLegalData = {
   nombre: string;
