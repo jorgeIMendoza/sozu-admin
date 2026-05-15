@@ -31,7 +31,11 @@
       "Bash(python *)",
       "Read(//c/Users/menco/OneDrive/Escritorio/admin-sozu/sozu-docs/**)",
       "Bash(gh workflow *)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Read(//c/Users/menco/.claude/skills/**)",
+      "Read(//c/Users/menco/.claude/plugins/**)",
+      "Bash(git -C \"C:\\\\Users\\\\menco\\\\OneDrive\\\\Escritorio\\\\admin-sozu\\\\sozu-docs\" pull)",
+      "Bash(start *)"
     ]
   },
   "enableAllProjectMcpServers": true,
