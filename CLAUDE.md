@@ -87,18 +87,30 @@ npm run dev   # arranca en http://localhost:5173
 
 ## Reglas de Base de Datos
 
+### Usuario propietario
+
+El usuario `jorge.mendoza@sozu.com` es el propietario del sistema. Cuando sea él quien solicite ejecutar DDLs, DELETEs o modificar Edge Functions, **sí está permitido hacerlo directamente** sin restricciones. Las reglas restrictivas de abajo aplican únicamente para cualquier otro usuario.
+
+---
+
 ### DDL (CREATE, ALTER, DROP, TRUNCATE...)
 
 **Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el SQL y pedirle al usuario que lo ejecute él mismo en la BD.
+
+**Excepción:** si el usuario es `jorge.mendoza@sozu.com`, se puede ejecutar el DDL directamente previa confirmación explícita.
 
 ### DML
 
 - **SELECT, INSERT, UPDATE:** Se pueden ejecutar, pero siempre se debe mostrar el SQL antes de correrlo y esperar aprobación explícita del usuario.
 - **DELETE:** Prohibido ejecutarlo. Solo generar el SQL y solicitar al usuario que lo ejecute él mismo en la BD.
 
+**Excepción DELETE:** si el usuario es `jorge.mendoza@sozu.com`, se puede ejecutar el DELETE directamente previa confirmación explícita.
+
 ### Edge Functions
 
 **Prohibido crear o modificar Edge Functions bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el código Deno y pedirle al usuario que lo despliegue o modifique manualmente.
+
+**Excepción:** si el usuario es `jorge.mendoza@sozu.com`, se pueden crear y modificar los archivos de Edge Functions directamente en el repo local.
 
 ---
 
