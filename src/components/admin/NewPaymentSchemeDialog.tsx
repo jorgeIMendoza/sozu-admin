@@ -250,9 +250,12 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                 name="porcentaje_mensualidades"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Porcentaje Mensualidades (%)</FormLabel>
+                    <FormLabel>
+                      Porcentaje Mensualidades (%)
+                      {tramosEnabled && <span className="ml-1 text-xs text-muted-foreground">(escalonado)</span>}
+                    </FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" {...field} />
+                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" disabled={tramosEnabled} {...field} value={tramosEnabled ? "0" : field.value} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -268,14 +271,16 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                   <FormItem>
                     <FormLabel>
                       Porcentaje Entrega (%) 
-                      {remainingPercentage !== 100 && (
+                      {tramosEnabled ? (
+                        <span className="ml-1 text-xs text-muted-foreground">(se calcula al generar la oferta)</span>
+                      ) : remainingPercentage !== 100 && (
                         <span className="text-sm text-muted-foreground ml-1">
                           (Restante: {remainingPercentage.toFixed(2)}%)
                         </span>
                       )}
                     </FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" {...field} />
+                      <Input type="number" min="0" max="100" step="0.01" placeholder="0.00" disabled={tramosEnabled} {...field} value={tramosEnabled ? "0" : field.value} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -287,12 +292,17 @@ export const NewPaymentSchemeDialog = ({ projectId, onSchemeAdded, canCreate = t
                 render={({ field }) => {
                   return (
                     <FormItem>
-                      <FormLabel>Número de Mensualidades</FormLabel>
+                      <FormLabel>
+                        Número de Mensualidades
+                        {tramosEnabled && <span className="ml-1 text-xs text-muted-foreground">(en tramos)</span>}
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="number" min="0" 
                           placeholder="12" 
+                          disabled={tramosEnabled}
                           {...field}
+                          value={tramosEnabled ? "0" : field.value}
                         />
                       </FormControl>
                       <FormMessage />
