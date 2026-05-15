@@ -108,7 +108,7 @@ export default function Registro() {
           <p className="text-xs mb-7" style={{ color: 'hsl(0 0% 55%)' }}>
             Si no lo encuentras, revisa tu carpeta de spam o correo no deseado.
           </p>
-          <a href="https://agentes.sozu.com/login" className="block">
+          <a href="${AGENTES_HOST}/login" className="block">
             <button type="button" className="login-btn-outline">
               Ir a iniciar sesión
             </button>
@@ -198,7 +198,7 @@ export default function Registro() {
           </button>
 
           {/* Login link */}
-          <a href="https://agentes.sozu.com/login" className="block">
+          <a href="${AGENTES_HOST}/login" className="block">
             <button type="button" className="login-btn-outline">
               ¿Ya tienes cuenta? Inicia sesión
             </button>
