@@ -24,9 +24,10 @@ const formSchema = z.object({
   const mensualidades = parseFloat(data.porcentaje_mensualidades) || 0;
   const entrega = parseFloat(data.porcentaje_entrega) || 0;
   const total = enganche + mensualidades + entrega;
+  if (mensualidades === 0 && entrega === 0) return enganche > 0 && enganche <= 100;
   return Math.abs(total - 100) < 0.01;
 }, {
-  message: "Los porcentajes deben sumar exactamente 100%",
+  message: "Los porcentajes deben sumar 100% (o usar esquema escalonado con mensualidades=0 y entrega=0)",
   path: ["porcentaje_entrega"],
 }).refine((data) => {
   const mensualidades = parseFloat(data.porcentaje_mensualidades) || 0;
@@ -98,22 +99,25 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated, canUpdate = t
 
   const mensualidadesPct = parseFloat(watchedMensualidades || "0");
   const numMensualidades = parseInt(watchedNumMensualidades || "0");
-  const showTramos = mensualidadesPct > 0 && numMensualidades > 1;
-
-  useEffect(() => {
-    if (!showTramos && tramosEnabled) {
-      setTramosEnabled(false);
-      setTramos([]);
-    }
-  }, [showTramos, tramosEnabled]);
+  // Always show the escalonado section so users can enable tramos-only mode.
+  const showTramos = true;
 
   const remainingPercentage = 100 - (parseFloat(watchedEnganche || "0") + parseFloat(watchedMensualidades || "0"));
 
   useEffect(() => {
-    if (mensualidadesPct === 0) {
+    if (mensualidadesPct === 0 && !tramosEnabled) {
       form.setValue("numero_mensualidades", "0");
     }
-  }, [watchedMensualidades, form]);
+  }, [watchedMensualidades, tramosEnabled, form]);
+
+  // When tramos-mode is enabled, force mensualidades / entrega / num. mensualidades to 0.
+  useEffect(() => {
+    if (tramosEnabled) {
+      form.setValue("porcentaje_mensualidades", "0");
+      form.setValue("porcentaje_entrega", "0");
+      form.setValue("numero_mensualidades", "0");
+    }
+  }, [tramosEnabled, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>, event?: any) => {
     if (event) {
@@ -122,14 +126,24 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated, canUpdate = t
     }
     
     try {
-      // Validate tramos if enabled
-      if (tramosEnabled && tramos.length > 0) {
+      const tramosMode = tramosEnabled && tramos.length > 0;
+
+      // Validate tramos if enabled (tramos-driven schemes)
+      if (tramosMode) {
         const sumTramos = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
-        const totalMens = parseInt(values.numero_mensualidades) || 0;
-        if (sumTramos !== totalMens) {
+        if (sumTramos <= 0) {
           toast({
             title: "Error de validación",
-            description: `La suma de mensualidades en los tramos (${sumTramos}) debe ser igual al total de mensualidades (${totalMens}).`,
+            description: "Cada tramo debe tener un número de mensualidades o una fecha límite que resuelva a más de 0 meses.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const tramoInvalido = tramos.find(t => !t.monto_mensualidad || t.monto_mensualidad <= 0);
+        if (tramoInvalido) {
+          toast({
+            title: "Error de validación",
+            description: "Cada tramo escalonado debe tener un monto por mensualidad mayor a 0.",
             variant: "destructive",
           });
           return;
@@ -139,11 +153,11 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated, canUpdate = t
       const updateData: any = {
         nombre: values.nombre,
         porcentaje_enganche: parseFloat(values.porcentaje_enganche) || 0,
-        porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades) || 0,
-        porcentaje_entrega: parseFloat(values.porcentaje_entrega) || 0,
-        numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+        porcentaje_mensualidades: tramosMode ? 0 : (parseFloat(values.porcentaje_mensualidades) || 0),
+        porcentaje_entrega: tramosMode ? 0 : (parseFloat(values.porcentaje_entrega) || 0),
+        numero_mensualidades: tramosMode ? 0 : (parseInt(values.numero_mensualidades) || 0),
         porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
-        tramos_mensualidad: tramosEnabled && tramos.length > 0 ? tramos : null,
+        tramos_mensualidad: tramosMode ? tramos : null,
       };
 
       const { error } = await supabase
