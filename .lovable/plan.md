@@ -1,88 +1,74 @@
-# Portal de Alta Dirección
 
-Crear un nuevo portal ejecutivo `/admin/portal-alta-direccion/*` inspirado en el proyecto **Sozu Executive Suite**, con vista 360° para directivos: dashboard financiero/comercial, pipeline, cobranza, contratos, facturas, comisiones, red comercial, citas, ofertas, reportes, auditoría y configuración. Acceso restringido a **Super Admin (rol_id === 1)**, mismo patrón que Portal Escrituración.
+# Plan: URLs por rol y por ambiente
 
-## Estrategia de datos (mixta)
-- **De BD real (consultas read-only):** propiedades, desarrollos/proyectos, cuentas de cobranza, ofertas, contratos, comisiones, usuarios/personas, citas, facturas. Reutilizar hooks existentes (`useCuentasCobranzaPaginadas`, `useCobranzaDashboard`, `useInventarioDisponible`, etc.) cuando aplique.
-- **Mock data** (en `src/data/altaDireccion/mockData.ts`) para módulos sin tabla clara aún: tendencias mensuales agregadas, KPIs ejecutivos compuestos, auditoría ejemplo.
-- Cada página marca claramente con un `Pill` "Datos en vivo" o "Demo" cuando la fuente sea mock.
+## Objetivo
 
-## Permisos
-- Super Admin (rol_id 1) — todo el portal.
-- Bloqueo en `PermissionRoute.tsx` análogo al de Portal Escrituración.
-- Sin DDL/DML — no se requieren cambios de BD ni nueva tabla de roles.
+1. El link "Confirmar mi Email" del correo de registro de agente debe apuntar a `agentes.sozu.com` (no `inmobiliarias.sozu.com`).
+2. El correo de credenciales (template Postmark `41353048`) para agentes debe mostrar `https://agentes.sozu.com/auth/login` como portal.
+3. En cualquier ambiente que **no** sea producción (`VITE_ENVIRONMENT !== 'production'` en frontend, equivalente en edge functions), todos los hosts `admin.sozu.com`, `agentes.sozu.com`, `inmobiliarias.sozu.com`, `clientes.sozu.com` deben reemplazarse por sus variantes `*-dev.sozu.com`.
 
-## Estructura del portal
+## Detalle por capa
 
-```text
-/admin/portal-alta-direccion/
-├── dashboard                  Dashboard ejecutivo (KPIs financieros + 3 gráficas recharts)
-├── citas                      Citas comerciales (vivo: configuracion_citas_horarios)
-├── prospectos                 Prospectos / leads (vivo: leads)
-├── pipeline                   Pipeline de oportunidades por etapa
-├── ofertas                    Ofertas + aprobaciones (vivo: ofertas)
-│
-├── cobranza                   Resumen cobranza (vivo: cuentas_cobranza, hook existente)
-├── contratos                  Contratos (vivo: documentos_propiedad / mifiel)
-├── facturas                   Facturas emitidas (vivo: facturas)
-├── comisiones                 Comisiones aprobadas/pagadas (vivo: comisiones)
-│
-├── red-comercial              Personas (agentes, brokers, embajadores) (vivo: usuarios)
-├── reportes                   Reportes ejecutivos (mix vivo + agregados mock)
-├── auditoria                  Bitácora (mock)
-└── configuracion              Preferencias del portal (mock)
-```
+### A) Frontend — helper centralizado de URLs por portal
 
-## Cambios en código (frontend únicamente)
+Nuevo archivo `src/lib/portalUrls.ts` que exporta:
 
-**Nuevos archivos**
-- `src/components/admin/portal-alta-direccion/PortalAltaDireccionLayout.tsx` — sidebar con 3 grupos (Comercial, Operación, Administración) + header, basado en el de Portal Escrituración.
-- `src/components/admin/portal-alta-direccion/ui.tsx` — `Kpi`, `Panel`, `PageHeader`, `Pill` (idéntico patrón).
-- `src/components/admin/portal-alta-direccion/GlobalFilterBar.tsx` — filtros globales (proyecto, canal, periodo, búsqueda) con contexto local.
-- `src/contexts/AltaDireccionFiltersContext.tsx` — provider para los filtros globales.
-- `src/data/altaDireccion/mockData.ts` — series mensuales, KPIs compuestos, eventos auditoría.
-- `src/pages/admin/portal-alta-direccion/` — un archivo por página (Dashboard, Citas, Prospectos, Pipeline, Ofertas, Cobranza, Contratos, Facturas, Comisiones, RedComercial, Reportes, Auditoria, Configuracion). 13 archivos.
-- `src/hooks/useAltaDireccionDashboard.ts` — agrega métricas de varias tablas (counts) en una sola query.
+- `IS_PRODUCTION = ENVIRONMENT === 'production'` (lee `ENVIRONMENT` de `src/lib/config.ts`).
+- `getPortalHost(portal: 'admin' | 'agentes' | 'inmobiliarias' | 'clientes'): string` que devuelve `https://<portal>.sozu.com` en prod y `https://<portal>-dev.sozu.com` en cualquier otro ambiente.
+- Helpers `getPortalLoginUrl(portal)` y `getPortalChangePasswordUrl(portal)`.
 
-**Archivos a modificar**
-- `src/App.tsx` — registrar 13 rutas lazy `portal-alta-direccion/*`.
-- `src/components/admin/AdminLayout.tsx` — agregar branch `if (location.pathname.startsWith("/admin/portal-alta-direccion")) return <PortalAltaDireccionLayout />`.
-- `src/components/auth/PermissionRoute.tsx` — agregar guard que solo deja pasar a `rol_id === 1`.
-- `src/utils/validRoutes.ts` — agregar las 13 rutas.
-- `src/components/admin/AdminSidebar.tsx` — entrada "Portal Alta Dirección" visible solo para Super Admin (estilo `ExternalLink`, igual a Portal Cobranza).
+Refactorizar para usar el helper:
 
-## Permisos al Super Admin
-No se requiere DDL/DML. La autorización se hace en el cliente con `profile.rol_id === 1`. Si quieres también ocultarlo del menú dinámico para otros roles ya queda automáticamente fuera porque no se registra en `submenus`.
+- `src/pages/auth/ConfirmacionEmail.tsx` — `getPortalHost` local actualmente hardcodea `clientes.sozu.com` / `inmobiliarias.sozu.com`. Cambiarlo para mapear:
+  - `portal=clientes` → `clientes`
+  - `portal=agentes` → `agentes` (nuevo)
+  - default / `inmobiliarias` → `inmobiliarias`
+  y obtener el host vía el helper (con sufijo `-dev` automático fuera de prod).
+- Otros archivos detectados con literales `*.sozu.com` (a revisar y migrar al helper donde apliquen): `src/App.tsx`, `src/pages/public/RegistroInmobiliaria.tsx`, `src/pages/public/Registro.tsx`, `src/pages/public/AgentesLanding.tsx`, `src/hooks/useDynamicMenus.ts`, `src/hooks/useClienteResumenFinanciero.ts`, varias páginas en `src/pages/admin/**`. Solo se sustituirán las que apunten a hosts del portal — no se tocarán correos como `notificaciones@sozu.com`.
 
-## Plan de ejecución (en pasos / chats separados)
+### B) Edge Functions (entregables en `Ejecuciones_manuales/` para que tú las despliegues)
 
-**Paso 1 — Esqueleto**
-- Layout, ui.tsx, FilterBar/contexto, ruteo en App.tsx, guard en PermissionRoute, AdminLayout branch, validRoutes, entrada en AdminSidebar para Super Admin.
-- Páginas vacías (placeholder con PageHeader) para validar navegación.
+Como por convención del proyecto **no puedo modificar/desplegar edge functions**, generaré los archivos `.md` con el código Deno completo listo para reemplazar. Cambios requeridos:
 
-**Paso 2 — Dashboard ejecutivo + datos mixtos**
-- `useAltaDireccionDashboard` con counts agregados (propiedades vendidas/apartadas/disponibles, ofertas pendientes, cuentas cobranza vencidas, comisiones devengadas).
-- 3 gráficas recharts (ingresos por desarrollo, ingresos por canal, tendencia mensual) — agregados mock.
-- 12 KPIs en 3 filas, badge "Datos en vivo" / "Demo" por tarjeta.
+1. **`supabase/functions/registro-publico/index.ts`**
+   - Cambiar la constante `AGENTE_PORTAL_URL = 'https://inmobiliarias.sozu.com'` para que use un helper que resuelva por ambiente y portal `agentes`. El `confirmationUrl` que se construye (`${AGENTE_PORTAL_URL}/auth/confirmacion-email?...&portal=agentes&...`) quedará apuntando a `agentes.sozu.com` (o `agentes-dev.sozu.com` fuera de prod).
+   - Nota: el query param `portal` actualmente envía `inmobiliarias`; cambiarlo a `agentes` para que `ConfirmacionEmail.tsx` redirija al host correcto.
 
-**Paso 3 — Comercial (Citas, Prospectos, Pipeline, Ofertas)**
-- Tablas read-only con paginación usando hooks existentes; drawers de detalle simples.
+2. **`supabase/functions/post-confirmacion-registro/index.ts`**
+   - `getPortalConfig(rolId)` actualmente devuelve `inmobiliarias.sozu.com` para no-cliente. Reemplazar por lógica que use rol → portal (`agentes` para rol `Agente Inmobiliario`, `inmobiliarias` para rol 4, `clientes` para rol 23) y luego resuelva el host por ambiente. El `detalles` del template `41353048` mostrará `https://agentes.sozu.com/auth/login` (o `-dev` fuera de prod).
 
-**Paso 4 — Operación (Cobranza, Contratos, Facturas, Comisiones)**
-- KPIs + tablas resumen con datos vivos (sin acciones de edición — es vista ejecutiva).
+3. **`supabase/functions/notificar-confirmacion-email/index.ts`**
+   - Misma corrección: `portalUrl` para `rolId === 3` debe ser `https://agentes.sozu.com/auth/login` (no `inmobiliarias.sozu.com`), respetando el ambiente.
 
-**Paso 5 — Administración (Red Comercial, Reportes, Auditoría, Configuración)**
-- Red Comercial: lista de agentes/brokers/embajadores (vivo).
-- Reportes: tarjetas con descargas (placeholder).
-- Auditoría / Configuración: mock.
+4. **`supabase/functions/reenviar-confirmacion-email/index.ts`**
+   - `host` actualmente: cliente → `clientes.sozu.com`, otros → `inmobiliarias.sozu.com`. Cambiar a: cliente → `clientes`, agente (rol 3) → `agentes`, inmobiliaria (rol 4) → `inmobiliarias`, todos resueltos por ambiente.
 
-**Paso 6 — QA y pulido**
-- Verificar acceso bloqueado para roles ≠ 1, navegación, breakpoints mobile, performance del dashboard.
+5. Revisión de otras edge functions con literales de host (`asignar-propiedad`, `enviar-aviso-bulk`, `enviar-oferta-email`, `notificar-agentes`, `registro-inmobiliaria-publica`, `seed-admin-user`, etc.): agregar el mismo helper para que respete `-dev` fuera de prod. No se tocan literales de email (`notificaciones@sozu.com`).
 
-## Detalles técnicos clave
-- Sidebar reutiliza patrón visual de `PortalEscrituracionLayout` (244px fijo en desktop, Sheet en mobile, grupos con label uppercase tracking-widest).
-- Reglas de terminología: "Desarrollo", "Departamento", "Disponible", "2 citas", 2 decimales en montos, emails normalizados.
-- Sin edge functions, sin DDL, sin DML — todo es UI + hooks de lectura. Por lo tanto **no se generan archivos en `Ejecuciones_manuales/`** en esta entrega.
-- Solo Super Admin lo ve; no se toca el sistema dinámico de menús (`submenus` / `usuarios_submenus_excluidos`).
+   Helper sugerido (Deno) inyectado en cada función:
+   ```ts
+   const IS_PROD = (Deno.env.get('ENVIRONMENT') ?? '').toLowerCase() === 'production';
+   const portalHost = (p: 'admin'|'agentes'|'inmobiliarias'|'clientes') =>
+     `https://${p}${IS_PROD ? '' : '-dev'}.sozu.com`;
+   ```
+   Requiere que el secret `ENVIRONMENT` exista en Supabase Edge Functions. Si no, se asume no-prod (sufijo `-dev`). Te indicaré en el `.md` que lo configures.
 
-¿Procedo con el Paso 1 (esqueleto del portal navegable) tras tu aprobación, y los pasos 2-6 los vamos liberando uno por uno en chats subsecuentes?
+### C) Entregables manuales
+
+Un solo archivo nuevo:
+
+- `Ejecuciones_manuales/05_urls_por_portal_y_ambiente.md` con:
+  - Bloque 1: secret `ENVIRONMENT=production` (solo en prod) para edge functions.
+  - Bloque 2..N: código Deno completo de cada edge function modificada (las 4-5 listadas arriba), cada una en su propio bloque con encabezado y fecha.
+
+## Lo que NO cambia
+
+- Direcciones `From:` de correos (`notificaciones@sozu.com`).
+- Lógica de negocio, templates de Postmark, autenticación, RLS.
+- `.env*` (ya están correctos para dev).
+
+## Resultado esperado
+
+- Agente que se registra recibe link de confirmación a `https://agentes(-dev).sozu.com/auth/confirmacion-email?...`.
+- Tras confirmar, recibe correo de credenciales con portal `https://agentes(-dev).sozu.com/auth/login`.
+- En preview/dev, todos los enlaces a portales usan `*-dev.sozu.com`; en producción usan los dominios sin sufijo.
