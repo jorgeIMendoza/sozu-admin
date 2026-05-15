@@ -211,10 +211,13 @@ const queryClient = new QueryClient({
 });
 
 const hostname = window.location.hostname;
-const isRegistroSubdomain = hostname === 'registro.sozu.com';
-const isInmobiliariasSubdomain = hostname === 'inmobiliarias.sozu.com';
-const isAgentesSubdomain = hostname === 'agentes.sozu.com';
-const isClientesSubdomain = hostname === 'clientes.sozu.com';
+// Match both production (portal.sozu.com) and dev (portal-dev.sozu.com) subdomains
+const matchPortal = (portal: string) =>
+  hostname === `${portal}.sozu.com` || hostname === `${portal}-dev.sozu.com`;
+const isRegistroSubdomain = matchPortal('registro');
+const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
+const isAgentesSubdomain = matchPortal('agentes');
+const isClientesSubdomain = matchPortal('clientes');
 
 // Determine portal context from subdomain for login page branding
 const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | null => {
