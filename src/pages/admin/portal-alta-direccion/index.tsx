@@ -1,18 +1,19 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  TrendingUp, Percent, Receipt, Clock, Building2, FileText,
+  TrendingUp, Percent, Receipt, Clock, FileText,
   CheckCircle, AlertTriangle, Banknote, Landmark, Users, History,
   CalendarCheck, Briefcase, FileSignature, BarChart3, Settings, UserSearch,
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend,
-} from "recharts";
 import { Kpi, Panel, PageHeader, Pill } from "@/components/admin/portal-alta-direccion/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  REVENUE_BY_PROJECT, REVENUE_BY_CHANNEL, MONTHLY_TREND, CHART_COLORS,
-  AUDIT_EVENTS, fmtMxn,
-} from "@/data/altaDireccion/mockData";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAltaDireccionFilters } from "@/contexts/AltaDireccionFiltersContext";
+import { AUDIT_EVENTS, fmtMxn } from "@/data/altaDireccion/mockData";
 
 const DemoBadge = () => (
   <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Datos demo</Pill>
@@ -22,201 +23,636 @@ const LiveBadge = () => (
 );
 
 // ============================ Dashboard ============================
-export function AltaDireccionDashboard() {
-  return (
-    <>
-      <PageHeader
-        title="Dashboard Ejecutivo"
-        description="Resumen financiero y comercial de SOZU"
-        action={<DemoBadge />}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Ingresos Totales" value={fmtMxn(96500000)} icon={TrendingUp} tone="success" hint="+12.3% vs mes anterior" />
-        <Kpi label="Comisiones Cobradas" value={fmtMxn(14475000)} icon={Percent} tone="primary" hint="+8.5% vs mes anterior" />
-        <Kpi label="Facturas Emitidas" value="87" icon={Receipt} hint={fmtMxn(78200000)} />
-        <Kpi label="Facturas Pendientes" value="14" icon={Clock} tone="warning" hint={fmtMxn(12800000)} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Departamentos Vendidos" value="124" icon={Building2} tone="success" hint="de 200 totales" />
-        <Kpi label="Departamentos Apartados" value="18" icon={Building2} tone="primary" hint="en proceso" />
-        <Kpi label="Departamentos Disponibles" value="58" icon={Building2} hint="29% inventario" />
-        <Kpi label="Ofertas Pendientes" value="7" icon={FileText} tone="warning" hint="requieren aprobación" />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Comisiones Devengadas" value={fmtMxn(5200000)} icon={Percent} tone="primary" />
-        <Kpi label="Comisiones Aprobadas" value={fmtMxn(3800000)} icon={CheckCircle} tone="success" />
-        <Kpi label="Contratos Pendientes" value="5" icon={FileSignature} tone="warning" />
-        <Kpi label="Alertas Críticas" value="3" icon={AlertTriangle} tone="destructive" />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Panel title="Ingresos por Desarrollo" description="Total acumulado por proyecto">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={REVENUE_BY_PROJECT}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v/1000000).toFixed(0)}M`} />
-              <Tooltip formatter={(v: number) => fmtMxn(v)} />
-              <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Panel>
-
-        <Panel title="Ingresos por Canal" description="Distribución por canal de venta">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={REVENUE_BY_CHANNEL} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={(e) => e.name}>
-                {REVENUE_BY_CHANNEL.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v: number) => fmtMxn(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-        </Panel>
-      </div>
-
-      <Panel title="Tendencia Mensual" description="Ingresos y comisiones — últimos 6 meses" className="mt-4">
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={MONTHLY_TREND}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v/1000000).toFixed(1)}M`} />
-            <Tooltip formatter={(v: number) => fmtMxn(v)} />
-            <Legend />
-            <Line type="monotone" dataKey="ingresos" stroke={CHART_COLORS[0]} strokeWidth={2} />
-            <Line type="monotone" dataKey="comisiones" stroke={CHART_COLORS[1]} strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
-      </Panel>
-    </>
-  );
-}
+// Movido a archivo dedicado para alojar mocks de filtrado + estado local.
+export { default as AltaDireccionDashboard } from "./AltaDireccionDashboardPage";
 
 // ============================ Comercial ============================
-const CITAS = [
-  { id: "CITA-2041", cliente: "María García López", fecha: "2026-05-14", hora: "10:00", desarrollo: "Daiku",   agente: "Carlos Mendoza", estado: "confirmada" },
-  { id: "CITA-2042", cliente: "Juan Pérez Silva",   fecha: "2026-05-14", hora: "11:30", desarrollo: "Bottura", agente: "Ana Ruiz",       estado: "pendiente"  },
-  { id: "CITA-2043", cliente: "Sofía Rivera",       fecha: "2026-05-15", hora: "09:00", desarrollo: "Monócolo",agente: "Carlos Mendoza", estado: "confirmada" },
+type CitaAgente = {
+  nombre_legal: string;
+  usuarios: { rol_id: number | null; roles: { nombre: string } | null }[] | null;
+};
+type CitaRow = {
+  id: number;
+  fecha: string;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  fecha_creacion: string | null;
+  id_estatus_cita: number | null;
+  estatus: string | null;
+  activo: boolean;
+  proyectos: { nombre: string } | null;
+  estatus_cita: { nombre: string } | null;
+  tipos_cita: { nombre: string } | null;
+  prospecto: { nombre_legal: string } | null;
+  agente: CitaAgente | null;
+};
+
+const ESTATUS_TONE: Record<number, string> = {
+  1: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  2: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  3: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+};
+
+const fmtFolio = (id: number) => `CITA-${String(id).padStart(4, "0")}`;
+const fmtHora = (t: string | null) => (t ? t.slice(0, 5) : "—");
+
+function fmtCreacion(ts: string | null): { fecha: string; hora: string } {
+  if (!ts) return { fecha: "—", hora: "" };
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return { fecha: "—", hora: "" };
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return { fecha: `${yyyy}-${mm}-${dd}`, hora: `${hh}:${mi}` };
+}
+
+const norm = (s: string | null | undefined) =>
+  (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+const CHANNEL_ROLES: Record<string, string[]> = {
+  inmobiliaria: ["inmobiliaria", "agente inmobiliario"],
+  broker: ["broker"],
+  embajador: ["embajador"],
+  referido: ["referido"],
+  interno: ["agente interno", "vendedor", "super administrador", "administrador de proyecto"],
+};
+
+function getPeriodRange(period: string | null): [Date, Date] | null {
+  if (!period) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  if (period === "this_month") return [new Date(y, m, 1), new Date(y, m + 1, 1)];
+  if (period === "last_month") return [new Date(y, m - 1, 1), new Date(y, m, 1)];
+  if (period === "this_quarter") {
+    const qStart = Math.floor(m / 3) * 3;
+    return [new Date(y, qStart, 1), new Date(y, qStart + 3, 1)];
+  }
+  if (period === "this_year") return [new Date(y, 0, 1), new Date(y + 1, 0, 1)];
+  return null;
+}
+
+function getAgenteRol(c: CitaRow): string | null {
+  const u = c.agente?.usuarios?.[0];
+  return u?.roles?.nombre || null;
+}
+
+type EstadoKey = "agendada" | "pendiente" | "confirmada" | "asistio" | "cancelada" | "otro";
+
+function getEstadoKey(c: CitaRow): EstadoKey {
+  if (!c.activo || c.estatus === "cancelada") return "cancelada";
+  if (c.estatus === "asistio") return "asistio";
+  if (c.id_estatus_cita === 1) return "agendada";
+  if (c.id_estatus_cita === 2) return "pendiente";
+  if (c.id_estatus_cita === 3) return "confirmada";
+  return "otro";
+}
+
+const ESTADO_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos los estados" },
+  { value: "agendada", label: "Agendada" },
+  { value: "pendiente", label: "Pendiente de confirmación" },
+  { value: "confirmada", label: "Confirmada" },
+  { value: "asistio", label: "Asistió" },
+  { value: "cancelada", label: "Cancelada" },
 ];
 
 export function AltaDireccionCitas() {
+  const { filters } = useAltaDireccionFilters();
+  const [estadoFilter, setEstadoFilter] = useState<string>("all");
+  const queryClient = useQueryClient();
+
+  const { data: citas = [], isLoading, error } = useQuery<CitaRow[]>({
+    queryKey: ["alta-direccion-citas"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("reservas_citas")
+        .select(
+          "id, fecha, hora_inicio, hora_fin, fecha_creacion, id_estatus_cita, estatus, activo, " +
+          "proyectos(nombre), estatus_cita(nombre), tipos_cita(nombre), " +
+          "prospecto:personas!reservas_citas_id_persona_prospecto_fkey(nombre_legal), " +
+          "agente:personas!reservas_citas_id_agente_fkey(nombre_legal, usuarios(rol_id, roles(nombre)))"
+        )
+        .order("fecha", { ascending: false })
+        .order("hora_inicio", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return (data || []) as CitaRow[];
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    const channel = (supabase as any)
+      .channel("alta-direccion-citas-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reservas_citas" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["alta-direccion-citas"] });
+        }
+      )
+      .subscribe();
+    return () => {
+      (supabase as any).removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  const parseFecha = (f: string) => {
+    const [y, m, d] = f.split("-").map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
+  const filtradas = useMemo(() => {
+    const projectQ = filters.projectId ? norm(filters.projectId) : null;
+    const channelRoles = filters.channel ? CHANNEL_ROLES[filters.channel] : null;
+    const periodRange = getPeriodRange(filters.period);
+    const searchQ = filters.search ? norm(filters.search) : null;
+
+    return citas.filter((c) => {
+      if (projectQ) {
+        if (norm(c.proyectos?.nombre) !== projectQ) return false;
+      }
+      if (channelRoles) {
+        const rol = norm(getAgenteRol(c));
+        if (!rol || !channelRoles.includes(rol)) return false;
+      }
+      if (periodRange) {
+        const d = parseFecha(c.fecha);
+        if (d < periodRange[0] || d >= periodRange[1]) return false;
+      }
+      if (estadoFilter !== "all") {
+        if (getEstadoKey(c) !== estadoFilter) return false;
+      }
+      if (searchQ) {
+        const hay = [
+          c.prospecto?.nombre_legal,
+          c.agente?.nombre_legal,
+          c.proyectos?.nombre,
+          fmtFolio(c.id),
+        ].map(norm).join(" ");
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+  }, [citas, filters, estadoFilter]);
+
+  const kpis = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = today.getDay();
+    const lunesOffset = day === 0 ? -6 : 1 - day;
+    const lunes = new Date(today);
+    lunes.setDate(lunes.getDate() + lunesOffset);
+    const finSemana = new Date(lunes);
+    finSemana.setDate(finSemana.getDate() + 7);
+
+    let semana = 0, confirmadas = 0, pendientes = 0;
+    for (const c of filtradas) {
+      const d = parseFecha(c.fecha);
+      if (d >= lunes && d < finSemana) semana++;
+      if (!c.activo || c.estatus === "cancelada") continue;
+      if (c.id_estatus_cita === 3) confirmadas++;
+      else if (c.id_estatus_cita === 1 || c.id_estatus_cita === 2) pendientes++;
+    }
+    return { semana, confirmadas, pendientes };
+  }, [filtradas]);
+
+  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all");
+  const totalDesc = hayFiltros
+    ? `${filtradas.length} de ${citas.length} citas`
+    : `${citas.length} citas en total`;
+
+  const estadoSelect = (
+    <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+      <SelectTrigger className="h-8 w-[200px] text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ESTADO_OPTIONS.map((o) => (
+          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
     <>
-      <PageHeader title="Citas Comerciales" description="Visitas y showrooms agendados" action={<DemoBadge />} />
+      <PageHeader title="Citas Comerciales" description="Visitas y showrooms agendados" action={<LiveBadge />} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <Kpi label="Citas esta semana" value="2 citas" icon={CalendarCheck} tone="primary" />
-        <Kpi label="Confirmadas" value="2 citas" icon={CheckCircle} tone="success" />
-        <Kpi label="Pendientes" value="1 cita" icon={Clock} tone="warning" />
+        <Kpi label="Citas esta semana" value={`${kpis.semana} ${kpis.semana === 1 ? "cita" : "citas"}`} icon={CalendarCheck} tone="primary" />
+        <Kpi label="Confirmadas" value={`${kpis.confirmadas} ${kpis.confirmadas === 1 ? "cita" : "citas"}`} icon={CheckCircle} tone="success" />
+        <Kpi label="Pendientes" value={`${kpis.pendientes} ${kpis.pendientes === 1 ? "cita" : "citas"}`} icon={Clock} tone="warning" />
       </div>
-      <Panel title="Próximas citas">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Folio</TableHead><TableHead>Cliente</TableHead><TableHead>Fecha</TableHead>
-              <TableHead>Hora</TableHead><TableHead>Desarrollo</TableHead><TableHead>Agente</TableHead><TableHead>Estado</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {CITAS.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.id}</TableCell>
-                <TableCell>{c.cliente}</TableCell>
-                <TableCell>{c.fecha}</TableCell>
-                <TableCell>{c.hora}</TableCell>
-                <TableCell>{c.desarrollo}</TableCell>
-                <TableCell>{c.agente}</TableCell>
-                <TableCell><Pill>{c.estado}</Pill></TableCell>
+      <Panel title="Historial de citas" description={totalDesc} action={estadoSelect}>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Cargando citas…</p>
+        ) : error ? (
+          <p className="text-sm text-red-600 py-6 text-center">Error al cargar citas: {(error as Error).message}</p>
+        ) : filtradas.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            {hayFiltros ? "No hay citas que coincidan con los filtros." : "No hay citas registradas."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Folio</TableHead><TableHead>Tipo</TableHead><TableHead>Cliente</TableHead>
+                <TableHead>Cita (fecha · hora)</TableHead>
+                <TableHead>Creada (fecha · hora)</TableHead>
+                <TableHead>Desarrollo</TableHead><TableHead>Agente</TableHead><TableHead>Estado</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtradas.map((c) => {
+                const key = getEstadoKey(c);
+                const tone =
+                  key === "cancelada" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                  : key === "asistio" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : c.id_estatus_cita ? ESTATUS_TONE[c.id_estatus_cita]
+                  : undefined;
+                const estadoLabel =
+                  key === "cancelada" ? "Cancelada"
+                  : key === "asistio" ? "Asistió"
+                  : c.estatus_cita?.nombre || c.estatus || "—";
+                const creada = fmtCreacion(c.fecha_creacion);
+                return (
+                  <TableRow key={c.id} className={key === "cancelada" ? "opacity-60" : undefined}>
+                    <TableCell className="font-medium">{fmtFolio(c.id)}</TableCell>
+                    <TableCell>
+                      <Pill className="bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                        {c.tipos_cita?.nombre || "—"}
+                      </Pill>
+                    </TableCell>
+                    <TableCell>{c.prospecto?.nombre_legal || "—"}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{c.fecha}</div>
+                      <div className="text-xs text-muted-foreground">{fmtHora(c.hora_inicio)}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{creada.fecha}</div>
+                      <div className="text-xs text-muted-foreground">{creada.hora}</div>
+                    </TableCell>
+                    <TableCell>{c.proyectos?.nombre || "—"}</TableCell>
+                    <TableCell>{c.agente?.nombre_legal || "—"}</TableCell>
+                    <TableCell><Pill className={tone}>{estadoLabel}</Pill></TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </Panel>
     </>
   );
 }
 
-const PROSPECTOS = [
-  { id: "LEAD-9001", nombre: "Roberto Gómez", canal: "Inmobiliaria", desarrollo: "Daiku",   etapa: "Nuevo",    score: 78 },
-  { id: "LEAD-9002", nombre: "Patricia Luna", canal: "Broker",       desarrollo: "Bottura", etapa: "Calificado", score: 91 },
-  { id: "LEAD-9003", nombre: "Diego Soto",    canal: "Embajador",    desarrollo: "Monócolo",etapa: "Visita",    score: 65 },
-  { id: "LEAD-9004", nombre: "Lucía Hernández", canal: "Referido",   desarrollo: "Daiku",   etapa: "Negociación", score: 88 },
-];
+type ProspectoRow = {
+  id: number;
+  fecha_creacion: string | null;
+  activo: boolean;
+  id_estatus_persona: number | null;
+  personas: {
+    nombre_legal: string;
+    email: string | null;
+    telefono: string | null;
+    clave_pais_telefono: string | null;
+  } | null;
+  proyectos: { nombre: string } | null;
+  agente: {
+    nombre_legal: string;
+    usuarios: { rol_id: number | null; roles: { nombre: string } | null }[] | null;
+  } | null;
+  estatus_persona: { nombre: string } | null;
+};
+
+const fmtLeadFolio = (id: number) => `LEAD-${String(id).padStart(4, "0")}`;
+
+function getProspectoRol(p: ProspectoRow): string | null {
+  return p.agente?.usuarios?.[0]?.roles?.nombre || null;
+}
+
+function rolToCanal(rol: string | null): string {
+  if (!rol) return "—";
+  const n = norm(rol);
+  if (n.includes("inmobiliaria") || n.includes("agente inmobiliario")) return "Inmobiliaria";
+  if (n.includes("broker")) return "Broker";
+  if (n.includes("embajador")) return "Embajador";
+  if (n.includes("referido")) return "Referido";
+  if (n.includes("agente interno") || n.includes("vendedor") || n.includes("super administrador") || n.includes("administrador de proyecto")) return "Canal Interno";
+  return rol;
+}
+
+type ActivoFilter = "active" | "deleted" | "all";
 
 export function AltaDireccionProspectos() {
+  const queryClient = useQueryClient();
+
+  const [search, setSearch] = useState("");
+  const [activoFilter, setActivoFilter] = useState<ActivoFilter>("active");
+  const [estatusFilter, setEstatusFilter] = useState<string>("all");
+  const [desarrolloFilter, setDesarrolloFilter] = useState<string>("all");
+  const [agenteFilter, setAgenteFilter] = useState<string>("all");
+  const [desde, setDesde] = useState<string>("");
+  const [hasta, setHasta] = useState<string>("");
+
+  const { data: prospectos = [], isLoading, error } = useQuery<ProspectoRow[]>({
+    queryKey: ["alta-direccion-prospectos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("entidades_relacionadas")
+        .select(
+          "id, fecha_creacion, activo, id_estatus_persona, " +
+          "personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono, clave_pais_telefono), " +
+          "proyectos!entidades_relacionadas_id_proyecto_fkey(nombre), " +
+          "agente:personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_legal, usuarios(rol_id, roles(nombre))), " +
+          "estatus_persona(nombre)"
+        )
+        .eq("id_tipo_entidad", 7)
+        .order("fecha_creacion", { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      return (data || []) as ProspectoRow[];
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    const channel = (supabase as any)
+      .channel("alta-direccion-prospectos-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "entidades_relacionadas" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["alta-direccion-prospectos"] });
+        }
+      )
+      .subscribe();
+    return () => {
+      (supabase as any).removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  const estatusOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    let hasNull = false;
+    for (const p of prospectos) {
+      const n = p.estatus_persona?.nombre;
+      if (n) seen.set(norm(n), n);
+      else hasNull = true;
+    }
+    const list = Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+    if (hasNull) list.push("__SIN_ESTATUS__");
+    return list;
+  }, [prospectos]);
+
+  const desarrolloOptions = useMemo(() => {
+    const seen = new Set<string>();
+    let hasNull = false;
+    for (const p of prospectos) {
+      const n = p.proyectos?.nombre;
+      if (n) seen.add(n);
+      else hasNull = true;
+    }
+    const list = Array.from(seen).sort((a, b) => a.localeCompare(b));
+    if (hasNull) list.push("__SIN_DESARROLLO__");
+    return list;
+  }, [prospectos]);
+
+  const agenteOptions = useMemo(() => {
+    const seen = new Set<string>();
+    let hasNull = false;
+    for (const p of prospectos) {
+      const n = p.agente?.nombre_legal;
+      if (n) seen.add(n);
+      else hasNull = true;
+    }
+    const list = Array.from(seen).sort((a, b) => a.localeCompare(b));
+    if (hasNull) list.push("__SIN_AGENTE__");
+    return list;
+  }, [prospectos]);
+
+  const filtradas = useMemo(() => {
+    const searchQ = search ? norm(search) : null;
+    const desdeD = desde ? new Date(desde + "T00:00:00") : null;
+    const hastaD = hasta ? new Date(hasta + "T23:59:59.999") : null;
+
+    return prospectos.filter((p) => {
+      if (activoFilter === "active" && !p.activo) return false;
+      if (activoFilter === "deleted" && p.activo) return false;
+
+      if (estatusFilter !== "all") {
+        if (estatusFilter === "__SIN_ESTATUS__") {
+          if (p.estatus_persona?.nombre) return false;
+        } else {
+          if (norm(p.estatus_persona?.nombre) !== estatusFilter) return false;
+        }
+      }
+      if (desarrolloFilter !== "all") {
+        if (desarrolloFilter === "__SIN_DESARROLLO__") {
+          if (p.proyectos?.nombre) return false;
+        } else {
+          if (p.proyectos?.nombre !== desarrolloFilter) return false;
+        }
+      }
+      if (agenteFilter !== "all") {
+        if (agenteFilter === "__SIN_AGENTE__") {
+          if (p.agente?.nombre_legal) return false;
+        } else {
+          if (p.agente?.nombre_legal !== agenteFilter) return false;
+        }
+      }
+      if (desdeD || hastaD) {
+        if (!p.fecha_creacion) return false;
+        const d = new Date(p.fecha_creacion);
+        if (desdeD && d < desdeD) return false;
+        if (hastaD && d > hastaD) return false;
+      }
+      if (searchQ) {
+        const tel = `${p.personas?.clave_pais_telefono || ""}${p.personas?.telefono || ""}`;
+        const hay = [
+          p.personas?.nombre_legal,
+          p.personas?.email,
+          tel,
+          p.personas?.telefono,
+        ].map(norm).join(" ");
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+  }, [prospectos, search, activoFilter, estatusFilter, desarrolloFilter, agenteFilter, desde, hasta]);
+
+  const kpis = useMemo(() => {
+    let nuevos = 0, enCurso = 0, sinEstatus = 0;
+    for (const p of filtradas) {
+      if (p.id_estatus_persona === 3) nuevos++;
+      else if (p.id_estatus_persona === 1) enCurso++;
+      else if (p.id_estatus_persona == null) sinEstatus++;
+    }
+    return { total: filtradas.length, nuevos, enCurso, sinEstatus };
+  }, [filtradas]);
+
+  const hayFiltros =
+    !!search || activoFilter !== "active" || estatusFilter !== "all" ||
+    desarrolloFilter !== "all" || agenteFilter !== "all" || !!desde || !!hasta;
+
+  const totalDesc = hayFiltros
+    ? `${filtradas.length} de ${prospectos.length} prospectos`
+    : `${prospectos.length} prospectos`;
+
+  const limpiar = () => {
+    setSearch("");
+    setActivoFilter("active");
+    setEstatusFilter("all");
+    setDesarrolloFilter("all");
+    setAgenteFilter("all");
+    setDesde("");
+    setHasta("");
+  };
+
   return (
     <>
-      <PageHeader title="Prospectos" description="Leads activos por canal y desarrollo" action={<DemoBadge />} />
+      <PageHeader title="Prospectos" description="Leads activos por canal y desarrollo" action={<LiveBadge />} />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <Kpi label="Leads activos" value={PROSPECTOS.length} icon={UserSearch} tone="primary" />
-        <Kpi label="Score promedio" value="80.5" icon={TrendingUp} tone="success" />
-        <Kpi label="En negociación" value="1" icon={Briefcase} tone="info" />
-        <Kpi label="Sin contacto >7d" value="0" icon={AlertTriangle} />
+        <Kpi label="Leads activos" value={kpis.total} icon={UserSearch} tone="primary" />
+        <Kpi label="Nuevos" value={kpis.nuevos} icon={TrendingUp} tone="success" />
+        <Kpi label="En curso" value={kpis.enCurso} icon={Briefcase} tone="info" />
+        <Kpi label="Sin estatus" value={kpis.sinEstatus} icon={AlertTriangle} tone="warning" />
       </div>
-      <Panel title="Listado">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead><TableHead>Nombre</TableHead><TableHead>Canal</TableHead>
-              <TableHead>Desarrollo</TableHead><TableHead>Etapa</TableHead><TableHead>Score</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {PROSPECTOS.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.id}</TableCell>
-                <TableCell>{p.nombre}</TableCell>
-                <TableCell>{p.canal}</TableCell>
-                <TableCell>{p.desarrollo}</TableCell>
-                <TableCell><Pill>{p.etapa}</Pill></TableCell>
-                <TableCell className="tabular-nums">{p.score}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Panel>
-    </>
-  );
-}
 
-const PIPELINE_STAGES = [
-  { key: "nuevo",     label: "Nuevo",       count: 14, value: 18000000 },
-  { key: "calificado",label: "Calificado",  count:  9, value: 22500000 },
-  { key: "visita",    label: "Visita",      count:  6, value: 19800000 },
-  { key: "oferta",    label: "Oferta",      count:  4, value: 17600000 },
-  { key: "negocia",   label: "Negociación", count:  3, value: 14400000 },
-  { key: "ganado",    label: "Ganado",      count:  7, value: 28500000 },
-];
+      <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, teléfono o correo…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={activoFilter} onValueChange={(v) => setActivoFilter(v as ActivoFilter)}>
+            <SelectTrigger className="h-8 w-[160px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Activos</SelectItem>
+              <SelectItem value="deleted">Eliminados</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
+            </SelectContent>
+          </Select>
 
-export function AltaDireccionPipeline() {
-  return (
-    <>
-      <PageHeader title="Pipeline" description="Oportunidades por etapa" action={<DemoBadge />} />
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {PIPELINE_STAGES.map((s, i) => (
-          <div key={s.key} className="rounded-lg border border-border bg-card p-3">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Etapa {i + 1}</p>
-            <p className="mt-1 text-sm font-medium">{s.label}</p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">{s.count}</p>
-            <p className="text-[11px] text-muted-foreground tabular-nums">{fmtMxn(s.value)}</p>
+          <Select value={estatusFilter} onValueChange={setEstatusFilter}>
+            <SelectTrigger className="h-8 w-[200px] text-xs"><SelectValue placeholder="Estatus" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estatus</SelectItem>
+              {estatusOptions.map((s) => (
+                <SelectItem key={s} value={s === "__SIN_ESTATUS__" ? "__SIN_ESTATUS__" : norm(s)}>
+                  {s === "__SIN_ESTATUS__" ? "Sin estatus" : s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={desarrolloFilter} onValueChange={setDesarrolloFilter}>
+            <SelectTrigger className="h-8 w-[180px] text-xs"><SelectValue placeholder="Desarrollo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los desarrollos</SelectItem>
+              {desarrolloOptions.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {d === "__SIN_DESARROLLO__" ? "Sin desarrollo" : d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={agenteFilter} onValueChange={setAgenteFilter}>
+            <SelectTrigger className="h-8 w-[220px] text-xs"><SelectValue placeholder="Agente" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los agentes</SelectItem>
+              {agenteOptions.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {a === "__SIN_AGENTE__" ? "Sin agente" : a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Creados del</span>
+            <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-8 w-[150px] text-xs" />
+            <span className="text-xs text-muted-foreground">al</span>
+            <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-8 w-[150px] text-xs" />
           </div>
-        ))}
+
+          {hayFiltros && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={limpiar}>
+              <X className="h-3 w-3 mr-1" /> Limpiar
+            </Button>
+          )}
+        </div>
       </div>
-      <Panel title="Conversión esperada" description="Por etapa" className="mt-4">
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={PIPELINE_STAGES}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Bar dataKey="count" fill={CHART_COLORS[0]} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+
+      <Panel title="Listado" description={totalDesc}>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Cargando prospectos…</p>
+        ) : error ? (
+          <p className="text-sm text-red-600 py-6 text-center">Error al cargar prospectos: {(error as Error).message}</p>
+        ) : filtradas.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            {hayFiltros ? "No hay prospectos que coincidan con los filtros." : "No hay prospectos registrados."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead><TableHead>Nombre</TableHead><TableHead>Contacto</TableHead><TableHead>Canal</TableHead>
+                <TableHead>Desarrollo</TableHead><TableHead>Agente</TableHead>
+                <TableHead>Estatus</TableHead><TableHead>Creado (fecha · hora)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtradas.map((p) => {
+                const canal = rolToCanal(getProspectoRol(p));
+                const estatus = p.estatus_persona?.nombre || "Sin estatus";
+                const creado = fmtCreacion(p.fecha_creacion);
+                const eliminado = !p.activo;
+                return (
+                  <TableRow key={p.id} className={eliminado ? "opacity-60" : undefined}>
+                    <TableCell className="font-medium">
+                      {fmtLeadFolio(p.id)}
+                      {eliminado && (
+                        <Pill className="ml-2 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Eliminado</Pill>
+                      )}
+                    </TableCell>
+                    <TableCell>{p.personas?.nombre_legal || "—"}</TableCell>
+                    <TableCell>
+                      <div className="text-xs">{p.personas?.email || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{p.personas?.telefono || "—"}</div>
+                    </TableCell>
+                    <TableCell>{canal}</TableCell>
+                    <TableCell>{p.proyectos?.nombre || "—"}</TableCell>
+                    <TableCell>{p.agente?.nombre_legal || "—"}</TableCell>
+                    <TableCell><Pill>{estatus}</Pill></TableCell>
+                    <TableCell>
+                      <div className="font-medium">{creado.fecha}</div>
+                      <div className="text-xs text-muted-foreground">{creado.hora}</div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </Panel>
     </>
   );
 }
+
+export { default as AltaDireccionPipeline } from "./AltaDireccionPipelinePage";
 
 const OFERTAS = [
   { id: "OFR-3001", cliente: "María García",  unidad: "Daiku A-201",    monto: 4500000, estado: "aprobada"  },
