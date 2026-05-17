@@ -601,7 +601,7 @@ export default function Comisiones() {
                       })()}
                         </div>
                         <Badge variant={comision.iva_incluido ? "default" : "outline"} className={`absolute top-0 right-0 text-[10px] px-1.5 py-0 ${comision.iva_incluido ? "bg-green-600 hover:bg-green-700" : "text-muted-foreground"}`}>
-                            {comision.iva_incluido ? "IVA Incluido" : "+ IVA"}
+                            {comision.iva_incluido ? "IVA Incluido" : "Sin IVA"}
                           </Badge>
                       </div>
                     </TableCell>
