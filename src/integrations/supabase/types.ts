@@ -3739,6 +3739,7 @@ export type Database = {
           url_evidencia_cancelacion: string | null
           url_evidencia_reembolso: string | null
           url_factura_comision: string | null
+          url_factura_xml_comision: string | null
           valor_uma: number | null
         }
         Insert: {
@@ -3776,6 +3777,7 @@ export type Database = {
           url_evidencia_cancelacion?: string | null
           url_evidencia_reembolso?: string | null
           url_factura_comision?: string | null
+          url_factura_xml_comision?: string | null
           valor_uma?: number | null
         }
         Update: {
@@ -3813,6 +3815,7 @@ export type Database = {
           url_evidencia_cancelacion?: string | null
           url_evidencia_reembolso?: string | null
           url_factura_comision?: string | null
+          url_factura_xml_comision?: string | null
           valor_uma?: number | null
         }
         Relationships: [
