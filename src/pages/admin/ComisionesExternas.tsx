@@ -792,7 +792,7 @@ export default function ComisionesExternas() {
                       } else if (anyConFactura) {
                         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>;
                       } else if (anyAprobadaSinFactura) {
-                        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobado/Sin factura</Badge>;
+                        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobada</Badge>;
                       } else if (anySinAprobar) {
                         return <Badge variant="outline" className="bg-muted text-muted-foreground">Sin aprobar</Badge>;
                       }
@@ -868,7 +868,7 @@ export default function ComisionesExternas() {
                                     ) : com.aprobada && com.urlFactura ? (
                                       <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>
                                     ) : com.aprobada && !com.urlFactura ? (
-                                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobado/Sin factura</Badge>
+                                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobada</Badge>
                                     ) : (
                                       <Badge variant="outline" className="bg-muted text-muted-foreground">Sin aprobar</Badge>
                                     )}
