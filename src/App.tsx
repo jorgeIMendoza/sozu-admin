@@ -175,6 +175,7 @@ const EscPLD = lazyRetry(() => import("./pages/admin/portal-escrituracion/index"
 const EscBorradores = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscBorradores })));
 const EscPlantillas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPlantillas })));
 const EscFirmas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscFirmas })));
+const EscCitas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCitas })));
 const EscEntregas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregas })));
 const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRPP })));
 const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
@@ -501,6 +502,7 @@ const App = () => (
                   <Route path="portal-escrituracion/borradores" element={<EscBorradores />} />
                   <Route path="portal-escrituracion/plantillas" element={<EscPlantillas />} />
                   <Route path="portal-escrituracion/firmas" element={<EscFirmas />} />
+                  <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
