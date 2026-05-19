@@ -10,7 +10,7 @@ export interface PagoRecord {
   url_cep: string | null;
   url_recibo: string | null;
   descripcion: string | null;
-  id_cuenta_cobranza: number;
+  id_cuenta_cobranza: number | null;
   metodo_pago: string | null;
   clabe_stp: string | null;
   cliente: string | null;

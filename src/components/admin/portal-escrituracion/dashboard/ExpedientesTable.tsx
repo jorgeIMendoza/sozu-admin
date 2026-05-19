@@ -63,10 +63,11 @@ const columns = [
     header: 'ID Cuenta',
     cell: info => {
       const val = info.getValue();
+      const hasAccount = !!info.row.original.cuentaCobranzaId;
       const display = val.startsWith('CC-') ? val : '—';
       return (
         <div>
-          <div className="font-bold text-slate-900">{display}</div>
+          <div className={`font-bold ${hasAccount ? 'text-emerald-600 underline underline-offset-2 decoration-dotted cursor-pointer' : 'text-slate-900'}`}>{display}</div>
           <div className="text-xs text-slate-500 mt-0.5">{info.row.original.proyecto}</div>
         </div>
       );
@@ -89,7 +90,12 @@ const columns = [
   }),
   columnHelper.accessor('pago', {
     header: 'Pago',
-    cell: info => <span className="text-slate-500 text-sm">{info.getValue()}</span>,
+    cell: info => {
+      const val = info.getValue();
+      return val === '—'
+        ? <span className="text-slate-400 text-sm">—</span>
+        : <span className="text-slate-900 text-sm font-medium">{val}</span>;
+    },
   }),
   columnHelper.accessor('banco', {
     header: 'Banco',
@@ -175,7 +181,7 @@ export function ExpedientesTable() {
   const [currentPage, setCurrentPage] = useState(0);
   const [editingPersonaId, setEditingPersonaId] = useState<number | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingCuenta, setEditingCuenta] = useState<{ id: number; precio_final: number } | null>(null);
+  const [editingCuenta, setEditingCuenta] = useState<{ id: number; precio_final: number; initialTab: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Reset página cuando cambian los filtros o búsqueda
@@ -299,7 +305,36 @@ export function ExpedientesTable() {
         }
       }
 
-      // Paso 6: Construir filas
+      // Paso 6: Totales pagados por cuenta (acuerdos_pago → aplicaciones_pago)
+      const totalPagadoByCuenta: Record<number, number> = {};
+      if (cuentaIds.length) {
+        const { data: acuerdos } = await supabase
+          .from('acuerdos_pago')
+          .select('id, id_cuenta_cobranza')
+          .in('id_cuenta_cobranza', cuentaIds)
+          .eq('activo', true);
+
+        if (acuerdos?.length) {
+          const acuerdoIdToCuenta: Record<number, number> = {};
+          acuerdos.forEach(a => { acuerdoIdToCuenta[a.id] = a.id_cuenta_cobranza; });
+
+          const { data: aplicaciones } = await supabase
+            .from('aplicaciones_pago')
+            .select('id_acuerdo_pago, monto, es_multa')
+            .in('id_acuerdo_pago', acuerdos.map(a => a.id))
+            .eq('activo', true);
+
+          (aplicaciones || []).forEach(ap => {
+            if (ap.es_multa) return;
+            const cuentaId = acuerdoIdToCuenta[ap.id_acuerdo_pago];
+            if (cuentaId) {
+              totalPagadoByCuenta[cuentaId] = (totalPagadoByCuenta[cuentaId] || 0) + (ap.monto ?? 0);
+            }
+          });
+        }
+      }
+
+      // Paso 7: Construir filas
       return props.map(p => {
         const cuenta = cuentaByProp[p.id];
         const cuentaId = cuenta?.id ?? null;
@@ -313,7 +348,9 @@ export function ExpedientesTable() {
           proyecto: proyectoActivo.nombre,
           unidad: p.numero_propiedad,
           cliente,
-          pago: '—',
+          pago: cuentaId
+            ? (totalPagadoByCuenta[cuentaId] ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
+            : '—',
           banco: '—',
           notaria,
           etapa: p.id_estatus_disponibilidad === 7
@@ -481,15 +518,18 @@ export function ExpedientesTable() {
                     {row.getVisibleCells().map(cell => {
                       const isUnidadClickable = cell.column.id === 'unidad' && !!row.original.personaId;
                       const isNotariaClickable = cell.column.id === 'notaria' && !!row.original.cuentaCobranzaId && row.original.notaria !== '—';
+                      const isIdClickable = cell.column.id === 'id' && !!row.original.cuentaCobranzaId;
                       return (
                       <td
                         key={cell.id}
-                        className={`px-5 py-4 whitespace-nowrap text-sm align-middle ${isNotariaClickable ? 'cursor-pointer' : ''}`}
+                        className={`px-5 py-4 whitespace-nowrap text-sm align-middle ${isNotariaClickable || isIdClickable ? 'cursor-pointer' : ''}`}
                         onClick={
                           isUnidadClickable
                             ? (e) => { e.stopPropagation(); setEditingPersonaId(row.original.personaId); setIsEditDialogOpen(true); }
                             : isNotariaClickable
-                            ? (e) => { e.stopPropagation(); setEditingCuenta({ id: row.original.cuentaCobranzaId!, precio_final: row.original.precioFinal }); }
+                            ? (e) => { e.stopPropagation(); setEditingCuenta({ id: row.original.cuentaCobranzaId!, precio_final: row.original.precioFinal, initialTab: 'escrituracion' }); }
+                            : isIdClickable
+                            ? (e) => { e.stopPropagation(); setEditingCuenta({ id: row.original.cuentaCobranzaId!, precio_final: row.original.precioFinal, initialTab: 'propiedad' }); }
                             : undefined
                         }
                       >
@@ -557,7 +597,7 @@ export function ExpedientesTable() {
     {editingCuenta && (
       <EditCuentaCobranzaDialog
         cuenta={editingCuenta}
-        initialTab="escrituracion"
+        initialTab={editingCuenta.initialTab}
         onClose={() => setEditingCuenta(null)}
         onUpdate={() => {
           queryClient.invalidateQueries({ queryKey: ['expedientes-real', proyectoActivo?.id] });

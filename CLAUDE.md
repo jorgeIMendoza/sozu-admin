@@ -79,9 +79,24 @@ Accesible a través del MCP oficial de Supabase Cloud (`mcp__plugin_supabase_sup
 
 ## Servidor de desarrollo
 
+**Al iniciar cada sesión**, verificar si el servidor está corriendo:
+
 ```bash
-npm run dev   # arranca en http://localhost:5173
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null
+# 200 → ya está corriendo, no hacer nada
+# otro → levantarlo con el comando de abajo
 ```
+
+Para levantarlo (Node.js no está en el PATH por defecto — usar ruta completa):
+
+```bash
+cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
+"/c/Program Files/nodejs/npm.cmd" run dev -- --host
+```
+
+- Puerto: **http://localhost:8080** (no 5173)
+- Red local: **http://10.200.195.170:8080**
+- Ejecutar en background si se necesita continuar trabajando en paralelo
 
 ---
 

@@ -359,10 +359,17 @@ export function RelacionPagos() {
   const totalMonto = useMemo(() => filteredPagos.reduce((s, p) => s + (p.monto ?? 0), 0), [filteredPagos]);
   const totalConCep = useMemo(() => filteredPagos.filter((p) => p.tiene_cep).length, [filteredPagos]);
 
-  // Detect single-account view
+  // Detect single-account view.
+  // Filter out null/undefined before building the Set — some RPC rows may have
+  // id_cuenta_cobranza = null even though the type says number.
   const singleCuentaId = useMemo(() => {
     if (!filteredPagos.length) return null;
-    const ids = new Set(filteredPagos.map((p) => p.id_cuenta_cobranza));
+    const ids = new Set(
+      filteredPagos
+        .map((p) => p.id_cuenta_cobranza)
+        .filter((id): id is number => id != null),
+    );
+    // Show detail cards whenever all non-null rows point to the same account
     return ids.size === 1 ? [...ids][0] : null;
   }, [filteredPagos]);
 
@@ -421,14 +428,15 @@ export function RelacionPagos() {
         const noCon = acuerdos.filter((a) => a.concepto !== 'pago a contra entrega');
 
         breakdown = {
-          aLaEntrega: contra.reduce((s, a) => s + Math.max(0, a.monto - a.aplicado), 0),
-          duranteObra: noCon.filter((a) => !a.pago_completado).reduce((s, a) => s + Math.max(0, a.monto - a.aplicado), 0),
+          aLaEntrega: contra.reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
+          duranteObra: noCon.filter((a) => !a.pago_completado).reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
           parcialidadesRestantes: acuerdos.filter((a) => a.concepto === 'parcialidad' && !a.pago_completado).length,
         };
       }
 
-      // Valor de escrituración
-      let escrituracion = cuenta.precio_final;
+      // Valor de escrituración — guard against null precio_final
+      const pf = cuenta.precio_final ?? 0;
+      let escrituracion = pf;
       if (cuenta.id_propiedad) {
         const [{ data: bodegas }, { data: estac }] = await Promise.all([
           supabase.from('bodegas').select('id_producto').eq('id_propiedad', cuenta.id_propiedad).eq('es_incluido', false).eq('activo', true),
@@ -439,22 +447,27 @@ export function RelacionPagos() {
           const { data: ofertas } = await supabase.from('ofertas').select('id').in('id_producto', productIds).eq('activo', true);
           if (ofertas?.length) {
             const { data: ctas } = await supabase.from('cuentas_cobranza').select('precio_final').in('id_oferta', ofertas.map((o) => o.id)).eq('activo', true);
-            escrituracion += (ctas ?? []).reduce((s, c) => s + (c.precio_final || 0), 0);
+            escrituracion += (ctas ?? []).reduce((s, c) => s + (c.precio_final ?? 0), 0);
           }
         }
       }
 
-      return { precioFinal: cuenta.precio_final, valorUma: cuenta.valor_uma || 0, totalPagadoCuenta, breakdown, escrituracion };
+      return { precioFinal: pf, valorUma: cuenta.valor_uma ?? 0, totalPagadoCuenta, breakdown, escrituracion };
     },
   });
 
   // Derived account-level values
   const precioFinal = cuentaResumen?.precioFinal ?? 0;
   const totalPagadoCuenta = cuentaResumen?.totalPagadoCuenta ?? 0;
+  // Use a 1-cent threshold to avoid false positives from floating-point arithmetic
+  const diferencia = precioFinal > 0 ? totalPagadoCuenta - precioFinal : 0;
+  const haySobrepago = diferencia > 0.01;
+  // Only mark as fully paid once cuentaResumen has actually loaded (avoids false green during fetch)
+  const esPagadoCompleto = !!cuentaResumen && precioFinal > 0 && !haySobrepago && Math.abs(diferencia) <= 0.01;
   const totalPendiente = Math.max(0, precioFinal - totalPagadoCuenta);
-  const haySobrepago = precioFinal > 0 && totalPagadoCuenta > precioFinal;
-  const montoSobrepago = Math.max(0, totalPagadoCuenta - precioFinal);
-  const limiteEfectivo = (cuentaResumen?.valorUma ?? 0) * 8025;
+  const montoSobrepago = haySobrepago ? diferencia : 0;
+  // Guard against null valor_uma → NaN
+  const limiteEfectivo = ((cuentaResumen?.valorUma ?? 0) || 0) * 8025;
   const pagadoEfectivo = useMemo(
     () => filteredPagos.filter((p) => p.metodo_pago?.toLowerCase().includes('efectivo')).reduce((s, p) => s + p.monto, 0),
     [filteredPagos],
@@ -559,7 +572,7 @@ export function RelacionPagos() {
       )}
 
       {/* ── Cards detallados de cuenta (single-account view) ─────────────── */}
-      {hasResults && singleCuentaId && (
+      {hasResults && singleCuentaId && (isLoadingResumen || !!cuentaResumen) && (
         <div className="space-y-4 mb-6">
           {/* Fila 1: 4 cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -588,34 +601,50 @@ export function RelacionPagos() {
                   sub={precioFinal > 0 ? `${pct(totalPagadoCuenta, precioFinal)} del total` : undefined}
                 />
 
-                {/* Saldo Pendiente / Sobrepago */}
-                <DetailCard
-                  label={haySobrepago ? 'Sobrepago' : 'Saldo Pendiente'}
-                  icon={haySobrepago
-                    ? <AlertTriangle className="w-4 h-4 text-orange-400" />
-                    : <DollarSign className="w-4 h-4 text-amber-400" />}
-                  value={fmtMxn(haySobrepago ? montoSobrepago : totalPendiente)}
-                  valueClass={haySobrepago ? 'text-orange-500' : 'text-amber-500'}
-                  sub={!haySobrepago && precioFinal > 0 ? `${pct(totalPendiente, precioFinal)} restante` : undefined}
-                  borderClass={haySobrepago ? 'border-orange-300' : 'border-slate-200'}
-                >
-                  {!haySobrepago && cuentaResumen?.breakdown && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">Durante obra:</span>
-                        <span className="font-medium text-slate-700">{fmtMxn(cuentaResumen.breakdown.duranteObra)}</span>
+                {/* Saldo Pendiente / Pagado / Sobrepago */}
+                {haySobrepago ? (
+                  <DetailCard
+                    label="Sobrepago"
+                    icon={<AlertTriangle className="w-4 h-4 text-orange-400" />}
+                    value={fmtMxn(montoSobrepago)}
+                    valueClass="text-orange-500"
+                    borderClass="border-orange-300"
+                  />
+                ) : esPagadoCompleto ? (
+                  <DetailCard
+                    label="Saldo Pendiente"
+                    icon={<DollarSign className="w-4 h-4 text-emerald-400" />}
+                    value={fmtMxn(0)}
+                    valueClass="text-emerald-600"
+                    sub="Cuenta completamente pagada"
+                    borderClass="border-emerald-200"
+                  />
+                ) : (
+                  <DetailCard
+                    label="Saldo Pendiente"
+                    icon={<DollarSign className="w-4 h-4 text-amber-400" />}
+                    value={fmtMxn(totalPendiente)}
+                    valueClass="text-amber-500"
+                    sub={precioFinal > 0 ? `${pct(totalPendiente, precioFinal)} restante` : undefined}
+                  >
+                    {cuentaResumen?.breakdown && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Durante obra:</span>
+                          <span className="font-medium text-slate-700">{fmtMxn(cuentaResumen.breakdown.duranteObra)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">A la entrega:</span>
+                          <span className="font-medium text-slate-700">{fmtMxn(cuentaResumen.breakdown.aLaEntrega)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Parcialidades restantes:</span>
+                          <span className="font-medium text-slate-700">{cuentaResumen.breakdown.parcialidadesRestantes}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">A la entrega:</span>
-                        <span className="font-medium text-slate-700">{fmtMxn(cuentaResumen.breakdown.aLaEntrega)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">Parcialidades restantes:</span>
-                        <span className="font-medium text-slate-700">{cuentaResumen.breakdown.parcialidadesRestantes}</span>
-                      </div>
-                    </div>
-                  )}
-                </DetailCard>
+                    )}
+                  </DetailCard>
+                )}
 
                 {/* Pago en Efectivo */}
                 <CashPaymentCard
