@@ -3,24 +3,18 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
-  Building2,
   Landmark,
-  ScrollText,
   Stamp,
-  UserCog,
-  CheckCircle2,
-  FileSignature,
-  FileStack,
   CalendarDays,
   PackageCheck,
-  BookCheck,
-  BarChart3,
-  History,
-  Settings,
   ArrowLeft,
   LogOut,
   Menu,
   LucideIcon,
+  Receipt,
+  ShieldAlert,
+  Scale,
+  HeartHandshake,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -35,45 +29,18 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "Operación",
+    label: "",
     items: [
-      { label: "Dashboard",                  path: "/admin/portal-escrituracion/dashboard",   icon: LayoutDashboard },
-      { label: "Expedientes",                path: "/admin/portal-escrituracion/expedientes", icon: FileText },
-      { label: "Unidades en Escrituración",  path: "/admin/portal-escrituracion/unidades",    icon: Building2 },
-      { label: "Crédito Hipotecario",        path: "/admin/portal-escrituracion/credito",     icon: Landmark },
-    ],
-  },
-  {
-    label: "Cierre legal",
-    items: [
-      { label: "Pipeline Notarial", path: "/admin/portal-escrituracion/pipeline", icon: ScrollText },
-      { label: "Notarías",           path: "/admin/portal-escrituracion/notarias", icon: Stamp },
-      { label: "Notarios",           path: "/admin/portal-escrituracion/notarios", icon: UserCog },
-      { label: "Avalúos",            path: "/admin/portal-escrituracion/avaluos",  icon: CheckCircle2 },
-    ],
-  },
-  {
-    label: "Documentación",
-    items: [
-      { label: "Expedientes / PLD",   path: "/admin/portal-escrituracion/pld",        icon: FileSignature },
-      { label: "Borradores",          path: "/admin/portal-escrituracion/borradores", icon: FileStack },
-      { label: "Plantillas",          path: "/admin/portal-escrituracion/plantillas", icon: FileText },
-    ],
-  },
-  {
-    label: "Entrega",
-    items: [
-      { label: "Programación de Firmas", path: "/admin/portal-escrituracion/firmas",   icon: CalendarDays },
-      { label: "Entregas Físicas",       path: "/admin/portal-escrituracion/entregas", icon: PackageCheck },
-      { label: "Inscripción RPP",        path: "/admin/portal-escrituracion/rpp",      icon: BookCheck },
-    ],
-  },
-  {
-    label: "Sistema",
-    items: [
-      { label: "Reportes",     path: "/admin/portal-escrituracion/reportes",     icon: BarChart3 },
-      { label: "Auditoría",    path: "/admin/portal-escrituracion/auditoria",    icon: History },
-      { label: "Configuración",path: "/admin/portal-escrituracion/configuracion",icon: Settings },
+      { label: "Escrituración",         path: "/admin/portal-escrituracion/dashboard",      icon: LayoutDashboard },
+      { label: "Expedientes",           path: "/admin/portal-escrituracion/expedientes",    icon: FileText },
+      { label: "Relación de Pagos",     path: "/admin/portal-escrituracion/relacion-pagos", icon: Receipt },
+      { label: "Notarías",              path: "/admin/portal-escrituracion/notarias",       icon: Stamp },
+      { label: "PLD",                   path: "/admin/portal-escrituracion/pld",            icon: ShieldAlert },
+      { label: "Créditos Hipotecarios", path: "/admin/portal-escrituracion/credito",        icon: Landmark },
+      { label: "Programar Citas",       path: "/admin/portal-escrituracion/citas",          icon: CalendarDays },
+      { label: "Demandas",              path: "/admin/portal-escrituracion/demandas",       icon: Scale },
+      { label: "Entregas",              path: "/admin/portal-escrituracion/entregas",       icon: PackageCheck },
+      { label: "Postventa",             path: "/admin/portal-escrituracion/postventa",      icon: HeartHandshake },
     ],
   },
 ];
@@ -123,9 +90,11 @@ export const PortalEscrituracionLayout = () => {
       <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
         {navGroups.map((group) => (
           <div key={group.label}>
-            <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-              {group.label}
-            </p>
+            {group.label && (
+              <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                {group.label}
+              </p>
+            )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item.path);
