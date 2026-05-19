@@ -320,9 +320,8 @@ export default function ComisionesExternas() {
           .eq('activo', true);
         
         facturas?.forEach(f => {
-          if (f.numero && f.url && f.id_cuenta_cobranza) {
-            const key = `${f.numero}_${f.id_cuenta_cobranza}`;
-            facturasMap.set(key, f.url);
+          if (f.url && f.id_cuenta_cobranza) {
+            facturasMap.set(String(f.id_cuenta_cobranza), f.url);
           }
         });
       }
@@ -357,8 +356,7 @@ export default function ComisionesExternas() {
           .map(c => {
             const userData = usuariosMap.get(c.email_usuario);
             const esExterno = emailsInmobiliarias.has(c.email_usuario) || emailsAgentesInmobiliarios.has(c.email_usuario);
-            const facturaKey = `${c.email_usuario}_${cuenta.id}`;
-            const urlFactura = facturasMap.get(facturaKey) || null;
+            const urlFactura = facturasMap.get(String(cuenta.id)) || null;
             
             return {
               ...c,
