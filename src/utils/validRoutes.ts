@@ -127,6 +127,7 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-escrituracion/borradores',
   '/admin/portal-escrituracion/plantillas',
   '/admin/portal-escrituracion/firmas',
+  '/admin/portal-escrituracion/citas',
   '/admin/portal-escrituracion/entregas',
   '/admin/portal-escrituracion/rpp',
   '/admin/portal-escrituracion/reportes',

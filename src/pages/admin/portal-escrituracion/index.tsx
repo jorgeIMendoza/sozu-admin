@@ -1,152 +1,35 @@
 import { useMemo, useState } from "react";
-import {
-  FileText, Building2, Landmark, ScrollText, Stamp, UserCog, CheckCircle2,
-  FileSignature, FileStack, CalendarDays, PackageCheck, BookCheck, BarChart3,
-  History, Settings, Banknote, AlertTriangle, Clock, Search,
-} from "lucide-react";
-import { Kpi, Panel, PageHeader, Pill } from "@/components/admin/portal-escrituracion/ui";
+import { Clock } from "lucide-react";
+import { Panel, PageHeader, Pill } from "@/components/admin/portal-escrituracion/ui";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  EXPEDIENTES, STAGES, HEALTH_META, NOTARIAS, NOTARIOS, AVALUOS, DOCS_PLD,
-  BORRADORES, PLANTILLAS, CITAS_FIRMA, ENTREGAS, INSCRIPCIONES, CREDITOS,
+  EXPEDIENTES, STAGES, HEALTH_META, NOTARIAS, NOTARIOS, AVALUOS,
+  BORRADORES, PLANTILLAS, CITAS_FIRMA, ENTREGAS, INSCRIPCIONES,
   fmtMxn,
 } from "@/data/escrituracion/mockData";
+import { DashboardEscrituracion } from "./DashboardEscrituracion";
+import { RelacionPagos } from "./RelacionPagos";
+import { ExpedientesDashboard } from "./ExpedientesDashboard";
+import { NotariasDashboard } from "./NotariasDashboard";
+import { PldDashboard } from "./PldDashboard";
+import { CreditosHipotecariosDashboard } from "./CreditosHipotecariosDashboard";
+import { ProgramarCitasDashboard } from "./ProgramarCitasDashboard";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
-  const total = EXPEDIENTES.length;
-  const enRiesgo = EXPEDIENTES.filter((e) => e.health === "at_risk" || e.health === "delayed").length;
-  const concluidos = EXPEDIENTES.filter((e) => e.health === "done").length;
-  const pipeline = EXPEDIENTES.filter((e) => e.health !== "done").reduce((s, e) => s + e.amount, 0);
+  return <DashboardEscrituracion />;
+}
 
-  return (
-    <>
-      <PageHeader title="Dashboard de Escrituración" description="Vista ejecutiva del cierre legal · datos demostrativos" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Expedientes activos" value={total} icon={ScrollText} hint="Pipeline total" />
-        <Kpi label="Pipeline en MXN" value={fmtMxn(pipeline)} icon={Banknote} tone="primary" />
-        <Kpi label="En riesgo / retrasados" value={enRiesgo} icon={AlertTriangle} tone="warning" hint="SLA vencido" />
-        <Kpi label="Escrituras entregadas" value={concluidos} icon={CheckCircle2} tone="info" hint="Mes en curso" />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Panel title="Distribución por etapa" description="Expedientes por paso del workflow" className="xl:col-span-2">
-          <div className="flex flex-wrap gap-2">
-            {STAGES.map((s) => {
-              const c = EXPEDIENTES.filter((e) => e.stage === s.key).length;
-              return (
-                <div key={s.key} className="rounded-lg border border-border bg-card px-3 py-2 min-w-[140px]">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums">{c}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
-        <Panel title="Próximas firmas" description="Esta semana">
-          <ul className="space-y-2">
-            {CITAS_FIRMA.slice(0, 5).map((c) => (
-              <li key={c.id} className="flex items-center justify-between border-b last:border-0 border-border pb-2 last:pb-0">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{c.cliente}</p>
-                  <p className="text-xs text-muted-foreground truncate">{c.notary} · {c.fecha} {c.hora}</p>
-                </div>
-                <Pill>{c.estado.replace("_", " ")}</Pill>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      </div>
-    </>
-  );
+// ============================ Relación de Pagos ============================
+export function EscRelacionPagos() {
+  return <RelacionPagos />;
 }
 
 // ============================ Expedientes ============================
 export function EscExpedientes() {
-  const [q, setQ] = useState("");
-  const [stage, setStage] = useState<string>("all");
-
-  const filtered = useMemo(
-    () =>
-      EXPEDIENTES.filter((e) => {
-        if (stage !== "all" && e.stage !== stage) return false;
-        if (q && !`${e.id} ${e.unit} ${e.client}`.toLowerCase().includes(q.toLowerCase())) return false;
-        return true;
-      }),
-    [q, stage]
-  );
-
-  return (
-    <>
-      <PageHeader title="Expedientes" description="Pipeline completo de escrituración" />
-
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5">
-          <Search className="size-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por expediente, unidad o cliente…"
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </div>
-        <select
-          value={stage}
-          onChange={(e) => setStage(e.target.value)}
-          className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm"
-        >
-          <option value="all">Todas las etapas</option>
-          {STAGES.map((s) => (
-            <option key={s.key} value={s.key}>{s.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <Panel title="Lista de expedientes" description={`${filtered.length} resultado(s)`}>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Expediente</TableHead>
-                <TableHead>Unidad</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Notaría</TableHead>
-                <TableHead>Monto</TableHead>
-                <TableHead>Etapa</TableHead>
-                <TableHead>Avance</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Firma</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell className="font-medium">{e.id}</TableCell>
-                  <TableCell>{e.unit} <span className="text-muted-foreground text-xs">· {e.project}</span></TableCell>
-                  <TableCell>{e.client}</TableCell>
-                  <TableCell>{e.notary}</TableCell>
-                  <TableCell className="tabular-nums">{fmtMxn(e.amount)}</TableCell>
-                  <TableCell><Pill>{STAGES.find((s) => s.key === e.stage)?.label}</Pill></TableCell>
-                  <TableCell className="min-w-[120px]">
-                    <Progress value={e.progress} className="h-2" />
-                    <span className="text-[11px] text-muted-foreground">{e.progress}%</span>
-                  </TableCell>
-                  <TableCell><Pill className={HEALTH_META[e.health].className}>{HEALTH_META[e.health].label}</Pill></TableCell>
-                  <TableCell className="text-muted-foreground">{e.signDate}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </Panel>
-    </>
-  );
+  return <ExpedientesDashboard />;
 }
 
 // ============================ Pipeline visual ============================
@@ -216,60 +99,17 @@ export function EscUnidades() {
 
 // ============================ Crédito Hipotecario ============================
 export function EscCredito() {
-  const totalAutorizado = CREDITOS.reduce((s, c) => s + c.montoAutorizado, 0);
-  const totalSolicitado = CREDITOS.reduce((s, c) => s + c.montoSolicitado, 0);
-  return (
-    <>
-      <PageHeader title="Crédito Hipotecario" description="Pipeline bancario" />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Kpi label="Solicitudes activas" value={CREDITOS.length} icon={Landmark} />
-        <Kpi label="Monto solicitado" value={fmtMxn(totalSolicitado)} icon={Banknote} tone="info" />
-        <Kpi label="Monto autorizado" value={fmtMxn(totalAutorizado)} icon={CheckCircle2} tone="success" />
-      </div>
-      <Panel title="Operaciones" description="Por banco e institución" className="mt-6">
-        <Table>
-          <TableHeader>
-            <TableRow><TableHead>Crédito</TableHead><TableHead>Cliente</TableHead><TableHead>Banco</TableHead><TableHead>Solicitado</TableHead><TableHead>Autorizado</TableHead><TableHead>Tasa</TableHead><TableHead>Plazo</TableHead><TableHead>Estado</TableHead></TableRow>
-          </TableHeader>
-          <TableBody>
-            {CREDITOS.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.id}</TableCell>
-                <TableCell>{c.cliente}</TableCell>
-                <TableCell>{c.banco}</TableCell>
-                <TableCell className="tabular-nums">{fmtMxn(c.montoSolicitado)}</TableCell>
-                <TableCell className="tabular-nums">{c.montoAutorizado ? fmtMxn(c.montoAutorizado) : "—"}</TableCell>
-                <TableCell className="tabular-nums">{c.tasa ? `${c.tasa.toFixed(2)}%` : "—"}</TableCell>
-                <TableCell>{c.plazoMeses} m</TableCell>
-                <TableCell><Pill>{c.estado}</Pill></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Panel>
-    </>
-  );
+  return <CreditosHipotecariosDashboard />;
+}
+
+// ============================ Programar Citas ============================
+export function EscCitas() {
+  return <ProgramarCitasDashboard />;
 }
 
 // ============================ Notarías ============================
 export function EscNotarias() {
-  return (
-    <>
-      <PageHeader title="Notarías" description="Directorio operativo" />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {NOTARIAS.map((n) => (
-          <Panel key={n.id} title={`Notaría ${n.num}`} description={n.zona}>
-            <p className="text-sm font-medium">{n.titular}</p>
-            <p className="text-xs text-muted-foreground">{n.email} · {n.telefono}</p>
-            <div className="mt-3 flex items-center gap-2">
-              <Pill>Carga: {n.cargaActiva}</Pill>
-              <Pill>SLA: {n.slaPromedioDias} d</Pill>
-            </div>
-          </Panel>
-        ))}
-      </div>
-    </>
-  );
+  return <NotariasDashboard />;
 }
 
 // ============================ Notarios ============================
@@ -332,30 +172,7 @@ export function EscAvaluos() {
 
 // ============================ PLD ============================
 export function EscPLD() {
-  return (
-    <>
-      <PageHeader title="Expedientes / PLD" description="Checklist de documentación y prevención de lavado" />
-      <Panel title="Documentos">
-        <Table>
-          <TableHeader>
-            <TableRow><TableHead>ID</TableHead><TableHead>Expediente</TableHead><TableHead>Cliente</TableHead><TableHead>Documento</TableHead><TableHead>Responsable</TableHead><TableHead>Estado</TableHead></TableRow>
-          </TableHeader>
-          <TableBody>
-            {DOCS_PLD.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.id}</TableCell>
-                <TableCell>{d.expedienteId}</TableCell>
-                <TableCell>{d.cliente}</TableCell>
-                <TableCell>{d.documento}</TableCell>
-                <TableCell>{d.responsable}</TableCell>
-                <TableCell><Pill>{d.estado.replace("_", " ")}</Pill></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Panel>
-    </>
-  );
+  return <PldDashboard />;
 }
 
 // ============================ Borradores ============================
