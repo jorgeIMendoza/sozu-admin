@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { Copy, Stamp, FileText, Loader2, Eye, RefreshCw } from "lucide-react";
+import { Copy, Stamp, FileText, Loader2, Eye, RefreshCw, FileCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -109,6 +109,7 @@ export default function Comisiones() {
           es_pagada_comision_venta,
           id_oferta,
           url_factura_comision,
+          url_factura_xml_comision,
           es_draft_factura_comision
         `).is("id_cuenta_cobranza_padre", null).order("id", {
         ascending: false
@@ -685,15 +686,23 @@ export default function Comisiones() {
                           );
                         }
                         // Timbrada
+                        const urlFacturaXml = comision.url_factura_xml_comision;
                         return (
                           <div className="flex items-center gap-1">
                             <Badge className="bg-green-600 hover:bg-green-700 text-white">Timbrada</Badge>
                             {urlFactura && (
-                              <Button size="sm" variant="ghost" onClick={() => {
-                                registrarVista('factura_comision_sozu', { id_cuenta_cobranza: comision.id, url: urlFactura, estado: 'timbrada' });
-                                window.open(urlFactura, '_blank');
-                              }}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" title="Ver PDF"
+                                onClick={() => {
+                                  registrarVista('factura_comision_sozu', { id_cuenta_cobranza: comision.id, url: urlFactura, estado: 'timbrada' });
+                                  window.open(urlFactura, '_blank');
+                                }}>
                                 <Eye className="h-3 w-3" />
+                              </Button>
+                            )}
+                            {urlFacturaXml && (
+                              <Button size="icon" variant="ghost" className="h-6 w-6" title="Descargar XML"
+                                onClick={() => window.open(urlFacturaXml, '_blank')}>
+                                <FileCode className="h-3 w-3" />
                               </Button>
                             )}
                           </div>
