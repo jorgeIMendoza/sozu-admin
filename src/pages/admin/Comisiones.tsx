@@ -701,7 +701,10 @@ export default function Comisiones() {
                             )}
                             {urlFacturaXml && (
                               <Button size="icon" variant="ghost" className="h-6 w-6" title="Descargar XML"
-                                onClick={() => window.open(`${urlFacturaXml}?download=`, '_blank')}>
+                                onClick={() => {
+                                  const baseName = urlFacturaXml.split('/').pop()?.split('?')[0].replace(/\.[^.]+$/, '') ?? 'factura_comision';
+                                  window.open(`${urlFacturaXml}?download=${baseName}.xml`, '_blank');
+                                }}>
                                 <FileCode className="h-3 w-3" />
                               </Button>
                             )}
