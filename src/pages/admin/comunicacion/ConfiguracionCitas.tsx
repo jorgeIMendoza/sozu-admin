@@ -1024,14 +1024,23 @@ export default function ConfiguracionCitas() {
                                         <span className="text-sm font-medium">{proj.nombre}</span>
                                         {projOptions.length > 0 ? (
                                           <Select
-                                            value={currentLoc?.direccion || "__none__"}
+                                            value={(() => {
+                                              if (!currentLoc) return "__none__";
+                                              const match = projOptions.find(
+                                                (o) => Math.abs(o.latitud - currentLoc.latitud) < 0.000001 && Math.abs(o.longitud - currentLoc.longitud) < 0.000001
+                                              ) ?? projOptions.find((o) => o.direccion === currentLoc.direccion);
+                                              return match ? `${match.type}::${match.direccion}` : "__none__";
+                                            })()}
                                             onValueChange={(v) => {
                                               setProjectLocations((prev) => {
                                                 const next = new Map(prev);
                                                 if (v === "__none__") {
                                                   next.delete(pid);
                                                 } else {
-                                                  const opt = projOptions.find((o) => o.direccion === v);
+                                                  const sepIdx = v.indexOf("::");
+                                                  const type = v.slice(0, sepIdx);
+                                                  const dir = v.slice(sepIdx + 2);
+                                                  const opt = projOptions.find((o) => o.type === type && o.direccion === dir);
                                                   if (opt) {
                                                     next.set(pid, { direccion: opt.direccion, latitud: opt.latitud, longitud: opt.longitud });
                                                   }
@@ -1047,7 +1056,7 @@ export default function ConfiguracionCitas() {
                                             <SelectContent>
                                               <SelectItem value="__none__">Sin ubicación</SelectItem>
                                               {projOptions.map((opt, i) => (
-                                                <SelectItem key={i} value={opt.direccion}>
+                                                <SelectItem key={i} value={`${opt.type}::${opt.direccion}`}>
                                                   <div className="flex items-center gap-2">
                                                     {opt.type === "showroom" ? (
                                                       <Store className="h-4 w-4 text-muted-foreground shrink-0" />
