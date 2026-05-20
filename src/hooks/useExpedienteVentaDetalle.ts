@@ -1,0 +1,758 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+
+export type TipoCuentaDetalle = "Propiedad" | "Producto" | "Servicio";
+
+export interface ComisionistaDetalle {
+  email: string;
+  nombre: string;
+  rol: string;
+  porcentaje: number;
+  monto: number;
+  es_externo: boolean;
+  aprobada: boolean;
+  pagada: boolean;
+}
+
+export type EstadoTimelineStep =
+  | "completado"
+  | "pendiente"
+  | "no_aplica"
+  | "sin_evidencia";
+
+export interface TimelineStepReal {
+  paso: number;
+  nombre: string;
+  estado: EstadoTimelineStep;
+  fecha?: string;
+  responsable?: string;
+  detalle?: string;
+  es_hito?: boolean;
+}
+
+export interface ExpedienteVentaDetalle {
+  id_cuenta_cobranza: number;
+  folio: string;
+  propiedad_label: string;
+  proyecto_nombre: string;
+  numero_departamento: string;
+  modelo_nombre: string;
+  edificio_nombre: string;
+  tipo: TipoCuentaDetalle;
+  producto_nombre: string;
+  precio_final: number;
+  metraje: number;
+  precio_m2: number;
+  porcentaje_comision_venta: number;
+  comision_total_sozu: number;
+  comision_externa: number;
+  comision_a_dispersar: number;
+  compradores: Array<{ nombre: string; porcentaje: number }>;
+  propietario: string;
+  fecha_compra: string;
+  dias_desde_compra: number;
+  estatus_disponibilidad: string;
+  comisionistas: ComisionistaDetalle[];
+  timeline: TimelineStepReal[];
+}
+
+const AGENTE_INMOBILIARIO_ROL_ID = 3;
+const DOMINIOS_INTERNOS = ["sozu.com", "investimento.mx", "tallwood.mx", "daiku.mx"];
+
+function esDominioInterno(email: string | null | undefined) {
+  if (!email) return true;
+  const dom = email.split("@")[1]?.toLowerCase();
+  if (!dom) return true;
+  return DOMINIOS_INTERNOS.includes(dom);
+}
+
+function diffDays(from: string, to: Date) {
+  const d = new Date(from);
+  return Math.round((to.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function useExpedienteVentaDetalle(folio: string | null | undefined) {
+  return useQuery({
+    queryKey: ["expediente_venta_detalle", folio],
+    enabled: !!folio,
+    queryFn: async (): Promise<ExpedienteVentaDetalle | null> => {
+      const match = folio?.match(/COB-(\d+)/i);
+      if (!match) return null;
+      const cuentaId = Number(match[1]);
+
+      const { data: cuenta, error: ccErr } = await supabase
+        .from("cuentas_cobranza")
+        .select(
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido",
+        )
+        .eq("id", cuentaId)
+        .maybeSingle();
+      if (ccErr) throw ccErr;
+      if (!cuenta) return null;
+
+      const idOferta = cuenta.id_oferta as number | null;
+
+      const { data: oferta, error: ofErr } = idOferta != null
+        ? await supabase
+            .from("ofertas")
+            .select("id, id_propiedad, id_producto, id_persona_lead, email_creador, fecha_generacion, fecha_creacion")
+            .eq("id", idOferta)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (ofErr) throw ofErr;
+
+      const idPropiedad = oferta?.id_propiedad ?? null;
+      const idProducto = oferta?.id_producto ?? null;
+
+      const { data: propiedad, error: prErr } = idPropiedad != null
+        ? await supabase
+            .from("propiedades")
+            .select(
+              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, id_estatus_disponibilidad",
+            )
+            .eq("id", idPropiedad)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (prErr) throw prErr;
+
+      const idEdificioModelo = propiedad?.id_edificio_modelo ?? null;
+
+      const { data: edModelo, error: emErr } = idEdificioModelo != null
+        ? await supabase
+            .from("edificios_modelos")
+            .select("id, id_edificio, id_modelo")
+            .eq("id", idEdificioModelo)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (emErr) throw emErr;
+
+      const [{ data: modelo, error: mdErr }, { data: edificio, error: edErr }] = await Promise.all([
+        edModelo?.id_modelo != null
+          ? supabase.from("modelos").select("id, nombre").eq("id", edModelo.id_modelo).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        edModelo?.id_edificio != null
+          ? supabase
+              .from("edificios")
+              .select("id, nombre, id_proyecto")
+              .eq("id", edModelo.id_edificio)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+      if (mdErr) throw mdErr;
+      if (edErr) throw edErr;
+
+      const { data: proyecto, error: prjErr } = edificio?.id_proyecto != null
+        ? await supabase
+            .from("proyectos")
+            .select("id, nombre")
+            .eq("id", edificio.id_proyecto)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (prjErr) throw prjErr;
+
+      const { data: producto, error: prodErr } = idProducto != null
+        ? await (supabase as any)
+            .from("productos_servicios")
+            .select(
+              "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+            )
+            .eq("id", idProducto)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (prodErr) throw prodErr;
+
+      const { data: estatusDisp, error: edispErr } = propiedad?.id_estatus_disponibilidad != null
+        ? await supabase
+            .from("estatus_disponibilidad")
+            .select("id, nombre")
+            .eq("id", propiedad.id_estatus_disponibilidad)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (edispErr) throw edispErr;
+
+      const idEntidadDueno = propiedad?.id_entidad_relacionada_dueno ?? null;
+      const { data: entidadDueno, error: entErr } = idEntidadDueno != null
+        ? await (supabase as any)
+            .from("entidades_relacionadas")
+            .select("id, id_persona, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+            .eq("id", idEntidadDueno)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (entErr) throw entErr;
+
+      const propietario =
+        entidadDueno?.personas?.nombre_comercial ||
+        entidadDueno?.personas?.nombre_legal ||
+        "";
+
+      const { data: compradoresRaw, error: compErr } = await supabase
+        .from("compradores")
+        .select("id_persona, porcentaje_copropiedad")
+        .eq("id_cuenta_cobranza", cuentaId)
+        .eq("activo", true);
+      if (compErr) throw compErr;
+
+      const compradorPersonaIds = (compradoresRaw || [])
+        .map((c) => c.id_persona)
+        .filter((v): v is number => v != null);
+
+      const { data: personasComp, error: pErr } = compradorPersonaIds.length
+        ? await (supabase as any)
+            .from("personas")
+            .select("id, nombre_legal, nombre_comercial")
+            .in("id", compradorPersonaIds)
+        : { data: [] as any[], error: null };
+      if (pErr) throw pErr;
+
+      const personaMap = new Map<number, string>(
+        ((personasComp || []) as Array<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>).map((p) => [
+          p.id,
+          p.nombre_comercial || p.nombre_legal || "",
+        ]),
+      );
+
+      const compradores = (compradoresRaw || [])
+        .map((c) => ({
+          nombre: personaMap.get(c.id_persona) || "",
+          porcentaje: Number(c.porcentaje_copropiedad) || 0,
+        }))
+        .filter((c) => !!c.nombre);
+
+      // Comisionistas (internos + externos) de esta cuenta
+      const { data: comisionistas, error: cmErr } = await supabase
+        .from("comisionistas")
+        .select(
+          "email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion",
+        )
+        .eq("id_cuenta_cobranza", cuentaId)
+        .eq("activo", true);
+      if (cmErr) throw cmErr;
+
+      // Documentos asociados a la cuenta o a la propiedad (todos los tipos)
+      const orPropiedadFilter = idPropiedad != null
+        ? `id_cuenta_cobranza.eq.${cuentaId},id_propiedad.eq.${idPropiedad}`
+        : `id_cuenta_cobranza.eq.${cuentaId}`;
+      const { data: documentos, error: docsErr } = await supabase
+        .from("documentos")
+        .select(
+          "id, id_tipo_documento, url, numero, id_estatus_verificacion, fecha_creacion, fecha_actualizacion, id_cuenta_cobranza, id_propiedad",
+        )
+        .or(orPropiedadFilter)
+        .eq("activo", true);
+      if (docsErr) throw docsErr;
+
+      // Acuerdos de apartado (id_concepto=1) y enganche (id_concepto=2)
+      const { data: acuerdos, error: acErr } = await supabase
+        .from("acuerdos_pago")
+        .select("id, id_concepto, pago_completado, fecha_creacion, fecha_actualizacion")
+        .eq("id_cuenta_cobranza", cuentaId)
+        .in("id_concepto", [1, 2])
+        .eq("activo", true);
+      if (acErr) throw acErr;
+
+      // Fechas reales del pago vía aplicaciones_pago + pagos
+      const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
+      const { data: aplicacionesPago, error: apErr } = acuerdoIds.length
+        ? await (supabase as any)
+            .from("aplicaciones_pago")
+            .select("id_acuerdo_pago, pagos!fk_aplicaciones_pago_pago(fecha_pago)")
+            .in("id_acuerdo_pago", acuerdoIds)
+            .eq("activo", true)
+        : { data: [] as any[], error: null };
+      if (apErr) throw apErr;
+
+      const fechaPorAcuerdo = new Map<number, string>();
+      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; pagos: { fecha_pago: string | null } | null }>).forEach((ap) => {
+        const fecha = ap.pagos?.fecha_pago;
+        if (fecha && ap.id_acuerdo_pago != null && !fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
+          fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
+        }
+      });
+
+      // Persona-lead (prospecto inicial)
+      const idPersonaLead = (oferta as any)?.id_persona_lead ?? null;
+      const { data: personaLead, error: plErr } = idPersonaLead != null
+        ? await (supabase as any)
+            .from("personas")
+            .select("id, nombre_legal, nombre_comercial, fecha_creacion")
+            .eq("id", idPersonaLead)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (plErr) throw plErr;
+
+      // Última reserva de cita del prospecto en el proyecto comprado
+      const idProyecto = edificio?.id_proyecto ?? null;
+      const { data: ultimaReservaArr, error: rcErr } =
+        idPersonaLead != null && idProyecto != null
+          ? await supabase
+              .from("reservas_citas")
+              .select(
+                "id, fecha, fecha_asistencia, id_estatus_cita, id_agente, fecha_creacion",
+              )
+              .eq("id_persona_prospecto", idPersonaLead)
+              .eq("id_proyecto", idProyecto)
+              .eq("activo", true)
+              .order("fecha", { ascending: false, nullsFirst: false })
+              .order("fecha_creacion", { ascending: false, nullsFirst: false })
+              .limit(1)
+          : { data: [] as any[], error: null };
+      if (rcErr) throw rcErr;
+      const ultimaReserva: any = (ultimaReservaArr || [])[0] ?? null;
+
+      const { data: agenteReserva, error: agErr } =
+        ultimaReserva?.id_agente != null
+          ? await (supabase as any)
+              .from("personas")
+              .select("id, nombre_legal, nombre_comercial")
+              .eq("id", ultimaReserva.id_agente)
+              .maybeSingle()
+          : { data: null, error: null };
+      if (agErr) throw agErr;
+
+      const emails = Array.from(
+        new Set(
+          (comisionistas || [])
+            .map((c) => c.email_usuario)
+            .filter((v): v is string => !!v),
+        ),
+      );
+
+      const [
+        { data: usuarios, error: usErr },
+        { data: personasCom, error: peErr },
+      ] = await Promise.all([
+        emails.length
+          ? supabase.from("usuarios").select("email, nombre, rol_id").in("email", emails)
+          : Promise.resolve({ data: [] as Array<{ email: string; nombre: string | null; rol_id: number | null }>, error: null }),
+        emails.length
+          ? (supabase as any)
+              .from("personas")
+              .select("email, nombre_legal, nombre_comercial, tipo_persona")
+              .in("email", emails)
+              .eq("activo", true)
+          : Promise.resolve({ data: [] as Array<{ email: string; nombre_legal: string | null; nombre_comercial: string | null; tipo_persona: string | null }>, error: null }),
+      ]);
+      if (usErr) throw usErr;
+      if (peErr) throw peErr;
+
+      const usuariosMap = new Map<string, { nombre: string; rolId: number | null }>();
+      (usuarios || []).forEach((u: any) => {
+        if (u.email) usuariosMap.set(u.email, { nombre: u.nombre ?? "", rolId: u.rol_id ?? null });
+      });
+
+      const personasComMap = new Map<string, { nombre: string; tipoPersona: string | null }>();
+      ((personasCom || []) as Array<{ email: string | null; nombre_legal: string | null; nombre_comercial: string | null; tipo_persona: string | null }>).forEach((p) => {
+        if (p.email) {
+          personasComMap.set(p.email, {
+            nombre: p.nombre_comercial || p.nombre_legal || "",
+            tipoPersona: p.tipo_persona,
+          });
+        }
+      });
+
+      const rolIds = Array.from(
+        new Set(
+          (usuarios || [])
+            .map((u: any) => u.rol_id)
+            .filter((v: any): v is number => v != null),
+        ),
+      );
+      const { data: roles, error: rolesErr } = rolIds.length
+        ? await supabase.from("roles").select("id, nombre").in("id", rolIds)
+        : { data: [] as Array<{ id: number; nombre: string | null }>, error: null };
+      if (rolesErr) throw rolesErr;
+      const rolesMap = new Map((roles || []).map((r: any) => [r.id, r.nombre ?? ""]));
+
+      const precioFinal = Number(cuenta.precio_final) || 0;
+      const pctVenta = Number(cuenta.porcentaje_comision_venta) || 0;
+      const comisionTotalSozu = +((precioFinal * pctVenta) / 100).toFixed(2);
+
+      const comisionistasDetalle: ComisionistaDetalle[] = (comisionistas || []).map((c) => {
+        const usuario = c.email_usuario ? usuariosMap.get(c.email_usuario) : undefined;
+        const persona = c.email_usuario ? personasComMap.get(c.email_usuario) : undefined;
+        const esInmobiliariaExterna = persona?.tipoPersona === "pm";
+        const esAgenteExterno =
+          usuario?.rolId === AGENTE_INMOBILIARIO_ROL_ID && !esDominioInterno(c.email_usuario);
+        const esExterno = esInmobiliariaExterna || esAgenteExterno;
+        const pct = Number(c.porcentaje_comision) || 0;
+        return {
+          email: c.email_usuario ?? "",
+          nombre: persona?.nombre || usuario?.nombre || c.email_usuario || "",
+          rol: usuario?.rolId != null ? rolesMap.get(usuario.rolId) ?? "Sin rol" : "Sin rol",
+          porcentaje: pct,
+          monto: +((precioFinal * pct) / 100).toFixed(2),
+          es_externo: esExterno,
+          aprobada: !!c.aprobada,
+          pagada: !!c.pagada,
+        };
+      });
+
+      const comisionExterna = +comisionistasDetalle
+        .filter((c) => c.es_externo)
+        .reduce((sum, c) => sum + c.monto, 0)
+        .toFixed(2);
+      const comisionADispersar = +comisionistasDetalle
+        .filter((c) => !c.es_externo)
+        .reduce((sum, c) => sum + c.monto, 0)
+        .toFixed(2);
+
+      const metraje =
+        (Number(propiedad?.m2_interiores) || 0) +
+        (Number(propiedad?.m2_exteriores) || 0) +
+        (Number((propiedad as any)?.m2_loft) || 0);
+      const precioM2 = metraje > 0 ? +(precioFinal / metraje).toFixed(2) : 0;
+
+      let tipoCuenta: TipoCuentaDetalle = "Propiedad";
+      if (producto) {
+        const categoria = ((producto as any).categorias_producto?.nombre || "").toLowerCase();
+        tipoCuenta = categoria === "servicios" ? "Servicio" : "Producto";
+      }
+
+      const fechaCompra = cuenta.fecha_compra
+        ? new Date(cuenta.fecha_compra).toISOString().slice(0, 10)
+        : "";
+      const dias = fechaCompra ? diffDays(fechaCompra, new Date()) : 0;
+
+      const propiedadLabel = [edificio?.nombre, propiedad?.numero_propiedad]
+        .filter(Boolean)
+        .join(" · ");
+
+      // ──────────────────────────────────────────────────────────
+      // Timeline del ciclo (16 pasos)
+      // ──────────────────────────────────────────────────────────
+      const acuerdoApartado = (acuerdos || []).find((a: any) => a.id_concepto === 1);
+      const acuerdoEnganche = (acuerdos || []).find((a: any) => a.id_concepto === 2);
+
+      const fechaApartado = acuerdoApartado
+        ? fechaPorAcuerdo.get(acuerdoApartado.id)
+        : undefined;
+      const fechaEnganche = acuerdoEnganche
+        ? fechaPorAcuerdo.get(acuerdoEnganche.id)
+        : undefined;
+
+      const docs = (documentos || []) as Array<{
+        id: number;
+        id_tipo_documento: number;
+        id_estatus_verificacion: number | null;
+        fecha_creacion: string | null;
+        fecha_actualizacion: string | null;
+        numero: string | null;
+        url: string | null;
+      }>;
+      const docContratoCliente = docs.find((d) => d.id_tipo_documento === 42); // Contrato firmado por cliente
+      const docContratoCompletoValidado = docs.find(
+        (d) => d.id_tipo_documento === 18 && d.id_estatus_verificacion === 2,
+      );
+      const docContratoCompleto = docs.find((d) => d.id_tipo_documento === 18);
+      const docFacturaExterna = docs.find((d) => d.id_tipo_documento === 46);
+      const algunDocValidado = docs.some((d) => d.id_estatus_verificacion === 2);
+
+      const comisionistasExternos = comisionistasDetalle.filter((c) => c.es_externo);
+      const comisionistasInternos = comisionistasDetalle.filter((c) => !c.es_externo);
+
+      const fmtDateOnly = (s: string | null | undefined) =>
+        s ? new Date(s).toISOString().slice(0, 10) : undefined;
+
+      const fechasComisionistasInternosCreacion = comisionistasInternos
+        .map((_) => null) // creación viene del raw, mapeo abajo
+        .filter(Boolean);
+      // Re-obtengo desde el raw para acceder a fecha_creacion / fecha_pago_comision
+      const internosRaw = (comisionistas || []).filter((c) => {
+        const u = c.email_usuario ? usuariosMap.get(c.email_usuario) : undefined;
+        const p = c.email_usuario ? personasComMap.get(c.email_usuario) : undefined;
+        const esInm = p?.tipoPersona === "pm";
+        const esAg = u?.rolId === AGENTE_INMOBILIARIO_ROL_ID && !esDominioInterno(c.email_usuario);
+        return !(esInm || esAg);
+      });
+      const externosRaw = (comisionistas || []).filter((c) => {
+        const u = c.email_usuario ? usuariosMap.get(c.email_usuario) : undefined;
+        const p = c.email_usuario ? personasComMap.get(c.email_usuario) : undefined;
+        const esInm = p?.tipoPersona === "pm";
+        const esAg = u?.rolId === AGENTE_INMOBILIARIO_ROL_ID && !esDominioInterno(c.email_usuario);
+        return esInm || esAg;
+      });
+
+      const fechaCreacionInternos = internosRaw
+        .map((c) => fmtDateOnly(c.fecha_creacion as string | null))
+        .filter((v): v is string => !!v)
+        .sort()[0];
+      const todosInternosPagados =
+        internosRaw.length > 0 && internosRaw.every((c) => !!c.pagada);
+      const fechaDispersionInternos = todosInternosPagados
+        ? internosRaw
+            .map((c) => fmtDateOnly(c.fecha_pago_comision as string | null))
+            .filter((v): v is string => !!v)
+            .sort()
+            .pop()
+        : undefined;
+      const fechaPagoExternoMayor = externosRaw
+        .filter((c) => !!c.pagada)
+        .map((c) => fmtDateOnly(c.fecha_pago_comision as string | null))
+        .filter((v): v is string => !!v)
+        .sort()
+        .pop();
+      const todosExternosPagados =
+        externosRaw.length > 0 && externosRaw.every((c) => !!c.pagada);
+
+      const tieneExternos = externosRaw.length > 0;
+
+      const timeline: TimelineStepReal[] = [
+        {
+          paso: 1,
+          nombre: "Prospecto creado",
+          estado: personaLead ? "completado" : "sin_evidencia",
+          fecha: fmtDateOnly((personaLead as any)?.fecha_creacion),
+          responsable: (oferta as any)?.email_creador || undefined,
+          detalle:
+            (personaLead as any)?.nombre_comercial ||
+            (personaLead as any)?.nombre_legal ||
+            undefined,
+        },
+        {
+          paso: 2,
+          nombre: "Cita realizada",
+          estado: ultimaReserva
+            ? ultimaReserva.fecha_asistencia
+              ? "completado"
+              : "pendiente"
+            : "sin_evidencia",
+          fecha: ultimaReserva
+            ? fmtDateOnly(ultimaReserva.fecha_asistencia || ultimaReserva.fecha)
+            : undefined,
+          responsable:
+            (agenteReserva as any)?.nombre_comercial ||
+            (agenteReserva as any)?.nombre_legal ||
+            undefined,
+          detalle: ultimaReserva
+            ? ultimaReserva.fecha_asistencia
+              ? "Asistencia registrada"
+              : "Reserva agendada, sin registro de asistencia"
+            : "Sin reservas para este prospecto en el proyecto",
+        },
+        {
+          paso: 3,
+          nombre: "Oferta generada",
+          estado: oferta ? "completado" : "sin_evidencia",
+          fecha: fmtDateOnly(
+            (oferta as any)?.fecha_generacion || (oferta as any)?.fecha_creacion,
+          ),
+          responsable: (oferta as any)?.email_creador || "Sistema",
+          detalle: oferta ? `Folio OFR-${(oferta as any).id}` : undefined,
+        },
+        {
+          paso: 4,
+          nombre: "Apartado: CLABE generada, primer pago",
+          estado: acuerdoApartado?.pago_completado
+            ? "completado"
+            : acuerdoApartado
+              ? "pendiente"
+              : "sin_evidencia",
+          fecha: fechaApartado || fmtDateOnly(acuerdoApartado?.fecha_creacion),
+          responsable: "STP / Cliente",
+        },
+        {
+          paso: 5,
+          nombre: "Documentación validada",
+          estado: algunDocValidado
+            ? "completado"
+            : docs.length > 0
+              ? "pendiente"
+              : "sin_evidencia",
+          fecha: algunDocValidado
+            ? fmtDateOnly(
+                docs.find((d) => d.id_estatus_verificacion === 2)?.fecha_creacion,
+              )
+            : undefined,
+          responsable: "Equipo Compradores",
+        },
+        {
+          paso: 6,
+          nombre: "Contrato generado",
+          estado: cuenta.contrato_draft != null ? "completado" : "pendiente",
+          fecha: cuenta.contrato_draft != null
+            ? fmtDateOnly((cuenta as any).fecha_actualizacion)
+            : undefined,
+          responsable: "Edge Function generar-contrato",
+        },
+        {
+          paso: 7,
+          nombre: "Firma cliente",
+          estado: acuerdoApartado?.pago_completado
+            ? "completado"
+            : acuerdoApartado
+              ? "pendiente"
+              : "sin_evidencia",
+          fecha: fechaApartado || fmtDateOnly(acuerdoApartado?.fecha_creacion),
+          responsable: compradores[0]?.nombre || "Cliente",
+          detalle: acuerdoApartado?.pago_completado
+            ? "Aproximación: momento en que la propiedad pasó a Apartado"
+            : undefined,
+        },
+        {
+          paso: 8,
+          nombre: "Firma SOZU",
+          estado: docContratoCompletoValidado
+            ? "completado"
+            : docContratoCompleto
+              ? "pendiente"
+              : "sin_evidencia",
+          fecha: docContratoCompletoValidado
+            ? fmtDateOnly(docContratoCompletoValidado.fecha_actualizacion)
+            : undefined,
+          responsable: "Representante legal SOZU",
+          detalle: docContratoCompletoValidado
+            ? "Documento 'Contrato firmado completamente' marcado Validado"
+            : docContratoCompleto
+              ? "Doc cargado, pendiente validar"
+              : "Sin documento 'Contrato firmado completamente'",
+        },
+        {
+          paso: 9,
+          nombre: "Enganche completo",
+          estado: acuerdoEnganche?.pago_completado
+            ? "completado"
+            : acuerdoEnganche
+              ? "pendiente"
+              : "sin_evidencia",
+          fecha: fechaEnganche || fmtDateOnly(acuerdoEnganche?.fecha_actualizacion),
+          responsable: "STP / Cliente",
+        },
+        {
+          paso: 10,
+          nombre: "VENTA reconocida",
+          estado: fechaCompra ? "completado" : "pendiente",
+          fecha: fechaCompra || undefined,
+          responsable: "Sistema",
+          detalle:
+            estatusDisp?.nombre === "Vendido"
+              ? "cambio a estatus Vendida"
+              : estatusDisp?.nombre || undefined,
+          es_hito: true,
+        },
+        {
+          paso: 11,
+          nombre: "Factura SOZU al desarrollador",
+          estado:
+            cuenta.url_factura_comision != null && !cuenta.es_draft_factura_comision
+              ? "completado"
+              : cuenta.url_factura_comision != null
+                ? "pendiente"
+                : "pendiente",
+          fecha: cuenta.url_factura_comision != null
+            ? fmtDateOnly((cuenta as any).fecha_actualizacion)
+            : undefined,
+          responsable: "Dirección General",
+          detalle:
+            cuenta.url_factura_comision == null
+              ? "Pendiente generación"
+              : cuenta.es_draft_factura_comision
+                ? "Generada en draft, pendiente timbre"
+                : "Timbrada",
+        },
+        {
+          paso: 12,
+          nombre: "Pago del desarrollador a SOZU",
+          estado: cuenta.es_pagada_comision_venta
+            ? "completado"
+            : cuenta.url_factura_comision != null && !cuenta.es_draft_factura_comision
+              ? "pendiente"
+              : "no_aplica",
+          fecha: cuenta.es_pagada_comision_venta
+            ? fmtDateOnly((cuenta as any).fecha_pago_comision)
+            : undefined,
+          detalle: !cuenta.es_pagada_comision_venta
+            ? "No aplica hasta emitir factura"
+            : undefined,
+        },
+        {
+          paso: 13,
+          nombre: "Factura externo",
+          estado: !tieneExternos
+            ? "no_aplica"
+            : docFacturaExterna
+              ? "completado"
+              : "pendiente",
+          fecha: docFacturaExterna ? fmtDateOnly(docFacturaExterna.fecha_creacion) : undefined,
+          responsable: comisionistasExternos.map((c) => c.nombre).join(", ") || undefined,
+          detalle: !tieneExternos
+            ? "No hay comisionistas externos en esta cuenta"
+            : !docFacturaExterna
+              ? "Pendiente recepción"
+              : undefined,
+        },
+        {
+          paso: 14,
+          nombre: "Pago a externo",
+          estado: !tieneExternos
+            ? "no_aplica"
+            : todosExternosPagados
+              ? "completado"
+              : "pendiente",
+          fecha: todosExternosPagados ? fechaPagoExternoMayor : undefined,
+          detalle: !tieneExternos
+            ? "No aplica"
+            : !todosExternosPagados
+              ? `${externosRaw.filter((c) => !c.pagada).length} pendiente(s)`
+              : undefined,
+        },
+        {
+          paso: 15,
+          nombre: "Cálculo de comisiones internas",
+          estado:
+            internosRaw.length > 0
+              ? "completado"
+              : "sin_evidencia",
+          fecha: fechaCreacionInternos,
+          responsable: "Sistema",
+          detalle:
+            internosRaw.length > 0
+              ? `${internosRaw.length} comisionista(s) interno(s)`
+              : undefined,
+        },
+        {
+          paso: 16,
+          nombre: "Dispersión de comisiones internas",
+          estado:
+            internosRaw.length === 0
+              ? "no_aplica"
+              : todosInternosPagados
+                ? "completado"
+                : "pendiente",
+          fecha: fechaDispersionInternos,
+          detalle:
+            internosRaw.length === 0
+              ? "No aplica"
+              : !todosInternosPagados
+                ? `${internosRaw.filter((c) => !c.pagada).length} pendiente(s)`
+                : undefined,
+        },
+      ];
+
+      return {
+        id_cuenta_cobranza: cuentaId,
+        folio: `COB-${cuentaId}`,
+        propiedad_label: propiedadLabel,
+        proyecto_nombre: proyecto?.nombre ?? "",
+        numero_departamento: propiedad?.numero_propiedad ?? "",
+        modelo_nombre: modelo?.nombre ?? "",
+        edificio_nombre: edificio?.nombre ?? "",
+        tipo: tipoCuenta,
+        producto_nombre: (producto as any)?.nombre ?? "",
+        precio_final: precioFinal,
+        metraje,
+        precio_m2: precioM2,
+        porcentaje_comision_venta: pctVenta,
+        comision_total_sozu: comisionTotalSozu,
+        comision_externa: comisionExterna,
+        comision_a_dispersar: comisionADispersar,
+        compradores,
+        propietario,
+        fecha_compra: fechaCompra,
+        dias_desde_compra: dias,
+        estatus_disponibilidad: estatusDisp?.nombre ?? "",
+        comisionistas: comisionistasDetalle,
+        timeline,
+      };
+    },
+  });
+}
