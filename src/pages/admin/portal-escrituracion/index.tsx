@@ -16,6 +16,7 @@ import { NotariasDashboard } from "./NotariasDashboard";
 import { PldDashboard } from "./PldDashboard";
 import { CreditosHipotecariosDashboard } from "./CreditosHipotecariosDashboard";
 import { ProgramarCitasDashboard } from "./ProgramarCitasDashboard";
+import { DemandasDashboard } from "./DemandasDashboard";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
@@ -105,6 +106,11 @@ export function EscCredito() {
 // ============================ Programar Citas ============================
 export function EscCitas() {
   return <ProgramarCitasDashboard />;
+}
+
+// ============================ Dashboard de Demandas ============================
+export function EscDemandas() {
+  return <DemandasDashboard />;
 }
 
 // ============================ Notarías ============================

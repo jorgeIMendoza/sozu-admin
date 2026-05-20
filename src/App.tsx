@@ -181,6 +181,7 @@ const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index"
 const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
 const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
 const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
+const EscDemandas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDemandas })));
 
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
@@ -508,6 +509,7 @@ const App = () => (
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
                   <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
+                  <Route path="portal-escrituracion/demandas" element={<EscDemandas />} />
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />

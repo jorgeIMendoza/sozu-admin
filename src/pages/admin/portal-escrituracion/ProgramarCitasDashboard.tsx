@@ -6,7 +6,7 @@ import {
   FileSignature, KeyRound, CalendarDays, Clock,
   CheckCircle2, XCircle, AlertTriangle, MapPin,
   User, FileText, Bell, RotateCcw, ChevronRight,
-  Building2,
+  Building2, Plus, ChevronLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -359,6 +359,644 @@ function EmptyState({ title, sub, onRetry }: { title: string; sub?: string; onRe
   );
 }
 
+// ─── Nueva Cita Dialog ────────────────────────────────────────────────────────
+
+interface NuevaCitaForm {
+  idTipoCita: number | '';
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  idPersona: number | '';
+  notas: string;
+  ubicacion: string;
+}
+
+type LugarKind = 'proyecto' | 'notaria' | null;
+
+function NuevaCitaDialog({
+  open,
+  onClose,
+  tiposCita,
+  proyectoId,
+  proyectoNombre,
+  defaultFecha,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tiposCita: { id: number; nombre: string }[];
+  proyectoId: number;
+  proyectoNombre: string;
+  defaultFecha: string;
+  onCreated: () => void;
+}) {
+  const emptyForm = (): NuevaCitaForm => ({
+    idTipoCita: '',
+    fecha: defaultFecha,
+    horaInicio: '',
+    horaFin: '',
+    idPersona: '',
+    notas: '',
+    ubicacion: '',
+  });
+
+  const [form, setForm]             = useState<NuevaCitaForm>(emptyForm);
+  const [personaSearch, setPersonaSearch] = useState('');
+  const [lugarOpen, setLugarOpen]   = useState(false);
+  const [lugarKind, setLugarKind]   = useState<LugarKind>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(emptyForm());
+      setPersonaSearch('');
+      setLugarOpen(false);
+      setLugarKind(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultFecha]);
+
+  // ── Personas ────────────────────────────────────────────────────────────────
+  const { data: personas = [] } = useQuery({
+    queryKey: ['personas-cita-picker'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('personas')
+        .select('id, nombre_legal')
+        .eq('activo', true)
+        .order('nombre_legal')
+        .limit(300);
+      return (data || []) as { id: number; nombre_legal: string }[];
+    },
+    enabled: open,
+  });
+
+  // ── Notarios ────────────────────────────────────────────────────────────────
+  const { data: notarios = [] } = useQuery({
+    queryKey: ['notarios-cita-picker'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('notarios')
+        .select('id, notaria, nombre')
+        .eq('activo', true)
+        .order('notaria');
+      return (data || []) as { id: number; notaria: string; nombre: string }[];
+    },
+    enabled: open,
+  });
+
+  const filteredPersonas = personaSearch.trim()
+    ? personas.filter(p => p.nombre_legal?.toLowerCase().includes(personaSearch.toLowerCase()))
+    : personas.slice(0, 20);
+
+  const set = (k: keyof NuevaCitaForm, v: string | number | '') =>
+    setForm(f => ({ ...f, [k]: v }));
+
+  // ── Lugar helpers ────────────────────────────────────────────────────────────
+  function selectProyecto() {
+    set('ubicacion', proyectoNombre);
+    setLugarKind('proyecto');
+    setLugarOpen(false);
+  }
+
+  function selectNotaria(n: { id: number; notaria: string; nombre: string }) {
+    const label = n.nombre ? `${n.notaria} — ${n.nombre}` : n.notaria;
+    set('ubicacion', label);
+    setLugarKind('notaria');
+    setLugarOpen(false);
+  }
+
+  function clearLugar() {
+    set('ubicacion', '');
+    setLugarKind(null);
+  }
+
+  // ── Mutation ─────────────────────────────────────────────────────────────────
+  const createMutation = useMutation({
+    mutationFn: async (f: NuevaCitaForm) => {
+      if (!f.idTipoCita || !f.fecha || !f.horaInicio || !f.horaFin)
+        throw new Error('Completa los campos requeridos');
+      const { error } = await supabase.from('reservas_citas').insert({
+        id_tipo_cita: f.idTipoCita as number,
+        fecha: f.fecha,
+        hora_inicio: f.horaInicio,
+        hora_fin: f.horaFin,
+        id_persona: f.idPersona || null,
+        id_proyecto: proyectoId,
+        notas: f.notas || null,
+        ubicacion: f.ubicacion || null,
+        estatus: 'programada',
+        activo: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Cita creada correctamente');
+      onCreated();
+      onClose();
+    },
+    onError: (e: any) => toast.error(e.message || 'Error al crear la cita'),
+  });
+
+  if (!open) return null;
+
+  // Clasificar tipos para styling; mostrar todos sin filtrar
+  const tiposConClase = tiposCita.map(tc => {
+    const tipo = classifyTipo(tc.nombre);
+    const isFirma = tipo === 'FIRMA_ESCRITURA';
+    const isEntrega = tipo === 'ENTREGA';
+    return { ...tc, tipo, isFirma, isEntrega };
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+        onClick={() => { setLugarOpen(false); onClose(); }}
+      />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Nueva cita</h2>
+            <p className="text-xs text-slate-500 mt-0.5">{proyectoNombre}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="overflow-y-auto px-5 py-4 space-y-4" onClick={() => setLugarOpen(false)}>
+
+          {/* ── Tipo de cita ── */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-2">
+              Tipo de cita <span className="text-red-500">*</span>
+            </label>
+
+            {tiposConClase.length === 0 ? (
+              <p className="text-xs text-slate-400 py-1">Cargando tipos de cita…</p>
+            ) : (
+              <div className="space-y-1.5">
+                {/* Grupo Firma de Escritura */}
+                {tiposConClase.filter(t => t.isFirma).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <FileSignature className="w-3 h-3" /> Firma de Escritura
+                    </p>
+                    {tiposConClase.filter(t => t.isFirma).map(tc => {
+                      const sel = form.idTipoCita === tc.id;
+                      return (
+                        <button
+                          key={tc.id}
+                          type="button"
+                          onClick={() => set('idTipoCita', tc.id)}
+                          className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                            sel
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                              : 'border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'
+                          }`}
+                        >
+                          <FileSignature className="w-4 h-4 shrink-0" />
+                          {tc.nombre}
+                          {sel && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Grupo Entrega de Departamento */}
+                {tiposConClase.filter(t => t.isEntrega).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <KeyRound className="w-3 h-3" /> Entrega de Departamento
+                    </p>
+                    {tiposConClase.filter(t => t.isEntrega).map(tc => {
+                      const sel = form.idTipoCita === tc.id;
+                      return (
+                        <button
+                          key={tc.id}
+                          type="button"
+                          onClick={() => set('idTipoCita', tc.id)}
+                          className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                            sel
+                              ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                              : 'border-slate-200 text-slate-700 hover:border-amber-300 hover:bg-amber-50'
+                          }`}
+                        >
+                          <KeyRound className="w-4 h-4 shrink-0" />
+                          {tc.nombre}
+                          {sel && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Otros tipos */}
+                {tiposConClase.filter(t => !t.isFirma && !t.isEntrega).map(tc => {
+                  const sel = form.idTipoCita === tc.id;
+                  return (
+                    <button
+                      key={tc.id}
+                      type="button"
+                      onClick={() => set('idTipoCita', tc.id)}
+                      className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                        sel
+                          ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
+                          : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <CalendarDays className="w-4 h-4 shrink-0" />
+                      {tc.nombre}
+                      {sel && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0" />}
+                    </button>
+                  );
+                })}
+
+                {/* Fallback: ninguno clasificado → mostrar todos como neutros */}
+                {tiposConClase.every(t => !t.isFirma && !t.isEntrega) && tiposConClase.length > 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Selecciona el tipo correspondiente a tu cita.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Fecha ── */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+              Fecha <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={form.fecha}
+              onChange={e => set('fecha', e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-300 transition-shadow"
+            />
+          </div>
+
+          {/* ── Horas ── */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Hora inicio <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                value={form.horaInicio}
+                onChange={e => {
+                  set('horaInicio', e.target.value);
+                  if (e.target.value) {
+                    const [h, m] = e.target.value.split(':').map(Number);
+                    const end = `${String(Math.min(h + 1, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                    set('horaFin', end);
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-300 transition-shadow"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Hora fin <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                value={form.horaFin}
+                onChange={e => set('horaFin', e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-300 transition-shadow"
+              />
+            </div>
+          </div>
+
+          {/* ── Cliente ── */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Cliente</label>
+            <div className="relative">
+              <input
+                placeholder="Buscar cliente…"
+                value={personaSearch}
+                onChange={e => {
+                  setPersonaSearch(e.target.value);
+                  if (form.idPersona) set('idPersona', '');
+                }}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-300 transition-shadow"
+              />
+              {form.idPersona && (
+                <button
+                  onClick={() => { set('idPersona', ''); setPersonaSearch(''); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {personaSearch && !form.idPersona && (
+              <div className="mt-1 border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-36 overflow-y-auto">
+                {filteredPersonas.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => { set('idPersona', p.id); setPersonaSearch(p.nombre_legal || ''); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                  >
+                    {p.nombre_legal}
+                  </button>
+                ))}
+                {filteredPersonas.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-slate-400">Sin resultados</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Lugar ── */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Lugar</label>
+            <div className="relative" onClick={e => e.stopPropagation()}>
+              {/* Trigger */}
+              <button
+                type="button"
+                onClick={() => setLugarOpen(o => !o)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm bg-slate-50 border rounded-xl outline-none transition-all text-left ${
+                  lugarOpen
+                    ? 'border-slate-400 ring-2 ring-slate-200'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {lugarKind === 'proyecto' && <Building2 className="w-4 h-4 text-indigo-500 shrink-0" />}
+                {lugarKind === 'notaria' && <FileText className="w-4 h-4 text-amber-500 shrink-0" />}
+                {!lugarKind && <MapPin className="w-4 h-4 text-slate-400 shrink-0" />}
+                <span className={`flex-1 truncate ${form.ubicacion ? 'text-slate-900' : 'text-slate-400'}`}>
+                  {form.ubicacion || 'Seleccionar lugar…'}
+                </span>
+                {form.ubicacion ? (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); clearLugar(); }}
+                    className="text-slate-400 hover:text-slate-600 shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${lugarOpen ? 'rotate-180' : ''}`} />
+                )}
+              </button>
+
+              {/* Dropdown panel */}
+              {lugarOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-slate-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                  {/* Sección Proyecto */}
+                  <div className="px-3 pt-2.5 pb-1">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                      <Building2 className="w-3 h-3" /> Proyecto
+                    </p>
+                    <button
+                      type="button"
+                      onClick={selectProyecto}
+                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        lugarKind === 'proyecto' && form.ubicacion === proyectoNombre
+                          ? 'bg-indigo-50 text-indigo-700 font-medium'
+                          : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="truncate">{proyectoNombre}</span>
+                      <span className="ml-auto text-[10px] text-slate-400 shrink-0">Entrega depto.</span>
+                    </button>
+                  </div>
+
+                  {/* Sección Notarías */}
+                  <div className="px-3 pt-2 pb-2.5 border-t border-slate-50 mt-1">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                      <FileText className="w-3 h-3" /> Notarías
+                    </p>
+                    {notarios.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-1 px-3">Sin notarías registradas</p>
+                    ) : (
+                      notarios.map(n => {
+                        const label = n.nombre ? `${n.notaria} — ${n.nombre}` : n.notaria;
+                        const isSel = lugarKind === 'notaria' && form.ubicacion === label;
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => selectNotaria(n)}
+                            className={`w-full text-left flex items-start gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                              isSel
+                                ? 'bg-amber-50 text-amber-700 font-medium'
+                                : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-xs">{n.notaria}</p>
+                              {n.nombre && <p className="text-[11px] text-slate-400 truncate">{n.nombre}</p>}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Notas ── */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Notas</label>
+            <textarea
+              rows={3}
+              placeholder="Instrucciones, documentos requeridos…"
+              value={form.notas}
+              onChange={e => set('notas', e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-300 transition-shadow resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => createMutation.mutate(form)}
+            disabled={
+              createMutation.isPending ||
+              !form.idTipoCita ||
+              !form.fecha ||
+              !form.horaInicio ||
+              !form.horaFin
+            }
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
+            Crear cita
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Month Calendar ───────────────────────────────────────────────────────────
+
+function MonthCalendar({
+  rows,
+  calendarMonth,
+  onPrev,
+  onNext,
+  selectedDay,
+  onSelectDay,
+}: {
+  rows: CitaRow[];
+  calendarMonth: Date;
+  onPrev: () => void;
+  onNext: () => void;
+  selectedDay: string | null;
+  onSelectDay: (day: string) => void;
+}) {
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const citasByDay = useMemo(() => {
+    const map: Record<string, CitaRow[]> = {};
+    rows.forEach(r => {
+      if (!map[r.fecha]) map[r.fecha] = [];
+      map[r.fecha].push(r);
+    });
+    return map;
+  }, [rows]);
+
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Monday=0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = calendarMonth.toLocaleDateString('es-MX', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 w-[268px] shrink-0">
+      {/* Navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={onPrev}
+          className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <p className="text-sm font-semibold text-slate-800 capitalize">{monthLabel}</p>
+        <button
+          onClick={onNext}
+          className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 mb-0.5">
+        {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
+          <div
+            key={i}
+            className="text-center text-[10px] font-semibold text-slate-400 py-1"
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const citas = citasByDay[dateStr] || [];
+          const isToday = dateStr === todayStr;
+          const isSelected = dateStr === selectedDay;
+          const hasFirma = citas.some(c => c.tipo === 'FIRMA_ESCRITURA' && c.status !== 'CANCELADA');
+          const hasEntrega = citas.some(c => c.tipo === 'ENTREGA' && c.status !== 'CANCELADA');
+
+          return (
+            <button
+              key={i}
+              onClick={() => onSelectDay(dateStr)}
+              className={`flex flex-col items-center rounded-lg py-1 px-0 transition-all hover:bg-slate-100 ${
+                isSelected
+                  ? 'bg-slate-900 hover:bg-slate-800'
+                  : isToday
+                  ? 'ring-1 ring-slate-300 bg-slate-50'
+                  : ''
+              }`}
+            >
+              <span
+                className={`text-[11px] tabular-nums leading-5 ${
+                  isSelected
+                    ? 'text-white font-bold'
+                    : isToday
+                    ? 'font-bold text-slate-900'
+                    : 'text-slate-600'
+                }`}
+              >
+                {day}
+              </span>
+              <div className="flex gap-0.5 h-1.5 mt-0.5">
+                {hasFirma && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? 'bg-indigo-300' : 'bg-indigo-500'
+                    }`}
+                  />
+                )}
+                {hasEntrega && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? 'bg-amber-300' : 'bg-amber-500'
+                    }`}
+                  />
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-4">
+        <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+          Firma escritura
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+          Entrega depto.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
@@ -374,6 +1012,12 @@ export function ProgramarCitasDashboard() {
   const [page, setPage]                   = useState(0);
   const [selected, setSelected]           = useState<CitaRow | null>(null);
   const [proyDropOpen, setProyDropOpen]   = useState(false);
+
+  const [viewMode, setViewMode]           = useState<'lista' | 'calendario'>('lista');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [selectedDay, setSelectedDay]     = useState<string | null>(null);
+  const [showNuevaCita, setShowNuevaCita] = useState(false);
+  const [nuevaCitaFecha, setNuevaCitaFecha] = useState('');
 
   useEffect(() => { setPage(0); }, [proyectoId, cardFilter, search, filtroStatus]);
   useEffect(() => {
@@ -414,7 +1058,7 @@ export function ProgramarCitasDashboard() {
   const { data: tiposCita = [] } = useQuery({
     queryKey: ['tipos-cita'],
     queryFn: async () => {
-      const { data } = await supabase.from('tipos_cita').select('id, nombre');
+      const { data } = await supabase.from('tipos_cita').select('id, nombre').eq('activo', true);
       return (data || []) as { id: number; nombre: string }[];
     },
   });
@@ -535,6 +1179,11 @@ export function ProgramarCitasDashboard() {
 
     return list;
   }, [rows, cardFilter, filtroStatus, search]);
+
+  const dayRows = useMemo(() =>
+    selectedDay ? rows.filter(r => r.fecha === selectedDay) : [],
+    [rows, selectedDay]
+  );
 
   const pageRows = useMemo(() =>
     filteredRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
@@ -672,7 +1321,41 @@ export function ProgramarCitasDashboard() {
             />
           </div>
 
+          {/* ── View toggle ── */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex bg-slate-100 rounded-xl p-0.5">
+              <button
+                onClick={() => setViewMode('lista')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  viewMode === 'lista'
+                    ? 'bg-white shadow-sm text-slate-900'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Lista
+              </button>
+              <button
+                onClick={() => setViewMode('calendario')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  viewMode === 'calendario'
+                    ? 'bg-white shadow-sm text-slate-900'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Calendario
+              </button>
+            </div>
+            <button
+              onClick={() => { setNuevaCitaFecha(''); setShowNuevaCita(true); }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-xl text-xs font-medium hover:bg-slate-800 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nueva cita
+            </button>
+          </div>
+
           {/* ── Table + Detail ── */}
+          {viewMode === 'lista' && (
           <div className="flex flex-1 gap-4 min-h-0">
             {/* Table panel */}
             <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col min-h-0">
@@ -827,7 +1510,140 @@ export function ProgramarCitasDashboard() {
               />
             )}
           </div>
+          )}
+
+          {/* ── Calendario view ── */}
+          {viewMode === 'calendario' && (
+            <div className="flex flex-1 gap-4 min-h-0">
+              <MonthCalendar
+                rows={rows}
+                calendarMonth={calendarMonth}
+                onPrev={() => setCalendarMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                onNext={() => setCalendarMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                selectedDay={selectedDay}
+                onSelectDay={(d) => { setSelectedDay(d); setSelected(null); }}
+              />
+
+              {/* Citas del día */}
+              <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col min-h-0">
+                {!selectedDay ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3">
+                    <CalendarDays className="w-8 h-8 text-slate-300" />
+                    <p className="text-sm text-slate-500">Selecciona un día para ver las citas</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{fmtDate(selectedDay)}</p>
+                        <p className="text-xs text-slate-500">
+                          {dayRows.length} cita{dayRows.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { setNuevaCitaFecha(selectedDay); setShowNuevaCita(true); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-medium hover:bg-slate-800 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Agregar cita
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-4 space-y-2">
+                      {dayRows.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 gap-3">
+                          <CalendarDays className="w-7 h-7 text-slate-300" />
+                          <p className="text-sm font-medium text-slate-500">Sin citas este día</p>
+                          <button
+                            onClick={() => { setNuevaCitaFecha(selectedDay); setShowNuevaCita(true); }}
+                            className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Agregar cita
+                          </button>
+                        </div>
+                      ) : (
+                        dayRows.map(cita => {
+                          const isFirma = cita.tipo === 'FIRMA_ESCRITURA';
+                          const Icon = isFirma ? FileSignature : KeyRound;
+                          return (
+                            <button
+                              key={cita.id}
+                              onClick={() => setSelected(cita)}
+                              className={`w-full text-left p-3 rounded-xl border transition-all hover:shadow-sm ${
+                                selected?.id === cita.id
+                                  ? 'border-slate-400 bg-slate-50 shadow-sm'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <div
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                    isFirma ? 'bg-indigo-50' : 'bg-amber-50'
+                                  }`}
+                                >
+                                  <Icon
+                                    className={`w-3.5 h-3.5 ${
+                                      isFirma ? 'text-indigo-600' : 'text-amber-600'
+                                    }`}
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <p className="text-xs font-semibold text-slate-900 truncate">
+                                      {cita.clienteNombre}
+                                    </p>
+                                    <StatusBadge status={cita.status} />
+                                  </div>
+                                  <p className="text-[11px] text-slate-500">{cita.tipoNombre}</p>
+                                  <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    {fmtTime(cita.horaInicio)} — {fmtTime(cita.horaFin)}
+                                  </p>
+                                  {cita.ubicacion && (
+                                    <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                      <MapPin className="w-3 h-3 shrink-0" />
+                                      <span className="truncate">{cita.ubicacion}</span>
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {selected && (
+                <DetailPanel
+                  cita={selected}
+                  onClose={() => setSelected(null)}
+                  onConfirm={(id) => confirmMutation.mutate(id)}
+                  onCancel={(id) => cancelMutation.mutate(id)}
+                  onComplete={(id) => completeMutation.mutate(id)}
+                  updating={isUpdating && updatingId === selected.id}
+                />
+              )}
+            </div>
+          )}
         </>
+      )}
+
+      {showNuevaCita && proyectoId && (
+        <NuevaCitaDialog
+          open={showNuevaCita}
+          onClose={() => setShowNuevaCita(false)}
+          tiposCita={tiposCita}
+          proyectoId={proyectoId}
+          proyectoNombre={proyectoNombre}
+          defaultFecha={nuevaCitaFecha}
+          onCreated={() =>
+            qc.invalidateQueries({ queryKey: ['reservas-citas-escrituracion', proyectoId] })
+          }
+        />
       )}
     </div>
   );
