@@ -1523,9 +1523,10 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .select('id_configuracion_cita, id_proyecto')
         .in('id_configuracion_cita', configIds);
 
-      // Filter to configs that match agent's projects
+      // Filter to configs that match agent's projects; store proyecto_ids for later use
       const filtered = allConfigs.filter((c: any) => {
         const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === c.id).map((cp: any) => cp.id_proyecto);
+        c.proyecto_ids = projIds;
         return projIds.some((pid: number) => agentProjectIds.includes(pid));
       });
 
@@ -1778,27 +1779,10 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .eq('id', personaId)
         .single();
 
-      const { data: entRel } = await supabase
-        .from('entidades_relacionadas')
-        .select('id_proyecto')
-        .eq('id_persona', personaId)
-        .eq('activo', true)
-        .limit(1)
-        .maybeSingle();
-
-      let showroomData: any = null;
-      if (entRel?.id_proyecto) {
-        const { data: showroom } = await supabase
-          .from('showrooms_proyecto')
-          .select('descripcion_direccion, latitud, longitud')
-          .eq('id_proyecto', entRel.id_proyecto)
-          .eq('activo', true)
-          .limit(1)
-          .maybeSingle();
-        showroomData = showroom;
-      }
-
       const selectedConfig = trainingConfigs.find((c: any) => c.id === selectedConfigId);
+      // Resolve the project for this config that belongs to the agent
+      const selectedProyectoId = (selectedConfig?.proyecto_ids as number[] | undefined)
+        ?.find((pid) => agentProjectIds.includes(pid)) ?? null;
 
       const { data, error } = await supabase.functions.invoke('agendar-capacitacion', {
         body: {
@@ -1808,9 +1792,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
           agent_email: persona?.email || '',
           calendar_owner_email: selectedConfig?.id_usuario_email || undefined,
           config_id: selectedConfigId,
-          direccion_showroom: showroomData?.descripcion_direccion || null,
-          latitud_showroom: showroomData?.latitud || null,
-          longitud_showroom: showroomData?.longitud || null,
+          id_proyecto: selectedProyectoId,
         },
       });
 
