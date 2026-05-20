@@ -713,13 +713,22 @@ export function DemandasDashboard() {
   const [selectedRow, setSelectedRow] = useState<DemandaRow | null>(null);
   const [tablesExist, setTablesExist] = useState<boolean | null>(null);
 
-  // ── Projects query ──────────────────────────────────────────────────────────
+  // ── Projects query (solo proyectos SOZU publicados, igual que Escrituración) ─
   const { data: proyectos = [] } = useQuery({
     queryKey: ['proyectos-demandas'],
     queryFn: async () => {
+      const { data: rels } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_proyecto')
+        .eq('id_tipo_entidad', 5)
+        .eq('activo', true);
+      const ids = (rels ?? []).map((r: any) => r.id_proyecto).filter(Boolean);
+      if (!ids.length) return [];
       const { data, error } = await supabase
         .from('proyectos')
         .select('id, nombre')
+        .in('id', ids)
+        .eq('publicar', true)
         .eq('activo', true)
         .order('nombre');
       if (error) throw error;
@@ -895,16 +904,22 @@ export function DemandasDashboard() {
 
   // ── TanStack Table ──────────────────────────────────────────────────────────
   const columns = useMemo(() => [
-    colHelper.accessor('unidad', {
-      header: 'Unidad',
-      cell: info => <span className="font-medium text-slate-900">{info.getValue()}</span>,
+    colHelper.accessor('cuentaId', {
+      header: 'ID Cuenta',
+      cell: info => <span className="font-mono text-xs text-slate-500">{info.getValue()}</span>,
     }),
-    colHelper.accessor('clienteNombre', {
-      header: 'Cliente',
-      cell: info => <span className="text-slate-700">{info.getValue()}</span>,
+    colHelper.display({
+      id: 'unidad_cliente',
+      header: 'Unidad / Cliente',
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p className="font-medium text-slate-900">{row.original.unidad}</p>
+          <p className="text-xs text-slate-500 truncate">{row.original.clienteNombre}</p>
+        </div>
+      ),
     }),
     colHelper.accessor('precioFinal', {
-      header: 'Precio final',
+      header: 'Precio final de venta',
       cell: info => <span className="tabular-nums">{fmtMxn(info.getValue())}</span>,
     }),
     colHelper.accessor('pagado', {

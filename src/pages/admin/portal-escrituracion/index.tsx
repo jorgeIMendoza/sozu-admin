@@ -17,6 +17,10 @@ import { PldDashboard } from "./PldDashboard";
 import { CreditosHipotecariosDashboard } from "./CreditosHipotecariosDashboard";
 import { ProgramarCitasDashboard } from "./ProgramarCitasDashboard";
 import { DemandasDashboard } from "./DemandasDashboard";
+import { EntregasDashboard } from "./EntregasDashboard";
+import { EntregaDetalle } from "./EntregaDetalle";
+import { PostventaDashboard } from "./PostventaDashboard";
+import { PostventaDetalle } from "./PostventaTicketDetalle";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
@@ -259,34 +263,20 @@ export function EscFirmas() {
 
 // ============================ Entregas físicas ============================
 export function EscEntregas() {
-  return (
-    <>
-      <PageHeader title="Entregas Físicas" description="Checklist por unidad" />
-      <Panel title="Listado">
-        <Table>
-          <TableHeader>
-            <TableRow><TableHead>Folio</TableHead><TableHead>Expediente</TableHead><TableHead>Cliente</TableHead><TableHead>Unidad</TableHead><TableHead>Fecha</TableHead><TableHead>Llaves</TableHead><TableHead>Manuales</TableHead><TableHead>Acceso</TableHead><TableHead>Tarjetón</TableHead><TableHead>Estado</TableHead></TableRow>
-          </TableHeader>
-          <TableBody>
-            {ENTREGAS.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell className="font-medium">{e.id}</TableCell>
-                <TableCell>{e.expedienteId}</TableCell>
-                <TableCell>{e.cliente}</TableCell>
-                <TableCell>{e.unidad}</TableCell>
-                <TableCell>{e.fechaProgramada}</TableCell>
-                <TableCell>{e.checklist.llaves ? "✓" : "—"}</TableCell>
-                <TableCell>{e.checklist.manuales ? "✓" : "—"}</TableCell>
-                <TableCell>{e.checklist.controlAcceso ? "✓" : "—"}</TableCell>
-                <TableCell>{e.checklist.tarjeton ? "✓" : "—"}</TableCell>
-                <TableCell><Pill>{e.estado.replace("_", " ")}</Pill></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Panel>
-    </>
-  );
+  return <EntregasDashboard />;
+}
+
+export function EscEntregaDetalle() {
+  return <EntregaDetalle />;
+}
+
+// ============================ Postventa ============================
+export function EscPostventa() {
+  return <PostventaDashboard />;
+}
+
+export function EscPostventaDetalle() {
+  return <PostventaDetalle />;
 }
 
 // ============================ Inscripción RPP ============================

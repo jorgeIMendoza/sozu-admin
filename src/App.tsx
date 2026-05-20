@@ -177,11 +177,14 @@ const EscPlantillas = lazyRetry(() => import("./pages/admin/portal-escrituracion
 const EscFirmas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscFirmas })));
 const EscCitas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCitas })));
 const EscEntregas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregas })));
+const EscEntregaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregaDetalle })));
 const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRPP })));
 const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
 const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
 const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
 const EscDemandas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDemandas })));
+const EscPostventa = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventa })));
+const EscPostventaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventaDetalle })));
 
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
@@ -505,11 +508,14 @@ const App = () => (
                   <Route path="portal-escrituracion/firmas" element={<EscFirmas />} />
                   <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
+                  <Route path="portal-escrituracion/entregas/:id" element={<EscEntregaDetalle />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
                   <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
                   <Route path="portal-escrituracion/demandas" element={<EscDemandas />} />
+                  <Route path="portal-escrituracion/postventa" element={<EscPostventa />} />
+                  <Route path="portal-escrituracion/postventa/:id" element={<EscPostventaDetalle />} />
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
