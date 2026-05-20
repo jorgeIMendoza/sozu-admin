@@ -192,10 +192,12 @@ async function loadProyectosByPropiedades(propIds: number[]): Promise<{
 }
 
 /* ──────────────────────────────────────────────────────────
-   "Ventas para facturar" — paginado + ordenable
-   cuentas_cobranza vendidas (fecha_compra NOT NULL) que aún no
-   tienen factura del Dueño a Real Estate Ventures
-   (url_factura_comision NULL).
+   "Comisión SOZU" — paginado + ordenable
+   Cuentas_cobranza que cumplen TODAS estas condiciones:
+   - Propiedad en estatus_disponibilidad = 5 (Vendido)
+   - es_pagada_comision_venta = false (estatus Pendiente)
+   - url_factura_comision IS NOT NULL AND
+     es_draft_factura_comision = false (factura SOZU Timbrada)
    ────────────────────────────────────────────────────────── */
 
 type VentaFacturarFetchResult = {
@@ -215,8 +217,10 @@ async function fetchVentasParaFacturar(
       { count: "exact" }
     )
     .eq("activo", true)
+    .eq("es_pagada_comision_venta", false)
+    .eq("es_draft_factura_comision", false)
+    .not("url_factura_comision", "is", null)
     .not("fecha_compra", "is", null)
-    .is("url_factura_comision", null)
     .order("fecha_compra", { ascending: sortDir === "asc" })
     .range(offset, offset + PAGE_SIZE - 1);
   if (error) throw error;
@@ -355,7 +359,13 @@ async function fetchVentasParaFacturar(
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const items: ValidacionVentaFacturar[] = rows.map((c) => {
+  const items: ValidacionVentaFacturar[] = rows
+    .filter((c) => {
+      // Sólo cuentas cuya propiedad esté en estatus Vendido (id=5)
+      const propExtra = c.id_propiedad ? propExtraById.get(c.id_propiedad) : null;
+      return propExtra?.id_estatus_disponibilidad === 5;
+    })
+    .map((c) => {
     const prop = c.id_propiedad ? propMap.get(c.id_propiedad) : null;
     const propExtra = c.id_propiedad ? propExtraById.get(c.id_propiedad) : null;
     const proyecto = c.id_propiedad ? proyectoByProp.get(c.id_propiedad) : undefined;
@@ -999,7 +1009,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
       {/* ─── Resumen ejecutivo ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <KpiCard
-          label="Ventas para facturar"
+          label="Comisión SOZU"
           count={ventasGlobalCount}
           amountLabel={
             ventasLoading
@@ -1050,12 +1060,12 @@ export default function AltaDireccionBandejaValidacionesPage() {
         />
       </div>
 
-      {/* ─── 1. Ventas para facturar (BD real, paginada en BD) ─── */}
+      {/* ─── 1. Comisión SOZU (BD real, paginada en BD) ─── */}
       <section ref={ventasRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
         <SectionHeader
           icon={Receipt}
           iconColor="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-          title="Ventas para facturar"
+          title="Comisión SOZU"
           count={ventasGlobalCount}
           right={
             <SortToggle
