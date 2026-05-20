@@ -16,7 +16,13 @@ import {
   Mail,
   Search,
   X,
+  Loader2,
 } from "lucide-react";
+import { useCicloVentaCasos } from "@/hooks/useCicloVentaCasos";
+import {
+  useExpedienteVentaDetalle,
+  type ExpedienteVentaDetalle,
+} from "@/hooks/useExpedienteVentaDetalle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -421,99 +427,95 @@ const DemoBadge = () => (
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-const getProyecto = (propiedad: string) => propiedad.split(" · ")[0] || propiedad;
-
 function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
-  const [etapaFilter, setEtapaFilter] = useState<string>("all");
+  const [tipoFilter, setTipoFilter] = useState<string>("all");
+
+  const { data: casos = [], isLoading, error } = useCicloVentaCasos();
 
   const proyectoOptions = useMemo(
-    () => Array.from(new Set(CASOS.map((c) => getProyecto(c.propiedad)))).sort((a, b) => a.localeCompare(b)),
-    []
-  );
-  const etapaOptions = useMemo(
-    () => Array.from(new Set(CASOS.map((c) => c.etapa))).sort((a, b) => a.localeCompare(b)),
-    []
+    () =>
+      Array.from(new Set(casos.map((c) => c.proyecto_nombre).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [casos],
   );
 
   const filtrados = useMemo(() => {
     const q = search ? norm(search) : null;
-    return CASOS.filter((c) => {
-      if (estadoFilter !== "all" && c.estado !== estadoFilter) return false;
-      if (proyectoFilter !== "all" && getProyecto(c.propiedad) !== proyectoFilter) return false;
-      if (etapaFilter !== "all" && c.etapa !== etapaFilter) return false;
+    return casos.filter((c) => {
+      if (proyectoFilter !== "all" && c.proyecto_nombre !== proyectoFilter) return false;
+      if (tipoFilter !== "all" && c.tipo !== tipoFilter) return false;
       if (q) {
-        const hay = [c.folio, c.propiedad, c.cliente].map(norm).join(" ");
+        const hay = [
+          c.folio,
+          c.propiedad_label,
+          c.proyecto_nombre,
+          c.propietario,
+          ...c.compradores,
+        ]
+          .map(norm)
+          .join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, estadoFilter, proyectoFilter, etapaFilter]);
+  }, [search, proyectoFilter, tipoFilter, casos]);
 
-  const hayFiltros =
-    !!search || estadoFilter !== "all" || proyectoFilter !== "all" || etapaFilter !== "all";
+  const hayFiltros = !!search || proyectoFilter !== "all" || tipoFilter !== "all";
 
   const limpiar = () => {
     setSearch("");
-    setEstadoFilter("all");
     setProyectoFilter("all");
-    setEtapaFilter("all");
+    setTipoFilter("all");
   };
 
   const totalDesc = hayFiltros
-    ? `${filtrados.length} de ${CASOS.length} expedientes`
-    : `${CASOS.length} expedientes activos en la demo`;
+    ? `${filtrados.length} de ${casos.length} ventas`
+    : `${casos.length} propiedades vendidas`;
 
   return (
     <>
       <PageHeader
         title="Ciclo de Venta"
-        description="Expedientes 360° por caso de venta — vista ejecutiva end-to-end"
-        action={<DemoBadge />}
+        description="Ventas realizadas — propiedades en estatus Vendido"
       />
 
       <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por folio, propiedad o cliente…"
+            placeholder="Buscar por cuenta, propiedad, comprador o propietario…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-          <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[170px] text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
-              <SelectItem value="vendida">Vendida</SelectItem>
-              <SelectItem value="en_firma">En firma</SelectItem>
-              <SelectItem value="en_apartado">En apartado</SelectItem>
-              <SelectItem value="en_oferta">En oferta</SelectItem>
-              <SelectItem value="liquidada">Liquidada</SelectItem>
-            </SelectContent>
-          </Select>
-
           <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[170px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los proyectos</SelectItem>
               {proyectoOptions.map((p) => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Select value={etapaFilter} onValueChange={setEtapaFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[260px] text-xs"><SelectValue /></SelectTrigger>
+          <Select value={tipoFilter} onValueChange={setTipoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[160px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas las etapas</SelectItem>
-              {etapaOptions.map((e) => (
-                <SelectItem key={e} value={e}>{e}</SelectItem>
-              ))}
+              <SelectItem value="all">Todos los tipos</SelectItem>
+              <SelectItem value="Propiedad">Propiedad</SelectItem>
+              <SelectItem value="Producto">Producto</SelectItem>
+              <SelectItem value="Servicio">Servicio</SelectItem>
             </SelectContent>
           </Select>
 
@@ -526,63 +528,93 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       </div>
 
       <Panel title="Casos disponibles" description={totalDesc}>
-        {filtrados.length === 0 ? (
+        {isLoading ? (
+          <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando ventas…
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
+            Error al cargar ventas: {(error as Error).message}
+          </div>
+        ) : filtrados.length === 0 ? (
           <div className="py-12 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
-              No se encontraron expedientes con esos criterios.
+              {casos.length === 0
+                ? "No hay propiedades vendidas registradas."
+                : "No se encontraron ventas con esos criterios."}
             </p>
-            <Button variant="outline" size="sm" onClick={limpiar}>
-              <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
-            </Button>
+            {hayFiltros && (
+              <Button variant="outline" size="sm" onClick={limpiar}>
+                <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+              </Button>
+            )}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">Folio</TableHead>
-                <TableHead className="text-xs">Propiedad</TableHead>
-                <TableHead className="text-xs">Cliente</TableHead>
-                <TableHead className="text-xs">Estado</TableHead>
-                <TableHead className="text-xs">Etapa</TableHead>
-                <TableHead className="text-xs">Días</TableHead>
-                <TableHead className="text-xs text-right">Monto venta</TableHead>
-                <TableHead className="text-xs text-right">Acción</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtrados.map((c) => (
-                <TableRow key={c.folio}>
-                  <TableCell className="font-medium text-sm">{c.folio}</TableCell>
-                  <TableCell className="text-sm">{c.propiedad}</TableCell>
-                  <TableCell className="text-sm">{c.cliente}</TableCell>
-                  <TableCell>
-                    <Pill className={ESTADO_TONE[c.estado]}>{ESTADO_LABEL[c.estado]}</Pill>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {c.etapa}
-                    {c.nota && (
-                      <span className="ml-1 text-amber-700 dark:text-amber-300">· {c.nota}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">{c.dias_desde_apartado}d</TableCell>
-                  <TableCell className="text-sm text-right font-semibold tabular-nums">
-                    {fmtMxn(c.monto_venta)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      onClick={() => onOpen(c.folio)}
-                      aria-label={`Abrir expediente ${c.folio}`}
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-1" /> Abrir
-                    </Button>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
+                  <TableHead className="text-xs">Tipo</TableHead>
+                  <TableHead className="text-xs">Propiedad</TableHead>
+                  <TableHead className="text-xs">Compradores</TableHead>
+                  <TableHead className="text-xs">Propietario</TableHead>
+                  <TableHead className="text-xs">Proyecto</TableHead>
+                  <TableHead className="text-xs">Días</TableHead>
+                  <TableHead className="text-xs text-right">Precio/m²</TableHead>
+                  <TableHead className="text-xs text-right">Precio Final</TableHead>
+                  <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtrados.map((c) => (
+                  <TableRow key={c.id_cuenta_cobranza}>
+                    <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
+                      {c.folio}
+                    </TableCell>
+                    <TableCell className="text-xs">{c.tipo}</TableCell>
+                    <TableCell className="text-sm">{c.propiedad_label || "-"}</TableCell>
+                    <TableCell className="text-xs">
+                      {c.compradores.length === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : c.compradores.length === 1 ? (
+                        c.compradores[0]
+                      ) : (
+                        <div>
+                          <div>{c.compradores[0]}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            +{c.compradores.length - 1} copropietarios
+                          </div>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {c.propietario || "-"}
+                    </TableCell>
+                    <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
+                    <TableCell className="text-xs tabular-nums">{c.dias_desde_compra}d</TableCell>
+                    <TableCell className="text-sm text-right tabular-nums">
+                      {c.precio_m2 > 0 ? fmtMxn(c.precio_m2) : "-"}
+                    </TableCell>
+                    <TableCell className="text-sm text-right font-semibold tabular-nums">
+                      {fmtMxn(c.precio_final)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => onOpen(c.folio)}
+                        aria-label={`Abrir expediente ${c.folio}`}
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1" /> Abrir
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Panel>
     </>
@@ -1101,15 +1133,14 @@ function Section({
    Placeholder para casos no cableados
    ────────────────────────────────────────────────────────── */
 
-function PlaceholderDetail({
-  folio,
+function ExpedienteDetalleReal({
+  data,
   onBack,
   onPrev,
   onNext,
   prevLabel,
   nextLabel,
-}: { folio: string } & DetailNavProps) {
-  const caso = CASOS.find((c) => c.folio === folio);
+}: { data: ExpedienteVentaDetalle } & DetailNavProps) {
   return (
     <>
       <DetailNavBar
@@ -1119,35 +1150,312 @@ function PlaceholderDetail({
         prevLabel={prevLabel}
         nextLabel={nextLabel}
       />
+
       <PageHeader
-        title={`Expediente ${folio}`}
-        description={caso ? `${caso.propiedad} · ${caso.cliente}` : "Expediente solicitado"}
-        action={<DemoBadge />}
+        title="Expediente de Venta"
+        description={`${data.folio} · ${data.propiedad_label || data.proyecto_nombre}`}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            Expediente completo en construcción para esta demo
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            En esta versión de la demo solo el caso <span className="font-mono font-semibold text-foreground">COB-1041</span> tiene
-            cableado el expediente 360° completo. Los demás casos del índice quedarán cableados en
-            iteraciones siguientes con datos reales de Supabase.
-          </p>
-          {caso && (
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <Info label="Estado" value={ESTADO_LABEL[caso.estado]} />
-              <Info label="Etapa" value={caso.etapa} />
-              <Info label="Días desde apartado" value={`${caso.dias_desde_apartado}`} />
-              <Info label="Monto venta" value={fmtMxn(caso.monto_venta)} />
+
+      {/* HERO */}
+      <Card className="mb-8 ring-1 ring-border">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">ID Cuenta</p>
+                <p className="text-xl font-bold text-foreground tabular-nums font-mono">
+                  {data.folio}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Building2 className="h-3 w-3" /> Propiedad
+                </p>
+                <p className="text-base font-semibold text-foreground mt-1">
+                  {data.propiedad_label || "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {data.metraje > 0 ? `${data.metraje.toFixed(2)} m²` : "Sin metraje"}
+                  {data.estatus_disponibilidad && ` · ${data.estatus_disponibilidad}`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Info label="Proyecto" value={data.proyecto_nombre || "—"} />
+                <Info label="No. Propiedad" value={data.numero_departamento || "—"} />
+                <Info label="Modelo" value={data.modelo_nombre || "—"} />
+                <Info label="Tipo" value={data.tipo} />
+                {data.tipo !== "Propiedad" && (
+                  <Info label="Producto" value={data.producto_nombre || "—"} />
+                )}
+                <Info label="Días" value={`${data.dias_desde_compra} días`} />
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <User className="h-3 w-3" /> Compradores
+                </p>
+                {data.compradores.length === 0 ? (
+                  <p className="text-sm text-muted-foreground mt-1">Sin compradores registrados</p>
+                ) : (
+                  <ul className="mt-1 space-y-0.5">
+                    {data.compradores.map((c, i) => (
+                      <li key={i} className="text-sm text-foreground">
+                        {c.nombre}
+                        {c.porcentaje > 0 && c.porcentaje < 100 && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({c.porcentaje}%)
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {data.propietario && (
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Propietario
+                  </p>
+                  <p className="text-sm font-medium text-foreground mt-0.5">{data.propietario}</p>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Derecha — indicadores financieros */}
+            <div className="lg:border-l lg:pl-6 lg:border-border">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                Indicadores financieros
+              </p>
+              <div className="space-y-4">
+                <Stat label="Precio final" value={fmtMxn(data.precio_final)} tone="emerald" />
+                <Stat
+                  label="Precio / m²"
+                  value={data.precio_m2 > 0 ? fmtMxn(data.precio_m2) : "—"}
+                  hint={data.metraje > 0 ? `${data.metraje.toFixed(2)} m²` : undefined}
+                />
+                <Stat
+                  label="Comisión total SOZU"
+                  value={fmtMxn(data.comision_total_sozu)}
+                  hint={`${data.porcentaje_comision_venta}% sobre precio venta`}
+                />
+                <Stat
+                  label="Comisión externa"
+                  value={fmtMxn(data.comision_externa)}
+                  hint={
+                    data.comision_externa > 0
+                      ? "A pagar a inmobiliaria/agente externo"
+                      : "Sin externos en esta venta"
+                  }
+                />
+                <Stat
+                  label="Comisión a dispersar"
+                  value={fmtMxn(data.comision_a_dispersar)}
+                  hint="Equipo interno SOZU"
+                  tone="emerald"
+                />
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Timeline del ciclo (16 pasos) */}
+      <Section
+        title="Timeline del ciclo"
+        icon={Clock}
+        description="Estado de los 16 pasos del expediente"
+      >
+        <Card>
+          <CardContent className="p-6">
+            <div>
+              {data.timeline.map((step, i) => (
+                <TimelineStep
+                  key={step.paso}
+                  step={{
+                    paso: step.paso,
+                    nombre: step.nombre,
+                    estado:
+                      step.estado === "sin_evidencia"
+                        ? "no_aplica"
+                        : step.estado === "completado"
+                          ? "completado"
+                          : step.estado === "pendiente"
+                            ? "pendiente"
+                            : "no_aplica",
+                    fecha: step.fecha,
+                    responsable: step.responsable,
+                    detalle:
+                      step.estado === "sin_evidencia" && !step.detalle
+                        ? "Sin información en BD"
+                        : step.detalle,
+                    es_hito: step.es_hito,
+                  }}
+                  isLast={i === data.timeline.length - 1}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </Section>
+
+      {/* Desglose de comisionistas */}
+      {data.comisionistas.length > 0 && (
+        <Section
+          title="Comisionistas asignados"
+          icon={User}
+          description="Internos y externos que participan en esta venta"
+        >
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Tipo</TableHead>
+                    <TableHead className="text-xs">Nombre</TableHead>
+                    <TableHead className="text-xs">Rol</TableHead>
+                    <TableHead className="text-xs text-right">%</TableHead>
+                    <TableHead className="text-xs text-right">Monto</TableHead>
+                    <TableHead className="text-xs">Estatus</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.comisionistas.map((c, i) => (
+                    <TableRow key={`${c.email}-${i}`}>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-normal whitespace-nowrap",
+                            c.es_externo
+                              ? "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40"
+                              : "border-violet-400 text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-950/40",
+                          )}
+                        >
+                          {c.es_externo ? "Externo" : "Interno"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">{c.nombre}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{c.rol}</TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">
+                        {c.porcentaje.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-sm text-right font-semibold tabular-nums">
+                        {fmtMxn(c.monto)}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {c.pagada ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                          >
+                            Pagada
+                          </Badge>
+                        ) : c.aprobada ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-violet-400 text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-950/40"
+                          >
+                            Aprobada
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-muted-foreground"
+                          >
+                            Pendiente
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </Section>
+      )}
     </>
+  );
+}
+
+function ExpedienteDetalleLoader({
+  folio,
+  onBack,
+  onPrev,
+  onNext,
+  prevLabel,
+  nextLabel,
+}: { folio: string } & DetailNavProps) {
+  const { data, isLoading, error } = useExpedienteVentaDetalle(folio);
+
+  if (isLoading) {
+    return (
+      <>
+        <DetailNavBar
+          onBack={onBack}
+          onPrev={onPrev}
+          onNext={onNext}
+          prevLabel={prevLabel}
+          nextLabel={nextLabel}
+        />
+        <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando expediente…
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <DetailNavBar
+          onBack={onBack}
+          onPrev={onPrev}
+          onNext={onNext}
+          prevLabel={prevLabel}
+          nextLabel={nextLabel}
+        />
+        <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
+          Error al cargar expediente: {(error as Error).message}
+        </div>
+      </>
+    );
+  }
+
+  if (!data) {
+    return (
+      <>
+        <DetailNavBar
+          onBack={onBack}
+          onPrev={onPrev}
+          onNext={onNext}
+          prevLabel={prevLabel}
+          nextLabel={nextLabel}
+        />
+        <PageHeader title={`Expediente ${folio}`} description="No se encontró la cuenta." />
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm text-muted-foreground">
+              No se encontró el expediente <span className="font-mono">{folio}</span> en la base de datos.
+            </p>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+
+  return (
+    <ExpedienteDetalleReal
+      data={data}
+      onBack={onBack}
+      onPrev={onPrev}
+      onNext={onNext}
+      prevLabel={prevLabel}
+      nextLabel={nextLabel}
+    />
   );
 }
 
@@ -1185,32 +1493,12 @@ export default function AltaDireccionCicloVentaPage() {
 
   if (!caso) return <IndiceView onOpen={goToCase} />;
 
-  const idx = CASOS.findIndex((c) => c.folio === caso);
-  const prevCaso = idx > 0 ? CASOS[idx - 1] : null;
-  const nextCaso = idx >= 0 && idx < CASOS.length - 1 ? CASOS[idx + 1] : null;
-  const onPrev = prevCaso ? () => goToCase(prevCaso.folio) : null;
-  const onNext = nextCaso ? () => goToCase(nextCaso.folio) : null;
-
-  if (caso === "COB-1041") {
-    return (
-      <ExpedienteView
-        data={EXPEDIENTE_COB_1041}
-        onBack={back}
-        onPrev={onPrev}
-        onNext={onNext}
-        prevLabel={prevCaso?.folio}
-        nextLabel={nextCaso?.folio}
-      />
-    );
-  }
   return (
-    <PlaceholderDetail
+    <ExpedienteDetalleLoader
       folio={caso}
       onBack={back}
-      onPrev={onPrev}
-      onNext={onNext}
-      prevLabel={prevCaso?.folio}
-      nextLabel={nextCaso?.folio}
+      onPrev={null}
+      onNext={null}
     />
   );
 }
