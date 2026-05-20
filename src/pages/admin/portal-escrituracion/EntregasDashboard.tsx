@@ -30,12 +30,15 @@ interface EntregaRow {
   checklistPct: number;
   daikuEstatus: 'COMPLETADO' | 'PENDIENTE' | 'EN_INSTALACION' | 'NO_APLICA';
   actaEstatus: 'FIRMADA' | 'PENDIENTE' | 'GENERADA';
+  actaUrl: string | null;
   observaciones: number;
   entregadoPor: string | null;
 }
 
-// tipos_documento.id = 24 → "Acta de entrega" — señal de unidad entregada
+// tipos_documento.id = 24 → "Acta de entrega"
+// estatus_disponibilidad: 5=Vendido 7=Escrituración 8=Entregado 9=Pagada completamente
 const ID_TIPO_ACTA_ENTREGA = 24;
+const ESTATUS_ENTREGA_IDS = [5, 7, 8, 9] as const;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -213,7 +216,7 @@ export function EntregasDashboard() {
       const proyectoIds = proyectoId ? [proyectoId] : proyectos.map(p => p.id);
       if (!proyectoIds.length) return [];
 
-      // edificios
+      // ── 1. Edificios ──────────────────────────────────────────────────────
       const { data: edificios } = await supabase
         .from('edificios')
         .select('id, nombre, id_proyecto')
@@ -225,40 +228,45 @@ export function EntregasDashboard() {
         (edificios ?? []).map((e: any) => [e.id, { nombre: e.nombre, proyectoId: e.id_proyecto }])
       );
 
-      // modelos
+      // ── 2. Modelos ────────────────────────────────────────────────────────
       const { data: modelos } = await supabase
         .from('edificios_modelos')
-        .select('id, nombre, id_edificio')
+        .select('id, id_edificio')
         .in('id_edificio', edificioIds);
       const modeloIds = (modelos ?? []).map((m: any) => m.id);
       if (!modeloIds.length) return [];
-      const modeloMap: Record<number, { nombre: string; edificioId: number }> = Object.fromEntries(
-        (modelos ?? []).map((m: any) => [m.id, { nombre: m.nombre, edificioId: m.id_edificio }])
+      const modeloEdificioMap: Record<number, number> = Object.fromEntries(
+        (modelos ?? []).map((m: any) => [m.id, m.id_edificio])
       );
 
-      // propiedades (con cuentas — solo las vendidas)
+      // ── 3. Propiedades — solo estatus de escrituración/entrega ────────────
+      // 5=Vendido  7=Escrituración  8=Entregado  9=Pagada completamente
       const { data: propiedades } = await supabase
         .from('propiedades')
-        .select('id, numero_propiedad, id_edificio_modelo')
+        .select('id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad, fecha_actualizacion')
         .in('id_edificio_modelo', modeloIds)
-        .eq('activo', true);
+        .in('id_estatus_disponibilidad', [...ESTATUS_ENTREGA_IDS])
+        .eq('activo', true)
+        .order('numero_propiedad');
       if (!propiedades?.length) return [];
       const propIds = propiedades.map((p: any) => p.id);
-      const propMap: Record<number, any> = Object.fromEntries(propiedades.map((p: any) => [p.id, p]));
 
-      // cuentas_cobranza
+      // ── 4. Cuentas de cobranza — más reciente por propiedad ───────────────
       const { data: cuentas } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final')
+        .select('id, id_propiedad, precio_final, fecha_actualizacion')
         .in('id_propiedad', propIds)
         .eq('activo', true);
-      if (!cuentas?.length) return [];
-      const cuentaIds = cuentas.map((c: any) => c.id);
-      const cuentaByPropId: Record<number, any> = Object.fromEntries(
-        cuentas.map((c: any) => [c.id_propiedad, c])
-      );
+      const cuentaByPropId: Record<number, any> = {};
+      (cuentas ?? []).forEach((c: any) => {
+        const existing = cuentaByPropId[c.id_propiedad];
+        if (!existing || c.fecha_actualizacion > existing.fecha_actualizacion)
+          cuentaByPropId[c.id_propiedad] = c;
+      });
+      const cuentaIds = Object.values(cuentaByPropId).map((c: any) => c.id);
+      if (!cuentaIds.length) return [];
 
-      // compradores + personas
+      // ── 5. Compradores + Personas ─────────────────────────────────────────
       const { data: compradores } = await supabase
         .from('compradores')
         .select('id_cuenta_cobranza, id_persona')
@@ -279,59 +287,58 @@ export function EntregasDashboard() {
           cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona] ?? '—';
       });
 
-      // entregas (si la tabla existe)
+      // ── 6. Entregas (si la tabla existe) ──────────────────────────────────
       let entregaByPropId: Record<number, any> = {};
       if (entregasExist) {
         const { data: entregasData } = await (supabase as any)
           .from('entregas')
-          .select('id, id_propiedad, id_cuenta_cobranza, estatus, fecha_programada, fecha_entrega, checklist_pct, daiku_estatus, acta_estatus, entregado_por')
+          .select('id, id_propiedad, estatus, fecha_programada, fecha_entrega, checklist_pct, daiku_estatus, acta_estatus, entregado_por')
           .in('id_propiedad', propIds)
           .eq('activo', true);
         (entregasData ?? []).forEach((e: any) => { entregaByPropId[e.id_propiedad] = e; });
       }
 
-      // Actas de entrega en documentos (id_tipo_documento = 24)
-      // Keyed by id_propiedad (más fiable — una propiedad puede tener varias cuentas)
+      // ── 7. Documentos — Acta de entrega (id_tipo_documento = 24) ─────────
+      // Keyed por id_propiedad (fiable aunque la propiedad tenga varias cuentas)
       const { data: actaDocs } = await supabase
         .from('documentos')
-        .select('id_propiedad, fecha_creacion')
+        .select('id_propiedad, url, fecha_creacion')
         .in('id_propiedad', propIds)
         .eq('id_tipo_documento', ID_TIPO_ACTA_ENTREGA)
-        .eq('activo', true);
-      const actaByPropId: Record<number, { fechaCreacion: string }> = {};
+        .eq('activo', true)
+        .eq('es_draft', false);
+      const actaByPropId: Record<number, { fechaCreacion: string; url: string }> = {};
       (actaDocs ?? []).forEach((d: any) => {
         if (!actaByPropId[d.id_propiedad])
-          actaByPropId[d.id_propiedad] = { fechaCreacion: d.fecha_creacion };
+          actaByPropId[d.id_propiedad] = { fechaCreacion: d.fecha_creacion, url: d.url ?? '' };
       });
 
-      // proyecto nombre lookup
+      // ── 8. Lookup de nombres de proyecto ─────────────────────────────────
       const proyectoNombreMap: Record<number, string> = Object.fromEntries(
         proyectos.map(p => [p.id, p.nombre])
       );
 
+      // ── 9. Ensamblar filas ────────────────────────────────────────────────
       return propiedades
         .filter((p: any) => cuentaByPropId[p.id])
         .map((p: any): EntregaRow => {
           const cuenta = cuentaByPropId[p.id];
           const entrega = entregaByPropId[p.id] ?? null;
           const acta = actaByPropId[p.id] ?? null;
-          const modelo = modeloMap[p.id_edificio_modelo];
-          const edificio = modelo ? edificioMap[modelo.edificioId] : null;
+          const edificioId = modeloEdificioMap[p.id_edificio_modelo];
+          const edificio = edificioMap[edificioId];
           const pId = edificio?.proyectoId ?? 0;
 
-          // Estatus: tabla entregas tiene prioridad; si no existe, acta de entrega → ENTREGADA
+          // Prioridad: tabla entregas → id_estatus_disponibilidad=8 → acta → LISTO
           const estatus: EstatusEntrega = entrega
             ? (entrega.estatus as EstatusEntrega)
-            : acta
+            : (p.id_estatus_disponibilidad === 8 || acta)
               ? 'ENTREGADA'
               : 'LISTO';
 
-          // Acta: firmada si hay documento, aunque la tabla entregas no exista
           const actaEstatus: EntregaRow['actaEstatus'] = entrega
             ? (entrega.acta_estatus as EntregaRow['actaEstatus'])
-            : acta
-              ? 'FIRMADA'
-              : 'PENDIENTE';
+            : acta ? 'FIRMADA' : 'PENDIENTE';
 
           return {
             id: entrega ? String(entrega.id) : `prop-${p.id}`,
@@ -340,7 +347,7 @@ export function EntregasDashboard() {
             proyecto: proyectoNombreMap[pId] ?? '—',
             proyectoId: pId,
             cliente: cuentaToPersona[cuenta.id] ?? '—',
-            modelo: modelo?.nombre ?? '—',
+            modelo: '—',
             cuentaId: cuenta.id,
             precioFinal: Number(cuenta.precio_final ?? 0),
             estatus,
@@ -349,6 +356,7 @@ export function EntregasDashboard() {
             checklistPct: entrega ? Number(entrega.checklist_pct ?? 0) : 0,
             daikuEstatus: (entrega?.daiku_estatus ?? 'NO_APLICA') as EntregaRow['daikuEstatus'],
             actaEstatus,
+            actaUrl: acta?.url ?? null,
             observaciones: 0,
             entregadoPor: entrega?.entregado_por ?? null,
           };
@@ -777,9 +785,20 @@ export function EntregasDashboard() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-lg text-xs font-medium ${ACTA_META[row.actaEstatus].cls}`}>
-                          {ACTA_META[row.actaEstatus].label}
-                        </span>
+                        {row.actaUrl ? (
+                          <a
+                            href={row.actaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${ACTA_META[row.actaEstatus].cls} hover:opacity-80`}
+                          >
+                            {ACTA_META[row.actaEstatus].label}
+                          </a>
+                        ) : (
+                          <span className={`px-2 py-1 rounded-lg text-xs font-medium ${ACTA_META[row.actaEstatus].cls}`}>
+                            {ACTA_META[row.actaEstatus].label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1">
