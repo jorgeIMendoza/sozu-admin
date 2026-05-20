@@ -306,23 +306,41 @@ export function PostventaDashboard() {
       const propMap: Record<number, any> = Object.fromEntries(propiedades.map((p: any) => [p.id, p]));
       const { data: cuentas } = await supabase.from('cuentas_cobranza').select('id, id_propiedad, precio_final').in('id_propiedad', propIds).eq('activo', true);
       const cuentaByPropId: Record<number, any> = Object.fromEntries((cuentas ?? []).map((c: any) => [c.id_propiedad, c]));
+      // Tickets — el join de proveedor va directo a personas (no existe pv_proveedores)
       const { data: rawTickets } = await (supabase as any)
         .from('pv_tickets')
-        .select('id, folio, id_propiedad, id_cuenta_cobranza, subcategoria, prioridad, estatus, garantia_estatus, fecha_limite_sla, sla_cumplido, responsable, fecha_creacion, pv_categorias_garantia(nombre), pv_proveedores(nombre, empresa)')
+        .select('id, folio, id_propiedad, id_cuenta_cobranza, id_proveedor, subcategoria, prioridad, estatus, garantia_estatus, fecha_limite_sla, sla_cumplido, responsable, fecha_creacion, pv_categorias_garantia(nombre)')
         .in('id_propiedad', propIds)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
       if (!rawTickets?.length) return [];
+
+      // Clientes (compradores de cada cuenta)
       const cuentaIds = [...new Set((rawTickets as any[]).map((t: any) => t.id_cuenta_cobranza).filter(Boolean))];
       const { data: compradores } = await supabase.from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
-      const personaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))];
-      let personaMap: Record<number, string> = {};
-      if (personaIds.length) {
-        const { data: personas } = await supabase.from('personas').select('id, nombre_legal').in('id', personaIds as number[]);
-        personaMap = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p.nombre_legal ?? '—']));
+      const clientePersonaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))];
+
+      // Proveedores asignados (personas con id_tipo_entidad IN (8,13))
+      const proveedorIds = [...new Set((rawTickets as any[]).map((t: any) => t.id_proveedor).filter(Boolean))];
+
+      // Una sola query a personas para clientes + proveedores
+      const allPersonaIds = [...new Set([...clientePersonaIds, ...proveedorIds])] as number[];
+      let personaMap: Record<number, { nombre: string; comercial: string | null }> = {};
+      if (allPersonaIds.length) {
+        const { data: personas } = await supabase
+          .from('personas')
+          .select('id, nombre_legal, nombre_comercial')
+          .in('id', allPersonaIds);
+        personaMap = Object.fromEntries(
+          (personas ?? []).map((p: any) => [p.id, { nombre: p.nombre_legal ?? '—', comercial: p.nombre_comercial }])
+        );
       }
       const cuentaToPersona: Record<number, string> = {};
-      (compradores ?? []).forEach((c: any) => { if (!cuentaToPersona[c.id_cuenta_cobranza]) cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona] ?? '—'; });
+      (compradores ?? []).forEach((c: any) => {
+        if (!cuentaToPersona[c.id_cuenta_cobranza])
+          cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona]?.nombre ?? '—';
+      });
+
       return (rawTickets as any[]).map((t: any): TicketRow => {
         const prop = propMap[t.id_propiedad];
         const cuenta = cuentaByPropId[t.id_propiedad] ?? null;
@@ -332,6 +350,10 @@ export function PostventaDashboard() {
         const slaLabel = limiteSla
           ? (slaVencido ? `⚠ Vencido` : `✓ ${limiteSla.toLocaleDateString('es-MX')}`)
           : '—';
+        const pvPersona = t.id_proveedor ? personaMap[t.id_proveedor] : null;
+        const proveedorLabel = pvPersona
+          ? (pvPersona.comercial ?? pvPersona.nombre)
+          : 'Sin proveedor';
         return {
           id: t.folio ?? `PV-${t.id}`,
           unidad: prop?.numero_propiedad ?? '—',
@@ -348,7 +370,7 @@ export function PostventaDashboard() {
           slaLabel,
           slaVencido,
           responsable: t.responsable ?? 'Sin asignar',
-          proveedor: t.pv_proveedores ? `${t.pv_proveedores.nombre}${t.pv_proveedores.empresa ? ` (${t.pv_proveedores.empresa})` : ''}` : 'Sin proveedor',
+          proveedor: proveedorLabel,
           evidenciaInicial: 0,
           evidenciaReparacion: 0,
           cuentaId: cuenta?.id ?? 0,
