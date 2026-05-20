@@ -9,6 +9,8 @@ import {
   Banknote,
   Check,
   ShieldAlert,
+  Loader2,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -29,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Kpi, PageHeader, Panel, Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
@@ -38,191 +40,12 @@ import {
   getVentaContext,
   resolveCobFolio,
 } from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
-
-/* ──────────────────────────────────────────────────────────
-   Tipo
-   ────────────────────────────────────────────────────────── */
-
-type EstadoComisionExt =
-  | "devengada"
-  | "aprobada"
-  | "facturada"
-  | "pagada"
-  | "cancelada";
-
-type TipoBeneficiario =
-  | "inmobiliaria"
-  | "broker"
-  | "aliado_comercial"
-  | "agente_externo";
-
-type ComisionExterna = {
-  id_comisionista: number;
-  folio_comision: string;
-  beneficiario_nombre: string;
-  beneficiario_rfc: string;
-  beneficiario_tipo: TipoBeneficiario;
-  id_cuenta_cobranza: number;
-  venta_referencia: string;
-  porcentaje_comision: number;
-  monto_comision: number;
-  estado: EstadoComisionExt;
-  fecha_devengo: string;
-  fecha_aprobacion?: string;
-  factura_referencia?: string;
-  fecha_pago?: string;
-  dias_desde_devengo: number;
-  ya_se_cobro_al_desarrollador: boolean;
-};
-
-/* ──────────────────────────────────────────────────────────
-   Mock data — armonizado con Facturas Por Pagar
-   Referencia: hoy = 2026-05-14
-   ────────────────────────────────────────────────────────── */
-
-const COMISIONES: ComisionExterna[] = [
-  // COB-1041 VENTA reconocida 2026-05-06 (hace 8 días).
-  {
-    id_comisionista: 9041,
-    folio_comision: "COM-EXT-1041",
-    beneficiario_nombre: "Inmobiliaria Vértice SA de CV",
-    beneficiario_rfc: "IVE220915MNL",
-    beneficiario_tipo: "inmobiliaria",
-    id_cuenta_cobranza: 1041,
-    venta_referencia: "COB-1041 · Daiku A-201",
-    porcentaje_comision: 2.0,
-    monto_comision: 37800.0,
-    estado: "devengada",
-    fecha_devengo: "2026-05-06",
-    factura_referencia: "F-V-1184",
-    dias_desde_devengo: 8,
-    ya_se_cobro_al_desarrollador: false,
-  },
-  // COB-1042 VENTA reconocida 2026-05-08 (hace 6 días).
-  {
-    id_comisionista: 9042,
-    folio_comision: "COM-EXT-1042",
-    beneficiario_nombre: "Broker Capital MX SA de CV",
-    beneficiario_rfc: "BCM231120QR2",
-    beneficiario_tipo: "broker",
-    id_cuenta_cobranza: 1042,
-    venta_referencia: "COB-1042 · Bottura PH-3",
-    porcentaje_comision: 2.25,
-    monto_comision: 54000.0,
-    estado: "devengada",
-    fecha_devengo: "2026-05-08",
-    factura_referencia: "F-MX-3382",
-    dias_desde_devengo: 6,
-    ya_se_cobro_al_desarrollador: false,
-  },
-  // Reemplazo de COM-EXT-1043 (la venta COB-1043 no es Vendida aún).
-  // Venta previa Daiku B-308 (COB-1036), precio $2,100,000.
-  {
-    id_comisionista: 9036,
-    folio_comision: "COM-EXT-1036",
-    beneficiario_nombre: "Premier Brokers MX",
-    beneficiario_rfc: "PBM230807UK1",
-    beneficiario_tipo: "broker",
-    id_cuenta_cobranza: 1036,
-    venta_referencia: "COB-1036 · Daiku B-308 (venta previa)",
-    porcentaje_comision: 1.78,
-    monto_comision: 37380.0, // 1.78% × 2,100,000
-    estado: "pagada",
-    fecha_devengo: "2026-04-16",
-    fecha_aprobacion: "2026-04-19",
-    factura_referencia: "F-PM-2218",
-    fecha_pago: "2026-05-02",
-    dias_desde_devengo: 28,
-    ya_se_cobro_al_desarrollador: true,
-  },
-  {
-    id_comisionista: 9038,
-    folio_comision: "COM-EXT-1038",
-    beneficiario_nombre: "Carlos Mendoza Ávalos",
-    beneficiario_rfc: "MEAC820315LZ4",
-    beneficiario_tipo: "agente_externo",
-    id_cuenta_cobranza: 1038,
-    venta_referencia: "COB-1038 · Daiku C-302",
-    porcentaje_comision: 2.0,
-    monto_comision: 30600.0,
-    estado: "facturada",
-    fecha_devengo: "2026-04-26",
-    fecha_aprobacion: "2026-04-28",
-    factura_referencia: "F-CM-7711",
-    dias_desde_devengo: 18,
-    ya_se_cobro_al_desarrollador: true,
-  },
-  {
-    id_comisionista: 9037,
-    folio_comision: "COM-EXT-1037",
-    beneficiario_nombre: "Premier Brokers MX",
-    beneficiario_rfc: "PBM230807UK1",
-    beneficiario_tipo: "broker",
-    id_cuenta_cobranza: 1037,
-    venta_referencia: "COB-1037 · Bottura PH-1",
-    porcentaje_comision: 1.78,
-    monto_comision: 48000.0,
-    estado: "pagada",
-    fecha_devengo: "2026-04-14",
-    fecha_aprobacion: "2026-04-17",
-    factura_referencia: "F-PR-2204",
-    fecha_pago: "2026-05-05",
-    dias_desde_devengo: 30,
-    ya_se_cobro_al_desarrollador: true,
-  },
-  {
-    id_comisionista: 9034,
-    folio_comision: "COM-EXT-1034",
-    beneficiario_nombre: "Inmobiliaria Vértice SA de CV",
-    beneficiario_rfc: "IVE220915MNL",
-    beneficiario_tipo: "inmobiliaria",
-    id_cuenta_cobranza: 1024,
-    venta_referencia: "COB-1024 · Daiku B-308 (venta previa)",
-    porcentaje_comision: 2.0,
-    monto_comision: 42000.0,
-    estado: "pagada",
-    fecha_devengo: "2026-03-30",
-    fecha_aprobacion: "2026-04-02",
-    factura_referencia: "F-VX-4421",
-    fecha_pago: "2026-05-10",
-    dias_desde_devengo: 45,
-    ya_se_cobro_al_desarrollador: true,
-  },
-  {
-    id_comisionista: 9029,
-    folio_comision: "COM-EXT-1029",
-    beneficiario_nombre: "Red Tropical Bienes Raíces",
-    beneficiario_rfc: "RTB210605VW8",
-    beneficiario_tipo: "aliado_comercial",
-    id_cuenta_cobranza: 1022,
-    venta_referencia: "COB-1022 · Monócolo D-3 (venta previa)",
-    porcentaje_comision: 2.25,
-    monto_comision: 19000.0,
-    estado: "aprobada",
-    fecha_devengo: "2026-04-22",
-    fecha_aprobacion: "2026-04-25",
-    factura_referencia: "F-RT-8810",
-    dias_desde_devengo: 22,
-    ya_se_cobro_al_desarrollador: true,
-  },
-  {
-    id_comisionista: 9023,
-    folio_comision: "COM-EXT-1023",
-    beneficiario_nombre: "Oficina Macro Inmobiliaria SA",
-    beneficiario_rfc: "OMI220411FH3",
-    beneficiario_tipo: "inmobiliaria",
-    id_cuenta_cobranza: 1019,
-    venta_referencia: "COB-1019 · Bottura PH-5 (venta previa)",
-    porcentaje_comision: 2.0,
-    monto_comision: 33000.0,
-    estado: "cancelada",
-    fecha_devengo: "2026-03-30",
-    fecha_aprobacion: "2026-04-03",
-    factura_referencia: "F-OM-1130",
-    dias_desde_devengo: 45,
-    ya_se_cobro_al_desarrollador: true,
-  },
-];
+import {
+  useComisionesExternas,
+  type ComisionExterna,
+  type EstadoComisionExterna as EstadoComisionExt,
+  type TipoBeneficiarioComExt as TipoBeneficiario,
+} from "@/hooks/useComisionesExternas";
 
 /* ──────────────────────────────────────────────────────────
    Helpers
@@ -250,12 +73,6 @@ const TIPO_LABEL: Record<TipoBeneficiario, string> = {
   aliado_comercial: "Aliado comercial",
   agente_externo: "Agente externo",
 };
-
-const DemoBadge = () => (
-  <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-    Datos demo
-  </Pill>
-);
 
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -295,20 +112,30 @@ export default function AltaDireccionComisionesExternasPage() {
   const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionExterna | null>(null);
 
+  const { data: comisiones = [], isLoading, error } = useComisionesExternas();
+
   const filtered = useMemo(() => {
     const q = search ? norm(search) : null;
-    return COMISIONES.filter((c) => {
+    return comisiones.filter((c) => {
       if (estadoFilter !== "all" && c.estado !== estadoFilter) return false;
       if (tipoFilter !== "all" && c.beneficiario_tipo !== tipoFilter) return false;
       if (q) {
-        const hay = [c.folio_comision, c.beneficiario_nombre, c.venta_referencia]
+        const hay = [
+          c.folio_comision,
+          c.beneficiario_nombre,
+          c.venta_referencia,
+          c.proyecto_nombre,
+          c.modelo_nombre,
+          c.producto_nombre,
+          c.numero_departamento,
+        ]
           .map(norm)
           .join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, estadoFilter, tipoFilter]);
+  }, [search, estadoFilter, tipoFilter, comisiones]);
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -336,18 +163,18 @@ export default function AltaDireccionComisionesExternasPage() {
     };
   }, [filtered]);
 
-  // KPI de RIESGO — siempre global, no se ve afectado por filtros casuales
+  // KPI de RIESGO — global sobre el dataset cargado (no afectado por filtros)
   const bloqueadoGlobal = useMemo(() => {
     let total = 0,
       count = 0;
-    for (const c of COMISIONES) {
-      if (!c.ya_se_cobro_al_desarrollador) {
+    for (const c of comisiones) {
+      if (!c.ya_se_cobro_al_desarrollador && c.estado !== "pagada") {
         total += c.monto_comision;
         count++;
       }
     }
     return { total, count };
-  }, []);
+  }, [comisiones]);
 
   const bloqueadoEnFiltro = useMemo(
     () => filtered.filter((c) => !c.ya_se_cobro_al_desarrollador).length,
@@ -357,8 +184,8 @@ export default function AltaDireccionComisionesExternasPage() {
   const hayFiltros = !!search || estadoFilter !== "all" || tipoFilter !== "all";
   const showGlobalHint = hayFiltros && bloqueadoEnFiltro !== bloqueadoGlobal.count;
   const totalDesc = hayFiltros
-    ? `${filtered.length} de ${COMISIONES.length} comisiones`
-    : `${COMISIONES.length} comisiones en el período`;
+    ? `${filtered.length} de ${comisiones.length} comisiones`
+    : `${comisiones.length} comisiones externas`;
 
   const limpiar = () => {
     setSearch("");
@@ -370,8 +197,7 @@ export default function AltaDireccionComisionesExternasPage() {
     <>
       <PageHeader
         title="Comisiones Externas"
-        description="Obligaciones con agentes externos, inmobiliarias, brokers y aliados comerciales"
-        action={<DemoBadge />}
+        description="Obligaciones con inmobiliarias y agentes externos que SOZU debe pagar"
       />
 
       {/* ─── KPIs ─── */}
@@ -495,118 +321,152 @@ export default function AltaDireccionComisionesExternasPage() {
 
       {/* ─── Tabla ─── */}
       <Panel title="Listado" description={totalDesc}>
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando comisiones…
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
+            Error al cargar comisiones: {(error as Error).message}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-12 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
-              No se encontraron comisiones con esos criterios.
+              {comisiones.length === 0
+                ? "No hay comisiones externas activas."
+                : "No se encontraron comisiones con esos criterios."}
             </p>
-            <Button variant="outline" size="sm" onClick={limpiar}>
-              <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
-            </Button>
+            {hayFiltros && (
+              <Button variant="outline" size="sm" onClick={limpiar}>
+                <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+              </Button>
+            )}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">Folio</TableHead>
-                <TableHead className="text-xs">Beneficiario</TableHead>
-                <TableHead className="text-xs">Tipo</TableHead>
-                <TableHead className="text-xs">Venta ref</TableHead>
-                <TableHead className="text-xs text-right">%</TableHead>
-                <TableHead className="text-xs text-right">Monto</TableHead>
-                <TableHead className="text-xs">Devengada</TableHead>
-                <TableHead className="text-xs">Antigüedad</TableHead>
-                <TableHead className="text-xs">Flag cobro</TableHead>
-                <TableHead className="text-xs">Estado</TableHead>
-                <TableHead className="text-xs text-right">Acción</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((c) => {
-                const sinCobro = !c.ya_se_cobro_al_desarrollador;
-                const alerta =
-                  c.dias_desde_devengo > 15 &&
-                  (c.estado === "devengada" || c.estado === "aprobada");
-                return (
-                  <TableRow
-                    key={c.id_comisionista}
-                    className={cn(sinCobro && "bg-amber-50/50 dark:bg-amber-950/20")}
-                  >
-                    <TableCell className="font-medium text-sm font-mono">
-                      {c.folio_comision}
-                    </TableCell>
-                    <TableCell className="text-sm">{c.beneficiario_nombre}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] font-normal">
-                        {TIPO_LABEL[c.beneficiario_tipo]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.venta_referencia}
-                    </TableCell>
-                    <TableCell className="text-xs text-right tabular-nums">
-                      {c.porcentaje_comision.toFixed(2)}%
-                    </TableCell>
-                    <TableCell className="text-sm text-right font-semibold tabular-nums">
-                      {fmtMxn(c.monto_comision)}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {c.fecha_devengo}
-                    </TableCell>
-                    <TableCell>
-                      <Antiguedad dias={c.dias_desde_devengo} isAlerta={alerta} />
-                    </TableCell>
-                    <TableCell>
-                      {sinCobro ? (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40"
-                          title="No pagar antes de cobrar al desarrollador"
-                        >
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          Sin cobro
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Cuenta</TableHead>
+                  <TableHead className="text-xs">Beneficiario</TableHead>
+                  <TableHead className="text-xs">Tipo</TableHead>
+                  <TableHead className="text-xs">Proyecto</TableHead>
+                  <TableHead className="text-xs">Modelo</TableHead>
+                  <TableHead className="text-xs">Depto</TableHead>
+                  <TableHead className="text-xs">Venta ref</TableHead>
+                  <TableHead className="text-xs text-right">Precio Final</TableHead>
+                  <TableHead className="text-xs text-right">Comisión</TableHead>
+                  <TableHead className="text-xs text-right">% Comisión</TableHead>
+                  <TableHead className="text-xs">Devengada</TableHead>
+                  <TableHead className="text-xs">Antigüedad</TableHead>
+                  <TableHead className="text-xs">Flag cobro</TableHead>
+                  <TableHead className="text-xs">Estado</TableHead>
+                  <TableHead className="text-xs">Factura</TableHead>
+                  <TableHead className="text-xs text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((c) => {
+                  const sinCobro = !c.ya_se_cobro_al_desarrollador;
+                  const alerta =
+                    c.dias_desde_devengo > 15 &&
+                    (c.estado === "devengada" || c.estado === "aprobada");
+                  return (
+                    <TableRow
+                      key={c.id_comisionista}
+                      className={cn(sinCobro && "bg-amber-50/50 dark:bg-amber-950/20")}
+                    >
+                      <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
+                        COB-{c.id_cuenta_cobranza}
+                      </TableCell>
+                      <TableCell className="text-sm">{c.beneficiario_nombre}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap">
+                          {TIPO_LABEL[c.beneficiario_tipo]}
                         </Badge>
-                      ) : (
-                        <div>
+                      </TableCell>
+                      <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
+                      <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
+                      <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {c.venta_referencia}
+                      </TableCell>
+                      <TableCell className="text-sm text-right tabular-nums">
+                        {fmtMxn(c.precio_final)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right font-semibold tabular-nums">
+                        {fmtMxn(c.monto_comision)}
+                      </TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">
+                        {c.porcentaje_comision.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                        {c.fecha_devengo}
+                      </TableCell>
+                      <TableCell>
+                        <Antiguedad dias={c.dias_desde_devengo} isAlerta={alerta} />
+                      </TableCell>
+                      <TableCell>
+                        {sinCobro ? (
                           <Badge
                             variant="outline"
-                            className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40"
+                            className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 whitespace-nowrap"
+                            title="No pagar antes de cobrar al desarrollador"
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Sin cobro
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 whitespace-nowrap"
                           >
                             <Check className="h-3 w-3 mr-1" />
                             Cobrado
                           </Badge>
-                          {c.factura_referencia && (
-                            <p className="mt-0.5 text-[10px] font-mono text-muted-foreground">
-                              {c.factura_referencia}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] font-medium", ESTADO_TONE[c.estado])}
-                      >
-                        {ESTADO_LABEL[c.estado]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => setSelected(c)}
-                        aria-label={`Ver detalle de ${c.folio_comision}`}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] font-medium whitespace-nowrap", ESTADO_TONE[c.estado])}
+                        >
+                          {ESTADO_LABEL[c.estado]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {c.url_factura ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px] px-2"
+                            title={c.factura_referencia || "Ver factura"}
+                            onClick={() => window.open(c.url_factura!, "_blank")}
+                          >
+                            <FileText className="h-3 w-3 mr-1" />
+                            {c.factura_referencia || "Ver"}
+                          </Button>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Sin factura</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => setSelected(c)}
+                          aria-label={`Ver detalle de ${c.folio_comision}`}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Panel>
 

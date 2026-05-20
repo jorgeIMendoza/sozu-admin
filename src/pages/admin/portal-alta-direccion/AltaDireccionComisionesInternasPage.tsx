@@ -7,8 +7,8 @@ import {
   Percent,
   Banknote,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader, Panel, Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
@@ -36,245 +36,16 @@ import {
   getVentaContext,
   resolveCobFolio,
 } from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+import {
+  useComisionesInternas,
+  type ComisionInterna,
+  type EstadoComisionInterna as EstadoComisionInt,
+} from "@/hooks/useComisionesInternas";
 
 /* ──────────────────────────────────────────────────────────
-   Tipo
+   Helpers (mock data removido; ahora se consume vía hook)
    ────────────────────────────────────────────────────────── */
 
-type EstadoComisionInt =
-  | "devengada"
-  | "aprobada"
-  | "autorizada"
-  | "dispersada"
-  | "cancelada";
-
-type ComisionInterna = {
-  id_comision_interna: number;
-  folio_comision: string;
-  comisionista_email: string;
-  comisionista_nombre: string;
-  comisionista_rol: string;
-  id_cuenta_cobranza: number;
-  venta_referencia: string;
-  porcentaje_comision: number;
-  monto_comision: number;
-  estado: EstadoComisionInt;
-  fecha_devengo: string;
-  fecha_aprobacion?: string;
-  fecha_autorizacion?: string;
-  fecha_dispersion?: string;
-  dias_desde_devengo: number;
-  // Antigüedad contextual por estado:
-  dias_esperando_director?: number;   // estado='aprobada'
-  dias_esperando_dispersion?: number; // estado='autorizada'
-};
-
-/* ──────────────────────────────────────────────────────────
-   Mock data — primeros 5 ITEMS coinciden con Bandeja
-   Referencia: hoy = 2026-05-14
-   ────────────────────────────────────────────────────────── */
-
-const COMISIONES: ComisionInterna[] = [
-  // ─── Esperando autorización del Director (matchean Bandeja) ───
-  // COB-1041 VENTA reconocida 2026-05-06 (hace 8 días). Aprobada 2026-05-07
-  // (hace 7 días, > 5 → rojo). Precio venta $1,890,000.
-  {
-    id_comision_interna: 871,
-    folio_comision: "COM-871",
-    comisionista_email: "rh.solis@sozu.com",
-    comisionista_nombre: "Roberto Hernández Solís",
-    comisionista_rol: "Director Comercial",
-    id_cuenta_cobranza: 1041,
-    venta_referencia: "COB-1041 · Daiku A-201",
-    porcentaje_comision: 1.5,
-    monto_comision: 28350.0, // 1.5% × 1,890,000
-    estado: "aprobada",
-    fecha_devengo: "2026-05-06",
-    fecha_aprobacion: "2026-05-07",
-    dias_desde_devengo: 8,
-    dias_esperando_director: 7,
-  },
-  {
-    id_comision_interna: 872,
-    folio_comision: "COM-872",
-    comisionista_email: "ana.ruiz@sozu.com",
-    comisionista_nombre: "Ana Patricia Ruiz",
-    comisionista_rol: "Ejecutivo Senior",
-    id_cuenta_cobranza: 1041,
-    venta_referencia: "COB-1041 · Daiku A-201",
-    porcentaje_comision: 1.2,
-    monto_comision: 22680.0, // 1.2% × 1,890,000
-    estado: "aprobada",
-    fecha_devengo: "2026-05-06",
-    fecha_aprobacion: "2026-05-07",
-    dias_desde_devengo: 8,
-    dias_esperando_director: 7,
-  },
-  // COB-1042 VENTA reconocida 2026-05-08 (hace 6 días). Aprobada 2026-05-09
-  // (hace 5 días, NO rojo porque 5 NO es > 5). Precio venta $2,400,000.
-  {
-    id_comision_interna: 873,
-    folio_comision: "COM-873",
-    comisionista_email: "rh.solis@sozu.com",
-    comisionista_nombre: "Roberto Hernández Solís",
-    comisionista_rol: "Director Comercial",
-    id_cuenta_cobranza: 1042,
-    venta_referencia: "COB-1042 · Bottura PH-3",
-    porcentaje_comision: 1.5,
-    monto_comision: 36000.0, // 1.5% × 2,400,000
-    estado: "aprobada",
-    fecha_devengo: "2026-05-08",
-    fecha_aprobacion: "2026-05-09",
-    dias_desde_devengo: 6,
-    dias_esperando_director: 5,
-  },
-  {
-    id_comision_interna: 874,
-    folio_comision: "COM-874",
-    comisionista_email: "diego.soto@sozu.com",
-    comisionista_nombre: "Diego Soto Vargas",
-    comisionista_rol: "Ejecutivo",
-    id_cuenta_cobranza: 1042,
-    venta_referencia: "COB-1042 · Bottura PH-3",
-    porcentaje_comision: 0.8,
-    monto_comision: 19200.0, // 0.8% × 2,400,000
-    estado: "aprobada",
-    fecha_devengo: "2026-05-08",
-    fecha_aprobacion: "2026-05-09",
-    dias_desde_devengo: 6,
-    dias_esperando_director: 5,
-  },
-  {
-    id_comision_interna: 875,
-    folio_comision: "COM-875",
-    comisionista_email: "patricia.luna@sozu.com",
-    comisionista_nombre: "Patricia Luna Olvera",
-    comisionista_rol: "Ejecutiva",
-    id_cuenta_cobranza: 1042,
-    venta_referencia: "COB-1042 · Bottura PH-3",
-    porcentaje_comision: 0.5,
-    monto_comision: 12000.0, // 0.5% × 2,400,000
-    estado: "aprobada",
-    fecha_devengo: "2026-05-08",
-    fecha_aprobacion: "2026-05-09",
-    dias_desde_devengo: 6,
-    dias_esperando_director: 5,
-  },
-
-  // ─── Históricas dispersadas (contexto del cierre completo) ───
-  // COB-1046 Bottura PH-2 — precio venta $3,800,000 (per índice Ciclo de Venta).
-  {
-    id_comision_interna: 862,
-    folio_comision: "COM-862",
-    comisionista_email: "rh.solis@sozu.com",
-    comisionista_nombre: "Roberto Hernández Solís",
-    comisionista_rol: "Director Comercial",
-    id_cuenta_cobranza: 1046,
-    venta_referencia: "COB-1046 · Bottura PH-2",
-    porcentaje_comision: 1.5,
-    monto_comision: 57000.0, // 1.5% × 3,800,000
-    estado: "dispersada",
-    fecha_devengo: "2026-02-26",
-    fecha_aprobacion: "2026-02-27",
-    fecha_autorizacion: "2026-02-28",
-    fecha_dispersion: "2026-02-28",
-    dias_desde_devengo: 77,
-  },
-  {
-    id_comision_interna: 863,
-    folio_comision: "COM-863",
-    comisionista_email: "patricia.luna@sozu.com",
-    comisionista_nombre: "Patricia Luna Olvera",
-    comisionista_rol: "Ejecutiva",
-    id_cuenta_cobranza: 1046,
-    venta_referencia: "COB-1046 · Bottura PH-2",
-    porcentaje_comision: 0.5,
-    monto_comision: 19000.0, // 0.5% × 3,800,000
-    estado: "dispersada",
-    fecha_devengo: "2026-02-26",
-    fecha_aprobacion: "2026-02-27",
-    fecha_autorizacion: "2026-02-28",
-    fecha_dispersion: "2026-02-28",
-    dias_desde_devengo: 77,
-  },
-  // Venta previa Bottura PH-1 — precio venta $2,700,000.
-  {
-    id_comision_interna: 854,
-    folio_comision: "COM-854",
-    comisionista_email: "rh.solis@sozu.com",
-    comisionista_nombre: "Roberto Hernández Solís",
-    comisionista_rol: "Director Comercial",
-    id_cuenta_cobranza: 1037,
-    venta_referencia: "COB-1037 · Bottura PH-1 (venta previa)",
-    porcentaje_comision: 1.5,
-    monto_comision: 40500.0, // 1.5% × 2,700,000
-    estado: "dispersada",
-    fecha_devengo: "2026-03-15",
-    fecha_aprobacion: "2026-03-17",
-    fecha_autorizacion: "2026-03-18",
-    fecha_dispersion: "2026-03-19",
-    dias_desde_devengo: 60,
-  },
-  {
-    id_comision_interna: 855,
-    folio_comision: "COM-855",
-    comisionista_email: "ana.ruiz@sozu.com",
-    comisionista_nombre: "Ana Patricia Ruiz",
-    comisionista_rol: "Ejecutivo Senior",
-    id_cuenta_cobranza: 1037,
-    venta_referencia: "COB-1037 · Bottura PH-1 (venta previa)",
-    porcentaje_comision: 1.2,
-    monto_comision: 32400.0, // 1.2% × 2,700,000
-    estado: "dispersada",
-    fecha_devengo: "2026-03-15",
-    fecha_aprobacion: "2026-03-17",
-    fecha_autorizacion: "2026-03-18",
-    fecha_dispersion: "2026-03-19",
-    dias_desde_devengo: 60,
-  },
-
-  // ─── Autorizadas, listas para dispersar ───
-  // Venta previa Daiku C-201 — precio venta $1,800,000.
-  // Devengo 2026-05-08 (hace 6d), autorizada 2026-05-11 (hace 3d).
-  {
-    id_comision_interna: 848,
-    folio_comision: "COM-848",
-    comisionista_email: "diego.soto@sozu.com",
-    comisionista_nombre: "Diego Soto Vargas",
-    comisionista_rol: "Ejecutivo",
-    id_cuenta_cobranza: 1015,
-    venta_referencia: "COB-1015 · Daiku C-201 (venta previa)",
-    porcentaje_comision: 0.8,
-    monto_comision: 14400.0, // 0.8% × 1,800,000
-    estado: "autorizada",
-    fecha_devengo: "2026-05-08",
-    fecha_aprobacion: "2026-05-09",
-    fecha_autorizacion: "2026-05-11",
-    dias_desde_devengo: 6,
-    dias_esperando_dispersion: 3,
-  },
-  {
-    id_comision_interna: 847,
-    folio_comision: "COM-847",
-    comisionista_email: "lucia.hernandez@sozu.com",
-    comisionista_nombre: "Lucía Hernández Ramírez",
-    comisionista_rol: "Coordinador",
-    id_cuenta_cobranza: 1015,
-    venta_referencia: "COB-1015 · Daiku C-201 (venta previa)",
-    porcentaje_comision: 0.5,
-    monto_comision: 9000.0, // 0.5% × 1,800,000
-    estado: "autorizada",
-    fecha_devengo: "2026-05-08",
-    fecha_aprobacion: "2026-05-09",
-    fecha_autorizacion: "2026-05-11",
-    dias_desde_devengo: 6,
-    dias_esperando_dispersion: 3,
-  },
-];
-
-/* ──────────────────────────────────────────────────────────
-   Helpers
-   ────────────────────────────────────────────────────────── */
 
 const ESTADO_LABEL: Record<EstadoComisionInt, string> = {
   devengada: "Devengada",
@@ -291,21 +62,6 @@ const ESTADO_TONE: Record<EstadoComisionInt, string> = {
   dispersada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   cancelada: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
-
-const ROL_OPTIONS = [
-  "Director Comercial",
-  "Director General",
-  "Ejecutivo Senior",
-  "Ejecutivo",
-  "Coordinador",
-  "Ejecutiva",
-];
-
-const DemoBadge = () => (
-  <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-    Datos demo
-  </Pill>
-);
 
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -446,9 +202,19 @@ export default function AltaDireccionComisionesInternasPage() {
   const [rolFilter, setRolFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionInterna | null>(null);
 
+  const { data: comisiones = [], isLoading, error } = useComisionesInternas();
+
+  const rolOptions = useMemo(
+    () =>
+      Array.from(new Set(comisiones.map((c) => c.comisionista_rol).filter(Boolean))).sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [comisiones],
+  );
+
   const filtered = useMemo(() => {
     const q = search ? norm(search) : null;
-    return COMISIONES.filter((c) => {
+    return comisiones.filter((c) => {
       if (estadoFilter !== "all" && c.estado !== estadoFilter) return false;
       if (rolFilter !== "all" && c.comisionista_rol !== rolFilter) return false;
       if (q) {
@@ -457,6 +223,9 @@ export default function AltaDireccionComisionesInternasPage() {
           c.comisionista_nombre,
           c.comisionista_rol,
           c.venta_referencia,
+          c.proyecto_nombre,
+          c.modelo_nombre,
+          c.numero_departamento,
         ]
           .map(norm)
           .join(" ");
@@ -464,7 +233,7 @@ export default function AltaDireccionComisionesInternasPage() {
       }
       return true;
     });
-  }, [search, estadoFilter, rolFilter]);
+  }, [search, estadoFilter, rolFilter, comisiones]);
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -501,8 +270,8 @@ export default function AltaDireccionComisionesInternasPage() {
 
   const hayFiltros = !!search || estadoFilter !== "all" || rolFilter !== "all";
   const totalDesc = hayFiltros
-    ? `${filtered.length} de ${COMISIONES.length} comisiones`
-    : `${COMISIONES.length} comisiones en el período`;
+    ? `${filtered.length} de ${comisiones.length} comisiones`
+    : `${comisiones.length} comisiones internas`;
 
   // KPI activo según el filtro de estado actual.
   // "Total devengadas" corresponde a estadoFilter==='all'.
@@ -529,7 +298,6 @@ export default function AltaDireccionComisionesInternasPage() {
       <PageHeader
         title="Comisiones Internas"
         description="Parte variable del ingreso del equipo comercial y operativo SOZU"
-        action={<DemoBadge />}
       />
 
       {/* ─── KPIs clicables (filtran la tabla) ─── */}
@@ -608,7 +376,7 @@ export default function AltaDireccionComisionesInternasPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los roles</SelectItem>
-              {ROL_OPTIONS.map((r) => (
+              {rolOptions.map((r) => (
                 <SelectItem key={r} value={r}>
                   {r}
                 </SelectItem>
@@ -626,90 +394,111 @@ export default function AltaDireccionComisionesInternasPage() {
 
       {/* ─── Tabla ─── */}
       <Panel title="Listado" description={totalDesc}>
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando comisiones…
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
+            Error al cargar comisiones: {(error as Error).message}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-12 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
-              No se encontraron comisiones con esos criterios.
+              {comisiones.length === 0
+                ? "No hay comisiones internas activas."
+                : "No se encontraron comisiones con esos criterios."}
             </p>
-            <Button variant="outline" size="sm" onClick={limpiar}>
-              <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
-            </Button>
+            {hayFiltros && (
+              <Button variant="outline" size="sm" onClick={limpiar}>
+                <X className="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+              </Button>
+            )}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">Folio</TableHead>
-                <TableHead className="text-xs">Comisionista</TableHead>
-                <TableHead className="text-xs">Rol</TableHead>
-                <TableHead className="text-xs">Venta ref</TableHead>
-                <TableHead className="text-xs text-right">%</TableHead>
-                <TableHead className="text-xs text-right">Monto</TableHead>
-                <TableHead className="text-xs">Devengada</TableHead>
-                <TableHead className="text-xs">Antigüedad</TableHead>
-                <TableHead className="text-xs">Estado</TableHead>
-                <TableHead className="text-xs text-right">Acción</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((c) => {
-                const aprobada = c.estado === "aprobada";
-                return (
-                  <TableRow
-                    key={c.id_comision_interna}
-                    className={cn(aprobada && "bg-amber-50/50 dark:bg-amber-950/20")}
-                  >
-                    <TableCell className="font-medium text-sm font-mono">
-                      {c.folio_comision}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <div>{c.comisionista_nombre}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono">
-                        {c.comisionista_email}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.comisionista_rol}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.venta_referencia}
-                    </TableCell>
-                    <TableCell className="text-xs text-right tabular-nums">
-                      {c.porcentaje_comision.toFixed(2)}%
-                    </TableCell>
-                    <TableCell className="text-sm text-right font-semibold tabular-nums">
-                      {fmtMxn(c.monto_comision)}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {c.fecha_devengo}
-                    </TableCell>
-                    <TableCell>
-                      <AntiguedadCell c={c} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] font-medium", ESTADO_TONE[c.estado])}
-                      >
-                        {ESTADO_LABEL[c.estado]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => setSelected(c)}
-                        aria-label={`Ver detalle de ${c.folio_comision}`}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">No. Cuenta</TableHead>
+                  <TableHead className="text-xs">Tipo</TableHead>
+                  <TableHead className="text-xs">Proyecto</TableHead>
+                  <TableHead className="text-xs">Modelo</TableHead>
+                  <TableHead className="text-xs">No. Departamento</TableHead>
+                  <TableHead className="text-xs text-right">Precio final</TableHead>
+                  <TableHead className="text-xs text-right">Comisión Total</TableHead>
+                  <TableHead className="text-xs text-right">% de comisión</TableHead>
+                  <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
+                  <TableHead className="text-xs">Nombre</TableHead>
+                  <TableHead className="text-xs text-right">Comisión</TableHead>
+                  <TableHead className="text-xs">Estado</TableHead>
+                  <TableHead className="text-xs text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((c) => {
+                  const aprobada = c.estado === "aprobada";
+                  return (
+                    <TableRow
+                      key={c.id_comision_interna}
+                      className={cn(aprobada && "bg-amber-50/50 dark:bg-amber-950/20")}
+                    >
+                      <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
+                        COB-{c.id_cuenta_cobranza}
+                      </TableCell>
+                      <TableCell className="text-xs">{c.tipo}</TableCell>
+                      <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
+                      <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
+                      <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums">
+                        {fmtMxn(c.precio_final)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right tabular-nums">
+                        {fmtMxn(c.comision_total_cuenta)}
+                      </TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">
+                        {c.porcentaje_comision.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                        {fmtMxn(c.comision_a_dispersar)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div>{c.comisionista_nombre}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {c.comisionista_rol}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-right font-semibold tabular-nums">
+                        {fmtMxn(c.monto_comision)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-medium whitespace-nowrap",
+                            ESTADO_TONE[c.estado],
+                          )}
+                        >
+                          {ESTADO_LABEL[c.estado]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => setSelected(c)}
+                          aria-label={`Ver detalle de ${c.folio_comision}`}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Panel>
 
