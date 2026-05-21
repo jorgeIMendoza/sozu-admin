@@ -40,4 +40,4 @@ Ejecuciones_manuales/*
 # Playwright MCP (screenshots y logs generados por Claude)
 .playwright-mcp/
 *.png
-bundle.js
+bundle*.js
