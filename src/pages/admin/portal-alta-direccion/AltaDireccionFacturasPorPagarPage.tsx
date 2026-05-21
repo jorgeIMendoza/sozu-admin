@@ -34,6 +34,7 @@ import {
 import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
 import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
 import {
@@ -46,6 +47,7 @@ import {
   type EstadoFacturaPorPagar as EstadoPago,
   type TipoBeneficiario,
   type EstatusComision,
+  type EstatusPagoFacturaPorPagar,
 } from "@/hooks/useFacturasPorPagar";
 
 /* ──────────────────────────────────────────────────────────
@@ -87,6 +89,20 @@ const ESTATUS_COMISION_TONE: Record<EstatusComision, string> = {
   pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
 };
 
+const ESTATUS_PAGO_LABEL: Record<EstatusPagoFacturaPorPagar, string> = {
+  espera_autorizacion: "Espera Autorización",
+  autorizada: "Autorizada",
+  pagada: "Pagada",
+  rechazada: "Rechazada",
+};
+
+const ESTATUS_PAGO_TONE: Record<EstatusPagoFacturaPorPagar, string> = {
+  espera_autorizacion: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  autorizada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  rechazada: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
+
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -123,6 +139,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorPagar | null>(null);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorPagar();
@@ -132,6 +149,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
     return facturas.filter((f) => {
       if (estadoFilter !== "all" && f.estado !== estadoFilter) return false;
       if (tipoFilter !== "all" && f.beneficiario_tipo !== tipoFilter) return false;
+      if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
       if (q) {
         const hay = [
           f.folio_cfdi,
@@ -148,7 +166,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
       }
       return true;
     });
-  }, [search, estadoFilter, tipoFilter, facturas]);
+  }, [search, estadoFilter, tipoFilter, estatusPagoFilter, facturas]);
 
   const kpis = useMemo(() => {
     let recibidoTotal = 0,
@@ -199,7 +217,11 @@ export default function AltaDireccionFacturasPorPagarPage() {
     [filtered]
   );
 
-  const hayFiltros = !!search || estadoFilter !== "all" || tipoFilter !== "all";
+  const hayFiltros =
+    !!search ||
+    estadoFilter !== "all" ||
+    tipoFilter !== "all" ||
+    estatusPagoFilter !== "all";
   const showGlobalHint = hayFiltros && bloqueadoEnFiltro !== bloqueadoGlobal.count;
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
@@ -209,6 +231,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
     setSearch("");
     setEstadoFilter("all");
     setTipoFilter("all");
+    setEstatusPagoFilter("all");
   };
 
   return (
@@ -329,6 +352,19 @@ export default function AltaDireccionFacturasPorPagarPage() {
             </SelectContent>
           </Select>
 
+          <Select value={estatusPagoFilter} onValueChange={setEstatusPagoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estatus de pago</SelectItem>
+              <SelectItem value="espera_autorizacion">Espera Autorización</SelectItem>
+              <SelectItem value="autorizada">Autorizada</SelectItem>
+              <SelectItem value="pagada">Pagada</SelectItem>
+              <SelectItem value="rechazada">Rechazada</SelectItem>
+            </SelectContent>
+          </Select>
+
           {hayFiltros && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={limpiar}>
               <X className="h-3 w-3 mr-1" /> Limpiar
@@ -365,10 +401,9 @@ export default function AltaDireccionFacturasPorPagarPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">No. Cuenta</TableHead>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Beneficiario</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
-                  <TableHead className="text-xs">Venta ref</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
                   <TableHead className="text-xs">Modelo</TableHead>
                   <TableHead className="text-xs">Producto</TableHead>
@@ -379,6 +414,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
                   <TableHead className="text-xs">Antigüedad</TableHead>
                   <TableHead className="text-xs">Flag cobro</TableHead>
                   <TableHead className="text-xs">Estado</TableHead>
+                  <TableHead className="text-xs">Estatus Pago</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -392,16 +428,13 @@ export default function AltaDireccionFacturasPorPagarPage() {
                       className={cn(sinCobro && "bg-amber-50/50 dark:bg-amber-950/20")}
                     >
                       <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
-                        COB-{f.id_cuenta_cobranza}
+                        {formatCuentaCobranzaId(f.id_cuenta_cobranza, f.tipo)}
                       </TableCell>
                       <TableCell className="text-sm">{f.beneficiario_nombre}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap">
                           {TIPO_LABEL[f.beneficiario_tipo]}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {f.venta_referencia}
                       </TableCell>
                       <TableCell className="text-sm">{f.proyecto_nombre || "-"}</TableCell>
                       <TableCell className="text-sm">{f.modelo_nombre || "-"}</TableCell>
@@ -475,6 +508,22 @@ export default function AltaDireccionFacturasPorPagarPage() {
                           {ESTADO_LABEL[f.estado]}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-medium whitespace-nowrap",
+                            ESTATUS_PAGO_TONE[f.estatus_pago],
+                          )}
+                          title={
+                            f.estatus_pago === "pagada" && f.fecha_pago_real
+                              ? `Pago realizado el ${f.fecha_pago_real}`
+                              : undefined
+                          }
+                        >
+                          {ESTATUS_PAGO_LABEL[f.estatus_pago]}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
@@ -501,8 +550,9 @@ export default function AltaDireccionFacturasPorPagarPage() {
           open={!!selected}
           onOpenChange={(open) => { if (!open) setSelected(null); }}
           entityType="pago_externo"
-          entityId={selected.folio_cfdi}
+          entityId={formatCuentaCobranzaId(selected.id_cuenta_cobranza, selected.tipo)}
           ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
+          hideVentaContext
         >
           <PagoExternoContent
             entity={{
@@ -516,6 +566,10 @@ export default function AltaDireccionFacturasPorPagarPage() {
               dias_desde_emision: selected.dias_desde_emision,
               ya_se_cobro_al_desarrollador: selected.ya_se_cobro_al_desarrollador,
               factura_cobrar_referencia: selected.factura_cobrar_referencia,
+              folio_cuenta: resolveCobFolio(selected.venta_referencia),
+              url_factura_externa: selected.url_factura,
+              estatus_pago: selected.estatus_pago,
+              fecha_pago: selected.fecha_pago_real ?? null,
             }}
             ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
             onClose={() => setSelected(null)}

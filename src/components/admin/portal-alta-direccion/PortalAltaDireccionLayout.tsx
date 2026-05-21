@@ -7,7 +7,6 @@ import {
   Briefcase,
   FileText,
   Percent,
-  BarChart3,
   ArrowLeft,
   LogOut,
   Menu,
@@ -91,14 +90,8 @@ const navGroups: NavGroup[] = [
       },
     ],
   },
-  {
-    label: "Administración",
-    items: [
-      // "Red Comercial", "Auditoría" y "Configuración" ocultas en esta fase de
-      // demo; rutas siguen vivas en App.tsx por URL directa.
-      { label: "Reportes",      path: "/admin/portal-alta-direccion/reportes",      icon: BarChart3 },
-    ],
-  },
+  // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
+  // ocultada en esta fase. Las rutas siguen vivas en App.tsx por URL directa.
 ];
 
 export const PortalAltaDireccionLayout = () => {

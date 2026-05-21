@@ -119,6 +119,89 @@ export function VentaParaFacturarContent({
         </div>
       </Section>
 
+      {/* ─── Oferta comercial ─── */}
+      <Section title="Oferta comercial">
+        <div className="grid grid-cols-2 gap-3">
+          <KV
+            icon={DollarSign}
+            label="Precio final"
+            value={fmtMxn(detalle.oferta_comercial.precio_final)}
+          />
+          <KV
+            icon={DollarSign}
+            label="Ahorro"
+            value={
+              detalle.oferta_comercial.ahorro > 0
+                ? fmtMxn(detalle.oferta_comercial.ahorro)
+                : "—"
+            }
+          />
+          <KV
+            icon={DollarSign}
+            label="Enganche"
+            value={
+              detalle.oferta_comercial.enganche > 0
+                ? fmtMxn(detalle.oferta_comercial.enganche)
+                : "—"
+            }
+          />
+          <KV
+            icon={DollarSign}
+            label="Mensualidades"
+            value={
+              detalle.oferta_comercial.parcialidades_total > 0
+                ? `${fmtMxn(detalle.oferta_comercial.parcialidades_total)} (${
+                    detalle.oferta_comercial.parcialidades_count
+                  } pagos)`
+                : "—"
+            }
+          />
+          <KV
+            icon={DollarSign}
+            label="A la entrega"
+            value={
+              detalle.oferta_comercial.a_la_entrega > 0
+                ? fmtMxn(detalle.oferta_comercial.a_la_entrega)
+                : "—"
+            }
+          />
+          <KV
+            icon={DollarSign}
+            label="Apartado"
+            value={
+              detalle.oferta_comercial.apartado > 0
+                ? fmtMxn(detalle.oferta_comercial.apartado)
+                : "—"
+            }
+          />
+        </div>
+
+        {/* Visualizador / link a la oferta */}
+        <div className="mt-3 flex items-center justify-between rounded-md border border-border bg-card px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Documento oferta
+            </p>
+            <p className="text-sm font-mono text-foreground">
+              {detalle.oferta_comercial.folio_oferta || "Sin folio"}
+            </p>
+          </div>
+          {detalle.oferta_comercial.url_oferta ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => window.open(detalle.oferta_comercial.url_oferta!, "_blank")}
+            >
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              Ver oferta
+            </Button>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">PDF aún no generado</span>
+          )}
+        </div>
+      </Section>
+
       {/* ─── Comprador ─── */}
       <Section title="Comprador">
         {detalle.compradores.length === 0 ? (
@@ -266,23 +349,75 @@ export function VentaParaFacturarContent({
         </Timeline>
       </Section>
 
-      <DrawerActionFooter
-        onCancel={onClose}
-        notePlaceholder="Notas (requeridas si rechazas el pago)…"
-        actions={[
-          {
-            label: "Rechazar pago",
-            variant: "destructive",
-            requiresNote: true,
-            onClick: () => {},
-          },
-          {
-            label: "Autorizar pago",
-            variant: "primary",
-            onClick: () => {},
-          },
-        ]}
-      />
+      {/* ─── Estatus de pago actual ─── */}
+      <Section title="Estatus de pago">
+        <EstatusPagoBanner
+          estatus={detalle.estatus_pago}
+          fechaPago={detalle.fecha_pago_comision}
+        />
+      </Section>
+
+      {/* Acciones sólo si el pago aún está en proceso */}
+      {(detalle.estatus_pago === "espera_autorizacion" ||
+        detalle.estatus_pago === "autorizada") && (
+        <DrawerActionFooter
+          onCancel={onClose}
+          notePlaceholder="Notas (requeridas si rechazas el pago)…"
+          actions={[
+            {
+              label: "Rechazar pago",
+              variant: "destructive",
+              requiresNote: true,
+              onClick: () => {},
+            },
+            {
+              label: "Autorizar pago",
+              variant: "primary",
+              onClick: () => {},
+            },
+          ]}
+        />
+      )}
+    </div>
+  );
+}
+
+function EstatusPagoBanner({
+  estatus,
+  fechaPago,
+}: {
+  estatus: "espera_autorizacion" | "autorizada" | "pagada" | "rechazada";
+  fechaPago: string | null;
+}) {
+  const cfg = {
+    espera_autorizacion: {
+      label: "Espera Autorización",
+      tone: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200",
+      text: "La factura está pendiente de autorización del Director.",
+    },
+    autorizada: {
+      label: "Autorizada",
+      tone: "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900/40 text-violet-800 dark:text-violet-200",
+      text: "Autorizada por Dirección — pago en proceso.",
+    },
+    pagada: {
+      label: "Pagada",
+      tone: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-200",
+      text: fechaPago
+        ? `Pago recibido el ${fechaPago}. No requiere acción adicional.`
+        : "Pago recibido. No requiere acción adicional.",
+    },
+    rechazada: {
+      label: "Rechazada",
+      tone: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200",
+      text: "Pago rechazado. Revisar motivo en la actividad reciente.",
+    },
+  }[estatus];
+
+  return (
+    <div className={`rounded-md border px-3 py-2.5 ${cfg.tone}`}>
+      <p className="text-sm font-semibold">{cfg.label}</p>
+      <p className="text-xs mt-0.5">{cfg.text}</p>
     </div>
   );
 }

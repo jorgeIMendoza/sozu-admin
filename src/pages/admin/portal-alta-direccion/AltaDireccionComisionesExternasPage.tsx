@@ -34,12 +34,11 @@ import {
 import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { ComisionExternaContent } from "@/components/admin/portal-alta-direccion/drawers/content/ComisionExternaContent";
-import {
-  getVentaContext,
-  resolveCobFolio,
-} from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
+import { useNavigate } from "react-router-dom";
+import { getVentaContext } from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
 import {
   useComisionesExternas,
   type ComisionExterna,
@@ -111,6 +110,7 @@ export default function AltaDireccionComisionesExternasPage() {
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionExterna | null>(null);
+  const navigate = useNavigate();
 
   const { data: comisiones = [], isLoading, error } = useComisionesExternas();
 
@@ -347,13 +347,12 @@ export default function AltaDireccionComisionesExternasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">Cuenta</TableHead>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Beneficiario</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
                   <TableHead className="text-xs">Modelo</TableHead>
                   <TableHead className="text-xs">Depto</TableHead>
-                  <TableHead className="text-xs">Venta ref</TableHead>
                   <TableHead className="text-xs text-right">Precio Final</TableHead>
                   <TableHead className="text-xs text-right">Comisión</TableHead>
                   <TableHead className="text-xs text-right">% Comisión</TableHead>
@@ -377,7 +376,7 @@ export default function AltaDireccionComisionesExternasPage() {
                       className={cn(sinCobro && "bg-amber-50/50 dark:bg-amber-950/20")}
                     >
                       <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
-                        COB-{c.id_cuenta_cobranza}
+                        {formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo)}
                       </TableCell>
                       <TableCell className="text-sm">{c.beneficiario_nombre}</TableCell>
                       <TableCell>
@@ -388,9 +387,6 @@ export default function AltaDireccionComisionesExternasPage() {
                       <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
                       <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
                       <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {c.venta_referencia}
-                      </TableCell>
                       <TableCell className="text-sm text-right tabular-nums">
                         {fmtMxn(c.precio_final)}
                       </TableCell>
@@ -440,11 +436,11 @@ export default function AltaDireccionComisionesExternasPage() {
                             size="sm"
                             variant="ghost"
                             className="h-7 text-[10px] px-2"
-                            title={c.factura_referencia || "Ver factura"}
+                            title="Ver factura del comisionista"
                             onClick={() => window.open(c.url_factura!, "_blank")}
                           >
                             <FileText className="h-3 w-3 mr-1" />
-                            {c.factura_referencia || "Ver"}
+                            Ver PDF
                           </Button>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">Sin factura</span>
@@ -470,36 +466,74 @@ export default function AltaDireccionComisionesExternasPage() {
         )}
       </Panel>
 
-      {/* ─── Drawer unificado del Portal Alta Dirección ─── */}
-      {selected && (
-        <ExpedienteDrawer
-          open={!!selected}
-          onOpenChange={(open) => { if (!open) setSelected(null); }}
-          entityType="comision_externa"
-          entityId={selected.folio_comision}
-          ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
-        >
-          <ComisionExternaContent
-            entity={{
-              folio: selected.folio_comision,
-              beneficiario_nombre: selected.beneficiario_nombre,
-              beneficiario_rfc: selected.beneficiario_rfc,
-              beneficiario_tipo: selected.beneficiario_tipo,
-              porcentaje_comision: selected.porcentaje_comision,
-              monto: selected.monto_comision,
-              fecha_devengo: selected.fecha_devengo,
-              fecha_aprobacion: selected.fecha_aprobacion,
-              fecha_pago: selected.fecha_pago,
-              dias_desde_devengo: selected.dias_desde_devengo,
-              factura_referencia: selected.factura_referencia,
-              ya_se_cobro_al_desarrollador: selected.ya_se_cobro_al_desarrollador,
-              estado: selected.estado,
-            }}
-            ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
-            onClose={() => setSelected(null)}
-          />
-        </ExpedienteDrawer>
-      )}
+      {/* ─── Drawer Pago externo (reusado para consulta de comisión) ─── */}
+      {selected && (() => {
+        const folioCuenta = formatCuentaCobranzaId(
+          selected.id_cuenta_cobranza,
+          selected.tipo,
+        );
+        // Mapear el estado de comisión externa → estatus de pago homologado
+        let estatusPago:
+          | "espera_autorizacion"
+          | "autorizada"
+          | "pagada"
+          | "rechazada";
+        if (selected.estado === "pagada") estatusPago = "pagada";
+        else if (selected.estado === "cancelada") estatusPago = "rechazada";
+        else if (selected.estado === "facturada" || selected.estado === "aprobada")
+          estatusPago = "autorizada";
+        else estatusPago = "espera_autorizacion";
+
+        const requiereValidacion =
+          estatusPago === "espera_autorizacion" || estatusPago === "autorizada";
+
+        return (
+          <ExpedienteDrawer
+            open={!!selected}
+            onOpenChange={(open) => { if (!open) setSelected(null); }}
+            entityType="pago_externo"
+            entityId={folioCuenta}
+            ventaContext={getVentaContext(folioCuenta)}
+            hideVentaContext
+          >
+            <PagoExternoContent
+              entity={{
+                folio_cfdi: folioCuenta,
+                beneficiario_nombre: selected.beneficiario_nombre,
+                beneficiario_rfc: selected.beneficiario_rfc,
+                beneficiario_tipo: selected.beneficiario_tipo,
+                monto: selected.monto_comision,
+                fecha_emision: selected.fecha_devengo,
+                dias_desde_emision: selected.dias_desde_devengo,
+                ya_se_cobro_al_desarrollador: selected.ya_se_cobro_al_desarrollador,
+                factura_cobrar_referencia: selected.factura_referencia,
+                folio_cuenta: folioCuenta,
+                url_factura_externa: selected.url_factura ?? null,
+                estatus_pago: estatusPago,
+                fecha_pago: selected.fecha_pago ?? null,
+              }}
+              ventaContext={getVentaContext(folioCuenta)}
+              onClose={() => setSelected(null)}
+              readOnly
+              ctaButton={
+                requiereValidacion
+                  ? {
+                      label: "Ir a Bandeja de Validaciones",
+                      onClick: () => {
+                        setSelected(null);
+                        navigate(
+                          `/admin/portal-alta-direccion/bandeja#${encodeURIComponent(
+                            folioCuenta,
+                          )}`,
+                        );
+                      },
+                    }
+                  : undefined
+              }
+            />
+          </ExpedienteDrawer>
+        );
+      })()}
     </>
   );
 }
