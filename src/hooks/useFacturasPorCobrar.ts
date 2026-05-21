@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 export type EstadoFacturaPorCobrar =
   | "timbrada_pendiente"
@@ -359,7 +360,7 @@ export function useFacturasPorCobrar() {
         else estadoFacturaSozu = "timbrada";
 
         const idNum = typeof c.id === "string" ? Number(c.id) : c.id;
-        const folio = `COB-${idNum}`;
+        const folio = formatCuentaCobranzaId(idNum, tipo);
         const numeroDepto = prop?.numero ?? "";
         const propiedadLabel = [edif?.nombre, numeroDepto].filter(Boolean).join(" ");
         const ventaRef = `${folio} · ${propiedadLabel || producto?.nombre || proyectoNombre || `Oferta ${idOferta ?? ""}`}`;

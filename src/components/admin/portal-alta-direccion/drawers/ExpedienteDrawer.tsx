@@ -29,6 +29,8 @@ export type ExpedienteDrawerProps = {
   subtitle?: string;
   ventaContext: VentaContext;
   children: React.ReactNode;
+  /** Oculta la VentaContextCard cuando el contenido del drawer ya muestra esos datos. */
+  hideVentaContext?: boolean;
 };
 
 export function ExpedienteDrawer({
@@ -39,6 +41,7 @@ export function ExpedienteDrawer({
   subtitle,
   ventaContext,
   children,
+  hideVentaContext = false,
 }: ExpedienteDrawerProps) {
   const navigate = useNavigate();
 
@@ -72,7 +75,7 @@ export function ExpedienteDrawer({
 
         {/* ─── Body scrolleable ─── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-          <VentaContextCard ctx={ventaContext} />
+          {!hideVentaContext && <VentaContextCard ctx={ventaContext} />}
           {children}
         </div>
 

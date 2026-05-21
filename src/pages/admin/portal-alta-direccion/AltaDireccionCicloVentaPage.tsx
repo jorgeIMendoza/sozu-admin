@@ -72,6 +72,8 @@ type TimelineStepData = {
   responsable?: string;
   detalle?: string;
   es_hito?: boolean;
+  url?: string;
+  url_label?: string;
 };
 
 type ActorExpediente = {
@@ -450,10 +452,10 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       if (q) {
         const hay = [
           c.folio,
-          c.propiedad_label,
           c.proyecto_nombre,
+          c.modelo_nombre,
+          c.numero_departamento,
           c.propietario,
-          ...c.compradores,
         ]
           .map(norm)
           .join(" ");
@@ -472,8 +474,8 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
   };
 
   const totalDesc = hayFiltros
-    ? `${filtrados.length} de ${casos.length} ventas`
-    : `${casos.length} propiedades vendidas`;
+    ? `${filtrados.length} de ${casos.length} expedientes`
+    : `${casos.length} expedientes`;
 
   return (
     <>
@@ -486,7 +488,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cuenta, propiedad, comprador o propietario…"
+            placeholder="Buscar por cuenta, proyecto, modelo, depto o propietario…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -527,7 +529,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
         </div>
       </div>
 
-      <Panel title="Casos disponibles" description={totalDesc}>
+      <Panel title="Expedientes" description={totalDesc}>
         {isLoading ? (
           <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Cargando ventas…
@@ -540,7 +542,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
           <div className="py-12 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
               {casos.length === 0
-                ? "No hay propiedades vendidas registradas."
+                ? "No hay expedientes registrados."
                 : "No se encontraron ventas con esos criterios."}
             </p>
             {hayFiltros && (
@@ -556,13 +558,13 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                 <TableRow>
                   <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
-                  <TableHead className="text-xs">Propiedad</TableHead>
-                  <TableHead className="text-xs">Compradores</TableHead>
-                  <TableHead className="text-xs">Propietario</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
-                  <TableHead className="text-xs">Días</TableHead>
+                  <TableHead className="text-xs">Modelo</TableHead>
+                  <TableHead className="text-xs">No. Departamento</TableHead>
+                  <TableHead className="text-xs">Propietario</TableHead>
                   <TableHead className="text-xs text-right">Precio/m²</TableHead>
                   <TableHead className="text-xs text-right">Precio Final</TableHead>
+                  <TableHead className="text-xs">Días</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -573,32 +575,19 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                       {c.folio}
                     </TableCell>
                     <TableCell className="text-xs">{c.tipo}</TableCell>
-                    <TableCell className="text-sm">{c.propiedad_label || "-"}</TableCell>
-                    <TableCell className="text-xs">
-                      {c.compradores.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : c.compradores.length === 1 ? (
-                        c.compradores[0]
-                      ) : (
-                        <div>
-                          <div>{c.compradores[0]}</div>
-                          <div className="text-[10px] text-muted-foreground">
-                            +{c.compradores.length - 1} copropietarios
-                          </div>
-                        </div>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {c.propietario || "-"}
                     </TableCell>
-                    <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
-                    <TableCell className="text-xs tabular-nums">{c.dias_desde_compra}d</TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
                       {c.precio_m2 > 0 ? fmtMxn(c.precio_m2) : "-"}
                     </TableCell>
                     <TableCell className="text-sm text-right font-semibold tabular-nums">
                       {fmtMxn(c.precio_final)}
                     </TableCell>
+                    <TableCell className="text-xs tabular-nums">{c.dias_desde_compra}d</TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
@@ -697,6 +686,17 @@ function TimelineStep({ step, isLast }: { step: TimelineStepData; isLast: boolea
           )}>
             {step.detalle}
           </p>
+        )}
+        {step.url && (
+          <a
+            href={step.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            <FileText className="h-3 w-3" />
+            {step.url_label || "Ver documento"}
+          </a>
         )}
       </div>
     </div>
@@ -1158,84 +1158,65 @@ function ExpedienteDetalleReal({
 
       {/* HERO */}
       <Card className="mb-8 ring-1 ring-border">
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">ID Cuenta</p>
-                <p className="text-xl font-bold text-foreground tabular-nums font-mono">
-                  {data.folio}
-                </p>
-              </div>
+        <CardContent className="p-6 space-y-6">
+          {/* Encabezado: ID Cuenta */}
+          <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3 border-b border-border">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">ID Cuenta</p>
+              <p className="text-2xl font-bold text-foreground font-mono">{data.folio}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Estado</p>
+              <p className="text-sm font-medium text-foreground">
+                {data.estatus_disponibilidad || "—"}
+                {data.fecha_compra && (
+                  <span className="text-muted-foreground ml-1">· {data.fecha_compra}</span>
+                )}
+              </p>
+            </div>
+          </div>
 
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Building2 className="h-3 w-3" /> Propiedad
-                </p>
-                <p className="text-base font-semibold text-foreground mt-1">
-                  {data.propiedad_label || "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {data.metraje > 0 ? `${data.metraje.toFixed(2)} m²` : "Sin metraje"}
-                  {data.estatus_disponibilidad && ` · ${data.estatus_disponibilidad}`}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+          {/* 3 columnas: Propiedad | Indicadores financieros | Compradores */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Datos de la propiedad */}
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1">
+                <Building2 className="h-3 w-3" /> Datos de la propiedad
+              </p>
+              <div className="grid grid-cols-2 gap-3">
                 <Info label="Proyecto" value={data.proyecto_nombre || "—"} />
-                <Info label="No. Propiedad" value={data.numero_departamento || "—"} />
+                <Info label="Edificio" value={data.edificio_nombre || "—"} />
                 <Info label="Modelo" value={data.modelo_nombre || "—"} />
+                <Info label="No. Depto" value={data.numero_departamento || "—"} />
                 <Info label="Tipo" value={data.tipo} />
                 {data.tipo !== "Propiedad" && (
                   <Info label="Producto" value={data.producto_nombre || "—"} />
                 )}
+                <Info
+                  label="Metraje"
+                  value={data.metraje > 0 ? `${data.metraje.toFixed(2)} m²` : "—"}
+                />
                 <Info label="Días" value={`${data.dias_desde_compra} días`} />
               </div>
-
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <User className="h-3 w-3" /> Compradores
-                </p>
-                {data.compradores.length === 0 ? (
-                  <p className="text-sm text-muted-foreground mt-1">Sin compradores registrados</p>
-                ) : (
-                  <ul className="mt-1 space-y-0.5">
-                    {data.compradores.map((c, i) => (
-                      <li key={i} className="text-sm text-foreground">
-                        {c.nombre}
-                        {c.porcentaje > 0 && c.porcentaje < 100 && (
-                          <span className="text-xs text-muted-foreground ml-1">
-                            ({c.porcentaje}%)
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
               {data.propietario && (
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Propietario
-                  </p>
-                  <p className="text-sm font-medium text-foreground mt-0.5">{data.propietario}</p>
+                <div className="mt-3 pt-3 border-t border-border">
+                  <Info label="Propietario / Receptor" value={data.propietario} />
                 </div>
               )}
             </div>
 
-            {/* Derecha — indicadores financieros */}
+            {/* Indicadores financieros */}
             <div className="lg:border-l lg:pl-6 lg:border-border">
               <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
                 Indicadores financieros
               </p>
               <div className="space-y-4">
-                <Stat label="Precio final" value={fmtMxn(data.precio_final)} tone="emerald" />
                 <Stat
                   label="Precio / m²"
                   value={data.precio_m2 > 0 ? fmtMxn(data.precio_m2) : "—"}
                   hint={data.metraje > 0 ? `${data.metraje.toFixed(2)} m²` : undefined}
                 />
+                <Stat label="Precio final" value={fmtMxn(data.precio_final)} tone="emerald" />
                 <Stat
                   label="Comisión total SOZU"
                   value={fmtMxn(data.comision_total_sozu)}
@@ -1257,6 +1238,47 @@ function ExpedienteDetalleReal({
                   tone="emerald"
                 />
               </div>
+            </div>
+
+            {/* Compradores */}
+            <div className="lg:border-l lg:pl-6 lg:border-border">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1">
+                <User className="h-3 w-3" /> Compradores
+              </p>
+              {data.compradores.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin compradores registrados</p>
+              ) : (
+                <ul className="space-y-3">
+                  {data.compradores.map((c, i) => (
+                    <li
+                      key={i}
+                      className="rounded-md border border-border bg-card p-2.5"
+                    >
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Nombre
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {c.nombre}
+                        {c.porcentaje > 0 && c.porcentaje < 100 && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({c.porcentaje}%)
+                          </span>
+                        )}
+                      </p>
+                      {i === 0 && data.rfc_comprador && (
+                        <>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">
+                            RFC
+                          </p>
+                          <p className="text-sm font-mono text-foreground">
+                            {data.rfc_comprador}
+                          </p>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </CardContent>
@@ -1292,6 +1314,8 @@ function ExpedienteDetalleReal({
                         ? "Sin información en BD"
                         : step.detalle,
                     es_hito: step.es_hito,
+                    url: step.url,
+                    url_label: step.url_label,
                   }}
                   isLast={i === data.timeline.length - 1}
                 />

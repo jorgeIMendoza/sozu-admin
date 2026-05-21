@@ -299,7 +299,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">No. Cuenta</TableHead>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
                   <TableHead className="text-xs">Modelo</TableHead>
