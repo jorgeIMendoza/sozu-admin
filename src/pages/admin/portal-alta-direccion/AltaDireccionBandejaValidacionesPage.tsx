@@ -201,10 +201,11 @@ async function loadProyectosByPropiedades(propIds: number[]): Promise<{
 /* ──────────────────────────────────────────────────────────
    "Comisión SOZU" — paginado + ordenable
    Cuentas_cobranza que cumplen TODAS estas condiciones:
-   - Propiedad en estatus_disponibilidad = 5 (Vendido)
    - es_pagada_comision_venta = false (estatus Pendiente)
    - url_factura_comision IS NOT NULL (factura SOZU Generada — draft o timbrada)
    - sin cuenta padre (excluye mantenimientos)
+   - Si es Propiedad: estatus_disponibilidad = 5 (Vendido)
+   - Si es Producto/Servicio: siempre se considera vendido
    ────────────────────────────────────────────────────────── */
 
 type VentaFacturarFetchResult = {
@@ -216,23 +217,67 @@ async function fetchVentasParaFacturar(
   page: number,
   sortDir: SortDir
 ): Promise<VentaFacturarFetchResult> {
-  const offset = page * PAGE_SIZE;
-  const { data: cobs, count, error } = await (supabase as any)
+  // Paso 1: traer todos los candidatos (sólo campos para filtrar y ordenar).
+  // .range(0, 49999) explícito para sobrepasar el límite default de PostgREST (1000).
+  const { data: candidatos, error: candErr } = await (supabase as any)
     .from("cuentas_cobranza")
-    .select(
-      "id, id_oferta, id_propiedad, fecha_compra, precio_final, porcentaje_comision_venta, url_factura_comision",
-      { count: "exact" }
-    )
+    .select("id, id_propiedad, fecha_compra")
     .eq("activo", true)
     .eq("es_pagada_comision_venta", false)
     .is("id_cuenta_cobranza_padre", null)
     .not("fecha_compra", "is", null)
     .not("url_factura_comision", "is", null)
     .order("fecha_compra", { ascending: sortDir === "asc" })
-    .range(offset, offset + PAGE_SIZE - 1);
+    .range(0, 49999);
+  if (candErr) throw candErr;
+  const candidatosRows = (candidatos || []) as Array<{
+    id: number;
+    id_propiedad: number | null;
+    fecha_compra: string | null;
+  }>;
+  if (candidatosRows.length === 0) return { items: [], total_count: 0 };
+
+  // Paso 2: de los id_propiedad presentes, identificar cuáles están en estatus Vendido (5)
+  const propIdsCandidatos = Array.from(
+    new Set(candidatosRows.map((r) => r.id_propiedad).filter((x): x is number => !!x))
+  );
+  const { data: vendidasData } = propIdsCandidatos.length
+    ? ((await (supabase as any)
+        .from("propiedades")
+        .select("id")
+        .eq("id_estatus_disponibilidad", 5)
+        .in("id", propIdsCandidatos)) as any)
+    : { data: [] };
+  const propVendidas = new Set<number>(
+    ((vendidasData || []) as Array<{ id: number }>).map((p) => p.id)
+  );
+
+  // Paso 3: filtrar — sin id_propiedad (Producto/Servicio) entran siempre; con propiedad
+  // sólo si está Vendida.
+  const elegibles = candidatosRows.filter(
+    (r) => r.id_propiedad == null || propVendidas.has(r.id_propiedad)
+  );
+  const total_count = elegibles.length;
+  if (total_count === 0) return { items: [], total_count: 0 };
+
+  // Paso 4: paginar la lista filtrada y traer los datos completos de la página
+  const offset = page * PAGE_SIZE;
+  const pageIds = elegibles.slice(offset, offset + PAGE_SIZE).map((r) => r.id);
+  if (pageIds.length === 0) return { items: [], total_count };
+
+  const { data: cobs, error } = await (supabase as any)
+    .from("cuentas_cobranza")
+    .select(
+      "id, id_oferta, id_propiedad, fecha_compra, precio_final, porcentaje_comision_venta, url_factura_comision"
+    )
+    .in("id", pageIds);
   if (error) throw error;
-  const rows = (cobs || []) as Array<any>;
-  if (rows.length === 0) return { items: [], total_count: count ?? 0 };
+  // Conservar el orden de paginación
+  const cobsById = new Map<number, any>(((cobs || []) as Array<any>).map((c) => [c.id, c]));
+  const rows = pageIds
+    .map((id) => cobsById.get(id))
+    .filter((c): c is any => !!c);
+  if (rows.length === 0) return { items: [], total_count };
 
   // Enrich: propiedad+proyecto via helper
   const propIds = Array.from(new Set(rows.map((r) => r.id_propiedad).filter(Boolean)));
@@ -366,13 +411,7 @@ async function fetchVentasParaFacturar(
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const items: ValidacionVentaFacturar[] = rows
-    .filter((c) => {
-      // Sólo cuentas cuya propiedad esté en estatus Vendido (id=5)
-      const propExtra = c.id_propiedad ? propExtraById.get(c.id_propiedad) : null;
-      return propExtra?.id_estatus_disponibilidad === 5;
-    })
-    .map((c) => {
+  const items: ValidacionVentaFacturar[] = rows.map((c) => {
     const prop = c.id_propiedad ? propMap.get(c.id_propiedad) : null;
     const propExtra = c.id_propiedad ? propExtraById.get(c.id_propiedad) : null;
     const proyecto = c.id_propiedad ? proyectoByProp.get(c.id_propiedad) : undefined;
@@ -396,9 +435,10 @@ async function fetchVentasParaFacturar(
       ? personaDuenaIdByEnt.get(propExtra.id_entidad_relacionada_dueno)
       : null;
     const personaDuena = personaDuenaId ? personaById.get(personaDuenaId) : null;
+    // Producto/Servicio se considera siempre "Vendido"; Propiedad usa su estatus real
     const estatusNombre = propExtra?.id_estatus_disponibilidad
-      ? estatusById.get(propExtra.id_estatus_disponibilidad) ?? "—"
-      : "—";
+      ? estatusById.get(propExtra.id_estatus_disponibilidad) ?? "Vendido"
+      : "Vendido";
     const fechaCompra = c.fecha_compra ? new Date(c.fecha_compra) : null;
     if (fechaCompra) fechaCompra.setHours(0, 0, 0, 0);
     const dias = fechaCompra
@@ -426,7 +466,7 @@ async function fetchVentasParaFacturar(
     };
   });
 
-  return { items, total_count: count ?? items.length };
+  return { items, total_count };
 }
 
 /* ──────────────────────────────────────────────────────────
