@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader, Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
@@ -768,12 +768,6 @@ function clasificarTipoExterno(
    Helpers
    ────────────────────────────────────────────────────────── */
 
-const DemoBadge = () => (
-  <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-    Datos demo
-  </Pill>
-);
-
 function Antiguedad({ dias, umbral }: { dias: number; umbral: number }) {
   const danger = dias > umbral;
   return (
@@ -1153,7 +1147,6 @@ export default function AltaDireccionBandejaValidacionesPage() {
       <PageHeader
         title="Bandeja de Validaciones"
         description="Pendientes de decisión — Dirección General"
-        action={<DemoBadge />}
       />
 
       {/* ─── Resumen ejecutivo ─── */}
@@ -1641,6 +1634,8 @@ export default function AltaDireccionBandejaValidacionesPage() {
                   fecha_emision: p.fecha_emision_factura,
                   dias_desde_emision: p.dias_esperando,
                   ya_se_cobro_al_desarrollador: p.ya_se_cobro_al_desarrollador,
+                  folio_cuenta: p.folio_factura,
+                  url_factura_externa: p.url_factura_externa,
                 }}
                 ventaContext={vctx}
                 onClose={close}

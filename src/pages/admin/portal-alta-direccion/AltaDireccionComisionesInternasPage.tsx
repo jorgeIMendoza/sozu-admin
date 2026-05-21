@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   X,
@@ -30,6 +31,7 @@ import {
 import { PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
 import { ComisionInternaContent } from "@/components/admin/portal-alta-direccion/drawers/content/ComisionInternaContent";
 import {
@@ -61,6 +63,42 @@ const ESTADO_TONE: Record<EstadoComisionInt, string> = {
   autorizada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   dispersada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   cancelada: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+};
+
+type EstatusPagoInterna =
+  | "espera_autorizacion"
+  | "autorizada"
+  | "pagada"
+  | "rechazada";
+
+const ESTATUS_PAGO_LABEL: Record<EstatusPagoInterna, string> = {
+  espera_autorizacion: "Espera Autorización",
+  autorizada: "Autorizada",
+  pagada: "Pagada",
+  rechazada: "Rechazada",
+};
+
+const ESTATUS_PAGO_TONE: Record<EstatusPagoInterna, string> = {
+  espera_autorizacion: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  autorizada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  rechazada: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
+
+type ComisionInternaCuenta = {
+  id_cuenta_cobranza: number;
+  folio_cuenta: string;
+  tipo: ComisionInterna["tipo"];
+  proyecto_nombre: string;
+  edificio_nombre: string;
+  modelo_nombre: string;
+  numero_departamento: string;
+  precio_final: number;
+  comision_total_cuenta: number;
+  porcentaje_dispersar: number;
+  comision_a_dispersar: number;
+  estatus_pago: EstatusPagoInterna;
+  representativo: ComisionInterna;
 };
 
 const norm = (s: string | null | undefined) =>
@@ -197,10 +235,11 @@ function ClickableKpi({
    ────────────────────────────────────────────────────────── */
 
 export default function AltaDireccionComisionesInternasPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [rolFilter, setRolFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<ComisionInterna | null>(null);
+  const [selected, setSelected] = useState<ComisionInternaCuenta | null>(null);
 
   const { data: comisiones = [], isLoading, error } = useComisionesInternas();
 
@@ -234,6 +273,56 @@ export default function AltaDireccionComisionesInternasPage() {
       return true;
     });
   }, [search, estadoFilter, rolFilter, comisiones]);
+
+  /** Una fila por id_cuenta_cobranza con datos agregados del equipo interno. */
+  const agrupadasPorCuenta = useMemo<ComisionInternaCuenta[]>(() => {
+    const map = new Map<number, ComisionInterna[]>();
+    for (const c of filtered) {
+      const arr = map.get(c.id_cuenta_cobranza) ?? [];
+      arr.push(c);
+      map.set(c.id_cuenta_cobranza, arr);
+    }
+
+    const out: ComisionInternaCuenta[] = [];
+    for (const [id, lista] of map) {
+      const head = lista[0];
+      const sumaPct = lista.reduce((s, c) => s + c.porcentaje_comision, 0);
+      // Estatus pago derivado del estado agregado del equipo interno
+      const todosDispersados = lista.every((c) => c.estado === "dispersada");
+      const algunoDispersado = lista.some((c) => c.estado === "dispersada");
+      const algunoCancelado = lista.some((c) => c.estado === "cancelada");
+      const algunoAutorizadoOAprobado = lista.some(
+        (c) => c.estado === "autorizada" || c.estado === "aprobada",
+      );
+      let estatusPago: EstatusPagoInterna;
+      if (todosDispersados) estatusPago = "pagada";
+      else if (algunoCancelado && !algunoDispersado) estatusPago = "rechazada";
+      else if (algunoDispersado || algunoAutorizadoOAprobado) estatusPago = "autorizada";
+      else estatusPago = "espera_autorizacion";
+
+      out.push({
+        id_cuenta_cobranza: id,
+        folio_cuenta: formatCuentaCobranzaId(id, head.tipo),
+        tipo: head.tipo,
+        proyecto_nombre: head.proyecto_nombre,
+        edificio_nombre: head.edificio_nombre,
+        modelo_nombre: head.modelo_nombre,
+        numero_departamento: head.numero_departamento,
+        precio_final: head.precio_final,
+        comision_total_cuenta: head.comision_total_cuenta,
+        porcentaje_dispersar: sumaPct,
+        comision_a_dispersar: head.comision_a_dispersar,
+        estatus_pago: estatusPago,
+        representativo: head,
+      });
+    }
+    // Ordenar por antigüedad (más antiguas primero)
+    return out.sort(
+      (a, b) =>
+        new Date(a.representativo.fecha_devengo).getTime() -
+        new Date(b.representativo.fecha_devengo).getTime(),
+    );
+  }, [filtered]);
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -270,8 +359,8 @@ export default function AltaDireccionComisionesInternasPage() {
 
   const hayFiltros = !!search || estadoFilter !== "all" || rolFilter !== "all";
   const totalDesc = hayFiltros
-    ? `${filtered.length} de ${comisiones.length} comisiones`
-    : `${comisiones.length} comisiones internas`;
+    ? `${agrupadasPorCuenta.length} cuentas (${filtered.length} de ${comisiones.length} comisionistas)`
+    : `${agrupadasPorCuenta.length} cuentas · ${comisiones.length} comisionistas internos`;
 
   // KPI activo según el filtro de estado actual.
   // "Total devengadas" corresponde a estadoFilter==='all'.
@@ -420,82 +509,67 @@ export default function AltaDireccionComisionesInternasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">No. Cuenta</TableHead>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
+                  <TableHead className="text-xs">Edificio</TableHead>
                   <TableHead className="text-xs">Modelo</TableHead>
                   <TableHead className="text-xs">No. Departamento</TableHead>
                   <TableHead className="text-xs text-right">Precio final</TableHead>
                   <TableHead className="text-xs text-right">Comisión Total</TableHead>
                   <TableHead className="text-xs text-right">% de comisión</TableHead>
                   <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
-                  <TableHead className="text-xs">Nombre</TableHead>
-                  <TableHead className="text-xs text-right">Comisión</TableHead>
-                  <TableHead className="text-xs">Estado</TableHead>
+                  <TableHead className="text-xs">Estatus Pago</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((c) => {
-                  const aprobada = c.estado === "aprobada";
-                  return (
-                    <TableRow
-                      key={c.id_comision_interna}
-                      className={cn(aprobada && "bg-amber-50/50 dark:bg-amber-950/20")}
-                    >
-                      <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
-                        COB-{c.id_cuenta_cobranza}
-                      </TableCell>
-                      <TableCell className="text-xs">{c.tipo}</TableCell>
-                      <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
-                      <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
-                      <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
-                      <TableCell className="text-sm text-right tabular-nums">
-                        {fmtMxn(c.precio_final)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right tabular-nums">
-                        {fmtMxn(c.comision_total_cuenta)}
-                      </TableCell>
-                      <TableCell className="text-xs text-right tabular-nums">
-                        {c.porcentaje_comision.toFixed(2)}%
-                      </TableCell>
-                      <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
-                        {fmtMxn(c.comision_a_dispersar)}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div>{c.comisionista_nombre}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {c.comisionista_rol}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-right font-semibold tabular-nums">
-                        {fmtMxn(c.monto_comision)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px] font-medium whitespace-nowrap",
-                            ESTADO_TONE[c.estado],
-                          )}
-                        >
-                          {ESTADO_LABEL[c.estado]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => setSelected(c)}
-                          aria-label={`Ver detalle de ${c.folio_comision}`}
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {agrupadasPorCuenta.map((c) => (
+                  <TableRow key={c.id_cuenta_cobranza}>
+                    <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
+                      {c.folio_cuenta}
+                    </TableCell>
+                    <TableCell className="text-xs">{c.tipo}</TableCell>
+                    <TableCell className="text-sm">{c.proyecto_nombre || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.edificio_nombre || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.modelo_nombre || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
+                    <TableCell className="text-sm text-right tabular-nums">
+                      {fmtMxn(c.precio_final)}
+                    </TableCell>
+                    <TableCell className="text-sm text-right tabular-nums">
+                      {fmtMxn(c.comision_total_cuenta)}
+                    </TableCell>
+                    <TableCell className="text-xs text-right tabular-nums">
+                      {c.porcentaje_dispersar.toFixed(2)}%
+                    </TableCell>
+                    <TableCell className="text-sm text-right font-semibold tabular-nums">
+                      {fmtMxn(c.comision_a_dispersar)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] font-medium whitespace-nowrap",
+                          ESTATUS_PAGO_TONE[c.estatus_pago],
+                        )}
+                      >
+                        {ESTATUS_PAGO_LABEL[c.estatus_pago]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => setSelected(c)}
+                        aria-label={`Ver detalle de ${c.folio_cuenta}`}
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -508,24 +582,26 @@ export default function AltaDireccionComisionesInternasPage() {
           open={!!selected}
           onOpenChange={(open) => { if (!open) setSelected(null); }}
           entityType="comision_interna"
-          entityId={selected.folio_comision}
-          ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
+          entityId={selected.folio_cuenta}
+          ventaContext={getVentaContext(resolveCobFolio(selected.representativo.venta_referencia))}
+          hideVentaContext
         >
           <ComisionInternaContent
-            entity={{
-              folio: selected.folio_comision,
-              comisionista_nombre: selected.comisionista_nombre,
-              comisionista_rol: selected.comisionista_rol,
-              comisionista_email: selected.comisionista_email,
-              porcentaje_comision: selected.porcentaje_comision,
-              monto: selected.monto_comision,
-              fecha_devengo: selected.fecha_devengo,
-              fecha_aprobacion: selected.fecha_aprobacion,
-              dias_esperando_director: selected.dias_esperando_director ?? selected.dias_desde_devengo,
-              estado: selected.estado,
-            }}
-            ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
+            entity={{ folio_cuenta: selected.folio_cuenta }}
+            ventaContext={getVentaContext(resolveCobFolio(selected.representativo.venta_referencia))}
             onClose={() => setSelected(null)}
+            readOnly
+            ctaButton={
+              selected.estatus_pago === "espera_autorizacion"
+                ? {
+                    label: "Ir a Bandeja de Validaciones",
+                    onClick: () => {
+                      setSelected(null);
+                      navigate("/admin/portal-alta-direccion/bandeja");
+                    },
+                  }
+                : undefined
+            }
           />
         </ExpedienteDrawer>
       )}

@@ -21,6 +21,12 @@ export type EstadoTimelineStep =
   | "no_aplica"
   | "sin_evidencia";
 
+export type EstatusPagoFacturaDetalle =
+  | "espera_autorizacion"
+  | "autorizada"
+  | "pagada"
+  | "rechazada";
+
 export interface TimelineStepReal {
   paso: number;
   nombre: string;
@@ -74,6 +80,20 @@ export interface ExpedienteVentaDetalle {
   numero_factura_externa: string | null;
   pago_apartado: PagoCliente | null;
   pago_enganche: PagoCliente | null;
+  oferta_comercial: {
+    precio_final: number;
+    precio_lista: number;
+    ahorro: number;
+    apartado: number;
+    enganche: number;
+    parcialidades_total: number;
+    parcialidades_count: number;
+    a_la_entrega: number;
+    url_oferta: string | null;
+    folio_oferta: string | null;
+  };
+  estatus_pago: EstatusPagoFacturaDetalle;
+  fecha_pago_comision: string | null;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -104,7 +124,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: cuenta, error: ccErr } = await supabase
         .from("cuentas_cobranza")
         .select(
-          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido",
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion",
         )
         .eq("id", cuentaId)
         .maybeSingle();
@@ -129,7 +149,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         ? await supabase
             .from("propiedades")
             .select(
-              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, id_estatus_disponibilidad",
+              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, precio_lista, id_estatus_disponibilidad",
             )
             .eq("id", idPropiedad)
             .maybeSingle()
@@ -262,12 +282,12 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         .eq("activo", true);
       if (docsErr) throw docsErr;
 
-      // Acuerdos de apartado (id_concepto=1) y enganche (id_concepto=2)
+      // Acuerdos de pago — Apartado(1), Enganche(2), A la entrega(3), Parcialidad(5)
       const { data: acuerdos, error: acErr } = await supabase
         .from("acuerdos_pago")
-        .select("id, id_concepto, pago_completado, fecha_creacion, fecha_actualizacion")
+        .select("id, id_concepto, monto, pago_completado, fecha_creacion, fecha_actualizacion")
         .eq("id_cuenta_cobranza", cuentaId)
-        .in("id_concepto", [1, 2])
+        .in("id_concepto", [1, 2, 3, 5])
         .eq("activo", true);
       if (acErr) throw acErr;
 
@@ -531,6 +551,13 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
 
       const tieneExternos = externosRaw.length > 0;
 
+      const pagoApartado = acuerdoApartado && pagoPorAcuerdo.has(acuerdoApartado.id)
+        ? pagoPorAcuerdo.get(acuerdoApartado.id)!
+        : null;
+      const pagoEnganche = acuerdoEnganche && pagoPorAcuerdo.has(acuerdoEnganche.id)
+        ? pagoPorAcuerdo.get(acuerdoEnganche.id)!
+        : null;
+
       const timeline: TimelineStepReal[] = [
         {
           paso: 1,
@@ -573,7 +600,9 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           ),
           responsable: (oferta as any)?.email_creador || "Sistema",
           detalle: oferta
-            ? `Folio O-${String((oferta as any).id).padStart(6, "0")}`
+            ? `Folio O-${String((oferta as any).id).padStart(6, "0")}${
+                !(oferta as any)?.url ? " · PDF aún no generado" : ""
+              }`
             : undefined,
           url: (oferta as any)?.url || undefined,
           url_label: (oferta as any)?.url ? "Ver oferta" : undefined,
@@ -588,6 +617,22 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               : "sin_evidencia",
           fecha: fechaApartado || fmtDateOnly(acuerdoApartado?.fecha_creacion),
           responsable: "STP / Cliente",
+          detalle: (() => {
+            const partes: string[] = [];
+            const clabe = (cuenta as any)?.clabe_stp as string | null | undefined;
+            if (clabe) partes.push(`CLABE STP: ${clabe}`);
+            if (pagoApartado?.monto) {
+              partes.push(
+                `Primer pago: ${new Intl.NumberFormat("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                }).format(pagoApartado.monto)}`,
+              );
+            }
+            return partes.length > 0 ? partes.join(" · ") : undefined;
+          })(),
+          url: pagoApartado?.url_recibo || undefined,
+          url_label: pagoApartado?.url_recibo ? "Ver comprobante" : undefined,
         },
         {
           paso: 5,
@@ -767,13 +812,6 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         },
       ];
 
-      const pagoApartado = acuerdoApartado && pagoPorAcuerdo.has(acuerdoApartado.id)
-        ? pagoPorAcuerdo.get(acuerdoApartado.id)!
-        : null;
-      const pagoEnganche = acuerdoEnganche && pagoPorAcuerdo.has(acuerdoEnganche.id)
-        ? pagoPorAcuerdo.get(acuerdoEnganche.id)!
-        : null;
-
       const urlFacturaSozu = (cuenta as any).url_factura_comision || null;
       const urlFacturaXmlSozu = (cuenta as any).url_factura_xml_comision || null;
       const isDraftFacturaSozu = !!(cuenta as any).es_draft_factura_comision;
@@ -819,6 +857,41 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         numero_factura_externa: numeroFacturaExterna,
         pago_apartado: pagoApartado,
         pago_enganche: pagoEnganche,
+        oferta_comercial: (() => {
+          const sumMonto = (concepto: number) =>
+            (acuerdos || [])
+              .filter((a: any) => a.id_concepto === concepto)
+              .reduce((s: number, a: any) => s + Number(a.monto ?? 0), 0);
+          const countConcepto = (concepto: number) =>
+            (acuerdos || []).filter((a: any) => a.id_concepto === concepto).length;
+          const precioLista = Number((propiedad as any)?.precio_lista) || 0;
+          const ahorro =
+            precioLista > 0 && precioLista > precioFinal
+              ? +(precioLista - precioFinal).toFixed(2)
+              : 0;
+          return {
+            precio_final: precioFinal,
+            precio_lista: precioLista,
+            ahorro,
+            apartado: +sumMonto(1).toFixed(2),
+            enganche: +sumMonto(2).toFixed(2),
+            parcialidades_total: +sumMonto(5).toFixed(2),
+            parcialidades_count: countConcepto(5),
+            a_la_entrega: +sumMonto(3).toFixed(2),
+            url_oferta: (oferta as any)?.url || null,
+            folio_oferta: oferta
+              ? `O-${String((oferta as any).id).padStart(6, "0")}`
+              : null,
+          };
+        })(),
+        estatus_pago: (() => {
+          if ((cuenta as any)?.es_pagada_comision_venta) return "pagada" as const;
+          if ((cuenta as any)?.id_tipo_cancelacion != null) return "rechazada" as const;
+          return "espera_autorizacion" as const;
+        })(),
+        fecha_pago_comision: (cuenta as any)?.fecha_pago_comision
+          ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
+          : null,
       };
     },
   });

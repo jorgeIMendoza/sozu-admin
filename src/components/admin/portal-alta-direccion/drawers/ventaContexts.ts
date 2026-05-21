@@ -84,12 +84,17 @@ const PROPIEDAD_TO_COB: Record<string, string> = {
 };
 
 /**
- * Resuelve el folio COB a partir de una referencia de venta arbitraria.
- * Acepta: "COB-1041", "COB-1041 · Daiku A-201", "Daiku A-201" (legacy).
+ * Resuelve el folio de la cuenta de cobranza a partir de una referencia
+ * arbitraria. Acepta:
+ *   - "CC-001750", "CCP-001758"           ← formato real actual
+ *   - "CC-001750 · Daiku 204"
+ *   - "COB-1041", "COB-1041 · Daiku A-201" ← legacy
+ *   - "Daiku A-201"                        ← fallback por nombre de propiedad
  */
 export function resolveCobFolio(ventaReferencia: string | null | undefined): string {
   if (!ventaReferencia) return "COB-0000";
-  const match = ventaReferencia.match(/COB-\d{4}/);
+  // Acepta CC-, CCP- o COB- seguido de dígitos (con o sin zero-padding)
+  const match = ventaReferencia.match(/(?:CCP|CC|COB)-\d{4,}/i);
   if (match) return match[0];
   for (const [propiedad, folio] of Object.entries(PROPIEDAD_TO_COB)) {
     if (ventaReferencia.includes(propiedad)) return folio;
