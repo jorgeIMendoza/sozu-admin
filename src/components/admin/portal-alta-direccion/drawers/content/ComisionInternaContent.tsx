@@ -36,10 +36,16 @@ export interface ComisionInternaDrawerEntity {
 export function ComisionInternaContent({
   entity,
   onClose,
+  readOnly = false,
+  ctaButton,
 }: {
   entity: ComisionInternaDrawerEntity;
   ventaContext: VentaContext;
   onClose: () => void;
+  /** Cuando true, oculta los controles Aprobar/Rechazar individuales y el Guardar global. */
+  readOnly?: boolean;
+  /** Botón CTA al final del drawer cuando readOnly. */
+  ctaButton?: { label: string; onClick: () => void };
 }) {
   const { data: detalle, isLoading, error } = useExpedienteVentaDetalle(entity.folio_cuenta);
   const queryClient = useQueryClient();
@@ -359,31 +365,33 @@ export function ComisionInternaContent({
       >
         {internos.length > 0 && (
           <>
-            <div className="flex items-center gap-2 mb-3">
-              <Button size="sm" variant="outline" className="h-8" onClick={aprobarTodos}>
-                <Check className="h-3.5 w-3.5 mr-1" />
-                Aprobar todos
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                onClick={rechazarTodos}
-              >
-                <X className="h-3.5 w-3.5 mr-1" />
-                Rechazar todos
-              </Button>
-              {(resumen.aprobados > 0 || resumen.rechazados > 0) && (
+            {!readOnly && (
+              <div className="flex items-center gap-2 mb-3">
+                <Button size="sm" variant="outline" className="h-8" onClick={aprobarTodos}>
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                  Aprobar todos
+                </Button>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-8 text-xs text-muted-foreground"
-                  onClick={limpiarDecisiones}
+                  variant="outline"
+                  className="h-8 border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  onClick={rechazarTodos}
                 >
-                  Limpiar selección
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Rechazar todos
                 </Button>
-              )}
-            </div>
+                {(resumen.aprobados > 0 || resumen.rechazados > 0) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={limpiarDecisiones}
+                  >
+                    Limpiar selección
+                  </Button>
+                )}
+              </div>
+            )}
 
             <ul className="space-y-2">
               {internos.map((c) => {
@@ -412,42 +420,44 @@ export function ComisionInternaContent({
                           {c.porcentaje.toFixed(2)}% · {fmtMxn(c.monto)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          size="sm"
-                          variant={decision === "aprobado" ? "default" : "outline"}
-                          className={cn(
-                            "h-7 text-[10px] px-2",
-                            decision === "aprobado" &&
-                              "bg-emerald-600 hover:bg-emerald-700 text-white",
-                          )}
-                          onClick={() => setDecision(c.email, "aprobado")}
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Aprobar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={decision === "rechazado" ? "default" : "outline"}
-                          className={cn(
-                            "h-7 text-[10px] px-2",
-                            decision === "rechazado"
-                              ? "bg-red-600 hover:bg-red-700 text-white"
-                              : "border-red-300 text-red-700 hover:bg-red-50",
-                          )}
-                          onClick={() => {
-                            setDecision(c.email, "rechazado");
-                            setEditandoNota(c.email);
-                          }}
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Rechazar
-                        </Button>
-                      </div>
+                      {!readOnly && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant={decision === "aprobado" ? "default" : "outline"}
+                            className={cn(
+                              "h-7 text-[10px] px-2",
+                              decision === "aprobado" &&
+                                "bg-emerald-600 hover:bg-emerald-700 text-white",
+                            )}
+                            onClick={() => setDecision(c.email, "aprobado")}
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Aprobar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={decision === "rechazado" ? "default" : "outline"}
+                            className={cn(
+                              "h-7 text-[10px] px-2",
+                              decision === "rechazado"
+                                ? "bg-red-600 hover:bg-red-700 text-white"
+                                : "border-red-300 text-red-700 hover:bg-red-50",
+                            )}
+                            onClick={() => {
+                              setDecision(c.email, "rechazado");
+                              setEditandoNota(c.email);
+                            }}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Rechazar
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Nota requerida para rechazo */}
-                    {requiereNota && (
+                    {!readOnly && requiereNota && (
                       <div className="mt-2">
                         {editing || !notas[c.email] ? (
                           <Input
@@ -493,40 +503,54 @@ export function ComisionInternaContent({
               })}
             </ul>
 
-            {/* Resumen + acción global */}
-            <div className="mt-4 border-t pt-3 flex items-center justify-between gap-3">
-              <div className="text-xs text-muted-foreground">
-                {resumen.aprobados} aprobados · {resumen.rechazados} rechazados ·{" "}
-                {resumen.pendientes} pendientes
+            {/* Resumen + acción global (sólo cuando NO es readOnly) */}
+            {!readOnly && (
+              <div className="mt-4 border-t pt-3 flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {resumen.aprobados} aprobados · {resumen.rechazados} rechazados ·{" "}
+                  {resumen.pendientes} pendientes
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClose}
+                    disabled={guardarMutation.isPending}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!puedeGuardar || guardarMutation.isPending}
+                    onClick={() => guardarMutation.mutate()}
+                  >
+                    {guardarMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        Guardando…
+                      </>
+                    ) : (
+                      "Guardar decisiones"
+                    )}
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onClose}
-                  disabled={guardarMutation.isPending}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={!puedeGuardar || guardarMutation.isPending}
-                  onClick={() => guardarMutation.mutate()}
-                >
-                  {guardarMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      Guardando…
-                    </>
-                  ) : (
-                    "Guardar decisiones"
-                  )}
-                </Button>
-              </div>
-            </div>
+            )}
           </>
         )}
       </Section>
+
+      {/* CTA opcional cuando readOnly (ej. Ir a Bandeja de Validaciones) */}
+      {readOnly && ctaButton && (
+        <div className="border-t border-border pt-4 flex items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cerrar
+          </Button>
+          <Button size="sm" onClick={ctaButton.onClick}>
+            {ctaButton.label}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

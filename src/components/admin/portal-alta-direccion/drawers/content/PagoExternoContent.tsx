@@ -1,8 +1,25 @@
-import { Building2, Calendar, Clock, Receipt, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  Building2,
+  Calendar,
+  Clock,
+  Receipt,
+  CheckCircle2,
+  AlertTriangle,
+  DollarSign,
+  Home,
+  Ruler,
+  User,
+  FileText,
+  Loader2,
+} from "lucide-react";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { DrawerActionFooter, type DrawerAction } from "../DrawerActionFooter";
 import { Section, KV, Timeline, TimelineItem, StatusCard } from "./_shared";
 import type { PagoExternoEntity, VentaContext } from "../types";
+import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 
 const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
   inmobiliaria: "Inmobiliaria",
@@ -13,14 +30,22 @@ const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
 
 export function PagoExternoContent({
   entity,
-  ventaContext,
   onClose,
+  readOnly = false,
+  ctaButton,
 }: {
   entity: PagoExternoEntity;
   ventaContext: VentaContext;
   onClose: () => void;
+  /** Cuando true, oculta acciones Bloquear/Autorizar y muestra solo info + opcional CTA. */
+  readOnly?: boolean;
+  /** Botón CTA al final del drawer (solo se renderiza si readOnly). */
+  ctaButton?: { label: string; onClick: () => void };
 }) {
   const cobroConfirmado = entity.ya_se_cobro_al_desarrollador;
+  const { data: detalle, isLoading, error } = useExpedienteVentaDetalle(
+    entity.folio_cuenta || entity.folio_cfdi,
+  );
 
   // Actions condicionadas según flag de cobro previo
   const actions: DrawerAction[] = cobroConfirmado
@@ -44,8 +69,224 @@ export function PagoExternoContent({
         },
       ];
 
+  if (isLoading) {
+    return (
+      <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cargando expediente…
+      </div>
+    );
+  }
+
+  const comprador = detalle?.compradores[0];
+
   return (
     <div className="space-y-6">
+      {/* ─── Resumen de la venta ─── */}
+      {detalle && (
+        <Section
+          title="Resumen de la venta"
+          body={
+            <p className="text-sm text-foreground leading-relaxed">
+              Venta cerrada hace{" "}
+              <span className="font-semibold">{detalle.dias_desde_compra} días</span>.
+              Comisión total SOZU{" "}
+              <span className="font-semibold tabular-nums">
+                {fmtMxn(detalle.comision_total_sozu)}
+              </span>{" "}
+              al desarrollador{" "}
+              <span className="font-semibold">{detalle.propietario || "—"}</span>.
+            </p>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <KV
+              icon={Calendar}
+              label="Fecha venta reconocida"
+              value={detalle.fecha_compra || "—"}
+            />
+            <KV
+              icon={Clock}
+              label="Días esperando"
+              value={`${detalle.dias_desde_compra} días`}
+            />
+            <KV
+              icon={DollarSign}
+              label="Comisión total SOZU"
+              value={fmtMxn(detalle.comision_total_sozu)}
+            />
+            <KV
+              icon={Building2}
+              label="Desarrollador (Receptor)"
+              value={detalle.propietario || "—"}
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Datos de la propiedad ─── */}
+      {detalle && (
+        <Section title="Datos de la propiedad">
+          <div className="grid grid-cols-2 gap-3">
+            <KV icon={Home} label="Proyecto" value={detalle.proyecto_nombre || "—"} />
+            <KV icon={Home} label="Edificio" value={detalle.edificio_nombre || "—"} />
+            <KV icon={Home} label="Modelo" value={detalle.modelo_nombre || "—"} />
+            <KV icon={Home} label="No. Depto" value={detalle.numero_departamento || "—"} />
+            <KV icon={Home} label="Tipo" value={detalle.tipo} />
+            <KV
+              icon={Ruler}
+              label="Metraje"
+              value={detalle.metraje > 0 ? `${detalle.metraje.toFixed(2)} m²` : "—"}
+            />
+            <KV
+              icon={DollarSign}
+              label="Precio / m²"
+              value={detalle.precio_m2 > 0 ? fmtMxn(detalle.precio_m2) : "—"}
+            />
+            <KV
+              icon={DollarSign}
+              label="Precio final"
+              value={fmtMxn(detalle.precio_final)}
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Oferta comercial ─── */}
+      {detalle && (
+        <Section title="Oferta comercial">
+          <div className="grid grid-cols-2 gap-3">
+            <KV
+              icon={DollarSign}
+              label="Precio final"
+              value={fmtMxn(detalle.oferta_comercial.precio_final)}
+            />
+            <KV
+              icon={DollarSign}
+              label="Ahorro"
+              value={
+                detalle.oferta_comercial.ahorro > 0
+                  ? fmtMxn(detalle.oferta_comercial.ahorro)
+                  : "—"
+              }
+            />
+            <KV
+              icon={DollarSign}
+              label="Enganche"
+              value={
+                detalle.oferta_comercial.enganche > 0
+                  ? fmtMxn(detalle.oferta_comercial.enganche)
+                  : "—"
+              }
+            />
+            <KV
+              icon={DollarSign}
+              label="Mensualidades"
+              value={
+                detalle.oferta_comercial.parcialidades_total > 0
+                  ? `${fmtMxn(detalle.oferta_comercial.parcialidades_total)} (${
+                      detalle.oferta_comercial.parcialidades_count
+                    } pagos)`
+                  : "—"
+              }
+            />
+            <KV
+              icon={DollarSign}
+              label="A la entrega"
+              value={
+                detalle.oferta_comercial.a_la_entrega > 0
+                  ? fmtMxn(detalle.oferta_comercial.a_la_entrega)
+                  : "—"
+              }
+            />
+            <KV
+              icon={DollarSign}
+              label="Apartado"
+              value={
+                detalle.oferta_comercial.apartado > 0
+                  ? fmtMxn(detalle.oferta_comercial.apartado)
+                  : "—"
+              }
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between rounded-md border border-border bg-card px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Documento oferta
+              </p>
+              <p className="text-sm font-mono text-foreground">
+                {detalle.oferta_comercial.folio_oferta || "Sin folio"}
+              </p>
+            </div>
+            {detalle.oferta_comercial.url_oferta ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() =>
+                  window.open(detalle.oferta_comercial.url_oferta!, "_blank")
+                }
+              >
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                Ver oferta
+              </Button>
+            ) : (
+              <span className="text-[10px] text-muted-foreground">
+                PDF aún no generado
+              </span>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Comprador ─── */}
+      {detalle && detalle.compradores.length > 0 && (
+        <Section title="Comprador">
+          <div className="grid grid-cols-2 gap-3">
+            <KV icon={User} label="Nombre" value={comprador?.nombre || "—"} />
+            <KV
+              icon={Receipt}
+              label="RFC"
+              value={detalle.rfc_comprador || "—"}
+              mono
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Documentos ─── */}
+      {detalle && (
+        <Section title="Documentos">
+          <div className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-2 bg-card">
+            <div className="min-w-0">
+              <p className="font-medium text-foreground">Contrato firmado completamente</p>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] mt-0.5",
+                  detalle.url_contrato_firmado
+                    ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                    : "text-muted-foreground",
+                )}
+              >
+                {detalle.url_contrato_firmado ? "Disponible" : "Pendiente"}
+              </Badge>
+            </div>
+            {detalle.url_contrato_firmado && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[10px] px-2"
+                onClick={() => window.open(detalle.url_contrato_firmado!, "_blank")}
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Ver
+              </Button>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Datos de la factura recibida ─── */}
       <Section title="Datos de la factura recibida">
         <div className="grid grid-cols-2 gap-3">
           <KV icon={Receipt} label="Folio CFDI" value={entity.folio_cfdi} mono />
@@ -74,8 +315,33 @@ export function PagoExternoContent({
           </span>
           <span className="text-xl font-bold tabular-nums">{fmtMxn(entity.monto)}</span>
         </div>
+        {/* Visualización del PDF de la factura recibida */}
+        <div className="mt-3 flex items-center justify-between rounded-md border border-border bg-card px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Visualización de la factura
+            </p>
+            <p className="text-sm text-foreground">
+              PDF cargado por {entity.beneficiario_nombre}
+            </p>
+          </div>
+          {entity.url_factura_externa ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => window.open(entity.url_factura_externa!, "_blank")}
+            >
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              Ver factura
+            </Button>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">PDF no disponible</span>
+          )}
+        </div>
       </Section>
 
+      {/* ─── Estado de cobro previo ─── */}
       <Section title="Estado de cobro previo">
         {cobroConfirmado ? (
           <StatusCard
@@ -118,6 +384,7 @@ export function PagoExternoContent({
         )}
       </Section>
 
+      {/* ─── Actividad reciente ─── */}
       <Section title="Actividad reciente">
         <Timeline>
           <TimelineItem
@@ -133,19 +400,95 @@ export function PagoExternoContent({
             label="Factura recibida del externo"
             meta={`${entity.fecha_emision} · ${entity.folio_cfdi} · ${fmtMxn(entity.monto)}`}
           />
-          <TimelineItem
-            label="Comisión externa devengada"
-            meta={`${ventaContext.folio} · ${ventaContext.propiedad}`}
-            tone="success"
-          />
+          {detalle && (
+            <TimelineItem
+              label="Comisión externa devengada"
+              meta={`${detalle.folio} · ${detalle.propiedad_label || detalle.proyecto_nombre}`}
+              tone="success"
+            />
+          )}
         </Timeline>
       </Section>
 
-      <DrawerActionFooter
-        onCancel={onClose}
-        notePlaceholder="Notas sobre el pago (requeridas si se bloquea con cobro confirmado)…"
-        actions={actions}
-      />
+      {error && (
+        <div className="text-xs text-amber-700 dark:text-amber-300">
+          No se pudo cargar el detalle del expediente: {(error as Error).message}
+        </div>
+      )}
+
+      {/* ─── Estatus de pago al externo ─── */}
+      {entity.estatus_pago && (
+        <Section title="Estatus de pago">
+          <EstatusPagoExternoBanner
+            estatus={entity.estatus_pago}
+            fechaPago={entity.fecha_pago ?? null}
+          />
+        </Section>
+      )}
+
+      {/* Acciones de Bandeja (Bloquear/Autorizar) sólo si no es readonly y el pago está en proceso */}
+      {!readOnly &&
+        (!entity.estatus_pago ||
+          entity.estatus_pago === "espera_autorizacion" ||
+          entity.estatus_pago === "autorizada") && (
+          <DrawerActionFooter
+            onCancel={onClose}
+            notePlaceholder="Notas sobre el pago (requeridas si se bloquea con cobro confirmado)…"
+            actions={actions}
+          />
+        )}
+
+      {/* CTA en modo readOnly (ej. Ir a Bandeja de Validaciones) */}
+      {readOnly && ctaButton && (
+        <div className="border-t border-border pt-4 flex items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cerrar
+          </Button>
+          <Button size="sm" onClick={ctaButton.onClick}>
+            {ctaButton.label}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EstatusPagoExternoBanner({
+  estatus,
+  fechaPago,
+}: {
+  estatus: "espera_autorizacion" | "autorizada" | "pagada" | "rechazada";
+  fechaPago: string | null;
+}) {
+  const cfg = {
+    espera_autorizacion: {
+      label: "Espera Autorización",
+      tone: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200",
+      text: "El pago al externo está pendiente de autorización del Director.",
+    },
+    autorizada: {
+      label: "Autorizada",
+      tone: "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900/40 text-violet-800 dark:text-violet-200",
+      text: "Autorizada por Dirección — pago al externo en proceso.",
+    },
+    pagada: {
+      label: "Pagada",
+      tone: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-200",
+      text: fechaPago
+        ? `Pago al externo realizado el ${fechaPago}. No requiere acción adicional.`
+        : "Pago al externo realizado. No requiere acción adicional.",
+    },
+    rechazada: {
+      label: "Rechazada",
+      tone: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200",
+      text: "Pago al externo rechazado. Revisar motivo en la actividad reciente.",
+    },
+  }[estatus];
+
+  return (
+    <div className={`rounded-md border px-3 py-2.5 ${cfg.tone}`}>
+      <p className="text-sm font-semibold">{cfg.label}</p>
+      <p className="text-xs mt-0.5">{cfg.text}</p>
     </div>
   );
 }
