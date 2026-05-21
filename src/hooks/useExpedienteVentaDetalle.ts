@@ -81,6 +81,7 @@ export interface ExpedienteVentaDetalle {
   pago_apartado: PagoCliente | null;
   pago_enganche: PagoCliente | null;
   oferta_comercial: {
+    id_oferta: number | null;
     precio_final: number;
     precio_lista: number;
     ahorro: number;
@@ -870,6 +871,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               ? +(precioLista - precioFinal).toFixed(2)
               : 0;
           return {
+            id_oferta: oferta ? ((oferta as any).id as number) : null,
             precio_final: precioFinal,
             precio_lista: precioLista,
             ahorro,
