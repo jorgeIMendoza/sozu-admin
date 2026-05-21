@@ -36,3 +36,8 @@ Ejecuciones_manuales/*
 # Lovable internal (la carpeta viaja en el repo, su contenido es local)
 .lovable/*
 !.lovable/.gitkeep
+
+# Playwright MCP (screenshots y logs generados por Claude)
+.playwright-mcp/
+*.png
+bundle.js
