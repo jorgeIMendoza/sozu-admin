@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 export type TipoCuentaDetalle = "Propiedad" | "Producto" | "Servicio";
 
@@ -28,6 +29,16 @@ export interface TimelineStepReal {
   responsable?: string;
   detalle?: string;
   es_hito?: boolean;
+  /** URL externa relacionada al paso (ej. PDF de la oferta, contrato firmado). */
+  url?: string;
+  /** Etiqueta visible para la URL (ej. "Ver oferta"). */
+  url_label?: string;
+}
+
+export interface PagoCliente {
+  monto: number;
+  fecha: string;
+  url_recibo: string | null;
 }
 
 export interface ExpedienteVentaDetalle {
@@ -49,11 +60,20 @@ export interface ExpedienteVentaDetalle {
   comision_a_dispersar: number;
   compradores: Array<{ nombre: string; porcentaje: number }>;
   propietario: string;
+  rfc_comprador: string;
   fecha_compra: string;
   dias_desde_compra: number;
   estatus_disponibilidad: string;
   comisionistas: ComisionistaDetalle[];
   timeline: TimelineStepReal[];
+  url_contrato_firmado: string | null;
+  url_factura_sozu: string | null;
+  url_factura_xml_sozu: string | null;
+  factura_sozu_estado: "sin_generar" | "draft" | "timbrada";
+  url_factura_externa: string | null;
+  numero_factura_externa: string | null;
+  pago_apartado: PagoCliente | null;
+  pago_enganche: PagoCliente | null;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -76,7 +96,8 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
     queryKey: ["expediente_venta_detalle", folio],
     enabled: !!folio,
     queryFn: async (): Promise<ExpedienteVentaDetalle | null> => {
-      const match = folio?.match(/COB-(\d+)/i);
+      // Acepta los 3 formatos: COB-#### (legacy), CC-000### (Propiedad), CCP-000### (Producto/Servicio)
+      const match = folio?.match(/(?:COB|CCP|CC)-0*(\d+)/i);
       if (!match) return null;
       const cuentaId = Number(match[1]);
 
@@ -95,7 +116,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: oferta, error: ofErr } = idOferta != null
         ? await supabase
             .from("ofertas")
-            .select("id, id_propiedad, id_producto, id_persona_lead, email_creador, fecha_generacion, fecha_creacion")
+            .select("id, id_propiedad, id_producto, id_persona_lead, email_creador, fecha_generacion, fecha_creacion, url")
             .eq("id", idOferta)
             .maybeSingle()
         : { data: null, error: null };
@@ -199,7 +220,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: personasComp, error: pErr } = compradorPersonaIds.length
         ? await (supabase as any)
             .from("personas")
-            .select("id, nombre_legal, nombre_comercial")
+            .select("id, nombre_legal, nombre_comercial, rfc")
             .in("id", compradorPersonaIds)
         : { data: [] as any[], error: null };
       if (pErr) throw pErr;
@@ -250,22 +271,34 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         .eq("activo", true);
       if (acErr) throw acErr;
 
-      // Fechas reales del pago vía aplicaciones_pago + pagos
+      // Fechas reales y montos del pago vía aplicaciones_pago + pagos
       const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
       const { data: aplicacionesPago, error: apErr } = acuerdoIds.length
         ? await (supabase as any)
             .from("aplicaciones_pago")
-            .select("id_acuerdo_pago, pagos!fk_aplicaciones_pago_pago(fecha_pago)")
+            .select(
+              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(fecha_pago, monto, url_recibo)",
+            )
             .in("id_acuerdo_pago", acuerdoIds)
             .eq("activo", true)
         : { data: [] as any[], error: null };
       if (apErr) throw apErr;
 
       const fechaPorAcuerdo = new Map<number, string>();
-      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; pagos: { fecha_pago: string | null } | null }>).forEach((ap) => {
+      const pagoPorAcuerdo = new Map<number, { monto: number; fecha: string; url_recibo: string | null }>();
+      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { fecha_pago: string | null; monto: number | null; url_recibo: string | null } | null }>).forEach((ap) => {
         const fecha = ap.pagos?.fecha_pago;
-        if (fecha && ap.id_acuerdo_pago != null && !fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
-          fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
+        if (fecha && ap.id_acuerdo_pago != null) {
+          if (!fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
+            fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
+          }
+          if (!pagoPorAcuerdo.has(ap.id_acuerdo_pago)) {
+            pagoPorAcuerdo.set(ap.id_acuerdo_pago, {
+              monto: Number(ap.monto ?? ap.pagos?.monto ?? 0),
+              fecha: new Date(fecha).toISOString().slice(0, 10),
+              url_recibo: ap.pagos?.url_recibo ?? null,
+            });
+          }
         }
       });
 
@@ -445,6 +478,8 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       );
       const docContratoCompleto = docs.find((d) => d.id_tipo_documento === 18);
       const docFacturaExterna = docs.find((d) => d.id_tipo_documento === 46);
+      const urlFacturaExterna = docFacturaExterna?.url ?? null;
+      const numeroFacturaExterna = docFacturaExterna?.numero ?? null;
       const algunDocValidado = docs.some((d) => d.id_estatus_verificacion === 2);
 
       const comisionistasExternos = comisionistasDetalle.filter((c) => c.es_externo);
@@ -537,7 +572,11 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
             (oferta as any)?.fecha_generacion || (oferta as any)?.fecha_creacion,
           ),
           responsable: (oferta as any)?.email_creador || "Sistema",
-          detalle: oferta ? `Folio OFR-${(oferta as any).id}` : undefined,
+          detalle: oferta
+            ? `Folio O-${String((oferta as any).id).padStart(6, "0")}`
+            : undefined,
+          url: (oferta as any)?.url || undefined,
+          url_label: (oferta as any)?.url ? "Ver oferta" : undefined,
         },
         {
           paso: 4,
@@ -728,9 +767,27 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         },
       ];
 
+      const pagoApartado = acuerdoApartado && pagoPorAcuerdo.has(acuerdoApartado.id)
+        ? pagoPorAcuerdo.get(acuerdoApartado.id)!
+        : null;
+      const pagoEnganche = acuerdoEnganche && pagoPorAcuerdo.has(acuerdoEnganche.id)
+        ? pagoPorAcuerdo.get(acuerdoEnganche.id)!
+        : null;
+
+      const urlFacturaSozu = (cuenta as any).url_factura_comision || null;
+      const urlFacturaXmlSozu = (cuenta as any).url_factura_xml_comision || null;
+      const isDraftFacturaSozu = !!(cuenta as any).es_draft_factura_comision;
+      let facturaSozuEstado: "sin_generar" | "draft" | "timbrada";
+      if (!urlFacturaSozu) facturaSozuEstado = "sin_generar";
+      else if (isDraftFacturaSozu) facturaSozuEstado = "draft";
+      else facturaSozuEstado = "timbrada";
+
+      const rfcComprador =
+        ((personasComp || []) as Array<any>).find((p) => p.rfc)?.rfc ?? "";
+
       return {
         id_cuenta_cobranza: cuentaId,
-        folio: `COB-${cuentaId}`,
+        folio: formatCuentaCobranzaId(cuentaId, tipoCuenta),
         propiedad_label: propiedadLabel,
         proyecto_nombre: proyecto?.nombre ?? "",
         numero_departamento: propiedad?.numero_propiedad ?? "",
@@ -747,11 +804,21 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         comision_a_dispersar: comisionADispersar,
         compradores,
         propietario,
+        rfc_comprador: rfcComprador,
         fecha_compra: fechaCompra,
         dias_desde_compra: dias,
         estatus_disponibilidad: estatusDisp?.nombre ?? "",
         comisionistas: comisionistasDetalle,
         timeline,
+        url_contrato_firmado:
+          docContratoCompletoValidado?.url ?? docContratoCompleto?.url ?? null,
+        url_factura_sozu: urlFacturaSozu,
+        url_factura_xml_sozu: urlFacturaXmlSozu,
+        factura_sozu_estado: facturaSozuEstado,
+        url_factura_externa: urlFacturaExterna,
+        numero_factura_externa: numeroFacturaExterna,
+        pago_apartado: pagoApartado,
+        pago_enganche: pagoEnganche,
       };
     },
   });

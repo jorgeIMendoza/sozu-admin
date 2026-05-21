@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 export type TipoCuentaCaso = "Propiedad" | "Producto" | "Servicio";
 
@@ -11,6 +12,7 @@ export interface CasoVenta {
   propiedad_label: string;
   numero_departamento: string;
   edificio_nombre: string;
+  modelo_nombre: string;
   compradores: string[];
   propietario: string;
   dias_desde_compra: number;
@@ -112,15 +114,33 @@ export function useCicloVentaCasos() {
       const { data: edms, error: emErr } = emIds.length
         ? await supabase
             .from("edificios_modelos")
-            .select("id, id_edificio")
+            .select("id, id_edificio, id_modelo")
             .in("id", emIds)
-        : { data: [] as Array<{ id: number; id_edificio: number | null }>, error: null };
+        : { data: [] as Array<{ id: number; id_edificio: number | null; id_modelo: number | null }>, error: null };
       if (emErr) throw emErr;
 
-      const emMap = new Map((edms || []).map((em) => [em.id, em.id_edificio]));
+      const emMap = new Map(
+        (edms || []).map((em) => [
+          em.id,
+          { idEdificio: em.id_edificio, idModelo: em.id_modelo },
+        ]),
+      );
+
+      const modeloIds = Array.from(
+        new Set((edms || []).map((em) => em.id_modelo).filter((v): v is number => v != null)),
+      );
+      const { data: modelos, error: mdErr } = modeloIds.length
+        ? await supabase.from("modelos").select("id, nombre").in("id", modeloIds)
+        : { data: [] as Array<{ id: number; nombre: string | null }>, error: null };
+      if (mdErr) throw mdErr;
+      const modeloMap = new Map((modelos || []).map((m) => [m.id, m.nombre ?? ""]));
 
       const edificioIds = Array.from(
-        new Set((edms || []).map((em) => em.id_edificio).filter((v): v is number => v != null)),
+        new Set(
+          Array.from(emMap.values())
+            .map((v) => v.idEdificio)
+            .filter((v): v is number => v != null),
+        ),
       );
 
       const { data: edificios, error: edErr } = edificioIds.length
@@ -250,9 +270,11 @@ export function useCicloVentaCasos() {
           if (idPropiedad == null) return null;
           const prop = propiedadMap.get(idPropiedad);
           if (!prop) return null;
-          const idEdificio = prop.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
+          const emInfo = prop.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
+          const idEdificio = emInfo?.idEdificio ?? null;
           const edif = idEdificio != null ? edificioMap.get(idEdificio) : undefined;
           const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";
+          const modeloNombre = emInfo?.idModelo != null ? modeloMap.get(emInfo.idModelo) ?? "" : "";
           const idProducto = idOferta != null ? ofertaToProducto.get(idOferta) ?? null : null;
           const producto = idProducto != null ? productoMap.get(idProducto) : undefined;
 
@@ -278,12 +300,13 @@ export function useCicloVentaCasos() {
 
           return {
             id_cuenta_cobranza: idNum,
-            folio: `COB-${idNum}`,
+            folio: formatCuentaCobranzaId(idNum, tipo),
             tipo,
             proyecto_nombre: proyectoNombre,
             propiedad_label: propiedadLabel || proyectoNombre,
             numero_departamento: prop.numero,
             edificio_nombre: edif?.nombre ?? "",
+            modelo_nombre: modeloNombre,
             compradores: compradoresPorCuenta.get(idNum) ?? [],
             propietario,
             dias_desde_compra: dias,
