@@ -312,18 +312,28 @@ export default function ComisionesExternas() {
       let facturasMap = new Map<string, string>();
       
       if (tipoDocFactura && cuentaIds.length > 0) {
-        const { data: facturas } = await supabase
-          .from('documentos')
-          .select('id_cuenta_cobranza, url, numero')
-          .in('id_cuenta_cobranza', cuentaIds)
-          .eq('id_tipo_documento', tipoDocFactura)
-          .eq('activo', true);
-        
-        facturas?.forEach(f => {
-          if (f.url && f.id_cuenta_cobranza) {
-            facturasMap.set(String(f.id_cuenta_cobranza), f.url);
-          }
-        });
+        const facturaBatchSize = 200;
+        const facturaChunks: number[][] = [];
+        for (let i = 0; i < cuentaIds.length; i += facturaBatchSize) {
+          facturaChunks.push(cuentaIds.slice(i, i + facturaBatchSize));
+        }
+        const facturaResults = await Promise.all(
+          facturaChunks.map((batch) =>
+            supabase
+              .from('documentos')
+              .select('id_cuenta_cobranza, url, numero')
+              .in('id_cuenta_cobranza', batch)
+              .eq('id_tipo_documento', tipoDocFactura)
+              .eq('activo', true)
+          )
+        );
+        for (const { data: facturas } of facturaResults) {
+          facturas?.forEach(f => {
+            if (f.url && f.id_cuenta_cobranza) {
+              facturasMap.set(String(f.id_cuenta_cobranza), f.url);
+            }
+          });
+        }
       }
 
       // Paso 8: Combinar datos - filtrar solo cuentas con al menos un comisionista externo
