@@ -84,6 +84,14 @@ export type PagoExternoEntity = {
   ya_se_cobro_al_desarrollador: boolean;
   factura_cobrar_referencia?: string;
   factura_cobrar_emitida_dias?: number;
+  /** ID Cuenta vinculada (formato CC-/CCP-). Permite cargar el expediente. */
+  folio_cuenta?: string;
+  /** URL del PDF de la factura del externo (documentos tipo=46). */
+  url_factura_externa?: string | null;
+  /** Estatus del pago al externo. */
+  estatus_pago?: "espera_autorizacion" | "autorizada" | "pagada" | "rechazada";
+  /** Fecha en que se ejecutó el pago al externo (cuando estatus_pago = pagada). */
+  fecha_pago?: string | null;
 };
 
 export type ComisionInternaEntity = {

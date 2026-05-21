@@ -33,16 +33,14 @@ import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { FacturaPorCobrarContent } from "@/components/admin/portal-alta-direccion/drawers/content/FacturaPorCobrarContent";
-import {
-  getVentaContext,
-  resolveCobFolio,
-} from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+import { VentaParaFacturarContent } from "@/components/admin/portal-alta-direccion/drawers/content/VentaParaFacturarContent";
+import { getVentaContext } from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
 import {
   useFacturasPorCobrar,
   type FacturaPorCobrar,
   type EstadoFacturaPorCobrar as EstadoCobro,
   type EstadoFacturaSozu,
+  type EstatusPagoFactura,
 } from "@/hooks/useFacturasPorCobrar";
 
 /* ──────────────────────────────────────────────────────────
@@ -77,6 +75,20 @@ const FACTURA_SOZU_TONE: Record<EstadoFacturaSozu, string> = {
   timbrada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
 };
 
+const ESTATUS_PAGO_LABEL: Record<EstatusPagoFactura, string> = {
+  espera_autorizacion: "Espera Autorización",
+  autorizada: "Autorizada",
+  pagada: "Pagada",
+  rechazada: "Rechazada",
+};
+
+const ESTATUS_PAGO_TONE: Record<EstatusPagoFactura, string> = {
+  espera_autorizacion: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  autorizada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  rechazada: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
+
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -103,6 +115,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [desarrolladorFilter, setDesarrolladorFilter] = useState<string>("all");
+  const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorCobrar | null>(null);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorCobrar();
@@ -121,6 +134,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
       if (estadoFilter !== "all" && f.estado !== estadoFilter) return false;
       if (desarrolladorFilter !== "all" && f.desarrollador_nombre !== desarrolladorFilter)
         return false;
+      if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
       if (q) {
         const hay = [
           f.folio_cfdi,
@@ -138,7 +152,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
       }
       return true;
     });
-  }, [search, estadoFilter, desarrolladorFilter, facturas]);
+  }, [search, estadoFilter, desarrolladorFilter, estatusPagoFilter, facturas]);
 
   const kpis = useMemo(() => {
     let emitidoTotal = 0,
@@ -173,7 +187,11 @@ export default function AltaDireccionFacturasPorCobrarPage() {
     };
   }, [filtered]);
 
-  const hayFiltros = !!search || estadoFilter !== "all" || desarrolladorFilter !== "all";
+  const hayFiltros =
+    !!search ||
+    estadoFilter !== "all" ||
+    desarrolladorFilter !== "all" ||
+    estatusPagoFilter !== "all";
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
     : `${facturas.length} facturas pendientes de cobro`;
@@ -182,6 +200,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
     setSearch("");
     setEstadoFilter("all");
     setDesarrolladorFilter("all");
+    setEstatusPagoFilter("all");
   };
 
   return (
@@ -263,6 +282,19 @@ export default function AltaDireccionFacturasPorCobrarPage() {
             </SelectContent>
           </Select>
 
+          <Select value={estatusPagoFilter} onValueChange={setEstatusPagoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estatus de pago</SelectItem>
+              <SelectItem value="espera_autorizacion">Espera Autorización</SelectItem>
+              <SelectItem value="autorizada">Autorizada</SelectItem>
+              <SelectItem value="pagada">Pagada</SelectItem>
+              <SelectItem value="rechazada">Rechazada</SelectItem>
+            </SelectContent>
+          </Select>
+
           {hayFiltros && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={limpiar}>
               <X className="h-3 w-3 mr-1" /> Limpiar
@@ -299,7 +331,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">No. Cuenta</TableHead>
+                  <TableHead className="text-xs">ID Cuenta</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
                   <TableHead className="text-xs">Proyecto</TableHead>
                   <TableHead className="text-xs">Modelo</TableHead>
@@ -313,6 +345,7 @@ export default function AltaDireccionFacturasPorCobrarPage() {
                   <TableHead className="text-xs">Emisión</TableHead>
                   <TableHead className="text-xs">Antigüedad</TableHead>
                   <TableHead className="text-xs">Estatus</TableHead>
+                  <TableHead className="text-xs">Estatus Pago</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -397,6 +430,22 @@ export default function AltaDireccionFacturasPorCobrarPage() {
                           {ESTADO_LABEL[f.estado]}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-medium whitespace-nowrap",
+                            ESTATUS_PAGO_TONE[f.estatus_pago],
+                          )}
+                          title={
+                            f.estatus_pago === "pagada" && f.fecha_pago_comision
+                              ? `Pago recibido el ${f.fecha_pago_comision}`
+                              : undefined
+                          }
+                        >
+                          {ESTATUS_PAGO_LABEL[f.estatus_pago]}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
@@ -422,29 +471,22 @@ export default function AltaDireccionFacturasPorCobrarPage() {
         <ExpedienteDrawer
           open={!!selected}
           onOpenChange={(open) => { if (!open) setSelected(null); }}
-          entityType="factura_por_cobrar"
+          entityType="venta_para_facturar"
           entityId={selected.folio_cfdi}
-          ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
+          ventaContext={getVentaContext(selected.folio_cfdi)}
+          hideVentaContext
         >
-          <FacturaPorCobrarContent
+          <VentaParaFacturarContent
             entity={{
-              folio_cfdi: selected.folio_cfdi,
-              uuid_sat: selected.uuid_sat,
+              folio_cuenta: selected.folio_cfdi,
+              fecha_venta: selected.fecha_emision,
+              dias_esperando: selected.dias_desde_emision,
+              monto_factura_desarrollador: selected.monto_total,
+              comprador_principal: "",
+              rfc_comprador: "",
               desarrollador_nombre: selected.desarrollador_nombre,
-              desarrollador_rfc: selected.desarrollador_rfc,
-              concepto: selected.concepto,
-              monto_subtotal: selected.monto_subtotal,
-              iva: selected.iva,
-              monto_total: selected.monto_total,
-              monto_cobrado: selected.monto_cobrado,
-              fecha_emision: selected.fecha_emision,
-              fecha_pago_esperada: selected.fecha_pago_esperada,
-              fecha_pago_real: selected.fecha_pago_real,
-              dias_desde_emision: selected.dias_desde_emision,
-              dias_para_vencer: selected.dias_para_vencer,
-              estado: selected.estado,
             }}
-            ventaContext={getVentaContext(resolveCobFolio(selected.venta_referencia))}
+            ventaContext={getVentaContext(selected.folio_cfdi)}
             onClose={() => setSelected(null)}
           />
         </ExpedienteDrawer>

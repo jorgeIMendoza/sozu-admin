@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 export type EstadoFacturaPorCobrar =
   | "timbrada_pendiente"
@@ -11,6 +12,12 @@ export type EstadoFacturaPorCobrar =
 export type TipoCuenta = "Propiedad" | "Producto" | "Servicio";
 
 export type EstadoFacturaSozu = "sin_generar" | "draft" | "timbrada";
+
+export type EstatusPagoFactura =
+  | "espera_autorizacion"
+  | "autorizada"
+  | "pagada"
+  | "rechazada";
 
 export interface FacturaPorCobrar {
   id_factura: number;
@@ -45,6 +52,8 @@ export interface FacturaPorCobrar {
   url_factura_comision: string | null;
   url_factura_xml_comision: string | null;
   estado_factura_sozu: EstadoFacturaSozu;
+  estatus_pago: EstatusPagoFactura;
+  fecha_pago_comision: string | null;
 }
 
 const IVA_RATE = 0.16;
@@ -79,12 +88,12 @@ export function useFacturasPorCobrar() {
           url_factura_comision,
           url_factura_xml_comision,
           es_draft_factura_comision,
-          iva_incluido
+          iva_incluido,
+          id_tipo_cancelacion
         `,
         )
         .eq("activo", true)
         .eq("es_aprobado", true)
-        .eq("es_pagada_comision_venta", false)
         .is("id_cuenta_cobranza_padre", null)
         .not("fecha_compra", "is", null)
         .order("fecha_compra", { ascending: false });
@@ -358,8 +367,18 @@ export function useFacturasPorCobrar() {
         else if (esDraft) estadoFacturaSozu = "draft";
         else estadoFacturaSozu = "timbrada";
 
+        // Estatus de pago derivado:
+        //   - pagada → es_pagada_comision_venta = true
+        //   - rechazada → id_tipo_cancelacion != null
+        //   - autorizada → no hay columna BD para distinguir vs espera; fallback a espera
+        //   - espera_autorizacion → default
+        let estatusPago: EstatusPagoFactura;
+        if (c.es_pagada_comision_venta) estatusPago = "pagada";
+        else if ((c as any).id_tipo_cancelacion != null) estatusPago = "rechazada";
+        else estatusPago = "espera_autorizacion";
+
         const idNum = typeof c.id === "string" ? Number(c.id) : c.id;
-        const folio = `COB-${idNum}`;
+        const folio = formatCuentaCobranzaId(idNum, tipo);
         const numeroDepto = prop?.numero ?? "";
         const propiedadLabel = [edif?.nombre, numeroDepto].filter(Boolean).join(" ");
         const ventaRef = `${folio} · ${propiedadLabel || producto?.nombre || proyectoNombre || `Oferta ${idOferta ?? ""}`}`;
@@ -396,6 +415,10 @@ export function useFacturasPorCobrar() {
           url_factura_comision: urlFactura,
           url_factura_xml_comision: c.url_factura_xml_comision || null,
           estado_factura_sozu: estadoFacturaSozu,
+          estatus_pago: estatusPago,
+          fecha_pago_comision: c.fecha_pago_comision
+            ? new Date(c.fecha_pago_comision).toISOString().slice(0, 10)
+            : null,
         };
       });
     },

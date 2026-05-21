@@ -10,7 +10,7 @@ import {
   ArrowDown,
   ChevronLeft,
   ChevronRight,
-  Info,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,15 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader, Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
 import { VentaParaFacturarContent } from "@/components/admin/portal-alta-direccion/drawers/content/VentaParaFacturarContent";
 import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
 import { ComisionInternaContent } from "@/components/admin/portal-alta-direccion/drawers/content/ComisionInternaContent";
-import { ExcepcionContent } from "@/components/admin/portal-alta-direccion/drawers/content/ExcepcionContent";
 import {
   getVentaContext,
   resolveCobFolio,
@@ -57,47 +57,54 @@ type ValidacionVentaFacturar = {
   fecha_venta: string;
   dias_esperando: number;
   estatus: string;
+  url_factura_comision: string | null;
 };
 
 type ValidacionPagoExterno = {
   id_factura: number;
+  id_cuenta_cobranza: number;
   folio_factura: string;
   agente_nombre: string;
   agente_tipo: "inmobiliaria" | "broker" | "aliado_comercial" | "agente_externo";
   venta_referencia: string;
+  porcentaje_comision: number;
   monto: number;
   fecha_emision_factura: string;
   dias_esperando: number;
   ya_se_cobro_al_desarrollador: boolean;
+  url_factura_externa: string | null;
+  tipo_transaccion: "Propiedad" | "Producto" | "Servicio";
 };
 
 type ValidacionComisionInterna = {
-  id_comisionista: number;
-  folio_comision: string;
+  // Identidad por cuenta
+  id_cuenta_cobranza: number;
+  folio_cuenta: string;
+  tipo_transaccion: "Propiedad" | "Producto" | "Servicio";
+  // Snapshot de la cuenta
+  proyecto: string;
+  edificio: string;
+  modelo: string;
+  numero_propiedad: string;
+  precio_final: number;
+  // Agregados de comisionistas internos
+  comision_a_dispersar: number;
+  fecha_devengo: string;
+  dias_esperando: number;
+  // Útiles para drawer (primer comisionista representativo)
   comisionista_nombre: string;
   comisionista_rol: string;
-  venta_referencia: string;
   porcentaje_comision: number;
   monto: number;
-  dias_esperando: number;
-};
-
-type ValidacionExcepcion = {
-  id_excepcion: number;
-  tipo: "descuento_fuera_politica" | "pago_parcial_fuera_esquema" | "ajuste_manual" | "otro";
-  descripcion_corta: string;
-  solicitante: string;
+  folio_comision: string;
   venta_referencia: string;
-  monto_impactado: number;
-  delta: number;
-  dias_esperando: number;
+  id_comisionista: number;
 };
 
 type SelectedItem =
   | { tipo: "venta"; data: ValidacionVentaFacturar }
   | { tipo: "externo"; data: ValidacionPagoExterno }
-  | { tipo: "interna"; data: ValidacionComisionInterna }
-  | { tipo: "excepcion"; data: ValidacionExcepcion };
+  | { tipo: "interna"; data: ValidacionComisionInterna };
 
 /* ──────────────────────────────────────────────────────────
    Mock data
@@ -196,8 +203,8 @@ async function loadProyectosByPropiedades(propIds: number[]): Promise<{
    Cuentas_cobranza que cumplen TODAS estas condiciones:
    - Propiedad en estatus_disponibilidad = 5 (Vendido)
    - es_pagada_comision_venta = false (estatus Pendiente)
-   - url_factura_comision IS NOT NULL AND
-     es_draft_factura_comision = false (factura SOZU Timbrada)
+   - url_factura_comision IS NOT NULL (factura SOZU Generada — draft o timbrada)
+   - sin cuenta padre (excluye mantenimientos)
    ────────────────────────────────────────────────────────── */
 
 type VentaFacturarFetchResult = {
@@ -213,14 +220,14 @@ async function fetchVentasParaFacturar(
   const { data: cobs, count, error } = await (supabase as any)
     .from("cuentas_cobranza")
     .select(
-      "id, id_oferta, id_propiedad, fecha_compra, precio_final, porcentaje_comision_venta",
+      "id, id_oferta, id_propiedad, fecha_compra, precio_final, porcentaje_comision_venta, url_factura_comision",
       { count: "exact" }
     )
     .eq("activo", true)
     .eq("es_pagada_comision_venta", false)
-    .eq("es_draft_factura_comision", false)
-    .not("url_factura_comision", "is", null)
+    .is("id_cuenta_cobranza_padre", null)
     .not("fecha_compra", "is", null)
+    .not("url_factura_comision", "is", null)
     .order("fecha_compra", { ascending: sortDir === "asc" })
     .range(offset, offset + PAGE_SIZE - 1);
   if (error) throw error;
@@ -401,7 +408,7 @@ async function fetchVentasParaFacturar(
     const pct = Number(c.porcentaje_comision_venta ?? 0);
     return {
       id_cuenta_cobranza: c.id,
-      folio_cuenta: `COB-${String(c.id).padStart(4, "0")}`,
+      folio_cuenta: formatCuentaCobranzaId(c.id, tipoTransaccion),
       tipo_transaccion: tipoTransaccion,
       proyecto: proyecto || "Sin proyecto",
       modelo: modeloNombre,
@@ -415,6 +422,7 @@ async function fetchVentasParaFacturar(
       fecha_venta: fechaCompra ? fechaCompra.toISOString().slice(0, 10) : "",
       dias_esperando: dias,
       estatus: estatusNombre,
+      url_factura_comision: c.url_factura_comision ?? null,
     };
   });
 
@@ -448,6 +456,12 @@ type ComisionistaEnriched = {
   es_pagada_comision_venta: boolean;
   proyecto: string;
   numero_propiedad: string;
+  edificio_nombre: string;
+  modelo_nombre: string;
+  // Propiedad
+  id_estatus_disponibilidad: number | null;
+  // Tipo de la cuenta (Propiedad/Producto/Servicio) — para formato CC-/CCP-
+  tipo_transaccion: "Propiedad" | "Producto" | "Servicio";
   // Usuario (puede ser null si no está en usuarios)
   nombre_usuario: string | null;
   nombre_legal: string | null;
@@ -456,6 +470,8 @@ type ComisionistaEnriched = {
   rol_id: number | null;
   // Persona (si el email es una inmobiliaria como persona moral)
   es_inmobiliaria_pm: boolean;
+  // Factura del comisionista externo (documentos id_tipo_documento=46)
+  url_factura_externa: string | null;
   // Derivados
   monto: number;
   dias_desde_devengo: number;
@@ -484,17 +500,130 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
     ? ((await (supabase as any)
         .from("cuentas_cobranza")
         .select(
-          "id, precio_final, id_propiedad, fecha_compra, es_pagada_comision_venta"
+          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta"
         )
         .in("id", ccIds)) as any)
     : { data: [] };
   const ccById = new Map<number, any>((ccs || []).map((c: any) => [c.id, c]));
 
-  // 3) propiedad + proyecto
-  const propIds = Array.from(
-    new Set((ccs || []).map((c: any) => c.id_propiedad).filter(Boolean))
+  // 2b) Ofertas para deducir tipo (Producto/Servicio si id_producto, si no Propiedad)
+  const ofertaIds = Array.from(
+    new Set((ccs || []).map((c: any) => c.id_oferta).filter(Boolean)),
   );
+  const { data: ofs } = ofertaIds.length
+    ? ((await (supabase as any)
+        .from("ofertas")
+        .select("id, id_propiedad, id_producto")
+        .in("id", ofertaIds)) as any)
+    : { data: [] };
+  const ofertaById = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
+
+  const productoIds = Array.from(
+    new Set((ofs || []).map((o: any) => o.id_producto).filter(Boolean)),
+  );
+  const { data: prodsRaw } = productoIds.length
+    ? ((await (supabase as any)
+        .from("productos_servicios")
+        .select("id, id_categoria")
+        .in("id", productoIds)) as any)
+    : { data: [] };
+  const catIds = Array.from(
+    new Set((prodsRaw || []).map((p: any) => p.id_categoria).filter(Boolean)),
+  );
+  const { data: cats } = catIds.length
+    ? ((await (supabase as any)
+        .from("categorias_producto")
+        .select("id, nombre")
+        .in("id", catIds)) as any)
+    : { data: [] };
+  const catNameById = new Map<number, string>(
+    (cats || []).map((c: any) => [c.id, (c.nombre as string)?.toLowerCase()]),
+  );
+  const productoTipoById = new Map<number, "Producto" | "Servicio">(
+    (prodsRaw || []).map((p: any) => [
+      p.id,
+      (catNameById.get(p.id_categoria) === "servicios" ? "Servicio" : "Producto") as any,
+    ]),
+  );
+
+  // 3) propiedad + proyecto (fallback a la propiedad de la oferta cuando cc.id_propiedad es NULL)
+  const propIdsCc = (ccs || []).map((c: any) => c.id_propiedad).filter(Boolean);
+  const propIdsOferta = (ofs || []).map((o: any) => o.id_propiedad).filter(Boolean);
+  const propIds = Array.from(new Set([...propIdsCc, ...propIdsOferta]));
   const { propMap, proyectoByProp } = await loadProyectosByPropiedades(propIds);
+
+  // 3b) estatus_disponibilidad por propiedad
+  const { data: propsEstatus } = propIds.length
+    ? ((await (supabase as any)
+        .from("propiedades")
+        .select("id, id_estatus_disponibilidad, id_edificio_modelo")
+        .in("id", propIds)) as any)
+    : { data: [] };
+  const estatusByProp = new Map<number, number | null>(
+    (propsEstatus || []).map((p: any) => [p.id, p.id_estatus_disponibilidad ?? null]),
+  );
+  const emByProp = new Map<number, number | null>(
+    (propsEstatus || []).map((p: any) => [p.id, p.id_edificio_modelo ?? null]),
+  );
+
+  // 3b-bis) edificio + modelo por propiedad
+  const emIdsForBandeja = Array.from(
+    new Set(Array.from(emByProp.values()).filter((v): v is number => v != null)),
+  );
+  const { data: emsBandeja } = emIdsForBandeja.length
+    ? ((await (supabase as any)
+        .from("edificios_modelos")
+        .select("id, id_edificio, id_modelo")
+        .in("id", emIdsForBandeja)) as any)
+    : { data: [] };
+  const emInfoById = new Map<number, { idEdificio: number | null; idModelo: number | null }>(
+    (emsBandeja || []).map((em: any) => [
+      em.id,
+      { idEdificio: em.id_edificio ?? null, idModelo: em.id_modelo ?? null },
+    ]),
+  );
+  const edIdsB = Array.from(
+    new Set(
+      Array.from(emInfoById.values())
+        .map((v) => v.idEdificio)
+        .filter((v): v is number => v != null),
+    ),
+  );
+  const { data: edsB } = edIdsB.length
+    ? ((await (supabase as any).from("edificios").select("id, nombre").in("id", edIdsB)) as any)
+    : { data: [] };
+  const edificioNameById = new Map<number, string>(
+    (edsB || []).map((e: any) => [e.id, e.nombre as string]),
+  );
+  const modIdsB = Array.from(
+    new Set(
+      Array.from(emInfoById.values())
+        .map((v) => v.idModelo)
+        .filter((v): v is number => v != null),
+    ),
+  );
+  const { data: modsB } = modIdsB.length
+    ? ((await (supabase as any).from("modelos").select("id, nombre").in("id", modIdsB)) as any)
+    : { data: [] };
+  const modeloNameById = new Map<number, string>(
+    (modsB || []).map((m: any) => [m.id, m.nombre as string]),
+  );
+
+  // 3c) Documentos de factura externa (id_tipo_documento = 46) por cuenta
+  const { data: docsFactExt } = ccIds.length
+    ? ((await (supabase as any)
+        .from("documentos")
+        .select("id_cuenta_cobranza, url")
+        .in("id_cuenta_cobranza", ccIds)
+        .eq("id_tipo_documento", 46)
+        .eq("activo", true)) as any)
+    : { data: [] };
+  const urlFacturaByCc = new Map<number, string>();
+  (docsFactExt || []).forEach((d: any) => {
+    if (d.id_cuenta_cobranza != null && d.url && !urlFacturaByCc.has(d.id_cuenta_cobranza)) {
+      urlFacturaByCc.set(d.id_cuenta_cobranza, d.url);
+    }
+  });
 
   // 4) Usuarios + roles + personas por email
   const emails = Array.from(new Set(comisRows.map((r) => r.email_usuario).filter(Boolean)));
@@ -547,8 +676,19 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   today.setHours(0, 0, 0, 0);
   const enriched: ComisionistaEnriched[] = comisRows.map((c) => {
     const cc = ccById.get(c.id_cuenta_cobranza);
-    const prop = cc?.id_propiedad ? propMap.get(cc.id_propiedad) : null;
-    const proyecto = cc?.id_propiedad ? proyectoByProp.get(cc.id_propiedad) : undefined;
+    const oferta = cc?.id_oferta ? ofertaById.get(cc.id_oferta) : null;
+    const idPropResolved: number | null = cc?.id_propiedad ?? oferta?.id_propiedad ?? null;
+    const prop = idPropResolved ? propMap.get(idPropResolved) : null;
+    const proyecto = idPropResolved ? proyectoByProp.get(idPropResolved) : undefined;
+    const estatusDispProp = idPropResolved ? estatusByProp.get(idPropResolved) ?? null : null;
+    const emIdRes = idPropResolved ? emByProp.get(idPropResolved) ?? null : null;
+    const emInfo = emIdRes != null ? emInfoById.get(emIdRes) : null;
+    const edificioNombre = emInfo?.idEdificio != null
+      ? edificioNameById.get(emInfo.idEdificio) ?? ""
+      : "";
+    const modeloNombre = emInfo?.idModelo != null
+      ? modeloNameById.get(emInfo.idModelo) ?? ""
+      : "";
     const usuario = userByEmail.get(c.email_usuario) || null;
     const rol = usuario?.rol_id ? rolById.get(usuario.rol_id) : null;
     const personaPorUser = usuario?.id_persona ? personaById.get(usuario.id_persona) : null;
@@ -558,6 +698,9 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       usuario?.rol_id === AGENTE_INMOBILIARIO_ROL_ID &&
       !esEmailDelGrupoInterno(c.email_usuario);
     const esExterno = esInmobiliariaPm || esAgenteInmobiliarioExterno;
+    const tipoTransaccion: "Propiedad" | "Producto" | "Servicio" = oferta?.id_producto
+      ? productoTipoById.get(oferta.id_producto) ?? "Producto"
+      : "Propiedad";
     const precio = Number(cc?.precio_final ?? 0);
     const pct = Number(c.porcentaje_comision ?? 0);
     const fechaDev = c.fecha_creacion ? new Date(c.fecha_creacion) : null;
@@ -581,12 +724,17 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       es_pagada_comision_venta: !!cc?.es_pagada_comision_venta,
       proyecto: proyecto || "Sin proyecto",
       numero_propiedad: prop?.numero_propiedad || "—",
+      edificio_nombre: edificioNombre,
+      modelo_nombre: modeloNombre,
+      id_estatus_disponibilidad: estatusDispProp,
+      tipo_transaccion: tipoTransaccion,
       nombre_usuario: usuario?.nombre ?? null,
       nombre_legal: personaPorEmail?.nombre_legal ?? personaPorUser?.nombre_legal ?? null,
       rfc: personaPorEmail?.rfc ?? personaPorUser?.rfc ?? null,
       rol_nombre: rol?.nombre ?? null,
       rol_id: usuario?.rol_id ?? null,
       es_inmobiliaria_pm: esInmobiliariaPm,
+      url_factura_externa: urlFacturaByCc.get(c.id_cuenta_cobranza) ?? null,
       monto: (precio * pct) / 100,
       dias_desde_devengo: diasDev,
       dias_desde_aprobacion: diasAprob,
@@ -616,38 +764,9 @@ function clasificarTipoExterno(
    vía fetchComisionistasPendientes() en el componente. Los mocks fueron
    removidos en esta iteración. */
 
-const EXCEPCIONES: ValidacionExcepcion[] = [
-  {
-    id_excepcion: 91,
-    tipo: "descuento_fuera_politica",
-    descripcion_corta: "Descuento 8% solicitado vs política 5% máximo",
-    solicitante: "Carlos Mendoza Ávalos",
-    venta_referencia: "Daiku A-205",
-    monto_impactado: 360000,
-    delta: 28800, // 8% sobre 360,000
-    dias_esperando: 4, // > 3 → rojo
-  },
-  {
-    id_excepcion: 92,
-    tipo: "pago_parcial_fuera_esquema",
-    descripcion_corta: "5 parcialidades vs 3 del esquema estándar",
-    solicitante: "Inmobiliaria Vértice SA de CV",
-    venta_referencia: "Bottura PH-2",
-    monto_impactado: 4200000,
-    delta: 1680000, // diferencia financiera del nuevo esquema
-    dias_esperando: 2,
-  },
-];
-
 /* ──────────────────────────────────────────────────────────
    Helpers
    ────────────────────────────────────────────────────────── */
-
-const DemoBadge = () => (
-  <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-    Datos demo
-  </Pill>
-);
 
 function Antiguedad({ dias, umbral }: { dias: number; umbral: number }) {
   const danger = dias > umbral;
@@ -670,13 +789,6 @@ const TIPO_EXTERNO_LABEL: Record<ValidacionPagoExterno["agente_tipo"], string> =
   broker: "Broker",
   aliado_comercial: "Aliado comercial",
   agente_externo: "Agente externo",
-};
-
-const TIPO_EXCEPCION_LABEL: Record<ValidacionExcepcion["tipo"], string> = {
-  descuento_fuera_politica: "Descuento fuera de política",
-  pago_parcial_fuera_esquema: "Pago parcial fuera de esquema",
-  ajuste_manual: "Ajuste manual",
-  otro: "Otro",
 };
 
 /* ──────────────────────────────────────────────────────────
@@ -871,7 +983,6 @@ export default function AltaDireccionBandejaValidacionesPage() {
   const ventasRef = useRef<HTMLDivElement>(null);
   const externosRef = useRef<HTMLDivElement>(null);
   const internasRef = useRef<HTMLDivElement>(null);
-  const excepcionesRef = useRef<HTMLDivElement>(null);
 
   /* ─── Sort + page state por sección ─── */
   const [sortVentas, setSortVentas] = useState<SortDir>("asc");
@@ -880,8 +991,6 @@ export default function AltaDireccionBandejaValidacionesPage() {
   const [pageExternos, setPageExternos] = useState(0);
   const [sortInternas, setSortInternas] = useState<SortDir>("asc");
   const [pageInternas, setPageInternas] = useState(0);
-  const [sortExcepciones, setSortExcepciones] = useState<SortDir>("asc");
-  const [pageExcepciones, setPageExcepciones] = useState(0);
 
   /* ─── 1. Ventas para Facturar (BD real, paginada en BD) ─── */
   const {
@@ -909,9 +1018,16 @@ export default function AltaDireccionBandejaValidacionesPage() {
   });
 
   // Externos: filter + sort + paginate
+  // Regla: comisionista externo + propiedad Vendido + factura cargada (tipo=46)
   const externosAll = useMemo(
-    () => (comisionistasPendientes ?? []).filter((c) => c.es_externo),
-    [comisionistasPendientes]
+    () =>
+      (comisionistasPendientes ?? []).filter(
+        (c) =>
+          c.es_externo &&
+          c.id_estatus_disponibilidad === 5 &&
+          !!c.url_factura_externa,
+      ),
+    [comisionistasPendientes],
   );
   const externosSorted = useMemo(() => {
     const sorted = [...externosAll].sort((a, b) => {
@@ -925,65 +1041,93 @@ export default function AltaDireccionBandejaValidacionesPage() {
     const offset = pageExternos * PAGE_SIZE;
     return externosSorted.slice(offset, offset + PAGE_SIZE).map<ValidacionPagoExterno>((c) => ({
       id_factura: c.id_cuenta_cobranza,
-      folio_factura: `COB-${String(c.id_cuenta_cobranza).padStart(4, "0")} · ${c.email_usuario}`,
+      id_cuenta_cobranza: c.id_cuenta_cobranza,
+      folio_factura: formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo_transaccion),
       agente_nombre: c.nombre_legal || c.nombre_usuario || c.email_usuario,
       agente_tipo: clasificarTipoExterno(c),
-      venta_referencia: `COB-${String(c.id_cuenta_cobranza).padStart(4, "0")} · ${c.proyecto}`,
+      venta_referencia: `${formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo_transaccion)} · ${c.proyecto}`,
+      porcentaje_comision: c.porcentaje_comision,
       monto: c.monto,
       fecha_emision_factura: c.fecha_devengo?.slice(0, 10) ?? "",
       dias_esperando: c.dias_desde_devengo,
       ya_se_cobro_al_desarrollador: c.es_pagada_comision_venta,
+      url_factura_externa: c.url_factura_externa,
+      tipo_transaccion: c.tipo_transaccion,
     }));
   }, [externosSorted, pageExternos]);
 
-  // Internas: filter + sort + paginate
-  const internasAll = useMemo(
-    () => (comisionistasPendientes ?? []).filter((c) => !c.es_externo),
-    [comisionistasPendientes]
-  );
+  // Internas: agrupar por cuenta_cobranza, una fila por cuenta
+  // ─── Sólo cuentas en Estatus Vendido = 5 ───
+  const internasAgrupadas = useMemo<ValidacionComisionInterna[]>(() => {
+    const internosRaw = (comisionistasPendientes ?? []).filter(
+      (c) => !c.es_externo && c.id_estatus_disponibilidad === 5,
+    );
+    const byCuenta = new Map<number, ComisionistaEnriched[]>();
+    internosRaw.forEach((c) => {
+      const arr = byCuenta.get(c.id_cuenta_cobranza) ?? [];
+      arr.push(c);
+      byCuenta.set(c.id_cuenta_cobranza, arr);
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayMs = 86400000;
+
+    return Array.from(byCuenta.entries()).map(([cuentaId, lista]) => {
+      const primero = lista[0];
+      const precio = primero.precio_final;
+      const sumaPct = lista.reduce((s, c) => s + c.porcentaje_comision, 0);
+      const comisionADispersar = +((precio * sumaPct) / 100).toFixed(2);
+      const fechas = lista
+        .map((c) => (c.fecha_compra ? new Date(c.fecha_compra) : null))
+        .filter((d): d is Date => !!d)
+        .map((d) => d.getTime());
+      const fechaMin = fechas.length ? Math.min(...fechas) : 0;
+      const fechaDevengo = fechaMin
+        ? new Date(fechaMin).toISOString().slice(0, 10)
+        : primero.fecha_devengo?.slice(0, 10) ?? "";
+      const dias = fechaMin
+        ? Math.floor((today.getTime() - fechaMin) / dayMs)
+        : primero.dias_desde_devengo;
+      const folio = formatCuentaCobranzaId(cuentaId, primero.tipo_transaccion);
+      return {
+        id_cuenta_cobranza: cuentaId,
+        folio_cuenta: folio,
+        tipo_transaccion: primero.tipo_transaccion,
+        proyecto: primero.proyecto,
+        edificio: primero.edificio_nombre,
+        modelo: primero.modelo_nombre,
+        numero_propiedad: primero.numero_propiedad,
+        precio_final: precio,
+        comision_a_dispersar: comisionADispersar,
+        fecha_devengo: fechaDevengo,
+        dias_esperando: dias,
+        // representativos para drawer
+        comisionista_nombre: primero.nombre_legal || primero.nombre_usuario || primero.email_usuario,
+        comisionista_rol: primero.rol_nombre || "Sin rol",
+        porcentaje_comision: sumaPct,
+        monto: comisionADispersar,
+        folio_comision: folio,
+        venta_referencia: `${folio} · ${primero.proyecto}`,
+        id_comisionista: cuentaId,
+      };
+    });
+  }, [comisionistasPendientes]);
+  const internasAll = internasAgrupadas;
   const internasSorted = useMemo(() => {
-    const sorted = [...internasAll].sort((a, b) => {
+    const sorted = [...internasAgrupadas].sort((a, b) => {
       const dir = sortInternas === "asc" ? 1 : -1;
       return (
-        (new Date(a.fecha_actualizacion).getTime() -
-          new Date(b.fecha_actualizacion).getTime()) *
-        dir
+        (new Date(a.fecha_devengo).getTime() - new Date(b.fecha_devengo).getTime()) * dir
       );
     });
     return sorted;
-  }, [internasAll, sortInternas]);
+  }, [internasAgrupadas, sortInternas]);
   const internasTotalPages = Math.max(1, Math.ceil(internasSorted.length / PAGE_SIZE));
   const COMISIONES_INTERNAS: ValidacionComisionInterna[] = useMemo(() => {
     const offset = pageInternas * PAGE_SIZE;
-    return internasSorted
-      .slice(offset, offset + PAGE_SIZE)
-      .map<ValidacionComisionInterna>((c, idx) => ({
-        id_comisionista: c.id_cuenta_cobranza * 1000 + idx,
-        folio_comision: `COM-${String(c.id_cuenta_cobranza).padStart(4, "0")}-${c.email_usuario
-          .split("@")[0]
-          .slice(0, 6)}`,
-        comisionista_nombre: c.nombre_legal || c.nombre_usuario || c.email_usuario,
-        comisionista_rol: c.rol_nombre || "Sin rol",
-        venta_referencia: `COB-${String(c.id_cuenta_cobranza).padStart(4, "0")} · ${c.proyecto}`,
-        porcentaje_comision: c.porcentaje_comision,
-        monto: c.monto,
-        dias_esperando: c.dias_desde_aprobacion,
-      }));
+    return internasSorted.slice(offset, offset + PAGE_SIZE);
   }, [internasSorted, pageInternas]);
-
-  /* ─── 4. Excepciones — mock paginado y ordenado en cliente ─── */
-  const excepcionesSorted = useMemo(() => {
-    const arr = [...EXCEPCIONES].sort((a, b) => {
-      const dir = sortExcepciones === "asc" ? -1 : 1; // asc = más antiguas primero (mayor dias_esperando)
-      return (a.dias_esperando - b.dias_esperando) * dir;
-    });
-    return arr;
-  }, [sortExcepciones]);
-  const excepcionesTotalPages = Math.max(1, Math.ceil(excepcionesSorted.length / PAGE_SIZE));
-  const EXCEPCIONES_PAGE = useMemo(() => {
-    const offset = pageExcepciones * PAGE_SIZE;
-    return excepcionesSorted.slice(offset, offset + PAGE_SIZE);
-  }, [excepcionesSorted, pageExcepciones]);
 
   const totales = useMemo(
     () => ({
@@ -1003,11 +1147,10 @@ export default function AltaDireccionBandejaValidacionesPage() {
       <PageHeader
         title="Bandeja de Validaciones"
         description="Pendientes de decisión — Dirección General"
-        action={<DemoBadge />}
       />
 
       {/* ─── Resumen ejecutivo ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
         <KpiCard
           label="Comisión SOZU"
           count={ventasGlobalCount}
@@ -1050,14 +1193,6 @@ export default function AltaDireccionBandejaValidacionesPage() {
           tone="blue"
           onClick={() => scrollTo(internasRef)}
         />
-        <KpiCard
-          label="Excepciones"
-          count={EXCEPCIONES.length}
-          amountLabel="Requieren VoBo"
-          icon={AlertTriangle}
-          tone="rose"
-          onClick={() => scrollTo(excepcionesRef)}
-        />
       </div>
 
       {/* ─── 1. Comisión SOZU (BD real, paginada en BD) ─── */}
@@ -1096,7 +1231,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Cuenta</TableHead>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
                       <TableHead className="text-xs">Tipo</TableHead>
                       <TableHead className="text-xs">Proyecto</TableHead>
                       <TableHead className="text-xs">Modelo</TableHead>
@@ -1108,6 +1243,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                       <TableHead className="text-xs text-right">Monto factura</TableHead>
                       <TableHead className="text-xs">Fecha · Antigüedad</TableHead>
                       <TableHead className="text-xs">Estatus</TableHead>
+                      <TableHead className="text-xs">Factura</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1158,6 +1294,22 @@ export default function AltaDireccionBandejaValidacionesPage() {
                           <Badge variant="secondary" className="text-[10px] font-normal">
                             {v.estatus}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {v.url_factura_comision ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-[10px] px-2"
+                              title="Ver factura SOZU"
+                              onClick={() => window.open(v.url_factura_comision!, "_blank")}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Ver PDF
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -1223,14 +1375,14 @@ export default function AltaDireccionBandejaValidacionesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs">Folio</TableHead>
-                    <TableHead className="text-xs">Beneficiario</TableHead>
+                    <TableHead className="text-xs">ID Cuenta</TableHead>
+                    <TableHead className="text-xs">Nombre Comisionista</TableHead>
                     <TableHead className="text-xs">Tipo</TableHead>
-                    <TableHead className="text-xs">Venta</TableHead>
+                    <TableHead className="text-xs text-right">% Comisión</TableHead>
                     <TableHead className="text-xs text-right">Monto</TableHead>
-                    <TableHead className="text-xs">Emisión</TableHead>
                     <TableHead className="text-xs">Antigüedad</TableHead>
                     <TableHead className="text-xs">Flag cobro</TableHead>
+                    <TableHead className="text-xs">Factura</TableHead>
                     <TableHead className="text-xs text-right">Acción</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1240,18 +1392,19 @@ export default function AltaDireccionBandejaValidacionesPage() {
                       key={`${p.id_factura}-${p.folio_factura}`}
                       className={cn(!p.ya_se_cobro_al_desarrollador && "bg-amber-50/50 dark:bg-amber-950/20")}
                     >
-                      <TableCell className="font-medium text-xs font-mono">
+                      <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
                         {p.folio_factura}
                       </TableCell>
                       <TableCell className="text-sm">{p.agente_nombre}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-[10px] font-normal">
+                        <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap">
                           {TIPO_EXTERNO_LABEL[p.agente_tipo]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.venta_referencia}</TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">
+                        {p.porcentaje_comision.toFixed(2)}%
+                      </TableCell>
                       <TableCell className="text-sm text-right font-semibold tabular-nums">{fmtMxn(p.monto)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.fecha_emision_factura}</TableCell>
                       <TableCell>
                         <Antiguedad dias={p.dias_esperando} umbral={7} />
                       </TableCell>
@@ -1259,19 +1412,35 @@ export default function AltaDireccionBandejaValidacionesPage() {
                         {p.ya_se_cobro_al_desarrollador ? (
                           <Badge
                             variant="outline"
-                            className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40"
+                            className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 whitespace-nowrap"
                           >
                             Cobrado
                           </Badge>
                         ) : (
                           <Badge
                             variant="outline"
-                            className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40"
+                            className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 whitespace-nowrap"
                             title="No pagar antes de cobrar al desarrollador"
                           >
                             <AlertTriangle className="h-3 w-3 mr-1" />
                             Pendiente cobrar al desarrollador
                           </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {p.url_factura_externa ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px] px-2"
+                            title="Ver factura del comisionista"
+                            onClick={() => window.open(p.url_factura_externa!, "_blank")}
+                          >
+                            <FileText className="h-3 w-3 mr-1" />
+                            Ver PDF
+                          </Button>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -1334,48 +1503,63 @@ export default function AltaDireccionBandejaValidacionesPage() {
                 No hay comisiones internas pendientes de autorización.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Folio</TableHead>
-                    <TableHead className="text-xs">Comisionista</TableHead>
-                    <TableHead className="text-xs">Rol</TableHead>
-                    <TableHead className="text-xs">Venta</TableHead>
-                    <TableHead className="text-xs text-right">%</TableHead>
-                    <TableHead className="text-xs text-right">Monto</TableHead>
-                    <TableHead className="text-xs">Antigüedad</TableHead>
-                    <TableHead className="text-xs text-right">Acción</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {COMISIONES_INTERNAS.map((c) => (
-                    <TableRow key={c.id_comisionista}>
-                      <TableCell className="font-medium text-xs font-mono">
-                        {c.folio_comision}
-                      </TableCell>
-                      <TableCell className="text-sm">{c.comisionista_nombre}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{c.comisionista_rol}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{c.venta_referencia}</TableCell>
-                      <TableCell className="text-sm text-right tabular-nums">{c.porcentaje_comision.toFixed(2)}%</TableCell>
-                      <TableCell className="text-sm text-right font-semibold tabular-nums">{fmtMxn(c.monto)}</TableCell>
-                      <TableCell>
-                        <Antiguedad dias={c.dias_esperando} umbral={5} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => setSelected({ tipo: "interna", data: c })}
-                          aria-label={`Revisar comisión interna ${c.folio_comision}`}
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Revisar
-                        </Button>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Edificio</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">No. Departamento</TableHead>
+                      <TableHead className="text-xs text-right">Precio final</TableHead>
+                      <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
+                      <TableHead className="text-xs">Fecha · Antigüedad</TableHead>
+                      <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {COMISIONES_INTERNAS.map((c) => (
+                      <TableRow key={c.id_cuenta_cobranza}>
+                        <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
+                          {c.folio_cuenta}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap">
+                            {c.tipo_transaccion}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{c.proyecto || "—"}</TableCell>
+                        <TableCell className="text-sm">{c.edificio || "—"}</TableCell>
+                        <TableCell className="text-sm">{c.modelo || "—"}</TableCell>
+                        <TableCell className="text-sm">{c.numero_propiedad || "—"}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                          {fmtMxn(c.precio_final)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-semibold tabular-nums">
+                          {fmtMxn(c.comision_a_dispersar)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <div className="text-xs text-muted-foreground">{c.fecha_devengo}</div>
+                          <Antiguedad dias={c.dias_esperando} umbral={5} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => setSelected({ tipo: "interna", data: c })}
+                            aria-label={`Revisar comisión interna ${c.folio_cuenta}`}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Revisar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1386,96 +1570,6 @@ export default function AltaDireccionBandejaValidacionesPage() {
           pageSize={PAGE_SIZE}
           onPageChange={setPageInternas}
           loading={comisLoading}
-        />
-      </section>
-
-      {/* ─── 4. Excepciones (mock, hasta materializar tabla excepciones_solicitadas) ─── */}
-      <section ref={excepcionesRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
-        <SectionHeader
-          icon={AlertTriangle}
-          iconColor="bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
-          title="Excepciones"
-          count={EXCEPCIONES.length}
-          right={
-            <SortToggle
-              value={sortExcepciones}
-              onChange={(v) => {
-                setSortExcepciones(v);
-                setPageExcepciones(0);
-              }}
-            />
-          }
-        />
-        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200/60 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900/40 p-3">
-          <Info className="h-4 w-4 text-amber-700 dark:text-amber-300 mt-0.5 shrink-0" />
-          <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-            <span className="font-semibold">Sección en datos demo.</span> La conexión con BD
-            real se habilita cuando se materialice la tabla{" "}
-            <code className="font-mono">excepciones_solicitadas</code> (o se confirme la
-            semántica de <code className="font-mono">ofertas.id_estatus_aprobacion</code> +{" "}
-            <code className="font-mono">comentario_justificacion</code> como modelo de excepción).
-          </p>
-        </div>
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">ID</TableHead>
-                  <TableHead className="text-xs">Tipo</TableHead>
-                  <TableHead className="text-xs">Descripción</TableHead>
-                  <TableHead className="text-xs">Solicitante</TableHead>
-                  <TableHead className="text-xs">Venta</TableHead>
-                  <TableHead className="text-xs text-right">Monto impactado</TableHead>
-                  <TableHead className="text-xs text-right">Delta solicitado</TableHead>
-                  <TableHead className="text-xs">Antigüedad</TableHead>
-                  <TableHead className="text-xs text-right">Acción</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {EXCEPCIONES_PAGE.map((e) => (
-                  <TableRow key={e.id_excepcion}>
-                    <TableCell className="font-medium text-sm">#{e.id_excepcion}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] font-normal">
-                        {TIPO_EXCEPCION_LABEL[e.tipo]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[260px]">{e.descripcion_corta}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{e.solicitante}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{e.venta_referencia}</TableCell>
-                    <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
-                      {fmtMxn(e.monto_impactado)}
-                    </TableCell>
-                    <TableCell className="text-sm text-right font-semibold tabular-nums text-rose-700 dark:text-rose-300">
-                      {fmtMxn(e.delta)}
-                    </TableCell>
-                    <TableCell>
-                      <Antiguedad dias={e.dias_esperando} umbral={3} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => setSelected({ tipo: "excepcion", data: e })}
-                        aria-label={`Revisar excepción #${e.id_excepcion}`}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" /> Revisar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-        <PaginationBar
-          page={pageExcepciones}
-          totalPages={excepcionesTotalPages}
-          totalCount={EXCEPCIONES.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPageExcepciones}
         />
       </section>
 
@@ -1495,6 +1589,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
               entityType="venta_para_facturar"
               entityId={v.folio_cuenta}
               ventaContext={vctx}
+              hideVentaContext
             >
               <VentaParaFacturarContent
                 entity={{
@@ -1528,6 +1623,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
               entityType="pago_externo"
               entityId={p.folio_factura}
               ventaContext={vctx}
+              hideVentaContext
             >
               <PagoExternoContent
                 entity={{
@@ -1538,6 +1634,8 @@ export default function AltaDireccionBandejaValidacionesPage() {
                   fecha_emision: p.fecha_emision_factura,
                   dias_desde_emision: p.dias_esperando,
                   ya_se_cobro_al_desarrollador: p.ya_se_cobro_al_desarrollador,
+                  folio_cuenta: p.folio_factura,
+                  url_factura_externa: p.url_factura_externa,
                 }}
                 ventaContext={vctx}
                 onClose={close}
@@ -1548,54 +1646,18 @@ export default function AltaDireccionBandejaValidacionesPage() {
 
         if (selected.tipo === "interna") {
           const c = selected.data;
-          const cob = resolveCobFolio(c.venta_referencia);
-          const vctx = getVentaContext(cob);
+          const vctx = getVentaContext(c.folio_cuenta);
           return (
             <ExpedienteDrawer
               open={open}
               onOpenChange={onOpenChange}
               entityType="comision_interna"
-              entityId={c.folio_comision}
+              entityId={c.folio_cuenta}
               ventaContext={vctx}
+              hideVentaContext
             >
               <ComisionInternaContent
-                entity={{
-                  folio: c.folio_comision,
-                  comisionista_nombre: c.comisionista_nombre,
-                  comisionista_rol: c.comisionista_rol,
-                  porcentaje_comision: c.porcentaje_comision,
-                  monto: c.monto,
-                  dias_esperando_director: c.dias_esperando,
-                  estado: "aprobada",
-                }}
-                ventaContext={vctx}
-                onClose={close}
-              />
-            </ExpedienteDrawer>
-          );
-        }
-
-        if (selected.tipo === "excepcion") {
-          const e = selected.data;
-          const cob = resolveCobFolio(e.venta_referencia);
-          const vctx = getVentaContext(cob);
-          return (
-            <ExpedienteDrawer
-              open={open}
-              onOpenChange={onOpenChange}
-              entityType="excepcion"
-              entityId={`#${e.id_excepcion}`}
-              ventaContext={vctx}
-            >
-              <ExcepcionContent
-                entity={{
-                  id_excepcion: e.id_excepcion,
-                  tipo: e.tipo,
-                  descripcion_corta: e.descripcion_corta,
-                  solicitante: e.solicitante,
-                  monto_impactado: e.monto_impactado,
-                  delta: e.delta,
-                }}
+                entity={{ folio_cuenta: c.folio_cuenta }}
                 ventaContext={vctx}
                 onClose={close}
               />

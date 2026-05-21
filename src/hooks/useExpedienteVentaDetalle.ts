@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
 export type TipoCuentaDetalle = "Propiedad" | "Producto" | "Servicio";
 
@@ -20,6 +21,12 @@ export type EstadoTimelineStep =
   | "no_aplica"
   | "sin_evidencia";
 
+export type EstatusPagoFacturaDetalle =
+  | "espera_autorizacion"
+  | "autorizada"
+  | "pagada"
+  | "rechazada";
+
 export interface TimelineStepReal {
   paso: number;
   nombre: string;
@@ -28,6 +35,16 @@ export interface TimelineStepReal {
   responsable?: string;
   detalle?: string;
   es_hito?: boolean;
+  /** URL externa relacionada al paso (ej. PDF de la oferta, contrato firmado). */
+  url?: string;
+  /** Etiqueta visible para la URL (ej. "Ver oferta"). */
+  url_label?: string;
+}
+
+export interface PagoCliente {
+  monto: number;
+  fecha: string;
+  url_recibo: string | null;
 }
 
 export interface ExpedienteVentaDetalle {
@@ -49,11 +66,34 @@ export interface ExpedienteVentaDetalle {
   comision_a_dispersar: number;
   compradores: Array<{ nombre: string; porcentaje: number }>;
   propietario: string;
+  rfc_comprador: string;
   fecha_compra: string;
   dias_desde_compra: number;
   estatus_disponibilidad: string;
   comisionistas: ComisionistaDetalle[];
   timeline: TimelineStepReal[];
+  url_contrato_firmado: string | null;
+  url_factura_sozu: string | null;
+  url_factura_xml_sozu: string | null;
+  factura_sozu_estado: "sin_generar" | "draft" | "timbrada";
+  url_factura_externa: string | null;
+  numero_factura_externa: string | null;
+  pago_apartado: PagoCliente | null;
+  pago_enganche: PagoCliente | null;
+  oferta_comercial: {
+    precio_final: number;
+    precio_lista: number;
+    ahorro: number;
+    apartado: number;
+    enganche: number;
+    parcialidades_total: number;
+    parcialidades_count: number;
+    a_la_entrega: number;
+    url_oferta: string | null;
+    folio_oferta: string | null;
+  };
+  estatus_pago: EstatusPagoFacturaDetalle;
+  fecha_pago_comision: string | null;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -76,14 +116,15 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
     queryKey: ["expediente_venta_detalle", folio],
     enabled: !!folio,
     queryFn: async (): Promise<ExpedienteVentaDetalle | null> => {
-      const match = folio?.match(/COB-(\d+)/i);
+      // Acepta los 3 formatos: COB-#### (legacy), CC-000### (Propiedad), CCP-000### (Producto/Servicio)
+      const match = folio?.match(/(?:COB|CCP|CC)-0*(\d+)/i);
       if (!match) return null;
       const cuentaId = Number(match[1]);
 
       const { data: cuenta, error: ccErr } = await supabase
         .from("cuentas_cobranza")
         .select(
-          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido",
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion",
         )
         .eq("id", cuentaId)
         .maybeSingle();
@@ -95,7 +136,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: oferta, error: ofErr } = idOferta != null
         ? await supabase
             .from("ofertas")
-            .select("id, id_propiedad, id_producto, id_persona_lead, email_creador, fecha_generacion, fecha_creacion")
+            .select("id, id_propiedad, id_producto, id_persona_lead, email_creador, fecha_generacion, fecha_creacion, url")
             .eq("id", idOferta)
             .maybeSingle()
         : { data: null, error: null };
@@ -108,7 +149,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         ? await supabase
             .from("propiedades")
             .select(
-              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, id_estatus_disponibilidad",
+              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, precio_lista, id_estatus_disponibilidad",
             )
             .eq("id", idPropiedad)
             .maybeSingle()
@@ -199,7 +240,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: personasComp, error: pErr } = compradorPersonaIds.length
         ? await (supabase as any)
             .from("personas")
-            .select("id, nombre_legal, nombre_comercial")
+            .select("id, nombre_legal, nombre_comercial, rfc")
             .in("id", compradorPersonaIds)
         : { data: [] as any[], error: null };
       if (pErr) throw pErr;
@@ -241,31 +282,43 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         .eq("activo", true);
       if (docsErr) throw docsErr;
 
-      // Acuerdos de apartado (id_concepto=1) y enganche (id_concepto=2)
+      // Acuerdos de pago — Apartado(1), Enganche(2), A la entrega(3), Parcialidad(5)
       const { data: acuerdos, error: acErr } = await supabase
         .from("acuerdos_pago")
-        .select("id, id_concepto, pago_completado, fecha_creacion, fecha_actualizacion")
+        .select("id, id_concepto, monto, pago_completado, fecha_creacion, fecha_actualizacion")
         .eq("id_cuenta_cobranza", cuentaId)
-        .in("id_concepto", [1, 2])
+        .in("id_concepto", [1, 2, 3, 5])
         .eq("activo", true);
       if (acErr) throw acErr;
 
-      // Fechas reales del pago vía aplicaciones_pago + pagos
+      // Fechas reales y montos del pago vía aplicaciones_pago + pagos
       const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
       const { data: aplicacionesPago, error: apErr } = acuerdoIds.length
         ? await (supabase as any)
             .from("aplicaciones_pago")
-            .select("id_acuerdo_pago, pagos!fk_aplicaciones_pago_pago(fecha_pago)")
+            .select(
+              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(fecha_pago, monto, url_recibo)",
+            )
             .in("id_acuerdo_pago", acuerdoIds)
             .eq("activo", true)
         : { data: [] as any[], error: null };
       if (apErr) throw apErr;
 
       const fechaPorAcuerdo = new Map<number, string>();
-      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; pagos: { fecha_pago: string | null } | null }>).forEach((ap) => {
+      const pagoPorAcuerdo = new Map<number, { monto: number; fecha: string; url_recibo: string | null }>();
+      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { fecha_pago: string | null; monto: number | null; url_recibo: string | null } | null }>).forEach((ap) => {
         const fecha = ap.pagos?.fecha_pago;
-        if (fecha && ap.id_acuerdo_pago != null && !fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
-          fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
+        if (fecha && ap.id_acuerdo_pago != null) {
+          if (!fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
+            fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
+          }
+          if (!pagoPorAcuerdo.has(ap.id_acuerdo_pago)) {
+            pagoPorAcuerdo.set(ap.id_acuerdo_pago, {
+              monto: Number(ap.monto ?? ap.pagos?.monto ?? 0),
+              fecha: new Date(fecha).toISOString().slice(0, 10),
+              url_recibo: ap.pagos?.url_recibo ?? null,
+            });
+          }
         }
       });
 
@@ -445,6 +498,8 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       );
       const docContratoCompleto = docs.find((d) => d.id_tipo_documento === 18);
       const docFacturaExterna = docs.find((d) => d.id_tipo_documento === 46);
+      const urlFacturaExterna = docFacturaExterna?.url ?? null;
+      const numeroFacturaExterna = docFacturaExterna?.numero ?? null;
       const algunDocValidado = docs.some((d) => d.id_estatus_verificacion === 2);
 
       const comisionistasExternos = comisionistasDetalle.filter((c) => c.es_externo);
@@ -496,6 +551,13 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
 
       const tieneExternos = externosRaw.length > 0;
 
+      const pagoApartado = acuerdoApartado && pagoPorAcuerdo.has(acuerdoApartado.id)
+        ? pagoPorAcuerdo.get(acuerdoApartado.id)!
+        : null;
+      const pagoEnganche = acuerdoEnganche && pagoPorAcuerdo.has(acuerdoEnganche.id)
+        ? pagoPorAcuerdo.get(acuerdoEnganche.id)!
+        : null;
+
       const timeline: TimelineStepReal[] = [
         {
           paso: 1,
@@ -537,7 +599,13 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
             (oferta as any)?.fecha_generacion || (oferta as any)?.fecha_creacion,
           ),
           responsable: (oferta as any)?.email_creador || "Sistema",
-          detalle: oferta ? `Folio OFR-${(oferta as any).id}` : undefined,
+          detalle: oferta
+            ? `Folio O-${String((oferta as any).id).padStart(6, "0")}${
+                !(oferta as any)?.url ? " · PDF aún no generado" : ""
+              }`
+            : undefined,
+          url: (oferta as any)?.url || undefined,
+          url_label: (oferta as any)?.url ? "Ver oferta" : undefined,
         },
         {
           paso: 4,
@@ -549,6 +617,22 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               : "sin_evidencia",
           fecha: fechaApartado || fmtDateOnly(acuerdoApartado?.fecha_creacion),
           responsable: "STP / Cliente",
+          detalle: (() => {
+            const partes: string[] = [];
+            const clabe = (cuenta as any)?.clabe_stp as string | null | undefined;
+            if (clabe) partes.push(`CLABE STP: ${clabe}`);
+            if (pagoApartado?.monto) {
+              partes.push(
+                `Primer pago: ${new Intl.NumberFormat("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                }).format(pagoApartado.monto)}`,
+              );
+            }
+            return partes.length > 0 ? partes.join(" · ") : undefined;
+          })(),
+          url: pagoApartado?.url_recibo || undefined,
+          url_label: pagoApartado?.url_recibo ? "Ver comprobante" : undefined,
         },
         {
           paso: 5,
@@ -728,9 +812,20 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         },
       ];
 
+      const urlFacturaSozu = (cuenta as any).url_factura_comision || null;
+      const urlFacturaXmlSozu = (cuenta as any).url_factura_xml_comision || null;
+      const isDraftFacturaSozu = !!(cuenta as any).es_draft_factura_comision;
+      let facturaSozuEstado: "sin_generar" | "draft" | "timbrada";
+      if (!urlFacturaSozu) facturaSozuEstado = "sin_generar";
+      else if (isDraftFacturaSozu) facturaSozuEstado = "draft";
+      else facturaSozuEstado = "timbrada";
+
+      const rfcComprador =
+        ((personasComp || []) as Array<any>).find((p) => p.rfc)?.rfc ?? "";
+
       return {
         id_cuenta_cobranza: cuentaId,
-        folio: `COB-${cuentaId}`,
+        folio: formatCuentaCobranzaId(cuentaId, tipoCuenta),
         propiedad_label: propiedadLabel,
         proyecto_nombre: proyecto?.nombre ?? "",
         numero_departamento: propiedad?.numero_propiedad ?? "",
@@ -747,11 +842,56 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         comision_a_dispersar: comisionADispersar,
         compradores,
         propietario,
+        rfc_comprador: rfcComprador,
         fecha_compra: fechaCompra,
         dias_desde_compra: dias,
         estatus_disponibilidad: estatusDisp?.nombre ?? "",
         comisionistas: comisionistasDetalle,
         timeline,
+        url_contrato_firmado:
+          docContratoCompletoValidado?.url ?? docContratoCompleto?.url ?? null,
+        url_factura_sozu: urlFacturaSozu,
+        url_factura_xml_sozu: urlFacturaXmlSozu,
+        factura_sozu_estado: facturaSozuEstado,
+        url_factura_externa: urlFacturaExterna,
+        numero_factura_externa: numeroFacturaExterna,
+        pago_apartado: pagoApartado,
+        pago_enganche: pagoEnganche,
+        oferta_comercial: (() => {
+          const sumMonto = (concepto: number) =>
+            (acuerdos || [])
+              .filter((a: any) => a.id_concepto === concepto)
+              .reduce((s: number, a: any) => s + Number(a.monto ?? 0), 0);
+          const countConcepto = (concepto: number) =>
+            (acuerdos || []).filter((a: any) => a.id_concepto === concepto).length;
+          const precioLista = Number((propiedad as any)?.precio_lista) || 0;
+          const ahorro =
+            precioLista > 0 && precioLista > precioFinal
+              ? +(precioLista - precioFinal).toFixed(2)
+              : 0;
+          return {
+            precio_final: precioFinal,
+            precio_lista: precioLista,
+            ahorro,
+            apartado: +sumMonto(1).toFixed(2),
+            enganche: +sumMonto(2).toFixed(2),
+            parcialidades_total: +sumMonto(5).toFixed(2),
+            parcialidades_count: countConcepto(5),
+            a_la_entrega: +sumMonto(3).toFixed(2),
+            url_oferta: (oferta as any)?.url || null,
+            folio_oferta: oferta
+              ? `O-${String((oferta as any).id).padStart(6, "0")}`
+              : null,
+          };
+        })(),
+        estatus_pago: (() => {
+          if ((cuenta as any)?.es_pagada_comision_venta) return "pagada" as const;
+          if ((cuenta as any)?.id_tipo_cancelacion != null) return "rechazada" as const;
+          return "espera_autorizacion" as const;
+        })(),
+        fecha_pago_comision: (cuenta as any)?.fecha_pago_comision
+          ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
+          : null,
       };
     },
   });

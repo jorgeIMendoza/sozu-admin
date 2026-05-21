@@ -18,6 +18,12 @@ export type TipoCuenta = "Propiedad" | "Producto" | "Servicio";
 
 export type EstatusComision = "pendiente" | "aprobada" | "pagada";
 
+export type EstatusPagoFacturaPorPagar =
+  | "espera_autorizacion"
+  | "autorizada"
+  | "pagada"
+  | "rechazada";
+
 export interface FacturaPorPagar {
   id_factura: number;
   folio_cfdi: string;
@@ -45,6 +51,7 @@ export interface FacturaPorPagar {
   numero_departamento: string;
   estatus_comision: EstatusComision;
   url_factura: string | null;
+  estatus_pago: EstatusPagoFacturaPorPagar;
 }
 
 const IVA_RATE = 0.16;
@@ -386,6 +393,19 @@ export function useFacturasPorPagar() {
             ? "aprobada"
             : "pendiente";
 
+        // Estatus de pago al externo (homologado con Facturas Por Cobrar)
+        //   - pagada            → comisionistas.pagada = true
+        //   - autorizada        → aprobada=true + cobro al desarrollador confirmado
+        //                         (puede dispersarse)
+        //   - rechazada         → estado == "rechazada" (no se tiene columna BD;
+        //                         fallback no se distingue de espera)
+        //   - espera_autorizacion → cualquier otro caso
+        let estatusPago: EstatusPagoFacturaPorPagar;
+        if (c.pagada) estatusPago = "pagada";
+        else if (estado === "rechazada") estatusPago = "rechazada";
+        else if (c.aprobada && yaCobroDesarrollador) estatusPago = "autorizada";
+        else estatusPago = "espera_autorizacion";
+
         const beneficiarioNombre =
           persona?.nombre || usuario?.nombre || c.email_usuario || "Sin beneficiario";
         const beneficiarioRfc = persona?.rfc || "";
@@ -422,6 +442,7 @@ export function useFacturasPorPagar() {
           numero_departamento: prop?.numero ?? "",
           estatus_comision: estatusComision,
           url_factura: doc?.url ?? null,
+          estatus_pago: estatusPago,
         };
       });
     },

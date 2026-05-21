@@ -34,6 +34,7 @@ export interface ComisionInterna {
   tipo: TipoCuentaInterna;
   proyecto_nombre: string;
   modelo_nombre: string;
+  edificio_nombre: string;
   numero_departamento: string;
   producto_nombre: string;
 }
@@ -404,6 +405,7 @@ export function useComisionesInternas() {
           tipo: tipoCuenta,
           proyecto_nombre: proyectoNombre,
           modelo_nombre: modeloNombre,
+          edificio_nombre: edif?.nombre ?? "",
           numero_departamento: prop?.numero ?? "",
           producto_nombre: producto?.nombre ?? "",
         };
