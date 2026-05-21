@@ -51,6 +51,7 @@ const IVA_RATE = 0.16;
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
 const TIPO_DOC_FACTURA_EXTERNA = 46;
 const DOMINIOS_INTERNOS = ["sozu.com", "investimento.mx", "tallwood.mx", "daiku.mx"];
+const DOC_BATCH_SIZE = 200;
 
 function esDominioInterno(email: string | null | undefined) {
   if (!email) return true;
@@ -308,15 +309,25 @@ export function useFacturasPorPagar() {
         ]),
       );
 
-      const { data: docs, error: docErr } = cuentaIds.length
-        ? await supabase
+      type DocRow = { id_cuenta_cobranza: number | null; url: string | null; numero: string | null };
+      const docChunks: number[][] = [];
+      for (let i = 0; i < cuentaIds.length; i += DOC_BATCH_SIZE) {
+        docChunks.push(cuentaIds.slice(i, i + DOC_BATCH_SIZE));
+      }
+      const docResults = await Promise.all(
+        docChunks.map((batch) =>
+          supabase
             .from("documentos")
             .select("id_cuenta_cobranza, url, numero")
-            .in("id_cuenta_cobranza", cuentaIds)
+            .in("id_cuenta_cobranza", batch)
             .eq("id_tipo_documento", TIPO_DOC_FACTURA_EXTERNA)
-            .eq("activo", true)
-        : { data: [] as Array<{ id_cuenta_cobranza: number | null; url: string | null; numero: string | null }>, error: null };
-      if (docErr) throw docErr;
+            .eq("activo", true),
+        ),
+      );
+      for (const { error } of docResults) {
+        if (error) throw error;
+      }
+      const docs: DocRow[] = docResults.flatMap(({ data }) => (data ?? []) as DocRow[]);
 
       const docMap = new Map<number, { url: string | null; numero: string | null }>();
       (docs || []).forEach((d: any) => {
