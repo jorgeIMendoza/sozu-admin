@@ -298,7 +298,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         ? await (supabase as any)
             .from("aplicaciones_pago")
             .select(
-              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(fecha_pago, monto, url_recibo)",
+              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(fecha_pago, monto, url_recibo, url_cep)",
             )
             .in("id_acuerdo_pago", acuerdoIds)
             .eq("activo", true)
@@ -307,17 +307,19 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
 
       const fechaPorAcuerdo = new Map<number, string>();
       const pagoPorAcuerdo = new Map<number, { monto: number; fecha: string; url_recibo: string | null }>();
-      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { fecha_pago: string | null; monto: number | null; url_recibo: string | null } | null }>).forEach((ap) => {
+      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { fecha_pago: string | null; monto: number | null; url_recibo: string | null; url_cep: string | null } | null }>).forEach((ap) => {
         const fecha = ap.pagos?.fecha_pago;
         if (fecha && ap.id_acuerdo_pago != null) {
           if (!fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
             fechaPorAcuerdo.set(ap.id_acuerdo_pago, new Date(fecha).toISOString().slice(0, 10));
           }
           if (!pagoPorAcuerdo.has(ap.id_acuerdo_pago)) {
+            // Comprobante: efectivo/transferencia → url_recibo; STP → url_cep
+            const comprobante = ap.pagos?.url_recibo ?? ap.pagos?.url_cep ?? null;
             pagoPorAcuerdo.set(ap.id_acuerdo_pago, {
               monto: Number(ap.monto ?? ap.pagos?.monto ?? 0),
               fecha: new Date(fecha).toISOString().slice(0, 10),
-              url_recibo: ap.pagos?.url_recibo ?? null,
+              url_recibo: comprobante,
             });
           }
         }
