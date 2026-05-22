@@ -60,9 +60,9 @@ export function PagoExternoContent({
       const { error } = await supabase
         .from("cuentas_cobranza")
         .update({
-          estatus_autorizacion_comision: "Autorizado",
-          email_autoriza_comision: user?.email ?? null,
-          fecha_autorizacion_comision: new Date().toISOString(),
+          estatus_autorizacion_comision_externa: "Autorizado",
+          email_autoriza_comision_externa: user?.email ?? null,
+          fecha_autorizacion_comision_externa: new Date().toISOString(),
         })
         .eq("id", entity.id_cuenta_cobranza!);
       if (error) throw error;
@@ -84,10 +84,10 @@ export function PagoExternoContent({
       const { error } = await supabase
         .from("cuentas_cobranza")
         .update({
-          estatus_autorizacion_comision: "Rechazado",
-          notas_rechazo_comision: note,
-          email_autoriza_comision: user?.email ?? null,
-          fecha_autorizacion_comision: new Date().toISOString(),
+          estatus_autorizacion_comision_externa: "Rechazado",
+          notas_rechazo_comision_externa: note,
+          email_autoriza_comision_externa: user?.email ?? null,
+          fecha_autorizacion_comision_externa: new Date().toISOString(),
         })
         .eq("id", entity.id_cuenta_cobranza!);
       if (error) throw error;

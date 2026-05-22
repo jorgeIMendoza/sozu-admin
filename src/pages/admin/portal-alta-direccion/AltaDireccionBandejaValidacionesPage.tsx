@@ -74,7 +74,7 @@ type ValidacionPagoExterno = {
   ya_se_cobro_al_desarrollador: boolean;
   url_factura_externa: string | null;
   tipo_transaccion: "Propiedad" | "Producto" | "Servicio";
-  estatus_autorizacion_comision: string;
+  estatus_autorizacion_comision_externa: string;
 };
 
 type ValidacionComisionInterna = {
@@ -562,7 +562,7 @@ type ComisionistaEnriched = {
   dias_desde_devengo: number;
   dias_desde_aprobacion: number;
   es_externo: boolean;
-  estatus_autorizacion_comision: string;
+  estatus_autorizacion_comision_externa: string;
 };
 
 async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
@@ -586,7 +586,7 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
     ? ((await (supabase as any)
         .from("cuentas_cobranza")
         .select(
-          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision"
+          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa"
         )
         .in("id", ccIds)) as any)
     : { data: [] };
@@ -825,7 +825,7 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       dias_desde_devengo: diasDev,
       dias_desde_aprobacion: diasAprob,
       es_externo: esExterno,
-      estatus_autorizacion_comision: cc?.estatus_autorizacion_comision ?? "En espera",
+      estatus_autorizacion_comision_externa: cc?.estatus_autorizacion_comision_externa ?? "En espera",
     };
   });
 
@@ -1113,7 +1113,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
           c.es_externo &&
           c.id_estatus_disponibilidad === 5 &&
           !!c.url_factura_externa &&
-          c.estatus_autorizacion_comision === "En espera",
+          c.estatus_autorizacion_comision_externa === "En espera",
       ),
     [comisionistasPendientes],
   );
@@ -1141,7 +1141,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
       ya_se_cobro_al_desarrollador: c.es_pagada_comision_venta,
       url_factura_externa: c.url_factura_externa,
       tipo_transaccion: c.tipo_transaccion,
-      estatus_autorizacion_comision: c.estatus_autorizacion_comision,
+      estatus_autorizacion_comision_externa: c.estatus_autorizacion_comision_externa,
     }));
   }, [externosSorted, pageExternos]);
 
@@ -1726,7 +1726,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                   folio_cuenta: p.folio_factura,
                   url_factura_externa: p.url_factura_externa,
                   id_cuenta_cobranza: p.id_cuenta_cobranza,
-                  estatus_pago: mapEstatusAutorizacion(p.estatus_autorizacion_comision),
+                  estatus_pago: mapEstatusAutorizacion(p.estatus_autorizacion_comision_externa),
                 }}
                 ventaContext={vctx}
                 onClose={close}
