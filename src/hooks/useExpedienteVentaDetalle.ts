@@ -95,6 +95,7 @@ export interface ExpedienteVentaDetalle {
   };
   estatus_pago: EstatusPagoFacturaDetalle;
   fecha_pago_comision: string | null;
+  notas_rechazo_comision: string | null;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -125,7 +126,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: cuenta, error: ccErr } = await supabase
         .from("cuentas_cobranza")
         .select(
-          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion",
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion, estatus_autorizacion_comision, notas_rechazo_comision",
         )
         .eq("id", cuentaId)
         .maybeSingle();
@@ -890,12 +891,15 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         })(),
         estatus_pago: (() => {
           if ((cuenta as any)?.es_pagada_comision_venta) return "pagada" as const;
-          if ((cuenta as any)?.id_tipo_cancelacion != null) return "rechazada" as const;
+          const autorizacion = (cuenta as any)?.estatus_autorizacion_comision as string | null | undefined;
+          if (autorizacion === "Autorizado") return "autorizada" as const;
+          if (autorizacion === "Rechazado") return "rechazada" as const;
           return "espera_autorizacion" as const;
         })(),
         fecha_pago_comision: (cuenta as any)?.fecha_pago_comision
           ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
           : null,
+        notas_rechazo_comision: (cuenta as any)?.notas_rechazo_comision ?? null,
       };
     },
   });
