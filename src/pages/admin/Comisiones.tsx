@@ -13,10 +13,11 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { Copy, Stamp, FileText, Loader2, Eye, RefreshCw, FileCode } from "lucide-react";
+import { Copy, Stamp, FileText, Loader2, Eye, RefreshCw, FileCode, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 export default function Comisiones() {
   const {
     toast
@@ -32,6 +33,7 @@ export default function Comisiones() {
   const [filtroNumero, setFiltroNumero] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState("");
   const [filtroEfectivo, setFiltroEfectivo] = useState("");
+  const [filtroAutorizacion, setFiltroAutorizacion] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
   const [generarLoading, setGenerarLoading] = useState<number | null>(null);
@@ -110,7 +112,9 @@ export default function Comisiones() {
           id_oferta,
           url_factura_comision,
           url_factura_xml_comision,
-          es_draft_factura_comision
+          es_draft_factura_comision,
+          estatus_autorizacion_comision,
+          notas_rechazo_comision
         `).is("id_cuenta_cobranza_padre", null).order("id", {
         ascending: false
       })) as any;
@@ -405,6 +409,16 @@ export default function Comisiones() {
         return false;
       }
     }
+
+    // Filtro por estatus de validación / autorización de comisión
+    if (filtroAutorizacion && filtroAutorizacion !== "todos") {
+      const estatusValidacion = comision.es_pagada_comision_venta
+        ? "Autorizado"
+        : comision.estatus_autorizacion_comision || "En espera";
+      if (estatusValidacion !== filtroAutorizacion) {
+        return false;
+      }
+    }
     return true;
   }) || [];
 
@@ -418,7 +432,7 @@ export default function Comisiones() {
   // Reset to page 1 when filters change
   useMemo(() => {
     setCurrentPage(1);
-  }, [filtroGeneral, filtroId, filtroTipo, filtroProyecto, filtroEdificio, filtroModelo, filtroNumero, filtroEstatus, filtroEfectivo]);
+  }, [filtroGeneral, filtroId, filtroTipo, filtroProyecto, filtroEdificio, filtroModelo, filtroNumero, filtroEstatus, filtroEfectivo, filtroAutorizacion]);
 
   const renderPaginationItems = () => {
     const items = [];
@@ -535,6 +549,18 @@ export default function Comisiones() {
                 <SelectItem value="no">No</SelectItem>
               </SelectContent>
             </Select>
+
+            <Select value={filtroAutorizacion} onValueChange={setFiltroAutorizacion}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por estatus pago comisión SOZU..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="En espera">En espera</SelectItem>
+                <SelectItem value="Autorizado">Autorizado</SelectItem>
+                <SelectItem value="Rechazado">Rechazado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Table>
@@ -555,6 +581,7 @@ export default function Comisiones() {
                 <TableHead>Fecha Pago Comisión</TableHead>
                 <TableHead>Comisión En Efectivo</TableHead>
                 <TableHead>Fact. Comisión Sozu</TableHead>
+                <TableHead>Estatus Pago Comisión SOZU</TableHead>
                 <TableHead>Estatus</TableHead>
               </TableRow>
             </TableHeader>
@@ -710,6 +737,36 @@ export default function Comisiones() {
                             )}
                           </div>
                         );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const estatusValidacion = comision.es_pagada_comision_venta
+                          ? "Autorizado"
+                          : (comision.estatus_autorizacion_comision as string | null) || "En espera";
+                        if (estatusValidacion === "Autorizado") {
+                          return <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">Autorizado</Badge>;
+                        }
+                        if (estatusValidacion === "Rechazado") {
+                          const notas = (comision.notas_rechazo_comision as string | null)?.trim();
+                          return (
+                            <div className="flex items-center gap-1">
+                              <Badge variant="destructive">Rechazado</Badge>
+                              {notas ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-xs whitespace-pre-wrap">
+                                    <p className="text-[10px] uppercase tracking-wider mb-1 opacity-70">Motivo</p>
+                                    <p className="text-xs">{notas}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : null}
+                            </div>
+                          );
+                        }
+                        return <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-200">En espera</Badge>;
                       })()}
                     </TableCell>
                     <TableCell>

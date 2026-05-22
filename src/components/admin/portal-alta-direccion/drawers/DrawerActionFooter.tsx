@@ -7,10 +7,13 @@ import { cn } from "@/lib/utils";
 export type DrawerAction = {
   label: string;
   variant: "primary" | "secondary" | "destructive";
-  onClick: () => void;
+  onClick: (note: string) => void | Promise<void>;
   disabled?: boolean;
   disabledReason?: string;
   requiresNote?: boolean;
+  /** Si true, el footer NO muestra el toast "demo" ni cierra el drawer
+   *  automáticamente — el consumer maneja UX y persistencia. */
+  skipDemoConfirmation?: boolean;
 };
 
 export type DrawerActionFooterProps = {
@@ -35,7 +38,11 @@ export function DrawerActionFooter({
       setTimeout(() => setErrorOn(null), 1500);
       return;
     }
-    a.onClick();
+    if (a.skipDemoConfirmation) {
+      a.onClick(note);
+      return;
+    }
+    a.onClick(note);
     toast(
       `✓ ${a.label} registrada en demo — la persistencia se habilita al conectar con BD productiva.`,
       { duration: 4000 }
