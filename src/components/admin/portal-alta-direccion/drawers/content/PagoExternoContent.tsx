@@ -13,6 +13,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import { Section, KV, Timeline, TimelineItem, StatusCard } from "./_shared";
 import type { PagoExternoEntity, VentaContext } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
+import { supabase } from "@/integrations/supabase/client";
 
 const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
   inmobiliaria: "Inmobiliaria",
@@ -45,10 +48,60 @@ export function PagoExternoContent({
   ctaButton?: { label: string; onClick: () => void };
 }) {
   const cobroConfirmado = entity.ya_se_cobro_al_desarrollador;
+  const queryClient = useQueryClient();
   const { data: detalle, isLoading, error } = useExpedienteVentaDetalle(
     entity.folio_cuenta || entity.folio_cfdi,
   );
   const [generandoOferta, setGenerandoOferta] = useState(false);
+
+  const autorizarMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("cuentas_cobranza")
+        .update({
+          estatus_autorizacion_comision: "Autorizado",
+          email_autoriza_comision: user?.email ?? null,
+          fecha_autorizacion_comision: new Date().toISOString(),
+        })
+        .eq("id", entity.id_cuenta_cobranza!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bandeja-comisionistas-pendientes"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones-externas"] });
+      toast.success("Pago autorizado correctamente.");
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast.error(`Error al autorizar: ${err.message}`);
+    },
+  });
+
+  const bloquearMutation = useMutation({
+    mutationFn: async (note: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("cuentas_cobranza")
+        .update({
+          estatus_autorizacion_comision: "Rechazado",
+          notas_rechazo_comision: note,
+          email_autoriza_comision: user?.email ?? null,
+          fecha_autorizacion_comision: new Date().toISOString(),
+        })
+        .eq("id", entity.id_cuenta_cobranza!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bandeja-comisionistas-pendientes"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones-externas"] });
+      toast.success("Pago bloqueado. La nota fue guardada.");
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast.error(`Error al bloquear: ${err.message}`);
+    },
+  });
 
   const handleGenerarOferta = async (idOferta: number) => {
     setGenerandoOferta(true);
@@ -60,6 +113,8 @@ export function PagoExternoContent({
     }
   };
 
+  const isPending = autorizarMutation.isPending || bloquearMutation.isPending;
+
   // Actions condicionadas según flag de cobro previo
   const actions: DrawerAction[] = cobroConfirmado
     ? [
@@ -67,12 +122,26 @@ export function PagoExternoContent({
           label: "Bloquear pago",
           variant: "destructive",
           requiresNote: true,
-          onClick: () => {},
+          disabled: isPending,
+          skipDemoConfirmation: true,
+          onClick: (note) => bloquearMutation.mutate(note),
         },
-        { label: "Autorizar pago", variant: "primary", onClick: () => {} },
+        {
+          label: "Autorizar pago",
+          variant: "primary",
+          disabled: isPending,
+          skipDemoConfirmation: true,
+          onClick: () => autorizarMutation.mutate(),
+        },
       ]
     : [
-        { label: "Bloquear pago", variant: "destructive", onClick: () => {} },
+        {
+          label: "Bloquear pago",
+          variant: "destructive",
+          disabled: isPending,
+          skipDemoConfirmation: true,
+          onClick: (note) => bloquearMutation.mutate(note),
+        },
         {
           label: "Autorizar pago",
           variant: "primary",
