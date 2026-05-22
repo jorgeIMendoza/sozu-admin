@@ -92,6 +92,8 @@ export type PagoExternoEntity = {
   estatus_pago?: "espera_autorizacion" | "autorizada" | "pagada" | "rechazada";
   /** Fecha en que se ejecutó el pago al externo (cuando estatus_pago = pagada). */
   fecha_pago?: string | null;
+  /** ID numérico de cuentas_cobranza — necesario para persistir autorización. */
+  id_cuenta_cobranza?: number;
 };
 
 export type ComisionInternaEntity = {

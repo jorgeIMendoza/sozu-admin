@@ -67,7 +67,8 @@ async function fetchAllCuentasConComisionistas() {
         porcentaje_comision_venta,
         iva_incluido,
         id_oferta,
-        es_pagada_comision_venta
+        es_pagada_comision_venta,
+        estatus_autorizacion_comision
       `)
       .is("id_cuenta_cobranza_padre", null)
       .order("id", { ascending: false })
@@ -794,9 +795,12 @@ export default function ComisionesExternas() {
                       const anyConFactura = comisionistasExternos.some((c: any) => c.urlFactura && c.aprobada && !c.pagada);
                       const anyAprobadaSinFactura = comisionistasExternos.some((c: any) => c.aprobada && !c.urlFactura && !c.pagada);
                       const anySinAprobar = comisionistasExternos.some((c: any) => !c.aprobada);
+                      const pagoAutorizado = anyConFactura && cuenta.estatus_autorizacion_comision === "Autorizado";
 
                       if (allPagadas) {
                         return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pagada</Badge>;
+                      } else if (pagoAutorizado) {
+                        return <Badge className="bg-violet-500/10 text-violet-600 border-violet-500/20">Pago autorizado</Badge>;
                       } else if (anyConFactura) {
                         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>;
                       } else if (anyAprobadaSinFactura) {
@@ -873,6 +877,8 @@ export default function ComisionesExternas() {
                                   <TableCell>
                                     {com.pagada ? (
                                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pagada</Badge>
+                                    ) : com.aprobada && com.urlFactura && cuenta.estatus_autorizacion_comision === "Autorizado" ? (
+                                      <Badge className="bg-violet-500/10 text-violet-600 border-violet-500/20">Pago autorizado</Badge>
                                     ) : com.aprobada && com.urlFactura ? (
                                       <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>
                                     ) : com.aprobada && !com.urlFactura ? (
