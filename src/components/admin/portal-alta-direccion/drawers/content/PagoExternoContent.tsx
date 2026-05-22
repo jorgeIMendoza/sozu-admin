@@ -12,6 +12,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
+import { useState } from "react";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import { DrawerActionFooter, type DrawerAction } from "../DrawerActionFooter";
 import { Section, KV, Timeline, TimelineItem, StatusCard } from "./_shared";
 import type { PagoExternoEntity, VentaContext } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
+import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
 
 const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
   inmobiliaria: "Inmobiliaria",
@@ -46,6 +48,17 @@ export function PagoExternoContent({
   const { data: detalle, isLoading, error } = useExpedienteVentaDetalle(
     entity.folio_cuenta || entity.folio_cfdi,
   );
+  const [generandoOferta, setGenerandoOferta] = useState(false);
+
+  const handleGenerarOferta = async (idOferta: number) => {
+    setGenerandoOferta(true);
+    try {
+      const service = new OfertaPdfEdgeFunctionService();
+      await service.generateOfertaPdf({ offerId: idOferta });
+    } finally {
+      setGenerandoOferta(false);
+    }
+  };
 
   // Actions condicionadas según flag de cobro previo
   const actions: DrawerAction[] = cobroConfirmado
@@ -217,21 +230,35 @@ export function PagoExternoContent({
                 {detalle.oferta_comercial.folio_oferta || "Sin folio"}
               </p>
             </div>
-            {detalle.oferta_comercial.url_oferta ? (
+            {detalle.oferta_comercial.id_oferta ? (
               <Button
                 size="sm"
                 variant="outline"
                 className="h-8"
-                onClick={() =>
-                  window.open(detalle.oferta_comercial.url_oferta!, "_blank")
-                }
+                disabled={generandoOferta}
+                onClick={async () => {
+                  if (detalle.oferta_comercial.url_oferta) {
+                    window.open(detalle.oferta_comercial.url_oferta, "_blank");
+                  } else {
+                    await handleGenerarOferta(detalle.oferta_comercial.id_oferta!);
+                  }
+                }}
               >
-                <FileText className="h-3.5 w-3.5 mr-1" />
-                Ver oferta
+                {generandoOferta ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    Generando…
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    Ver oferta
+                  </>
+                )}
               </Button>
             ) : (
               <span className="text-[10px] text-muted-foreground">
-                PDF aún no generado
+                Sin oferta vinculada
               </span>
             )}
           </div>
