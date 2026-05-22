@@ -221,7 +221,7 @@ async function fetchVentasParaFacturar(
   // .range(0, 49999) explícito para sobrepasar el límite default de PostgREST (1000).
   const { data: candidatos, error: candErr } = await (supabase as any)
     .from("cuentas_cobranza")
-    .select("id, id_propiedad, fecha_compra")
+    .select("id, id_oferta, id_propiedad, fecha_compra")
     .eq("activo", true)
     .eq("es_pagada_comision_venta", false)
     .is("id_cuenta_cobranza_padre", null)
@@ -232,14 +232,39 @@ async function fetchVentasParaFacturar(
   if (candErr) throw candErr;
   const candidatosRows = (candidatos || []) as Array<{
     id: number;
+    id_oferta: number | null;
     id_propiedad: number | null;
     fecha_compra: string | null;
   }>;
   if (candidatosRows.length === 0) return { items: [], total_count: 0 };
 
-  // Paso 2: de los id_propiedad presentes, identificar cuáles están en estatus Vendido (5)
+  // Paso 2: resolver id_propiedad efectiva por candidato (cc.id_propiedad fallback a oferta.id_propiedad)
+  const ofertaIdsCandidatos = Array.from(
+    new Set(candidatosRows.map((r) => r.id_oferta).filter((x): x is number => !!x))
+  );
+  const { data: ofertasMin } = ofertaIdsCandidatos.length
+    ? ((await (supabase as any)
+        .from("ofertas")
+        .select("id, id_propiedad, id_producto")
+        .in("id", ofertaIdsCandidatos)) as any)
+    : { data: [] };
+  const ofertaMinById = new Map<number, { id_propiedad: number | null; id_producto: number | null }>(
+    ((ofertasMin || []) as Array<{ id: number; id_propiedad: number | null; id_producto: number | null }>).map((o) => [
+      o.id,
+      { id_propiedad: o.id_propiedad ?? null, id_producto: o.id_producto ?? null },
+    ])
+  );
+
+  const propEfectivaPorCandidato = new Map<number, number | null>();
+  for (const r of candidatosRows) {
+    const ofertaInfo = r.id_oferta ? ofertaMinById.get(r.id_oferta) ?? null : null;
+    const efectiva = r.id_propiedad ?? ofertaInfo?.id_propiedad ?? null;
+    propEfectivaPorCandidato.set(r.id, efectiva);
+  }
+
+  // Paso 3: identificar propiedades en estatus Vendido (5)
   const propIdsCandidatos = Array.from(
-    new Set(candidatosRows.map((r) => r.id_propiedad).filter((x): x is number => !!x))
+    new Set(Array.from(propEfectivaPorCandidato.values()).filter((x): x is number => !!x))
   );
   const { data: vendidasData } = propIdsCandidatos.length
     ? ((await (supabase as any)
@@ -252,11 +277,12 @@ async function fetchVentasParaFacturar(
     ((vendidasData || []) as Array<{ id: number }>).map((p) => p.id)
   );
 
-  // Paso 3: filtrar — sin id_propiedad (Producto/Servicio) entran siempre; con propiedad
-  // sólo si está Vendida.
-  const elegibles = candidatosRows.filter(
-    (r) => r.id_propiedad == null || propVendidas.has(r.id_propiedad)
-  );
+  // Paso 4: filtrar — pasa si NO tiene propiedad efectiva (Producto/Servicio puro = siempre Vendido)
+  // o si tiene propiedad efectiva y está en estatus Vendido.
+  const elegibles = candidatosRows.filter((r) => {
+    const efectiva = propEfectivaPorCandidato.get(r.id);
+    return efectiva == null || propVendidas.has(efectiva);
+  });
   const total_count = elegibles.length;
   if (total_count === 0) return { items: [], total_count: 0 };
 
@@ -279,8 +305,28 @@ async function fetchVentasParaFacturar(
     .filter((c): c is any => !!c);
   if (rows.length === 0) return { items: [], total_count };
 
+  // Ofertas primero — necesarias para resolver id_propiedad fallback cuando
+  // cuentas_cobranza.id_propiedad está NULL (cuentas creadas sin esa FK).
+  const ofertaIdsAll = Array.from(new Set(rows.map((r) => r.id_oferta).filter(Boolean)));
+  const { data: ofs } = ofertaIdsAll.length
+    ? ((await (supabase as any)
+        .from("ofertas")
+        .select("id, id_propiedad, id_persona_lead, id_producto")
+        .in("id", ofertaIdsAll)) as any)
+    : { data: [] };
+  const ofertaById = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
+
+  // id_propiedad efectiva por cuenta = cc.id_propiedad || oferta.id_propiedad
+  const propIdByCuenta = new Map<number, number | null>();
+  for (const r of rows) {
+    const fromOferta = r.id_oferta ? ofertaById.get(r.id_oferta)?.id_propiedad ?? null : null;
+    propIdByCuenta.set(r.id, r.id_propiedad ?? fromOferta);
+  }
+
   // Enrich: propiedad+proyecto via helper
-  const propIds = Array.from(new Set(rows.map((r) => r.id_propiedad).filter(Boolean)));
+  const propIds = Array.from(
+    new Set(Array.from(propIdByCuenta.values()).filter((x): x is number => !!x))
+  );
   const { propMap, proyectoByProp } = await loadProyectosByPropiedades(propIds);
 
   // Propiedades extra: estatus_disponibilidad + entidad relacionada dueña + modelo
@@ -353,16 +399,6 @@ async function fetchVentasParaFacturar(
     (ents || []).map((e: any) => [e.id, e.id_persona])
   );
 
-  // Ofertas → comprador (id_persona_lead) + id_producto
-  const ofertaIds = Array.from(new Set(rows.map((r) => r.id_oferta).filter(Boolean)));
-  const { data: ofs } = ofertaIds.length
-    ? ((await (supabase as any)
-        .from("ofertas")
-        .select("id, id_persona_lead, id_producto")
-        .in("id", ofertaIds)) as any)
-    : { data: [] };
-  const ofertaById = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
-
   // Productos + categorias para determinar tipo
   const productoIds = Array.from(
     new Set((ofs || []).map((o: any) => o.id_producto).filter(Boolean))
@@ -412,9 +448,10 @@ async function fetchVentasParaFacturar(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const items: ValidacionVentaFacturar[] = rows.map((c) => {
-    const prop = c.id_propiedad ? propMap.get(c.id_propiedad) : null;
-    const propExtra = c.id_propiedad ? propExtraById.get(c.id_propiedad) : null;
-    const proyecto = c.id_propiedad ? proyectoByProp.get(c.id_propiedad) : undefined;
+    const idPropEfectivo = propIdByCuenta.get(c.id) ?? null;
+    const prop = idPropEfectivo ? propMap.get(idPropEfectivo) : null;
+    const propExtra = idPropEfectivo ? propExtraById.get(idPropEfectivo) : null;
+    const proyecto = idPropEfectivo ? proyectoByProp.get(idPropEfectivo) : undefined;
     const oferta = c.id_oferta ? ofertaById.get(c.id_oferta) : null;
     const persona = oferta?.id_persona_lead
       ? personaById.get(oferta.id_persona_lead)
