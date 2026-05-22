@@ -254,7 +254,7 @@ export const PortalAltaDireccionLayout = () => {
       <div className="min-h-screen flex">
         <aside
           className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30"
-          style={{ width: 244 }}
+          style={{ width: 232 }}
         >
           {sidebar}
         </aside>
@@ -265,7 +265,7 @@ export const PortalAltaDireccionLayout = () => {
           </SheetContent>
         </Sheet>
 
-        <div className="flex-1 lg:ml-[244px]">
+        <div className="flex-1 lg:ml-[232px]">
           <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-6 h-14">
             <div className="flex items-center gap-2 text-sm text-foreground">
               <span className="font-medium">Portal Alta Dirección</span>
@@ -308,7 +308,7 @@ export const PortalAltaDireccionLayout = () => {
             </Avatar>
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
+          <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
             {!ROUTES_SIN_FILTER_BAR.some((r) => location.pathname.startsWith(r)) && (
               <GlobalFilterBar />
             )}

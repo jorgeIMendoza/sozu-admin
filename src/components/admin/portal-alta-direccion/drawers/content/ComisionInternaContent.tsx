@@ -121,12 +121,15 @@ export function ComisionInternaContent({
       const aprobados = internos.filter((c) => decisiones[c.email] === "aprobado");
       const rechazados = internos.filter((c) => decisiones[c.email] === "rechazado");
 
-      // 1) Aprobados → marcar pagada=true (autorización de dispersión)
+      // 1) Aprobados → marcar aprobada=true Y pagada=true (autorización + dispersión).
+      // El check constraint chk_comisionistas_pagos_coherencia exige que pagada=true
+      // sólo sea válido cuando aprobada=true, por eso se setean ambos en un solo UPDATE.
       if (aprobados.length > 0) {
         const emails = aprobados.map((c) => c.email);
         const { error: errAp } = await (supabase as any)
           .from("comisionistas")
           .update({
+            aprobada: true,
             pagada: true,
             fecha_pago_comision: new Date().toISOString(),
           })

@@ -224,6 +224,7 @@ async function fetchVentasParaFacturar(
     .select("id, id_oferta, id_propiedad, fecha_compra")
     .eq("activo", true)
     .eq("es_pagada_comision_venta", false)
+    .eq("estatus_autorizacion_comision", "En espera")
     .is("id_cuenta_cobranza_padre", null)
     .not("fecha_compra", "is", null)
     .not("url_factura_comision", "is", null)

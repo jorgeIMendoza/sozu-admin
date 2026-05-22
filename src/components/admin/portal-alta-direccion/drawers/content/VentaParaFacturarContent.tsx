@@ -21,6 +21,10 @@ import { Section, KV, Timeline, TimelineItem } from "./_shared";
 import type { VentaContext, VentaParaFacturarEntity } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function VentaParaFacturarContent({
   entity,
@@ -32,6 +36,8 @@ export function VentaParaFacturarContent({
 }) {
   const { data: detalle, isLoading, error } = useExpedienteVentaDetalle(entity.folio_cuenta);
   const [generandoOferta, setGenerandoOferta] = useState(false);
+  const queryClient = useQueryClient();
+  const { profile, user } = useAuth();
 
   const handleGenerarOferta = async (idOferta: number) => {
     setGenerandoOferta(true);
@@ -42,6 +48,45 @@ export function VentaParaFacturarContent({
       setGenerandoOferta(false);
     }
   };
+
+  const autorizacionMutation = useMutation({
+    mutationFn: async ({
+      decision,
+      notas,
+    }: {
+      decision: "Autorizado" | "Rechazado";
+      notas: string;
+    }) => {
+      if (!detalle) throw new Error("Sin expediente");
+      const emailAutoriza = profile?.email || user?.email || null;
+      const { error: updateError } = await supabase
+        .from("cuentas_cobranza")
+        .update({
+          estatus_autorizacion_comision: decision,
+          notas_rechazo_comision: decision === "Rechazado" ? notas.trim() : null,
+          fecha_autorizacion_comision: new Date().toISOString(),
+          email_autoriza_comision: emailAutoriza,
+        })
+        .eq("id", detalle.id_cuenta_cobranza);
+      if (updateError) throw updateError;
+      return decision;
+    },
+    onSuccess: (decision) => {
+      toast.success(
+        decision === "Autorizado"
+          ? "Pago de comisión autorizado"
+          : "Pago de comisión rechazado",
+      );
+      queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+      queryClient.invalidateQueries({ queryKey: ["bandeja-ventas-para-facturar"] });
+      onClose();
+    },
+    onError: (err) => {
+      console.error("Error al actualizar autorización de comisión:", err);
+      toast.error("No se pudo registrar la decisión. Intenta de nuevo.");
+    },
+  });
 
   if (isLoading) {
     return (
@@ -383,6 +428,7 @@ export function VentaParaFacturarContent({
         <EstatusPagoBanner
           estatus={detalle.estatus_pago}
           fechaPago={detalle.fecha_pago_comision}
+          notasRechazo={detalle.notas_rechazo_comision}
         />
       </Section>
 
@@ -397,12 +443,18 @@ export function VentaParaFacturarContent({
               label: "Rechazar pago",
               variant: "destructive",
               requiresNote: true,
-              onClick: () => {},
+              skipDemoConfirmation: true,
+              disabled: autorizacionMutation.isPending,
+              onClick: (note) =>
+                autorizacionMutation.mutate({ decision: "Rechazado", notas: note }),
             },
             {
               label: "Autorizar pago",
               variant: "primary",
-              onClick: () => {},
+              skipDemoConfirmation: true,
+              disabled: autorizacionMutation.isPending,
+              onClick: () =>
+                autorizacionMutation.mutate({ decision: "Autorizado", notas: "" }),
             },
           ]}
         />
@@ -414,9 +466,11 @@ export function VentaParaFacturarContent({
 function EstatusPagoBanner({
   estatus,
   fechaPago,
+  notasRechazo,
 }: {
   estatus: "espera_autorizacion" | "autorizada" | "pagada" | "rechazada";
   fechaPago: string | null;
+  notasRechazo?: string | null;
 }) {
   const cfg = {
     espera_autorizacion: {
@@ -439,14 +493,16 @@ function EstatusPagoBanner({
     rechazada: {
       label: "Rechazada",
       tone: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200",
-      text: "Pago rechazado. Revisar motivo en la actividad reciente.",
+      text: notasRechazo
+        ? `Motivo: ${notasRechazo}`
+        : "Pago rechazado. Revisar motivo en la actividad reciente.",
     },
   }[estatus];
 
   return (
     <div className={`rounded-md border px-3 py-2.5 ${cfg.tone}`}>
       <p className="text-sm font-semibold">{cfg.label}</p>
-      <p className="text-xs mt-0.5">{cfg.text}</p>
+      <p className="text-xs mt-0.5 whitespace-pre-wrap">{cfg.text}</p>
     </div>
   );
 }
