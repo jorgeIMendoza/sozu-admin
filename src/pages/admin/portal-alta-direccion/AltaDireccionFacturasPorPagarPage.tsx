@@ -44,31 +44,13 @@ import {
 import {
   useFacturasPorPagar,
   type FacturaPorPagar,
-  type EstadoFacturaPorPagar as EstadoPago,
   type TipoBeneficiario,
   type EstatusComision,
-  type EstatusPagoFacturaPorPagar,
 } from "@/hooks/useFacturasPorPagar";
 
 /* ──────────────────────────────────────────────────────────
    Helpers
    ────────────────────────────────────────────────────────── */
-
-const ESTADO_LABEL: Record<EstadoPago, string> = {
-  en_revision: "En revisión",
-  aprobada_para_pago: "Aprobada para pago",
-  pagada: "Pagada",
-  bloqueada: "Bloqueada",
-  rechazada: "Rechazada",
-};
-
-const ESTADO_TONE: Record<EstadoPago, string> = {
-  en_revision: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  aprobada_para_pago: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-  pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  bloqueada: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  rechazada: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-};
 
 const TIPO_LABEL: Record<TipoBeneficiario, string> = {
   inmobiliaria: "Inmobiliaria",
@@ -87,20 +69,6 @@ const ESTATUS_COMISION_TONE: Record<EstatusComision, string> = {
   pendiente: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   aprobada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-};
-
-const ESTATUS_PAGO_LABEL: Record<EstatusPagoFacturaPorPagar, string> = {
-  espera_autorizacion: "Espera Autorización",
-  autorizada: "Autorizada",
-  pagada: "Pagada",
-  rechazada: "Rechazada",
-};
-
-const ESTATUS_PAGO_TONE: Record<EstatusPagoFacturaPorPagar, string> = {
-  espera_autorizacion: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  autorizada: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-  pagada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  rechazada: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const norm = (s: string | null | undefined) =>
@@ -137,27 +105,34 @@ function Antiguedad({
 
 export default function AltaDireccionFacturasPorPagarPage() {
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("all");
-  const [tipoFilter, setTipoFilter] = useState<string>("all");
-  const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
+  const [proyectoFilter, setProyectoFilter] = useState<string>("all");
+  const [estatusComisionFilter, setEstatusComisionFilter] = useState<string>("all");
+  const [flagCobroFilter, setFlagCobroFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorPagar | null>(null);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorPagar();
 
+  const proyectoOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(facturas.map((f) => f.proyecto_nombre).filter((v): v is string => !!v)),
+      ).sort((a, b) => a.localeCompare(b)),
+    [facturas],
+  );
+
   const filtered = useMemo(() => {
     const q = search ? norm(search) : null;
     return facturas.filter((f) => {
-      if (estadoFilter !== "all" && f.estado !== estadoFilter) return false;
-      if (tipoFilter !== "all" && f.beneficiario_tipo !== tipoFilter) return false;
-      if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
+      if (proyectoFilter !== "all" && f.proyecto_nombre !== proyectoFilter) return false;
+      if (estatusComisionFilter !== "all" && f.estatus_comision !== estatusComisionFilter) return false;
+      if (flagCobroFilter !== "all") {
+        const wantCobrado = flagCobroFilter === "cobrado";
+        if (!!f.ya_se_cobro_al_desarrollador !== wantCobrado) return false;
+      }
       if (q) {
         const hay = [
           f.folio_cfdi,
           f.beneficiario_nombre,
-          f.venta_referencia,
-          f.proyecto_nombre,
-          f.modelo_nombre,
-          f.producto_nombre,
           f.numero_departamento,
         ]
           .map(norm)
@@ -166,7 +141,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
       }
       return true;
     });
-  }, [search, estadoFilter, tipoFilter, estatusPagoFilter, facturas]);
+  }, [search, proyectoFilter, estatusComisionFilter, flagCobroFilter, facturas]);
 
   const kpis = useMemo(() => {
     let recibidoTotal = 0,
@@ -219,9 +194,9 @@ export default function AltaDireccionFacturasPorPagarPage() {
 
   const hayFiltros =
     !!search ||
-    estadoFilter !== "all" ||
-    tipoFilter !== "all" ||
-    estatusPagoFilter !== "all";
+    proyectoFilter !== "all" ||
+    estatusComisionFilter !== "all" ||
+    flagCobroFilter !== "all";
   const showGlobalHint = hayFiltros && bloqueadoEnFiltro !== bloqueadoGlobal.count;
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
@@ -229,9 +204,9 @@ export default function AltaDireccionFacturasPorPagarPage() {
 
   const limpiar = () => {
     setSearch("");
-    setEstadoFilter("all");
-    setTipoFilter("all");
-    setEstatusPagoFilter("all");
+    setProyectoFilter("all");
+    setEstatusComisionFilter("all");
+    setFlagCobroFilter("all");
   };
 
   return (
@@ -318,50 +293,47 @@ export default function AltaDireccionFacturasPorPagarPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por folio CFDI o beneficiario…"
+            placeholder="Buscar por ID Cuenta, Beneficiario o No. Depto…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-          <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="en_revision">En revisión</SelectItem>
-              <SelectItem value="aprobada_para_pago">Aprobada para pago</SelectItem>
-              <SelectItem value="pagada">Pagada</SelectItem>
-              <SelectItem value="bloqueada">Bloqueada</SelectItem>
-              <SelectItem value="rechazada">Rechazada</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={tipoFilter} onValueChange={setTipoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los tipos</SelectItem>
-              <SelectItem value="inmobiliaria">Inmobiliaria</SelectItem>
-              <SelectItem value="broker">Broker</SelectItem>
-              <SelectItem value="aliado_comercial">Aliado comercial</SelectItem>
-              <SelectItem value="agente_externo">Agente externo</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={estatusPagoFilter} onValueChange={setEstatusPagoFilter}>
+          <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
             <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos los estatus de pago</SelectItem>
-              <SelectItem value="espera_autorizacion">Espera Autorización</SelectItem>
-              <SelectItem value="autorizada">Autorizada</SelectItem>
+              <SelectItem value="all">Todos los proyectos</SelectItem>
+              {proyectoOptions.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={estatusComisionFilter} onValueChange={setEstatusComisionFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estatus comisión</SelectItem>
+              <SelectItem value="pendiente">Pendiente</SelectItem>
+              <SelectItem value="aprobada">Aprobada</SelectItem>
               <SelectItem value="pagada">Pagada</SelectItem>
-              <SelectItem value="rechazada">Rechazada</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={flagCobroFilter} onValueChange={setFlagCobroFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todo flag cobro</SelectItem>
+              <SelectItem value="cobrado">Cobrado</SelectItem>
+              <SelectItem value="sin_cobro">Sin cobro</SelectItem>
             </SelectContent>
           </Select>
 
@@ -409,12 +381,11 @@ export default function AltaDireccionFacturasPorPagarPage() {
                   <TableHead className="text-xs">Producto</TableHead>
                   <TableHead className="text-xs">No. Depto</TableHead>
                   <TableHead className="text-xs">Estatus comisión</TableHead>
+                  <TableHead className="text-xs">Visualizar Factura</TableHead>
                   <TableHead className="text-xs text-right">Monto total</TableHead>
                   <TableHead className="text-xs">Emisión</TableHead>
                   <TableHead className="text-xs">Antigüedad</TableHead>
                   <TableHead className="text-xs">Flag cobro</TableHead>
-                  <TableHead className="text-xs">Estado</TableHead>
-                  <TableHead className="text-xs">Estatus Pago</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -451,18 +422,33 @@ export default function AltaDireccionFacturasPorPagarPage() {
                           >
                             {ESTATUS_COMISION_LABEL[f.estatus_comision]}
                           </Badge>
-                          {f.url_factura && (
+                          {f.estatus_comision === "pagada" && f.url_evidencia_pago && (
                             <Button
                               size="icon"
                               variant="ghost"
                               className="h-6 w-6"
-                              title="Ver factura"
-                              onClick={() => window.open(f.url_factura!, "_blank")}
+                              title="Ver comprobante de pago"
+                              onClick={() => window.open(f.url_evidencia_pago!, "_blank")}
                             >
                               <FileText className="h-3 w-3" />
                             </Button>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {f.url_factura ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px]"
+                            onClick={() => window.open(f.url_factura!, "_blank")}
+                          >
+                            <FileText className="h-3 w-3 mr-1" />
+                            Ver factura
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-right font-semibold tabular-nums">
                         {fmtMxn(f.monto_total)}
@@ -499,30 +485,6 @@ export default function AltaDireccionFacturasPorPagarPage() {
                             )}
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[10px] font-medium whitespace-nowrap", ESTADO_TONE[f.estado])}
-                        >
-                          {ESTADO_LABEL[f.estado]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px] font-medium whitespace-nowrap",
-                            ESTATUS_PAGO_TONE[f.estatus_pago],
-                          )}
-                          title={
-                            f.estatus_pago === "pagada" && f.fecha_pago_real
-                              ? `Pago realizado el ${f.fecha_pago_real}`
-                              : undefined
-                          }
-                        >
-                          {ESTATUS_PAGO_LABEL[f.estatus_pago]}
-                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button

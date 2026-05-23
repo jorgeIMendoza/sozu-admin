@@ -17,6 +17,8 @@ import {
   Search,
   X,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useCicloVentaCasos } from "@/hooks/useCicloVentaCasos";
 import {
@@ -74,6 +76,18 @@ type TimelineStepData = {
   es_hito?: boolean;
   url?: string;
   url_label?: string;
+  urls?: Array<{ url: string; label: string }>;
+  expand?: {
+    type: "comisionistas_internos";
+    items: Array<{
+      nombre: string;
+      rol: string;
+      porcentaje: number;
+      monto: number;
+      aprobada: boolean;
+      pagada: boolean;
+    }>;
+  };
 };
 
 type ActorExpediente = {
@@ -615,6 +629,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
    ────────────────────────────────────────────────────────── */
 
 function TimelineStep({ step, isLast }: { step: TimelineStepData; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
   const iconConfig = {
     completado: {
       Icon: Check,
@@ -679,13 +694,79 @@ function TimelineStep({ step, isLast }: { step: TimelineStepData; isLast: boolea
           {step.fecha && step.responsable && <span>·</span>}
           {step.responsable && <span>{step.responsable}</span>}
         </div>
-        {step.detalle && (
+        {step.detalle && !step.expand && (
           <p className={cn(
             "mt-1 text-xs",
             step.estado === "pendiente" ? "text-amber-700 dark:text-amber-300 font-medium" : "text-muted-foreground"
           )}>
             {step.detalle}
           </p>
+        )}
+        {step.expand && step.expand.items.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className={cn(
+                "mt-1 inline-flex items-center gap-1 text-xs font-medium hover:underline",
+                step.estado === "pendiente"
+                  ? "text-amber-700 dark:text-amber-300"
+                  : "text-primary",
+              )}
+              aria-expanded={expanded}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+              {step.detalle ?? "Ver detalle"}
+            </button>
+            {expanded && (
+              <div className="mt-2 rounded-md border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-8 text-[10px]">Nombre</TableHead>
+                      <TableHead className="h-8 text-[10px]">Rol</TableHead>
+                      <TableHead className="h-8 text-[10px] text-right">%</TableHead>
+                      <TableHead className="h-8 text-[10px] text-right">Monto</TableHead>
+                      <TableHead className="h-8 text-[10px]">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {step.expand.items.map((com, idx) => (
+                      <TableRow key={`${idx}-${com.nombre}`}>
+                        <TableCell className="text-xs font-medium">{com.nombre}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{com.rol}</TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {com.porcentaje.toFixed(2)}%
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {fmtMxn(com.monto)}
+                        </TableCell>
+                        <TableCell>
+                          {com.pagada ? (
+                            <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 text-[10px]">
+                              Pagada
+                            </Badge>
+                          ) : com.aprobada ? (
+                            <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]">
+                              Aprobada
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px]">
+                              Sin aprobar
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </>
         )}
         {step.url && (
           <a
@@ -697,6 +778,22 @@ function TimelineStep({ step, isLast }: { step: TimelineStepData; isLast: boolea
             <FileText className="h-3 w-3" />
             {step.url_label || "Ver documento"}
           </a>
+        )}
+        {step.urls && step.urls.length > 0 && (
+          <div className="mt-1 flex flex-col gap-0.5">
+            {step.urls.map((u, idx) => (
+              <a
+                key={`${idx}-${u.url}`}
+                href={u.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <FileText className="h-3 w-3" />
+                {u.label}
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1316,6 +1413,8 @@ function ExpedienteDetalleReal({
                     es_hito: step.es_hito,
                     url: step.url,
                     url_label: step.url_label,
+                    urls: step.urls,
+                    expand: step.expand,
                   }}
                   isLast={i === data.timeline.length - 1}
                 />
