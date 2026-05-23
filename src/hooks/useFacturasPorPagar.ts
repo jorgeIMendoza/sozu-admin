@@ -51,6 +51,7 @@ export interface FacturaPorPagar {
   numero_departamento: string;
   estatus_comision: EstatusComision;
   url_factura: string | null;
+  url_evidencia_pago: string | null;
   estatus_pago: EstatusPagoFacturaPorPagar;
 }
 
@@ -83,7 +84,7 @@ export function useFacturasPorPagar() {
       const { data: comisionistas, error: cmErr } = await supabase
         .from("comisionistas")
         .select(
-          "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion",
+          "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, url_evidencia_pago",
         )
         .eq("activo", true);
       if (cmErr) throw cmErr;
@@ -442,6 +443,7 @@ export function useFacturasPorPagar() {
           numero_departamento: prop?.numero ?? "",
           estatus_comision: estatusComision,
           url_factura: doc?.url ?? null,
+          url_evidencia_pago: (c as any).url_evidencia_pago ?? null,
           estatus_pago: estatusPago,
         };
       });

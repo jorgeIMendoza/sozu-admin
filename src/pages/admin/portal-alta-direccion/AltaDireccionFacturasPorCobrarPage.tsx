@@ -38,7 +38,6 @@ import { getVentaContext } from "@/components/admin/portal-alta-direccion/drawer
 import {
   useFacturasPorCobrar,
   type FacturaPorCobrar,
-  type EstadoFacturaPorCobrar as EstadoCobro,
   type EstadoFacturaSozu,
   type EstatusPagoFactura,
 } from "@/hooks/useFacturasPorCobrar";
@@ -46,22 +45,6 @@ import {
 /* ──────────────────────────────────────────────────────────
    Helpers
    ────────────────────────────────────────────────────────── */
-
-const ESTADO_LABEL: Record<EstadoCobro, string> = {
-  timbrada_pendiente: "Timbrada pendiente",
-  cobro_parcial: "Cobro parcial",
-  cobrada: "Cobrada",
-  vencida: "Vencida",
-  cancelada: "Cancelada",
-};
-
-const ESTADO_TONE: Record<EstadoCobro, string> = {
-  timbrada_pendiente: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  cobro_parcial: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  cobrada: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  vencida: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  cancelada: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-};
 
 const FACTURA_SOZU_LABEL: Record<EstadoFacturaSozu, string> = {
   sin_generar: "Sin generar",
@@ -113,46 +96,43 @@ function Antiguedad({ dias, isVencida }: { dias: number; isVencida: boolean }) {
 
 export default function AltaDireccionFacturasPorCobrarPage() {
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("all");
-  const [desarrolladorFilter, setDesarrolladorFilter] = useState<string>("all");
+  const [proyectoFilter, setProyectoFilter] = useState<string>("all");
+  const [entidadDuenaFilter, setEntidadDuenaFilter] = useState<string>("all");
+  const [facturaSozuFilter, setFacturaSozuFilter] = useState<string>("all");
   const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorCobrar | null>(null);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorCobrar();
 
-  const desarrolladoresOptions = useMemo(
+  const proyectoOptions = useMemo(
     () =>
-      Array.from(new Set(facturas.map((f) => f.desarrollador_nombre))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [facturas]
+      Array.from(
+        new Set(facturas.map((f) => f.proyecto_nombre).filter((v): v is string => !!v)),
+      ).sort((a, b) => a.localeCompare(b)),
+    [facturas],
+  );
+  const entidadDuenaOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(facturas.map((f) => f.entidad_duena).filter((v): v is string => !!v)),
+      ).sort((a, b) => a.localeCompare(b)),
+    [facturas],
   );
 
   const filtered = useMemo(() => {
     const q = search ? norm(search) : null;
     return facturas.filter((f) => {
-      if (estadoFilter !== "all" && f.estado !== estadoFilter) return false;
-      if (desarrolladorFilter !== "all" && f.desarrollador_nombre !== desarrolladorFilter)
-        return false;
+      if (proyectoFilter !== "all" && f.proyecto_nombre !== proyectoFilter) return false;
+      if (entidadDuenaFilter !== "all" && f.entidad_duena !== entidadDuenaFilter) return false;
+      if (facturaSozuFilter !== "all" && f.estado_factura_sozu !== facturaSozuFilter) return false;
       if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
       if (q) {
-        const hay = [
-          f.folio_cfdi,
-          f.desarrollador_nombre,
-          f.venta_referencia,
-          f.proyecto_nombre,
-          f.modelo_nombre,
-          f.producto_nombre,
-          f.numero_departamento,
-          f.entidad_duena,
-        ]
-          .map(norm)
-          .join(" ");
+        const hay = [f.folio_cfdi, f.numero_departamento].map(norm).join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, estadoFilter, desarrolladorFilter, estatusPagoFilter, facturas]);
+  }, [search, proyectoFilter, entidadDuenaFilter, facturaSozuFilter, estatusPagoFilter, facturas]);
 
   const kpis = useMemo(() => {
     let emitidoTotal = 0,
@@ -189,8 +169,9 @@ export default function AltaDireccionFacturasPorCobrarPage() {
 
   const hayFiltros =
     !!search ||
-    estadoFilter !== "all" ||
-    desarrolladorFilter !== "all" ||
+    proyectoFilter !== "all" ||
+    entidadDuenaFilter !== "all" ||
+    facturaSozuFilter !== "all" ||
     estatusPagoFilter !== "all";
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
@@ -198,8 +179,9 @@ export default function AltaDireccionFacturasPorCobrarPage() {
 
   const limpiar = () => {
     setSearch("");
-    setEstadoFilter("all");
-    setDesarrolladorFilter("all");
+    setProyectoFilter("all");
+    setEntidadDuenaFilter("all");
+    setFacturaSozuFilter("all");
     setEstatusPagoFilter("all");
   };
 
@@ -247,38 +229,50 @@ export default function AltaDireccionFacturasPorCobrarPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por folio CFDI o desarrollador…"
+            placeholder="Buscar por ID Cuenta o No. Depto…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-          <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
+          <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="timbrada_pendiente">Timbrada pendiente</SelectItem>
-              <SelectItem value="cobro_parcial">Cobro parcial</SelectItem>
-              <SelectItem value="cobrada">Cobrada</SelectItem>
-              <SelectItem value="vencida">Vencida</SelectItem>
-              <SelectItem value="cancelada">Cancelada</SelectItem>
+              <SelectItem value="all">Todos los proyectos</SelectItem>
+              {proyectoOptions.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
-          <Select value={desarrolladorFilter} onValueChange={setDesarrolladorFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[280px] text-xs">
+          <Select value={entidadDuenaFilter} onValueChange={setEntidadDuenaFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[240px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos los desarrolladores</SelectItem>
-              {desarrolladoresOptions.map((d) => (
+              <SelectItem value="all">Todas las entidades dueñas</SelectItem>
+              {entidadDuenaOptions.map((d) => (
                 <SelectItem key={d} value={d}>
                   {d}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={facturaSozuFilter} onValueChange={setFacturaSozuFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toda Fact. Comisión Sozu</SelectItem>
+              <SelectItem value="timbrada">Timbrada</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="sin_generar">Sin generar</SelectItem>
             </SelectContent>
           </Select>
 
@@ -344,7 +338,6 @@ export default function AltaDireccionFacturasPorCobrarPage() {
                   <TableHead className="text-xs">Fact. Comisión Sozu</TableHead>
                   <TableHead className="text-xs">Emisión</TableHead>
                   <TableHead className="text-xs">Antigüedad</TableHead>
-                  <TableHead className="text-xs">Estatus</TableHead>
                   <TableHead className="text-xs">Estatus Pago</TableHead>
                   <TableHead className="text-xs text-right">Acción</TableHead>
                 </TableRow>
@@ -421,14 +414,6 @@ export default function AltaDireccionFacturasPorCobrarPage() {
                       </TableCell>
                       <TableCell>
                         <Antiguedad dias={f.dias_desde_emision} isVencida={vencida} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className={cn("text-[10px] font-medium", ESTADO_TONE[f.estado])}
-                          variant="outline"
-                        >
-                          {ESTADO_LABEL[f.estado]}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge

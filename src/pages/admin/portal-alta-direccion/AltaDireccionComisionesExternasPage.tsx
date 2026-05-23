@@ -107,35 +107,38 @@ function Antiguedad({
 
 export default function AltaDireccionComisionesExternasPage() {
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("all");
+  const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [estadoPagoFilter, setEstadoPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionExterna | null>(null);
   const navigate = useNavigate();
 
   const { data: comisiones = [], isLoading, error } = useComisionesExternas();
 
+  const proyectoOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(comisiones.map((c) => c.proyecto_nombre).filter((v): v is string => !!v)),
+      ).sort((a, b) => a.localeCompare(b)),
+    [comisiones],
+  );
+
   const filtered = useMemo(() => {
     const q = search ? norm(search) : null;
     return comisiones.filter((c) => {
-      if (estadoFilter !== "all" && c.estado !== estadoFilter) return false;
+      if (proyectoFilter !== "all" && c.proyecto_nombre !== proyectoFilter) return false;
       if (tipoFilter !== "all" && c.beneficiario_tipo !== tipoFilter) return false;
+      if (estadoPagoFilter !== "all" && c.estado !== estadoPagoFilter) return false;
       if (q) {
-        const hay = [
-          c.folio_comision,
-          c.beneficiario_nombre,
-          c.venta_referencia,
-          c.proyecto_nombre,
-          c.modelo_nombre,
-          c.producto_nombre,
-          c.numero_departamento,
-        ]
+        const idCuenta = formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo);
+        const hay = [idCuenta, c.beneficiario_nombre, c.numero_departamento]
           .map(norm)
           .join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, estadoFilter, tipoFilter, comisiones]);
+  }, [search, proyectoFilter, tipoFilter, estadoPagoFilter, comisiones]);
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -181,7 +184,11 @@ export default function AltaDireccionComisionesExternasPage() {
     [filtered]
   );
 
-  const hayFiltros = !!search || estadoFilter !== "all" || tipoFilter !== "all";
+  const hayFiltros =
+    !!search ||
+    proyectoFilter !== "all" ||
+    tipoFilter !== "all" ||
+    estadoPagoFilter !== "all";
   const showGlobalHint = hayFiltros && bloqueadoEnFiltro !== bloqueadoGlobal.count;
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${comisiones.length} comisiones`
@@ -189,8 +196,9 @@ export default function AltaDireccionComisionesExternasPage() {
 
   const limpiar = () => {
     setSearch("");
-    setEstadoFilter("all");
+    setProyectoFilter("all");
     setTipoFilter("all");
+    setEstadoPagoFilter("all");
   };
 
   return (
@@ -277,24 +285,24 @@ export default function AltaDireccionComisionesExternasPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por folio o beneficiario…"
+            placeholder="Buscar por ID Cuenta, Beneficiario o Depto…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-          <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-            <SelectTrigger className="h-8 w-full sm:w-[180px] text-xs">
+          <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="devengada">Devengada</SelectItem>
-              <SelectItem value="aprobada">Aprobada</SelectItem>
-              <SelectItem value="facturada">Facturada</SelectItem>
-              <SelectItem value="pagada">Pagada</SelectItem>
-              <SelectItem value="cancelada">Cancelada</SelectItem>
+              <SelectItem value="all">Todos los proyectos</SelectItem>
+              {proyectoOptions.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -308,6 +316,20 @@ export default function AltaDireccionComisionesExternasPage() {
               <SelectItem value="broker">Broker</SelectItem>
               <SelectItem value="aliado_comercial">Aliado comercial</SelectItem>
               <SelectItem value="agente_externo">Agente externo</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={estadoPagoFilter} onValueChange={setEstadoPagoFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estados de pago</SelectItem>
+              <SelectItem value="devengada">Devengada</SelectItem>
+              <SelectItem value="aprobada">Aprobada</SelectItem>
+              <SelectItem value="facturada">Facturada</SelectItem>
+              <SelectItem value="pagada">Pagada</SelectItem>
+              <SelectItem value="cancelada">Cancelada</SelectItem>
             </SelectContent>
           </Select>
 
@@ -423,12 +445,25 @@ export default function AltaDireccionComisionesExternasPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[10px] font-medium whitespace-nowrap", ESTADO_TONE[c.estado])}
-                        >
-                          {ESTADO_LABEL[c.estado]}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] font-medium whitespace-nowrap", ESTADO_TONE[c.estado])}
+                          >
+                            {ESTADO_LABEL[c.estado]}
+                          </Badge>
+                          {c.estado === "pagada" && c.url_evidencia_pago && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              title="Ver comprobante de pago"
+                              onClick={() => window.open(c.url_evidencia_pago!, "_blank")}
+                            >
+                              <FileText className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {c.url_factura ? (
