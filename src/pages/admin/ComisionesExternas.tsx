@@ -496,6 +496,15 @@ export default function ComisionesExternas() {
         .from('documentos')
         .getPublicUrl(filePath);
 
+      // Opción B: resolver id_persona de la empresa (pm) para vincular la factura
+      // a nivel de persona/empresa, no solo por email
+      const { data: personaData } = await supabase
+        .from('personas')
+        .select('id')
+        .eq('email', email)
+        .eq('activo', true)
+        .maybeSingle();
+
       const { error: docError } = await supabase
         .from('documentos')
         .insert({
@@ -503,11 +512,12 @@ export default function ComisionesExternas() {
           id_tipo_documento: tipoDocFactura,
           url: urlData.publicUrl,
           numero: email,
+          id_persona: personaData?.id ?? null,
           activo: true
         });
 
       if (docError) throw docError;
-      
+
       return { email, idCuenta, url: urlData.publicUrl };
     },
     onSuccess: () => {
