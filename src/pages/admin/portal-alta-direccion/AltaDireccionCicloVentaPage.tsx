@@ -495,7 +495,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
     <>
       <PageHeader
         title="Ciclo de Venta"
-        description="Ventas realizadas — propiedades en estatus Vendido"
+        description="Expedientes en ciclo — propiedades en estatus Apartado o Vendido"
       />
 
       <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-3">
