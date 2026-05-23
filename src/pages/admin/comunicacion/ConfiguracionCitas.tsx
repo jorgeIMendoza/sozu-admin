@@ -520,7 +520,7 @@ export default function ConfiguracionCitas() {
     mutationFn: async ({ tipoId, nombre }: { tipoId: number; nombre: string }) => {
       const { data, error } = await supabase
         .from("configuracion_citas_usuarios")
-        .insert({
+        .upsert({
           id_usuario_email: selectedUserEmail,
           id_tipo_cita: tipoId,
           nombre,
@@ -528,7 +528,7 @@ export default function ConfiguracionCitas() {
           max_invitados: 1,
           correos_enterado: [],
           activo: true,
-        })
+        }, { onConflict: 'id_usuario_email,id_tipo_cita,nombre' })
         .select()
         .single();
       if (error) throw error;

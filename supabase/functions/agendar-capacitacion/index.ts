@@ -1038,6 +1038,9 @@ Deno.serve(async (req) => {
             // All are fixed, include all
             scheduleCorrEnt = [...correosFijos];
           }
+        } else {
+          // round_robin desactivado: enviar a TODOS (correos_enterado + correos_enterado_fijos)
+          scheduleCorrEnt = [...new Set([...scheduleCorrEnt, ...correosFijos])];
         }
       }
     } else if (userCitaConfig) {
