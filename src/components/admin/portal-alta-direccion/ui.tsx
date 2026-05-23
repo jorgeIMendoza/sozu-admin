@@ -63,6 +63,8 @@ export function Kpi({
   icon: Icon,
   tone = "default",
   trend,
+  onClick,
+  active,
 }: {
   label: string;
   value: string | number;
@@ -70,6 +72,10 @@ export function Kpi({
   icon: LucideIcon;
   tone?: "default" | "primary" | "warning" | "info" | "destructive" | "success";
   trend?: { value: string; direction: "up" | "down" };
+  /** Cuando se provee, la tarjeta es clickable (rol button). */
+  onClick?: () => void;
+  /** Resalta la tarjeta como filtro activo. */
+  active?: boolean;
 }) {
   const toneClass: Record<string, string> = {
     default: "bg-muted text-foreground",
@@ -79,8 +85,38 @@ export function Kpi({
     destructive: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
     success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   };
+  const ringTone: Record<string, string> = {
+    default: "ring-foreground/30",
+    primary: "ring-primary/60",
+    warning: "ring-amber-400 dark:ring-amber-700",
+    info: "ring-sky-400 dark:ring-sky-700",
+    destructive: "ring-red-400 dark:ring-red-700",
+    success: "ring-emerald-400 dark:ring-emerald-700",
+  };
+  const interactive = !!onClick;
   return (
-    <Card className="rounded-xl border border-border shadow-sm">
+    <Card
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      aria-pressed={interactive ? !!active : undefined}
+      className={cn(
+        "rounded-xl border border-border shadow-sm",
+        interactive &&
+          "cursor-pointer transition-all hover:shadow-md hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active && cn("ring-2", ringTone[tone]),
+      )}
+    >
       <CardContent className="p-6 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground">

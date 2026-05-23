@@ -120,9 +120,12 @@ const ESTADO_OPTIONS: { value: string; label: string }[] = [
   { value: "cancelada", label: "Cancelada" },
 ];
 
+type KpiFilter = "all" | "semana" | "confirmadas" | "pendientes";
+
 export function AltaDireccionCitas() {
   const { filters } = useAltaDireccionFilters();
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
+  const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
   const queryClient = useQueryClient();
 
   const { data: citas = [], isLoading, error } = useQuery<CitaRow[]>({
@@ -167,6 +170,18 @@ export function AltaDireccionCitas() {
     return new Date(y, (m || 1) - 1, d || 1);
   };
 
+  const semanaRange = useMemo<[Date, Date]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = today.getDay();
+    const lunesOffset = day === 0 ? -6 : 1 - day;
+    const lunes = new Date(today);
+    lunes.setDate(lunes.getDate() + lunesOffset);
+    const finSemana = new Date(lunes);
+    finSemana.setDate(finSemana.getDate() + 7);
+    return [lunes, finSemana];
+  }, []);
+
   const filtradas = useMemo(() => {
     const projectQ = filters.projectId ? norm(filters.projectId) : null;
     const channelRoles = filters.channel ? CHANNEL_ROLES[filters.channel] : null;
@@ -188,6 +203,50 @@ export function AltaDireccionCitas() {
       if (estadoFilter !== "all") {
         if (getEstadoKey(c) !== estadoFilter) return false;
       }
+      if (kpiFilter !== "all") {
+        if (kpiFilter === "semana") {
+          const d = parseFecha(c.fecha);
+          if (d < semanaRange[0] || d >= semanaRange[1]) return false;
+        } else if (kpiFilter === "confirmadas") {
+          if (!c.activo || c.estatus === "cancelada") return false;
+          if (c.id_estatus_cita !== 3) return false;
+        } else if (kpiFilter === "pendientes") {
+          if (!c.activo || c.estatus === "cancelada") return false;
+          if (c.id_estatus_cita !== 1 && c.id_estatus_cita !== 2) return false;
+        }
+      }
+      if (searchQ) {
+        const hay = [
+          c.prospecto?.nombre_legal,
+          c.agente?.nombre_legal,
+          c.proyectos?.nombre,
+          fmtFolio(c.id),
+        ].map(norm).join(" ");
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+  }, [citas, filters, estadoFilter, kpiFilter, semanaRange]);
+
+  // Conteos de KPI sobre los filtros globales (proyecto/canal/periodo/búsqueda/estado)
+  // — pero ignorando el kpiFilter mismo, para que el usuario no pierda el conteo
+  // al activar una tarjeta.
+  const kpiBaseList = useMemo(() => {
+    const projectQ = filters.projectId ? norm(filters.projectId) : null;
+    const channelRoles = filters.channel ? CHANNEL_ROLES[filters.channel] : null;
+    const periodRange = getPeriodRange(filters.period);
+    const searchQ = filters.search ? norm(filters.search) : null;
+    return citas.filter((c) => {
+      if (projectQ && norm(c.proyectos?.nombre) !== projectQ) return false;
+      if (channelRoles) {
+        const rol = norm(getAgenteRol(c));
+        if (!rol || !channelRoles.includes(rol)) return false;
+      }
+      if (periodRange) {
+        const d = parseFecha(c.fecha);
+        if (d < periodRange[0] || d >= periodRange[1]) return false;
+      }
+      if (estadoFilter !== "all" && getEstadoKey(c) !== estadoFilter) return false;
       if (searchQ) {
         const hay = [
           c.prospecto?.nombre_legal,
@@ -202,30 +261,24 @@ export function AltaDireccionCitas() {
   }, [citas, filters, estadoFilter]);
 
   const kpis = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const day = today.getDay();
-    const lunesOffset = day === 0 ? -6 : 1 - day;
-    const lunes = new Date(today);
-    lunes.setDate(lunes.getDate() + lunesOffset);
-    const finSemana = new Date(lunes);
-    finSemana.setDate(finSemana.getDate() + 7);
-
     let semana = 0, confirmadas = 0, pendientes = 0;
-    for (const c of filtradas) {
+    for (const c of kpiBaseList) {
       const d = parseFecha(c.fecha);
-      if (d >= lunes && d < finSemana) semana++;
+      if (d >= semanaRange[0] && d < semanaRange[1]) semana++;
       if (!c.activo || c.estatus === "cancelada") continue;
       if (c.id_estatus_cita === 3) confirmadas++;
       else if (c.id_estatus_cita === 1 || c.id_estatus_cita === 2) pendientes++;
     }
     return { semana, confirmadas, pendientes };
-  }, [filtradas]);
+  }, [kpiBaseList, semanaRange]);
 
-  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all");
+  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all" || kpiFilter !== "all");
   const totalDesc = hayFiltros
     ? `${filtradas.length} de ${citas.length} citas`
     : `${citas.length} citas en total`;
+
+  const toggleKpi = (next: KpiFilter) =>
+    setKpiFilter((prev) => (prev === next ? "all" : next));
 
   const estadoSelect = (
     <Select value={estadoFilter} onValueChange={setEstadoFilter}>
@@ -244,9 +297,30 @@ export function AltaDireccionCitas() {
     <>
       <PageHeader title="Citas Comerciales" description="Visitas y showrooms agendados" action={<LiveBadge />} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <Kpi label="Citas esta semana" value={`${kpis.semana} ${kpis.semana === 1 ? "cita" : "citas"}`} icon={CalendarCheck} tone="primary" />
-        <Kpi label="Confirmadas" value={`${kpis.confirmadas} ${kpis.confirmadas === 1 ? "cita" : "citas"}`} icon={CheckCircle} tone="success" />
-        <Kpi label="Pendientes" value={`${kpis.pendientes} ${kpis.pendientes === 1 ? "cita" : "citas"}`} icon={Clock} tone="warning" />
+        <Kpi
+          label="Citas esta semana"
+          value={`${kpis.semana} ${kpis.semana === 1 ? "cita" : "citas"}`}
+          icon={CalendarCheck}
+          tone="primary"
+          onClick={() => toggleKpi("semana")}
+          active={kpiFilter === "semana"}
+        />
+        <Kpi
+          label="Confirmadas"
+          value={`${kpis.confirmadas} ${kpis.confirmadas === 1 ? "cita" : "citas"}`}
+          icon={CheckCircle}
+          tone="success"
+          onClick={() => toggleKpi("confirmadas")}
+          active={kpiFilter === "confirmadas"}
+        />
+        <Kpi
+          label="Pendientes"
+          value={`${kpis.pendientes} ${kpis.pendientes === 1 ? "cita" : "citas"}`}
+          icon={Clock}
+          tone="warning"
+          onClick={() => toggleKpi("pendientes")}
+          active={kpiFilter === "pendientes"}
+        />
       </div>
       <Panel title="Historial de citas" description={totalDesc} action={estadoSelect}>
         {isLoading ? (
