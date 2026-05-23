@@ -22,7 +22,9 @@ export interface CasoVenta {
   fecha_compra: string;
 }
 
+const ESTATUS_APARTADO = 4;
 const ESTATUS_VENDIDO = 5;
+const ESTATUS_EN_CICLO = [ESTATUS_APARTADO, ESTATUS_VENDIDO];
 
 function diffDays(from: string, to: Date) {
   const d = new Date(from);
@@ -74,7 +76,7 @@ export function useCicloVentaCasos() {
               "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, precio_lista, id_estatus_disponibilidad",
             )
             .in("id", propiedadIdsFromOfertas)
-            .eq("id_estatus_disponibilidad", ESTATUS_VENDIDO)
+            .in("id_estatus_disponibilidad", ESTATUS_EN_CICLO)
             .eq("activo", true)
         : { data: [] as Array<any>, error: null };
       if (propErr) throw propErr;

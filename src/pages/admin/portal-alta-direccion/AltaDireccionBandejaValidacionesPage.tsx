@@ -1145,11 +1145,29 @@ export default function AltaDireccionBandejaValidacionesPage() {
     }));
   }, [externosSorted, pageExternos]);
 
-  // Internas: agrupar por cuenta_cobranza, una fila por cuenta
-  // ─── Sólo cuentas en Estatus Vendido = 5 ───
+  // Internas: agrupar por cuenta_cobranza, una fila por cuenta.
+  //
+  // Reglas de habilitación (mismo flujo del menú Pagar Comisiones del Admin):
+  //  1. SOZU ya cobró la comisión del desarrollador
+  //     → cuentas_cobranza.es_pagada_comision_venta = true
+  //  2. Si la cuenta tiene comisionistas externos, todos deben estar pagados
+  //     → ningún externo activo+aprobado de esa cuenta sigue con pagada=false
+  //  3. Sólo entonces se habilita el pago al personal interno
+  //     (comisionistas internos pendientes de esa cuenta)
+  //
+  // El fetch ya filtra `aprobada=true AND pagada=false`, por lo que cualquier
+  // fila con `es_externo=true` en el resultado es un externo aún pendiente.
   const internasAgrupadas = useMemo<ValidacionComisionInterna[]>(() => {
+    const cuentasConExternoPendiente = new Set(
+      (comisionistasPendientes ?? [])
+        .filter((c) => c.es_externo)
+        .map((c) => c.id_cuenta_cobranza),
+    );
     const internosRaw = (comisionistasPendientes ?? []).filter(
-      (c) => !c.es_externo && c.id_estatus_disponibilidad === 5,
+      (c) =>
+        !c.es_externo &&
+        c.es_pagada_comision_venta &&
+        !cuentasConExternoPendiente.has(c.id_cuenta_cobranza),
     );
     const byCuenta = new Map<number, ComisionistaEnriched[]>();
     internosRaw.forEach((c) => {
