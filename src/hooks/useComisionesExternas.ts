@@ -33,6 +33,7 @@ export interface ComisionExterna {
   fecha_pago?: string;
   factura_referencia?: string;
   url_factura?: string | null;
+  url_evidencia_pago?: string | null;
   dias_desde_devengo: number;
   ya_se_cobro_al_desarrollador: boolean;
   tipo: TipoCuentaComExt;
@@ -70,7 +71,7 @@ export function useComisionesExternas() {
       const { data: comisionistas, error: cmErr } = await supabase
         .from("comisionistas")
         .select(
-          "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, fecha_actualizacion",
+          "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, fecha_actualizacion, url_evidencia_pago",
         )
         .eq("activo", true);
       if (cmErr) throw cmErr;
@@ -397,6 +398,7 @@ export function useComisionesExternas() {
           fecha_pago: c.fecha_pago_comision ? toIsoDate(new Date(c.fecha_pago_comision)) : undefined,
           factura_referencia: doc?.numero ?? undefined,
           url_factura: doc?.url ?? null,
+          url_evidencia_pago: (c as any).url_evidencia_pago ?? null,
           dias_desde_devengo: diasDesdeDevengo,
           ya_se_cobro_al_desarrollador: yaCobroDesarrollador,
           tipo: tipoCuenta,

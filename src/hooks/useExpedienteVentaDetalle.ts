@@ -13,6 +13,7 @@ export interface ComisionistaDetalle {
   es_externo: boolean;
   aprobada: boolean;
   pagada: boolean;
+  url_evidencia_pago: string | null;
 }
 
 export type EstadoTimelineStep =
@@ -39,6 +40,22 @@ export interface TimelineStepReal {
   url?: string;
   /** Etiqueta visible para la URL (ej. "Ver oferta"). */
   url_label?: string;
+  /** Lista de comprobantes/documentos enlazados al paso (e.g. enganche pagado en
+   *  varias parcialidades por STP/transferencia/efectivo). Si se provee, se
+   *  muestra debajo de `url` (cuando ambos existen). */
+  urls?: Array<{ url: string; label: string }>;
+  /** Detalle expandible click-to-show (paso 15: comisionistas internos). */
+  expand?: {
+    type: "comisionistas_internos";
+    items: Array<{
+      nombre: string;
+      rol: string;
+      porcentaje: number;
+      monto: number;
+      aprobada: boolean;
+      pagada: boolean;
+    }>;
+  };
 }
 
 export interface PagoCliente {
@@ -265,7 +282,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: comisionistas, error: cmErr } = await supabase
         .from("comisionistas")
         .select(
-          "email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion",
+          "email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, url_evidencia_pago",
         )
         .eq("id_cuenta_cobranza", cuentaId)
         .eq("activo", true);
@@ -299,16 +316,38 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         ? await (supabase as any)
             .from("aplicaciones_pago")
             .select(
-              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(fecha_pago, monto, url_recibo, url_cep)",
+              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(id, fecha_pago, monto, url_recibo, url_cep, id_metodos_pago)",
             )
             .in("id_acuerdo_pago", acuerdoIds)
             .eq("activo", true)
         : { data: [] as any[], error: null };
       if (apErr) throw apErr;
 
+      // Métodos de pago referenciados — para etiquetar comprobantes
+      // (STP / Transferencia / Efectivo / etc.)
+      const metodoIds = Array.from(
+        new Set(
+          ((aplicacionesPago || []) as Array<any>)
+            .map((ap) => ap.pagos?.id_metodos_pago)
+            .filter((v): v is number => v != null),
+        ),
+      );
+      const { data: metodosPagoRows, error: mpErr } = metodoIds.length
+        ? await supabase
+            .from("metodos_pago")
+            .select("id, nombre")
+            .in("id", metodoIds)
+        : { data: [] as Array<{ id: number; nombre: string | null }>, error: null };
+      if (mpErr) throw mpErr;
+      const metodoNombreById = new Map<number, string>(
+        (metodosPagoRows || []).map((m) => [m.id, m.nombre ?? ""]),
+      );
+
       const fechaPorAcuerdo = new Map<number, string>();
       const pagoPorAcuerdo = new Map<number, { monto: number; fecha: string; url_recibo: string | null }>();
-      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { fecha_pago: string | null; monto: number | null; url_recibo: string | null; url_cep: string | null } | null }>).forEach((ap) => {
+      const comprobantesPorAcuerdo = new Map<number, Array<{ url: string; label: string }>>();
+      const pagosVistos = new Set<string>();
+      ((aplicacionesPago || []) as Array<{ id_acuerdo_pago: number; monto: number | null; pagos: { id: number | null; fecha_pago: string | null; monto: number | null; url_recibo: string | null; url_cep: string | null; id_metodos_pago: number | null } | null }>).forEach((ap) => {
         const fecha = ap.pagos?.fecha_pago;
         if (fecha && ap.id_acuerdo_pago != null) {
           if (!fechaPorAcuerdo.has(ap.id_acuerdo_pago)) {
@@ -322,6 +361,26 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               fecha: new Date(fecha).toISOString().slice(0, 10),
               url_recibo: comprobante,
             });
+          }
+          // Lista completa de comprobantes por acuerdo (todas las parcialidades)
+          const urlComprobante = ap.pagos?.url_cep ?? ap.pagos?.url_recibo ?? null;
+          if (urlComprobante) {
+            // Deduplicar por (acuerdo, id_pago) para no repetir si la misma factura
+            // se aplica varias veces con distintos montos.
+            const dedupKey = `${ap.id_acuerdo_pago}:${ap.pagos?.id ?? urlComprobante}`;
+            if (!pagosVistos.has(dedupKey)) {
+              pagosVistos.add(dedupKey);
+              const metodoNombre = ap.pagos?.id_metodos_pago != null
+                ? metodoNombreById.get(ap.pagos.id_metodos_pago) || ""
+                : "";
+              const fechaCorta = new Date(fecha).toISOString().slice(0, 10);
+              const label = metodoNombre
+                ? `Comprobante ${metodoNombre} · ${fechaCorta}`
+                : `Comprobante · ${fechaCorta}`;
+              const arr = comprobantesPorAcuerdo.get(ap.id_acuerdo_pago) ?? [];
+              arr.push({ url: urlComprobante, label });
+              comprobantesPorAcuerdo.set(ap.id_acuerdo_pago, arr);
+            }
           }
         }
       });
@@ -441,6 +500,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           es_externo: esExterno,
           aprobada: !!c.aprobada,
           pagada: !!c.pagada,
+          url_evidencia_pago: (c as any).url_evidencia_pago ?? null,
         };
       });
 
@@ -693,6 +753,11 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
             : docContratoCompleto
               ? "Doc cargado, pendiente validar"
               : "Sin documento 'Contrato firmado completamente'",
+          url: docContratoCompletoValidado?.url ?? docContratoCompleto?.url ?? undefined,
+          url_label:
+            docContratoCompletoValidado?.url || docContratoCompleto?.url
+              ? "Ver contrato firmado"
+              : undefined,
         },
         {
           paso: 9,
@@ -704,6 +769,9 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               : "sin_evidencia",
           fecha: fechaEnganche || fmtDateOnly(acuerdoEnganche?.fecha_actualizacion),
           responsable: "STP / Cliente",
+          urls: acuerdoEnganche
+            ? comprobantesPorAcuerdo.get(acuerdoEnganche.id)
+            : undefined,
         },
         {
           paso: 10,
@@ -736,6 +804,12 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
               : cuenta.es_draft_factura_comision
                 ? "Generada en draft, pendiente timbre"
                 : "Timbrada",
+          url: cuenta.url_factura_comision ?? undefined,
+          url_label: cuenta.url_factura_comision
+            ? cuenta.es_draft_factura_comision
+              ? "Ver factura (draft)"
+              : "Ver factura SOZU"
+            : undefined,
         },
         {
           paso: 12,
@@ -748,9 +822,21 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           fecha: cuenta.es_pagada_comision_venta
             ? fmtDateOnly((cuenta as any).fecha_pago_comision)
             : undefined,
-          detalle: !cuenta.es_pagada_comision_venta
-            ? "No aplica hasta emitir factura"
-            : undefined,
+          detalle: (() => {
+            if (!cuenta.es_pagada_comision_venta) {
+              return "No aplica hasta emitir factura";
+            }
+            const partes: string[] = [];
+            const clave = (cuenta as any).clave_rastreo_comision_venta as string | null | undefined;
+            if (clave) partes.push(`Clave rastreo STP: ${clave}`);
+            const monto = Number((cuenta as any).monto_comision_pagado ?? 0);
+            if (monto > 0) {
+              partes.push(
+                new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(monto),
+              );
+            }
+            return partes.length > 0 ? partes.join(" · ") : undefined;
+          })(),
         },
         {
           paso: 13,
@@ -767,6 +853,8 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
             : !docFacturaExterna
               ? "Pendiente recepción"
               : undefined,
+          url: docFacturaExterna?.url ?? undefined,
+          url_label: docFacturaExterna?.url ? "Ver factura externo" : undefined,
         },
         {
           paso: 14,
@@ -782,6 +870,15 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
             : !todosExternosPagados
               ? `${externosRaw.filter((c) => !c.pagada).length} pendiente(s)`
               : undefined,
+          urls: (() => {
+            const links = comisionistasExternos
+              .filter((c) => c.pagada && c.url_evidencia_pago)
+              .map((c) => ({
+                url: c.url_evidencia_pago as string,
+                label: `Evidencia · ${c.nombre}`,
+              }));
+            return links.length > 0 ? links : undefined;
+          })(),
         },
         {
           paso: 15,
@@ -795,6 +892,20 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           detalle:
             internosRaw.length > 0
               ? `${internosRaw.length} comisionista(s) interno(s)`
+              : undefined,
+          expand:
+            internosRaw.length > 0
+              ? {
+                  type: "comisionistas_internos",
+                  items: comisionistasInternos.map((c) => ({
+                    nombre: c.nombre,
+                    rol: c.rol,
+                    porcentaje: c.porcentaje,
+                    monto: c.monto,
+                    aprobada: c.aprobada,
+                    pagada: c.pagada,
+                  })),
+                }
               : undefined,
         },
         {
