@@ -23,7 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
-import { GlobalFilterBar } from "./GlobalFilterBar";
+import { GlobalFilterBar } from "@/components/admin/portal-alta-direccion/GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-administracion/dashboard",
