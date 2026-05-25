@@ -204,27 +204,27 @@ const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/port
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
-// Portal de Administración (clon de Alta Dirección reutilizando páginas)
-const AdminDashboard            = AltaDireccionDashboard;
-const AdminCitas                = AltaDireccionCitas;
-const AdminProspectos           = AltaDireccionProspectos;
-const AdminPipeline             = AltaDireccionPipeline;
-const AdminOfertas              = AltaDireccionOfertas;
-const AdminCobranza             = AltaDireccionCobranza;
-const AdminContratos            = AltaDireccionContratos;
-const AdminFacturas             = AltaDireccionFacturas;
-const AdminComisiones           = AltaDireccionComisiones;
-const AdminRedComercial         = AltaDireccionRedComercial;
-const AdminReportes             = AltaDireccionReportes;
-const AdminAuditoria            = AltaDireccionAuditoria;
-const AdminConfiguracion        = AltaDireccionConfiguracion;
-const AdminNotificaciones       = AltaDireccionNotificaciones;
-const AdminBandejaValidaciones  = AltaDireccionBandejaValidaciones;
-const AdminCicloVenta           = AltaDireccionCicloVenta;
-const AdminFacturasPorCobrar    = AltaDireccionFacturasPorCobrar;
-const AdminFacturasPorPagar     = AltaDireccionFacturasPorPagar;
-const AdminComisionesExternas   = AltaDireccionComisionesExternas;
-const AdminComisionesInternas   = AltaDireccionComisionesInternas;
+// Portal de Administración (módulo independiente, copia de Alta Dirección)
+const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
+const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
+const AdminProspectos           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionProspectos })));
+const AdminPipeline             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionPipeline })));
+const AdminOfertas              = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionOfertas })));
+const AdminCobranza             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCobranza })));
+const AdminContratos            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionContratos })));
+const AdminFacturas             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionFacturas })));
+const AdminComisiones           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionComisiones })));
+const AdminRedComercial         = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionRedComercial })));
+const AdminReportes             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionReportes })));
+const AdminAuditoria            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionAuditoria })));
+const AdminConfiguracion        = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionConfiguracion })));
+const AdminNotificaciones       = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionNotificacionesPage"));
+const AdminBandejaValidaciones  = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionBandejaValidacionesPage"));
+const AdminCicloVenta           = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionCicloVentaPage"));
+const AdminFacturasPorCobrar    = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorCobrarPage"));
+const AdminFacturasPorPagar     = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorPagarPage"));
+const AdminComisionesExternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesExternasPage"));
+const AdminComisionesInternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesInternasPage"));
 
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
