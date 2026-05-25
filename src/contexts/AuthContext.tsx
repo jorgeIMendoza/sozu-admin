@@ -14,6 +14,9 @@ interface UserProfile {
   activo: boolean;
   ver_todos_prospectos_compradores: boolean;
   ver_filtros_avanzados_eliminados: boolean;
+  id_notario: number | null;
+  notaria_nombre: string | null;
+  id_perfil_juridico: number | null;
 }
 
 interface AuthContextType {

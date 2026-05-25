@@ -200,7 +200,7 @@ export function PostventaDashboard() {
   // ── Check if pv_tickets exists ────────────────────────────────────────────
   useEffect(() => {
     (async () => {
-      const { error } = await (supabase as any).from('pv_tickets').select('id').limit(1);
+      const { error } = await (supabase as any).from('postventa_tickets').select('id').limit(1);
       setPvTablesExist(!error);
     })();
   }, []);
@@ -308,8 +308,8 @@ export function PostventaDashboard() {
       const cuentaByPropId: Record<number, any> = Object.fromEntries((cuentas ?? []).map((c: any) => [c.id_propiedad, c]));
       // Tickets — el join de proveedor va directo a personas (no existe pv_proveedores)
       const { data: rawTickets } = await (supabase as any)
-        .from('pv_tickets')
-        .select('id, folio, id_propiedad, id_cuenta_cobranza, id_proveedor, subcategoria, prioridad, estatus, garantia_estatus, fecha_limite_sla, sla_cumplido, responsable, fecha_creacion, pv_categorias_garantia(nombre)')
+        .from('postventa_tickets')
+        .select('id, folio, id_propiedad, id_cuenta_cobranza, id_proveedor, subcategoria, prioridad, estatus, garantia_estatus, fecha_limite_sla, sla_cumplido, responsable, fecha_creacion, postventa_categorias_garantia(nombre)')
         .in('id_propiedad', propIds)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -360,7 +360,7 @@ export function PostventaDashboard() {
           torre: '—',
           proyecto: '—',
           cliente: cuentaToPersona[t.id_cuenta_cobranza] ?? '—',
-          categoria: t.pv_categorias_garantia?.nombre ?? '—',
+          categoria: t.postventa_categorias_garantia?.nombre ?? '—',
           subcategoria: t.subcategoria ?? '—',
           prioridad: t.prioridad as PrioridadTicket,
           estatus: t.estatus as EstatusTicket,

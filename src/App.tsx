@@ -185,6 +185,11 @@ const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escriturac
 const EscDemandas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDemandas })));
 const EscPostventa = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventa })));
 const EscPostventaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventaDetalle })));
+const EscWorkflow     = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscWorkflow })));
+const EscAppNotaria         = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotaria })));
+const EscAppNotariaUsuarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotariaUsuarios })));
+const EscAppJuridico        = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppJuridico })));
+const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotariaLogin"));
 
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
@@ -354,6 +359,7 @@ const App = () => (
                 <Route path="/registro" element={<Registro />} />
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
+                <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
                 
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
@@ -516,6 +522,10 @@ const App = () => (
                   <Route path="portal-escrituracion/demandas" element={<EscDemandas />} />
                   <Route path="portal-escrituracion/postventa" element={<EscPostventa />} />
                   <Route path="portal-escrituracion/postventa/:id" element={<EscPostventaDetalle />} />
+                  <Route path="portal-escrituracion/workflow" element={<EscWorkflow />} />
+                  <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
+                  <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
+                  <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />

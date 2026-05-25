@@ -8,20 +8,46 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect } from 'react';
 
-function DashboardHeader() {
-  const { proyectoActivo, setProyectoActivo, setInventarioActivo, setEscrituradosActivo, setDemandasActivo, setEntregasActivo } = useEscrituracionDashboard();
+interface DashboardKpis {
+  inventario: number;
+  escriturados: number;
+  expedientesDocumentos: number;
+  relacionPagos: number;
+  alertasPld: number;
+  enProceso: number;
+  recursosPropios: number;
+  creditoHipotecario: number;
+  citas: number;
+  demandas: number;
+  entregas: number;
+  postventa: number;
+}
 
-  // 1. Obtener proyectos SOZU publicados
+const KPIS_ZERO: DashboardKpis = {
+  inventario: 0, escriturados: 0, expedientesDocumentos: 0, relacionPagos: 0,
+  alertasPld: 0, enProceso: 0, recursosPropios: 0, creditoHipotecario: 0,
+  citas: 0, demandas: 0, entregas: 0, postventa: 0,
+};
+
+function DashboardHeader() {
+  const {
+    proyectoActivo, setProyectoActivo,
+    setInventarioActivo, setEscrituradosActivo, setExpedientesDocumentosActivo,
+    setRelacionPagosActivo, setAlertasPldActivo, setEnProcesoActivo,
+    setRecursosPropiosActivo, setCreditoHipotecarioActivo, setCitasActivo,
+    setDemandasActivo, setEntregasActivo, setPostventaActivo,
+  } = useEscrituracionDashboard();
+
+  // 1. Proyectos SOZU publicados (carga única, no depende del proyecto activo)
   const { data: proyectos, isLoading: isLoadingProyectos } = useQuery({
     queryKey: ['proyectos-escrituracion-sozu'],
     queryFn: async () => {
-      // Proyectos vinculados a inmobiliaria (id_tipo_entidad = 5)
       const { data: sozuRels } = await supabase
         .from('entidades_relacionadas')
         .select('id_proyecto')
         .eq('id_tipo_entidad', 5)
         .eq('activo', true);
-        
+
       const sozuIds = sozuRels?.map(r => r.id_proyecto).filter(Boolean) || [];
       if (sozuIds.length === 0) return [];
 
@@ -44,119 +70,173 @@ function DashboardHeader() {
     }
   }, [proyectos, proyectoActivo, setProyectoActivo]);
 
-  // 2. Obtener los IDs de modelos del proyecto activo (base para los conteos de KPIs)
-  const { data: modeloIds } = useQuery({
-    queryKey: ['modelo-ids', proyectoActivo?.id],
-    queryFn: async () => {
-      if (!proyectoActivo?.id) return [];
+  // 2. Query consolidada de KPIs — waterfall obligatorio
+  const { data: allKpis } = useQuery({
+    queryKey: ['dashboard-kpis', proyectoActivo?.id],
+    queryFn: async (): Promise<DashboardKpis> => {
+      if (!proyectoActivo?.id) return KPIS_ZERO;
 
+      // Waterfall: edificios → modelos
       const { data: edificios } = await supabase
-        .from('edificios')
-        .select('id')
-        .eq('id_proyecto', proyectoActivo.id)
-        .eq('activo', true);
-
-      if (!edificios?.length) return [];
+        .from('edificios').select('id')
+        .eq('id_proyecto', proyectoActivo.id).eq('activo', true);
+      if (!edificios?.length) return KPIS_ZERO;
 
       const { data: modelos } = await supabase
-        .from('edificios_modelos')
-        .select('id')
+        .from('edificios_modelos').select('id')
         .in('id_edificio', edificios.map(e => e.id));
+      if (!modelos?.length) return KPIS_ZERO;
+      const modeloIds = modelos.map(m => m.id);
 
-      return modelos?.map(m => m.id) ?? [];
+      // Propiedades del proyecto
+      const { data: propiedades } = await supabase
+        .from('propiedades').select('id, id_estatus_disponibilidad')
+        .in('id_edificio_modelo', modeloIds).eq('activo', true);
+      const allProps = propiedades || [];
+      if (!allProps.length) return KPIS_ZERO;
+
+      const allPropIds = allProps.map(p => p.id);
+      const propStatusMap: Record<number, number> = {};
+      for (const p of allProps) propStatusMap[p.id] = p.id_estatus_disponibilidad;
+
+      // Cuentas de cobranza del proyecto
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza').select('id, id_propiedad, id_notario, numero_escritura')
+        .in('id_propiedad', allPropIds);
+      const allCuentas = cuentas || [];
+      const allCuentaIds = allCuentas.map(c => c.id);
+
+      // Queries paralelas (todas sobre cuentaIds ya conocidos)
+      const [
+        pagosRes,
+        demandasRes,
+        docsExpRes,
+        docsPvRes,
+        creditosRes,
+        tiposCitaRes,
+        reservasCitasRes,
+      ] = await Promise.allSettled([
+        allCuentaIds.length
+          ? supabase.from('pagos').select('id_cuenta_cobranza, clave_rastreo')
+              .in('id_cuenta_cobranza', allCuentaIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+
+        allCuentaIds.length
+          ? supabase.from('demandas').select('id_cuenta_cobranza')
+              .in('id_cuenta_cobranza', allCuentaIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+
+        allCuentaIds.length
+          ? supabase.from('documentos').select('id_cuenta_cobranza')
+              .in('id_cuenta_cobranza', allCuentaIds)
+              .gte('id_estatus_verificacion', 2).eq('activo', true)
+          : Promise.resolve({ data: [] as any[], error: null }),
+
+        allCuentaIds.length
+          ? supabase.from('documentos').select('id_cuenta_cobranza')
+              .in('id_cuenta_cobranza', allCuentaIds)
+              .eq('id_tipo_documento', 24).eq('activo', true)
+          : Promise.resolve({ data: [] as any[], error: null }),
+
+        // creditos_hipotecarios: tabla post-DDL, graceful fallback
+        allCuentaIds.length
+          ? (supabase as any).from('creditos_hipotecarios').select('id_cuenta_cobranza')
+              .in('id_cuenta_cobranza', allCuentaIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+
+        supabase.from('tipos_cita').select('id, nombre').eq('activo', true),
+
+        supabase.from('reservas_citas').select('id_tipo_cita')
+          .eq('id_proyecto', proyectoActivo.id).eq('activo', true),
+      ]);
+
+      // ── Inventario / Escriturados / Entregas (solo propiedades) ──
+      const inventario = allProps.length;
+      const escriturados = allProps.filter(
+        p => p.id_estatus_disponibilidad === 7 || p.id_estatus_disponibilidad === 8
+      ).length;
+      const entregas = allProps.filter(p => p.id_estatus_disponibilidad === 8).length;
+
+      // ── Relación Pagos / Alertas PLD ──
+      const pagos: any[] = pagosRes.status === 'fulfilled' ? (pagosRes.value as any)?.data ?? [] : [];
+      const pagoCuentaSet = new Set(pagos.map(p => p.id_cuenta_cobranza));
+      const alertaCuentaSet = new Set(pagos.filter(p => !p.clave_rastreo).map(p => p.id_cuenta_cobranza));
+      const relacionPagos = pagoCuentaSet.size;
+      const alertasPld = alertaCuentaSet.size;
+
+      // ── Demandas (dual-source: prop estatus 11 OR registro en tabla demandas) ──
+      const demandasRows: any[] = demandasRes.status === 'fulfilled' ? (demandasRes.value as any)?.data ?? [] : [];
+      const demandaCuentaSet = new Set(demandasRows.map(d => d.id_cuenta_cobranza));
+      const prop11CuentaSet = new Set(
+        allCuentas
+          .filter(c => c.id_propiedad != null && propStatusMap[c.id_propiedad] === 11)
+          .map(c => c.id)
+      );
+      const demandas = new Set([...prop11CuentaSet, ...demandaCuentaSet]).size;
+
+      // ── Expedientes Documentos ──
+      const docsExp: any[] = docsExpRes.status === 'fulfilled' ? (docsExpRes.value as any)?.data ?? [] : [];
+      const expedientesDocumentos = new Set(docsExp.map(d => d.id_cuenta_cobranza)).size;
+
+      // ── Postventa ──
+      const docsPv: any[] = docsPvRes.status === 'fulfilled' ? (docsPvRes.value as any)?.data ?? [] : [];
+      const postventaSet = new Set(docsPv.map(d => d.id_cuenta_cobranza));
+      const postventa = postventaSet.size || entregas;
+
+      // ── En Proceso (tiene notario asignado pero sin escritura) ──
+      const enProceso = allCuentas.filter(c => c.id_notario && !c.numero_escritura).length;
+
+      // ── Crédito Hipotecario (post-DDL, graceful fallback) ──
+      const creditosRows: any[] = creditosRes.status === 'fulfilled' ? (creditosRes.value as any)?.data ?? [] : [];
+      const cuentasConCreditoSet = new Set(creditosRows.map(c => c.id_cuenta_cobranza));
+      const creditoHipotecario = cuentasConCreditoSet.size;
+
+      // ── Recursos Propios (tienen notario pero no crédito hipotecario) ──
+      const recursosPropios = allCuentas
+        .filter(c => c.id_notario && !cuentasConCreditoSet.has(c.id))
+        .length;
+
+      // ── Citas de escrituración ──
+      const tiposCita: any[] = tiposCitaRes.status === 'fulfilled' ? (tiposCitaRes.value as any)?.data ?? [] : [];
+      const tiposCitaEscrituracionIds = new Set(
+        tiposCita
+          .filter(t => /escritur|firm|notari/i.test(t.nombre || ''))
+          .map(t => t.id)
+      );
+      const reservasCitas: any[] = reservasCitasRes.status === 'fulfilled' ? (reservasCitasRes.value as any)?.data ?? [] : [];
+      const citas = reservasCitas.filter(r => tiposCitaEscrituracionIds.has(r.id_tipo_cita)).length;
+
+      return {
+        inventario, escriturados, expedientesDocumentos, relacionPagos,
+        alertasPld, enProceso, recursosPropios, creditoHipotecario,
+        citas, demandas, entregas, postventa,
+      };
     },
     enabled: !!proyectoActivo?.id,
   });
 
-  // 3. Inventario: total de unidades activas
-  const { data: inventarioCount } = useQuery({
-    queryKey: ['inventario-activo', proyectoActivo?.id],
-    queryFn: async () => {
-      if (!modeloIds?.length) return 0;
-      const { count, error } = await supabase
-        .from('propiedades')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true)
-        .in('id_edificio_modelo', modeloIds);
-      if (error) { console.error('Error fetching inventario:', error); return 0; }
-      return count || 0;
-    },
-    enabled: !!modeloIds?.length,
-  });
-
-  // 4. Escriturados: unidades escrituradas y/o entregadas (estatus 7, 8, 9)
-  const { data: escrituradosCount } = useQuery({
-    queryKey: ['escriturados-activo', proyectoActivo?.id],
-    queryFn: async () => {
-      if (!modeloIds?.length) return 0;
-      const { count, error } = await supabase
-        .from('propiedades')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true)
-        .in('id_estatus_disponibilidad', [7, 8])
-        .in('id_edificio_modelo', modeloIds);
-      if (error) { console.error('Error fetching escriturados:', error); return 0; }
-      return count || 0;
-    },
-    enabled: !!modeloIds?.length,
-  });
-
-  // 5. Demandas: unidades con estatus "En demanda" (id 11)
-  const { data: demandasCount } = useQuery({
-    queryKey: ['demandas-activo', proyectoActivo?.id],
-    queryFn: async () => {
-      if (!modeloIds?.length) return 0;
-      const { count, error } = await supabase
-        .from('propiedades')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true)
-        .eq('id_estatus_disponibilidad', 11)
-        .in('id_edificio_modelo', modeloIds);
-      if (error) { console.error('Error fetching demandas:', error); return 0; }
-      return count || 0;
-    },
-    enabled: !!modeloIds?.length,
-  });
-
-  // 6. Entregas: unidades con estatus "Entregado" (id 8)
-  const { data: entregasCount } = useQuery({
-    queryKey: ['entregas-activo', proyectoActivo?.id],
-    queryFn: async () => {
-      if (!modeloIds?.length) return 0;
-      const { count, error } = await supabase
-        .from('propiedades')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true)
-        .eq('id_estatus_disponibilidad', 8)
-        .in('id_edificio_modelo', modeloIds);
-      if (error) { console.error('Error fetching entregas:', error); return 0; }
-      return count || 0;
-    },
-    enabled: !!modeloIds?.length,
-  });
-
-  // Actualizar contexto cuando se cargan los conteos
+  // Propagar todos los KPIs al contexto en un solo efecto
   useEffect(() => {
-    if (inventarioCount !== undefined) setInventarioActivo(inventarioCount);
-  }, [inventarioCount, setInventarioActivo]);
-
-  useEffect(() => {
-    if (escrituradosCount !== undefined) setEscrituradosActivo(escrituradosCount);
-  }, [escrituradosCount, setEscrituradosActivo]);
-
-  useEffect(() => {
-    if (demandasCount !== undefined) setDemandasActivo(demandasCount);
-  }, [demandasCount, setDemandasActivo]);
-
-  useEffect(() => {
-    if (entregasCount !== undefined) setEntregasActivo(entregasCount);
-  }, [entregasCount, setEntregasActivo]);
+    if (!allKpis) return;
+    setInventarioActivo(allKpis.inventario);
+    setEscrituradosActivo(allKpis.escriturados);
+    setExpedientesDocumentosActivo(allKpis.expedientesDocumentos);
+    setRelacionPagosActivo(allKpis.relacionPagos);
+    setAlertasPldActivo(allKpis.alertasPld);
+    setEnProcesoActivo(allKpis.enProceso);
+    setRecursosPropiosActivo(allKpis.recursosPropios);
+    setCreditoHipotecarioActivo(allKpis.creditoHipotecario);
+    setCitasActivo(allKpis.citas);
+    setDemandasActivo(allKpis.demandas);
+    setEntregasActivo(allKpis.entregas);
+    setPostventaActivo(allKpis.postventa);
+  }, [allKpis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Dashboard de Escrituración</h1>
-        
+
         <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-500">Proyecto</span>
@@ -190,13 +270,13 @@ function DashboardHeader() {
 
       <div className="flex items-center gap-4">
         <span className="text-xs text-slate-400 hidden sm:inline-block">Última actualización: 23 May 2026, 11:30 a.m.</span>
-        
+
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm">
             <Download className="w-4 h-4" />
             Exportar
           </button>
-          
+
           <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white"></span>
@@ -213,7 +293,7 @@ function DashboardContent() {
       <DashboardHeader />
       <KpisSection />
       <PipelineNotarial />
-      
+
       <div className="flex flex-col lg:flex-row gap-6 relative">
         <ExpedientesTable />
         <RightDetailPanel />

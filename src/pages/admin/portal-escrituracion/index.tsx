@@ -21,6 +21,10 @@ import { EntregasDashboard } from "./EntregasDashboard";
 import { EntregaDetalle } from "./EntregaDetalle";
 import { PostventaDashboard } from "./PostventaDashboard";
 import { PostventaDetalle } from "./PostventaTicketDetalle";
+import { WorkflowDashboard } from "./WorkflowDashboard";
+import { AppNotariaDashboard } from "./AppNotariaDashboard";
+import { AppNotariaUsuarios } from "./AppNotariaUsuarios";
+import { AppJuridicoDashboard } from "./AppJuridicoDashboard";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
@@ -277,6 +281,26 @@ export function EscPostventa() {
 
 export function EscPostventaDetalle() {
   return <PostventaDetalle />;
+}
+
+// ============================ Workflow ============================
+export function EscWorkflow() {
+  return <WorkflowDashboard />;
+}
+
+// ============================ App Notaría ============================
+export function EscAppNotaria() {
+  return <AppNotariaDashboard />;
+}
+
+// ============================ Usuarios Notaría ============================
+export function EscAppNotariaUsuarios() {
+  return <AppNotariaUsuarios />;
+}
+
+// ============================ App Jurídico ============================
+export function EscAppJuridico() {
+  return <AppJuridicoDashboard />;
 }
 
 // ============================ Inscripción RPP ============================
