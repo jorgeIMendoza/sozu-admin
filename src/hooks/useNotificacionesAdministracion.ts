@@ -527,7 +527,7 @@ async function fetchFacturasPorPagarPendientes(): Promise<NotificacionAdministra
 
 export function useNotificacionesAdministracion() {
   return useQuery<NotificacionAdministracion[]>({
-    queryKey: ["notificaciones-alta-direccion"],
+    queryKey: ["notificaciones-administracion"],
     queryFn: async () => {
       const [q1, q2, q3, q4, q5] = await Promise.all([
         fetchVentasListasFacturar(),
