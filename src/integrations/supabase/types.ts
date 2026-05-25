@@ -3782,13 +3782,16 @@ export type Database = {
           collection_id: number | null
           contrato_draft: string | null
           email_autoriza_comision: string | null
+          email_autoriza_comision_externa: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
           es_draft_factura_comision: boolean | null
           es_pagada_comision_venta: boolean
           estatus_autorizacion_comision: string
+          estatus_autorizacion_comision_externa: string
           fecha_actualizacion: string
           fecha_autorizacion_comision: string | null
+          fecha_autorizacion_comision_externa: string | null
           fecha_compra: string | null
           fecha_creacion: string
           fecha_escritura: string | null
@@ -3806,6 +3809,7 @@ export type Database = {
           monto_cobro_cancelacion: number | null
           monto_comision_pagado: number
           notas_rechazo_comision: string | null
+          notas_rechazo_comision_externa: string | null
           numero_escritura: string | null
           numero_unidad_privativa: string | null
           porcentaje_comision_venta: number
@@ -3824,13 +3828,16 @@ export type Database = {
           collection_id?: number | null
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
+          email_autoriza_comision_externa?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
+          estatus_autorizacion_comision_externa?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
+          fecha_autorizacion_comision_externa?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -3848,6 +3855,7 @@ export type Database = {
           monto_cobro_cancelacion?: number | null
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
+          notas_rechazo_comision_externa?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -3866,13 +3874,16 @@ export type Database = {
           collection_id?: number | null
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
+          email_autoriza_comision_externa?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
+          estatus_autorizacion_comision_externa?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
+          fecha_autorizacion_comision_externa?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -3890,6 +3901,7 @@ export type Database = {
           monto_cobro_cancelacion?: number | null
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
+          notas_rechazo_comision_externa?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
