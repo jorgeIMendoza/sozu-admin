@@ -204,6 +204,28 @@ const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/port
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
+// Portal de Administración (clon de Alta Dirección reutilizando páginas)
+const AdminDashboard            = AltaDireccionDashboard;
+const AdminCitas                = AltaDireccionCitas;
+const AdminProspectos           = AltaDireccionProspectos;
+const AdminPipeline             = AltaDireccionPipeline;
+const AdminOfertas              = AltaDireccionOfertas;
+const AdminCobranza             = AltaDireccionCobranza;
+const AdminContratos            = AltaDireccionContratos;
+const AdminFacturas             = AltaDireccionFacturas;
+const AdminComisiones           = AltaDireccionComisiones;
+const AdminRedComercial         = AltaDireccionRedComercial;
+const AdminReportes             = AltaDireccionReportes;
+const AdminAuditoria            = AltaDireccionAuditoria;
+const AdminConfiguracion        = AltaDireccionConfiguracion;
+const AdminNotificaciones       = AltaDireccionNotificaciones;
+const AdminBandejaValidaciones  = AltaDireccionBandejaValidaciones;
+const AdminCicloVenta           = AltaDireccionCicloVenta;
+const AdminFacturasPorCobrar    = AltaDireccionFacturasPorCobrar;
+const AdminFacturasPorPagar     = AltaDireccionFacturasPorPagar;
+const AdminComisionesExternas   = AltaDireccionComisionesExternas;
+const AdminComisionesInternas   = AltaDireccionComisionesInternas;
+
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
 const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));
@@ -546,6 +568,28 @@ const App = () => (
                   <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
                   <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+
+                 {/* Portal de Administración (clon de Alta Dirección) */}
+                 <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
+                 <Route path="portal-administracion/citas" element={<AdminCitas />} />
+                 <Route path="portal-administracion/prospectos" element={<AdminProspectos />} />
+                 <Route path="portal-administracion/pipeline" element={<AdminPipeline />} />
+                 <Route path="portal-administracion/ofertas" element={<AdminOfertas />} />
+                 <Route path="portal-administracion/cobranza" element={<AdminCobranza />} />
+                 <Route path="portal-administracion/contratos" element={<AdminContratos />} />
+                 <Route path="portal-administracion/facturas" element={<AdminFacturas />} />
+                 <Route path="portal-administracion/comisiones" element={<AdminComisiones />} />
+                 <Route path="portal-administracion/red-comercial" element={<AdminRedComercial />} />
+                 <Route path="portal-administracion/reportes" element={<AdminReportes />} />
+                 <Route path="portal-administracion/auditoria" element={<AdminAuditoria />} />
+                 <Route path="portal-administracion/configuracion" element={<AdminConfiguracion />} />
+                 <Route path="portal-administracion/notificaciones" element={<AdminNotificaciones />} />
+                 <Route path="portal-administracion/bandeja" element={<AdminBandejaValidaciones />} />
+                 <Route path="portal-administracion/ciclo-venta" element={<AdminCicloVenta />} />
+                 <Route path="portal-administracion/facturas-por-cobrar" element={<AdminFacturasPorCobrar />} />
+                 <Route path="portal-administracion/facturas-por-pagar" element={<AdminFacturasPorPagar />} />
+                 <Route path="portal-administracion/comisiones-externas" element={<AdminComisionesExternas />} />
+                 <Route path="portal-administracion/comisiones-internas" element={<AdminComisionesInternas />} />
 
                  {/* Portal Embajadores */}
                  <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
