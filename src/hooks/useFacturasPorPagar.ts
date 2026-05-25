@@ -403,7 +403,7 @@ export function useFacturasPorPagar() {
         //   - espera_autorizacion → cualquier otro caso
         let estatusPago: EstatusPagoFacturaPorPagar;
         if (c.pagada) estatusPago = "pagada";
-        else if (estado === "rechazada") estatusPago = "rechazada";
+        else if ((estado as string) === "rechazada") estatusPago = "rechazada" as EstatusPagoFacturaPorPagar;
         else if (c.aprobada && yaCobroDesarrollador) estatusPago = "autorizada";
         else estatusPago = "espera_autorizacion";
 

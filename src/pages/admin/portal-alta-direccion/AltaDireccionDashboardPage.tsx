@@ -184,7 +184,7 @@ function computeSaludData({
       antiguedad_promedio_dias: cobrarAvgAge,
       facturas_vencidas: { count: cobrarVencidas.length, monto: cobrarVencidasMonto },
     },
-    deuda_colaboradores: {
+    deuda_colaboradores: ({
       empty: pagarPendientes.length === 0,
       empty_reason: !canalAplicaExternos
         ? "El canal seleccionado no aplica a deuda con colaboradores externos"
@@ -192,7 +192,7 @@ function computeSaludData({
       monto_total: pagarTotal,
       listas_para_pagar: { count: listasParaPagar.length, monto: listasMonto },
       bloqueadas: { count: bloqueadas.length, monto: bloqueadasMonto },
-    },
+    } as any),
     comisiones_internas_pendientes: {
       empty: internasFiltradas.length === 0,
       empty_reason: !canalAplicaInternas
