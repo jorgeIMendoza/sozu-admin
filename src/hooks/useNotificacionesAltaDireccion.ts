@@ -152,8 +152,7 @@ async function enrichCuentas(rows: CuentaBase[]): Promise<Map<number, EnrichedCu
   type PropRow = {
     id: number;
     numero_propiedad: string | null;
-    modelos: {
-      nombre: string | null;
+    edificios_modelos: {
       edificios: {
         nombre: string | null;
         proyectos: { nombre: string | null } | null;
@@ -169,11 +168,10 @@ async function enrichCuentas(rows: CuentaBase[]): Promise<Map<number, EnrichedCu
         `
         id,
         numero_propiedad,
-        modelos:id_modelo (
-          nombre,
-          edificios:id_edificio (
+        edificios_modelos!fk_propiedades_edificio_modelo (
+          edificios!fk_edificios_modelos_edificio (
             nombre,
-            proyectos:id_proyecto ( nombre )
+            proyectos!fk_edificios_proyecto ( nombre )
           )
         )
       `,
@@ -193,8 +191,8 @@ async function enrichCuentas(rows: CuentaBase[]): Promise<Map<number, EnrichedCu
       : "Propiedad";
     const propId = r.id_propiedad ?? oferta?.id_propiedad ?? null;
     const prop = propId ? propsMap.get(propId) ?? null : null;
-    const proyecto = prop?.modelos?.edificios?.proyectos?.nombre ?? null;
-    const edificio = prop?.modelos?.edificios?.nombre ?? "";
+    const proyecto = prop?.edificios_modelos?.edificios?.proyectos?.nombre ?? null;
+    const edificio = prop?.edificios_modelos?.edificios?.nombre ?? "";
     const numero = prop?.numero_propiedad ?? "";
     const ubicacion = [edificio, numero].filter(Boolean).join(" ");
     out.set(r.id, {
