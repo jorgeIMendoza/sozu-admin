@@ -31,16 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { Kpi, PageHeader, Panel } from "@/components/admin/portal-administracion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
+import { ExpedienteDrawer } from "@/components/admin/portal-administracion/drawers/ExpedienteDrawer";
+import { PagoExternoContent } from "@/components/admin/portal-administracion/drawers/content/PagoExternoContent";
 import {
   getVentaContext,
   resolveCobFolio,
-} from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+} from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useFacturasPorPagar,
   type FacturaPorPagar,
@@ -103,7 +103,7 @@ function Antiguedad({
    Página
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionFacturasPorPagarPage() {
+export default function AdministracionFacturasPorPagarPage() {
   const [search, setSearch] = useState("");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [estatusComisionFilter, setEstatusComisionFilter] = useState<string>("all");
@@ -506,7 +506,7 @@ export default function AltaDireccionFacturasPorPagarPage() {
         )}
       </Panel>
 
-      {/* ─── Drawer unificado del Portal Alta Dirección ─── */}
+      {/* ─── Drawer unificado del Portal de Administración ─── */}
       {selected && (
         <ExpedienteDrawer
           open={!!selected}

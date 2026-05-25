@@ -45,8 +45,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader, Pill, Panel } from "@/components/admin/portal-alta-direccion/ui";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { PageHeader, Pill, Panel } from "@/components/admin/portal-administracion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 
 /* ──────────────────────────────────────────────────────────
@@ -1595,7 +1595,7 @@ function Info({ label, value }: { label: string; value: string }) {
    Main — dispatch por ?caso=...
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionCicloVentaPage() {
+export default function AdministracionCicloVentaPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const caso = searchParams.get("caso");
 

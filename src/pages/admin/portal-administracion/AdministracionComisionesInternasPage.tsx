@@ -28,16 +28,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { PageHeader, Panel } from "@/components/admin/portal-administracion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { ComisionInternaContent } from "@/components/admin/portal-alta-direccion/drawers/content/ComisionInternaContent";
+import { ExpedienteDrawer } from "@/components/admin/portal-administracion/drawers/ExpedienteDrawer";
+import { ComisionInternaContent } from "@/components/admin/portal-administracion/drawers/content/ComisionInternaContent";
 import {
   getVentaContext,
   resolveCobFolio,
-} from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+} from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useComisionesInternas,
   type ComisionInterna,
@@ -234,7 +234,7 @@ function ClickableKpi({
    Página
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionComisionesInternasPage() {
+export default function AdministracionComisionesInternasPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
@@ -576,7 +576,7 @@ export default function AltaDireccionComisionesInternasPage() {
         )}
       </Panel>
 
-      {/* ─── Drawer unificado del Portal Alta Dirección ─── */}
+      {/* ─── Drawer unificado del Portal de Administración ─── */}
       {selected && (
         <ExpedienteDrawer
           open={!!selected}
@@ -597,7 +597,7 @@ export default function AltaDireccionComisionesInternasPage() {
                     label: "Ir a Bandeja de Validaciones",
                     onClick: () => {
                       setSelected(null);
-                      navigate("/admin/portal-alta-direccion/bandeja");
+                      navigate("/admin/portal-administracion/bandeja");
                     },
                   }
                 : undefined

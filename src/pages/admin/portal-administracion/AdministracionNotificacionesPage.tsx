@@ -28,13 +28,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
+import { Kpi, PageHeader, Panel } from "@/components/admin/portal-administracion/ui";
 import { cn } from "@/lib/utils";
 import {
-  useNotificacionesAltaDireccion,
-  type NotificacionAltaDireccion,
+  useNotificacionesAdministracion,
+  type NotificacionAdministracion,
   type TipoNotificacion,
-} from "@/hooks/useNotificacionesAltaDireccion";
+} from "@/hooks/useNotificacionesAdministracion";
 
 /* ──────────────────────────────────────────────────────────
    Configuración visual por tipo
@@ -151,7 +151,7 @@ function EventoCard({
   onMarkRead,
   now,
 }: {
-  e: NotificacionAltaDireccion;
+  e: NotificacionAdministracion;
   isRead: boolean;
   onMarkRead: (id: string) => void;
   now: Date;
@@ -238,9 +238,9 @@ function EventoCard({
    Página
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionNotificacionesPage() {
+export default function AdministracionNotificacionesPage() {
   const now = useMemo(() => new Date(), []);
-  const { data: eventos = [], isLoading, error } = useNotificacionesAltaDireccion();
+  const { data: eventos = [], isLoading, error } = useNotificacionesAdministracion();
 
   const [search, setSearch] = useState("");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
@@ -248,7 +248,7 @@ export default function AltaDireccionNotificacionesPage() {
   const [soloNoLeidas, setSoloNoLeidas] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
-  const isRead = (e: NotificacionAltaDireccion) => readIds.has(e.id);
+  const isRead = (e: NotificacionAdministracion) => readIds.has(e.id);
 
   const markRead = (id: string) =>
     setReadIds((prev) => {
@@ -299,7 +299,7 @@ export default function AltaDireccionNotificacionesPage() {
   }, [search, tipoFilter, proyectoFilter, soloNoLeidas, readIds, eventos]);
 
   const grouped = useMemo(() => {
-    const map = new Map<Bucket, NotificacionAltaDireccion[]>();
+    const map = new Map<Bucket, NotificacionAdministracion[]>();
     for (const b of BUCKET_ORDER) map.set(b, []);
     for (const e of filtered) map.get(getBucket(e.fecha_evento, now))!.push(e);
     return map;

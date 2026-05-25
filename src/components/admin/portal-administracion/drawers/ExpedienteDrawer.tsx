@@ -7,7 +7,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { Pill } from "@/components/admin/portal-administracion/ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -48,7 +48,7 @@ export function ExpedienteDrawer({
   const verExpediente = () => {
     onOpenChange(false);
     navigate(
-      `/admin/portal-alta-direccion/ciclo-venta?caso=${encodeURIComponent(ventaContext.folio)}`
+      `/admin/portal-administracion/ciclo-venta?caso=${encodeURIComponent(ventaContext.folio)}`
     );
   };
 

@@ -23,19 +23,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { PageHeader } from "@/components/admin/portal-administracion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { supabase } from "@/integrations/supabase/client";
-import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { VentaParaFacturarContent } from "@/components/admin/portal-alta-direccion/drawers/content/VentaParaFacturarContent";
-import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
-import { ComisionInternaContent } from "@/components/admin/portal-alta-direccion/drawers/content/ComisionInternaContent";
+import { ExpedienteDrawer } from "@/components/admin/portal-administracion/drawers/ExpedienteDrawer";
+import { VentaParaFacturarContent } from "@/components/admin/portal-administracion/drawers/content/VentaParaFacturarContent";
+import { PagoExternoContent } from "@/components/admin/portal-administracion/drawers/content/PagoExternoContent";
+import { ComisionInternaContent } from "@/components/admin/portal-administracion/drawers/content/ComisionInternaContent";
 import {
   getVentaContext,
   resolveCobFolio,
-} from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+} from "@/components/admin/portal-administracion/drawers/ventaContexts";
 
 /* ──────────────────────────────────────────────────────────
    Tipos
@@ -1064,7 +1064,7 @@ function PaginationBar({
    Página
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionBandejaValidacionesPage() {
+export default function AdministracionBandejaValidacionesPage() {
   const [selected, setSelected] = useState<SelectedItem | null>(null);
 
   const ventasRef = useRef<HTMLDivElement>(null);
@@ -1667,7 +1667,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
         />
       </section>
 
-      {/* ─── Drawer unificado del Portal Alta Dirección ─── */}
+      {/* ─── Drawer unificado del Portal de Administración ─── */}
       {selected && (() => {
         const close = () => setSelected(null);
         const open = !!selected;

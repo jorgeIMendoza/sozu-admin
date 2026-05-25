@@ -1,5 +1,5 @@
 import { Receipt, Building2, Calendar, Banknote, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { DrawerActionFooter, type DrawerAction } from "../DrawerActionFooter";
 import { Section, KV, StatusCard } from "./_shared";
 import type { FacturaPorCobrarEntity, VentaContext } from "../types";

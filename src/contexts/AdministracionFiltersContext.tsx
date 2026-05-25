@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
-export type AltaDireccionFilters = {
+export type AdministracionFilters = {
   projectId: string | null;
   channel: string | null;
   period: string | null;
   search: string | null;
 };
 
-const DEFAULTS: AltaDireccionFilters = {
+const DEFAULTS: AdministracionFilters = {
   projectId: null,
   channel: null,
   period: null,
@@ -15,26 +15,26 @@ const DEFAULTS: AltaDireccionFilters = {
 };
 
 type Ctx = {
-  filters: AltaDireccionFilters;
-  setFilter: <K extends keyof AltaDireccionFilters>(k: K, v: AltaDireccionFilters[K]) => void;
+  filters: AdministracionFilters;
+  setFilter: <K extends keyof AdministracionFilters>(k: K, v: AdministracionFilters[K]) => void;
   resetFilters: () => void;
 };
 
-const AltaDireccionFiltersContext = createContext<Ctx | undefined>(undefined);
+const AdministracionFiltersContext = createContext<Ctx | undefined>(undefined);
 
-export function AltaDireccionFiltersProvider({ children }: { children: ReactNode }) {
-  const [filters, setFilters] = useState<AltaDireccionFilters>(DEFAULTS);
+export function AdministracionFiltersProvider({ children }: { children: ReactNode }) {
+  const [filters, setFilters] = useState<AdministracionFilters>(DEFAULTS);
   const setFilter: Ctx["setFilter"] = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const resetFilters = () => setFilters(DEFAULTS);
   return (
-    <AltaDireccionFiltersContext.Provider value={{ filters, setFilter, resetFilters }}>
+    <AdministracionFiltersContext.Provider value={{ filters, setFilter, resetFilters }}>
       {children}
-    </AltaDireccionFiltersContext.Provider>
+    </AdministracionFiltersContext.Provider>
   );
 }
 
-export function useAltaDireccionFilters() {
-  const ctx = useContext(AltaDireccionFiltersContext);
-  if (!ctx) throw new Error("useAltaDireccionFilters must be used inside AltaDireccionFiltersProvider");
+export function useAdministracionFilters() {
+  const ctx = useContext(AdministracionFiltersContext);
+  if (!ctx) throw new Error("useAdministracionFilters must be used inside AdministracionFiltersProvider");
   return ctx;
 }

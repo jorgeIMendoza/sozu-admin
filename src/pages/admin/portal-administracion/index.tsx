@@ -5,15 +5,15 @@ import {
   CheckCircle, AlertTriangle, Banknote, Landmark, Users, History,
   CalendarCheck, Briefcase, FileSignature, BarChart3, Settings, UserSearch,
 } from "lucide-react";
-import { Kpi, Panel, PageHeader, Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { Kpi, Panel, PageHeader, Pill } from "@/components/admin/portal-administracion/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAltaDireccionFilters } from "@/contexts/AltaDireccionFiltersContext";
-import { AUDIT_EVENTS, fmtMxn } from "@/data/altaDireccion/mockData";
+import { useAdministracionFilters } from "@/contexts/AdministracionFiltersContext";
+import { AUDIT_EVENTS, fmtMxn } from "@/data/administracion/mockData";
 
 const DemoBadge = () => (
   <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Datos demo</Pill>
@@ -24,7 +24,7 @@ const LiveBadge = () => (
 
 // ============================ Dashboard ============================
 // Movido a archivo dedicado para alojar mocks de filtrado + estado local.
-export { default as AltaDireccionDashboard } from "./AltaDireccionDashboardPage";
+export { default as AdministracionDashboard } from "./AdministracionDashboardPage";
 
 // ============================ Comercial ============================
 type CitaAgente = {
@@ -122,14 +122,14 @@ const ESTADO_OPTIONS: { value: string; label: string }[] = [
 
 type KpiFilter = "all" | "semana" | "confirmadas" | "pendientes";
 
-export function AltaDireccionCitas() {
-  const { filters } = useAltaDireccionFilters();
+export function AdministracionCitas() {
+  const { filters } = useAdministracionFilters();
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
   const queryClient = useQueryClient();
 
   const { data: citas = [], isLoading, error } = useQuery<CitaRow[]>({
-    queryKey: ["alta-direccion-citas"],
+    queryKey: ["administracion-citas"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("reservas_citas")
@@ -151,12 +151,12 @@ export function AltaDireccionCitas() {
 
   useEffect(() => {
     const channel = (supabase as any)
-      .channel("alta-direccion-citas-realtime")
+      .channel("administracion-citas-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "reservas_citas" },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["alta-direccion-citas"] });
+          queryClient.invalidateQueries({ queryKey: ["administracion-citas"] });
         }
       )
       .subscribe();
@@ -423,7 +423,7 @@ function rolToCanal(rol: string | null): string {
 
 type ActivoFilter = "active" | "deleted" | "all";
 
-export function AltaDireccionProspectos() {
+export function AdministracionProspectos() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -435,7 +435,7 @@ export function AltaDireccionProspectos() {
   const [hasta, setHasta] = useState<string>("");
 
   const { data: prospectos = [], isLoading, error } = useQuery<ProspectoRow[]>({
-    queryKey: ["alta-direccion-prospectos"],
+    queryKey: ["administracion-prospectos"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("entidades_relacionadas")
@@ -458,12 +458,12 @@ export function AltaDireccionProspectos() {
 
   useEffect(() => {
     const channel = (supabase as any)
-      .channel("alta-direccion-prospectos-realtime")
+      .channel("administracion-prospectos-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "entidades_relacionadas" },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["alta-direccion-prospectos"] });
+          queryClient.invalidateQueries({ queryKey: ["administracion-prospectos"] });
         }
       )
       .subscribe();
@@ -726,7 +726,7 @@ export function AltaDireccionProspectos() {
   );
 }
 
-export { default as AltaDireccionPipeline } from "./AltaDireccionPipelinePage";
+export { default as AdministracionPipeline } from "./AdministracionPipelinePage";
 
 const OFERTAS = [
   { id: "OFR-3001", cliente: "María García",  unidad: "Daiku A-201",    monto: 4500000, estado: "aprobada"  },
@@ -735,7 +735,7 @@ const OFERTAS = [
   { id: "OFR-3004", cliente: "Lucía H.",      unidad: "Daiku C-402",    monto: 5800000, estado: "pendiente" },
 ];
 
-export function AltaDireccionOfertas() {
+export function AdministracionOfertas() {
   const total = OFERTAS.reduce((s, o) => s + o.monto, 0);
   const pend = OFERTAS.filter((o) => o.estado === "pendiente").length;
   return (
@@ -775,7 +775,7 @@ const COBRANZA = [
   { id: "COB-003", cliente: "Sofía Rivera",  unidad: "Monócolo B-1", saldo: 1800000,  total: 3100000, estado: "vencida"  },
 ];
 
-export function AltaDireccionCobranza() {
+export function AdministracionCobranza() {
   const cobrado = COBRANZA.reduce((s, c) => s + (c.total - c.saldo), 0);
   const por_cobrar = COBRANZA.reduce((s, c) => s + c.saldo, 0);
   return (
@@ -816,7 +816,7 @@ const CONTRATOS = [
   { id: "CTR-203", cliente: "Sofía Rivera", unidad: "Monócolo B-1", fecha: "2026-05-09", estado: "firmado"  },
 ];
 
-export function AltaDireccionContratos() {
+export function AdministracionContratos() {
   return (
     <>
       <PageHeader title="Contratos" description="Estatus de contratos firmados y pendientes" action={<DemoBadge />} />
@@ -853,7 +853,7 @@ const FACTURAS = [
   { id: "F-A4503", cliente: "Sofía Rivera", concepto: "Liquidación",          monto: 1800000, fecha: "2026-05-09", estado: "pendiente" },
 ];
 
-export function AltaDireccionFacturas() {
+export function AdministracionFacturas() {
   const total = FACTURAS.reduce((s, f) => s + f.monto, 0);
   return (
     <>
@@ -892,7 +892,7 @@ const COMISIONES = [
   { id: "COM-120", agente: "Diego Soto",     canal: "Embajador",    monto: 62000,  estado: "devengada"},
 ];
 
-export function AltaDireccionComisiones() {
+export function AdministracionComisiones() {
   const dev = COMISIONES.filter((c) => c.estado === "devengada").reduce((s, c) => s + c.monto, 0);
   const apr = COMISIONES.filter((c) => c.estado === "aprobada").reduce((s, c) => s + c.monto, 0);
   const pag = COMISIONES.filter((c) => c.estado === "pagada").reduce((s, c) => s + c.monto, 0);
@@ -934,7 +934,7 @@ const PERSONAS = [
   { id: "P-4", nombre: "Inmobiliaria X", rol: "Agencia",            canal: "Inmobiliaria", ventas: 12, comision: 1080000 },
 ];
 
-export function AltaDireccionRedComercial() {
+export function AdministracionRedComercial() {
   return (
     <>
       <PageHeader title="Red Comercial" description="Agentes, brokers, embajadores e inmobiliarias" action={<DemoBadge />} />
@@ -966,7 +966,7 @@ export function AltaDireccionRedComercial() {
   );
 }
 
-export function AltaDireccionReportes() {
+export function AdministracionReportes() {
   const reportes = [
     { id: "R-1", nombre: "Cierres del mes",     desc: "Ventas escrituradas y apartados" },
     { id: "R-2", nombre: "Pipeline por canal",  desc: "Distribución y conversión" },
@@ -989,7 +989,7 @@ export function AltaDireccionReportes() {
   );
 }
 
-export function AltaDireccionAuditoria() {
+export function AdministracionAuditoria() {
   return (
     <>
       <PageHeader title="Auditoría" description="Bitácora ejecutiva de eventos del sistema" action={<DemoBadge />} />
@@ -1010,10 +1010,10 @@ export function AltaDireccionAuditoria() {
   );
 }
 
-export function AltaDireccionConfiguracion() {
+export function AdministracionConfiguracion() {
   return (
     <>
-      <PageHeader title="Configuración" description="Parámetros del Portal Alta Dirección" action={<DemoBadge />} />
+      <PageHeader title="Configuración" description="Parámetros del Portal de Administración" action={<DemoBadge />} />
       <Panel title="Preferencias" description="Configuración general del portal">
         <p className="text-sm text-muted-foreground">
           Aquí vivirán: umbrales de KPIs, alertas críticas, integraciones con BI y reglas de visibilidad por desarrollo.

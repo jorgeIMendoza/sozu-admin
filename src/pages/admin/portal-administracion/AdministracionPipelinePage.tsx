@@ -95,7 +95,7 @@ async function enrichOfertas(data: any[]): Promise<PipelineCard[]> {
   const productoIds = [...new Set(data.map((o: any) => o.id_producto).filter(Boolean))] as number[];
   const ofertaIds = data.map((o: any) => o.id);
 
-  // Resolve creator emails → name + role (Alta Dirección sees ALL agents, no a-priori list)
+  // Resolve creator emails → name + role (Administración sees ALL agents, no a-priori list)
   const allEmails = [...new Set(data.map((o: any) => o.email_creador).filter(Boolean))] as string[];
   const nameMap = new Map<string, string>();
   const agentRoleEmails = new Set<string>();
@@ -226,7 +226,7 @@ async function enrichOfertas(data: any[]): Promise<PipelineCard[]> {
   });
 }
 
-export default function AltaDireccionPipelinePage() {
+export default function AdministracionPipelinePage() {
   const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set(["expiradas"]));
   const [manuallyToggled, setManuallyToggled] = useState<Set<string>>(new Set());
   const [selectedCard, setSelectedCard] = useState<PipelineCard | null>(null);
@@ -242,7 +242,7 @@ export default function AltaDireccionPipelinePage() {
   const dateRanges = useMemo(() => buildDateRangesFromMonths(selectedMonths), [selectedMonths]);
   const hasMonthFilter = selectedMonths.length > 0;
 
-  // Fetch ALL active ofertas (no agent / inmobiliaria filter — Alta Dirección sees everything)
+  // Fetch ALL active ofertas (no agent / inmobiliaria filter — Administración sees everything)
   const { data: ofertas = [], isLoading } = useQuery<PipelineCard[]>({
     queryKey: ["altadir-pipeline-ofertas", selectedMonths],
     queryFn: async () => {

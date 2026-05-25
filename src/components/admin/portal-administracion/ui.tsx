@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /**
- * Componentes UI compartidos del Portal Alta Dirección.
+ * Componentes UI compartidos del Portal de Administración.
  * Alineados al Design System SOZU (tipografías, espaciados, radios y tonos).
  * Se mantienen los tokens de Tailwind (HSL) para preservar dark mode y scopes.
  */

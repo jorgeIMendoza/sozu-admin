@@ -12,7 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";

@@ -1,5 +1,5 @@
 import { AlertTriangle, User, Shield } from "lucide-react";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { DrawerActionFooter } from "../DrawerActionFooter";
 import { Section, StatusCard } from "./_shared";
 import type { ExcepcionEntity, VentaContext } from "../types";

@@ -1,5 +1,5 @@
-import { fmtMxn } from "@/data/altaDireccion/mockData";
-import { Pill } from "@/components/admin/portal-alta-direccion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
+import { Pill } from "@/components/admin/portal-administracion/ui";
 import { cn } from "@/lib/utils";
 import type { VentaContext, EstadoVenta } from "./types";
 

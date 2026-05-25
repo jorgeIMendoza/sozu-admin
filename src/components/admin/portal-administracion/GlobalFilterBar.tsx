@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { X, Search } from "lucide-react";
-import { useAltaDireccionFilters } from "@/contexts/AltaDireccionFiltersContext";
+import { useAdministracionFilters } from "@/contexts/AdministracionFiltersContext";
 
 const projects = [
   { id: "all", name: "Todos los desarrollos" },
@@ -27,7 +27,7 @@ const periods = [
 ];
 
 export function GlobalFilterBar() {
-  const { filters, setFilter, resetFilters } = useAltaDireccionFilters();
+  const { filters, setFilter, resetFilters } = useAdministracionFilters();
   const hasFilters = filters.projectId || filters.channel || filters.period || filters.search;
   return (
     <div className="bg-card px-4 lg:px-6 py-2 flex items-center gap-2 flex-wrap border-b border-border -mx-4 lg:-mx-8 -mt-4 lg:-mt-6 mb-4">

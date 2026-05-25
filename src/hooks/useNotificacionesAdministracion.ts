@@ -13,7 +13,7 @@ export type TipoNotificacion =
   | "factura_sozu_vencida"
   | "factura_pagar_pendiente";
 
-export interface NotificacionAltaDireccion {
+export interface NotificacionAdministracion {
   id: string;
   tipo: TipoNotificacion;
   titulo: string;
@@ -210,7 +210,7 @@ async function enrichCuentas(rows: CuentaBase[]): Promise<Map<number, EnrichedCu
    Q1) Ventas listas para facturar
    ────────────────────────────────────────────────────────── */
 
-async function fetchVentasListasFacturar(): Promise<NotificacionAltaDireccion[]> {
+async function fetchVentasListasFacturar(): Promise<NotificacionAdministracion[]> {
   const { data, error } = await supabase
     .from("cuentas_cobranza")
     .select(CUENTA_FIELDS)
@@ -226,7 +226,7 @@ async function fetchVentasListasFacturar(): Promise<NotificacionAltaDireccion[]>
   const base = (data ?? []) as CuentaBase[];
   const enriched = await enrichCuentas(base);
 
-  return base.map<NotificacionAltaDireccion>((r) => {
+  return base.map<NotificacionAdministracion>((r) => {
     const c = enriched.get(r.id)!;
     const precio = r.precio_final ?? 0;
     const pct = r.porcentaje_comision_venta ?? 0;
@@ -244,7 +244,7 @@ async function fetchVentasListasFacturar(): Promise<NotificacionAltaDireccion[]>
       dias_esperando: dias,
       monto: comision,
       critico: dias > UMBRAL_CRITICO_DIAS,
-      link_modulo: "/admin/portal-alta-direccion/bandeja",
+      link_modulo: "/admin/portal-administracion/bandeja",
     };
   });
 }
@@ -275,7 +275,7 @@ type ComisionistaRow = {
   fecha_actualizacion: string | null;
 };
 
-async function fetchPagosExternosValidar(): Promise<NotificacionAltaDireccion[]> {
+async function fetchPagosExternosValidar(): Promise<NotificacionAdministracion[]> {
   const { data, error } = await supabase
     .from("comisionistas")
     .select(
@@ -303,7 +303,7 @@ async function fetchPagosExternosValidar(): Promise<NotificacionAltaDireccion[]>
   const enriched = await enrichCuentas(cuentas);
 
   return filas
-    .map<NotificacionAltaDireccion | null>((c) => {
+    .map<NotificacionAdministracion | null>((c) => {
       const en = enriched.get(c.id_cuenta_cobranza);
       if (!en) return null;
       const precio = en.precio_final ?? 0;
@@ -327,17 +327,17 @@ async function fetchPagosExternosValidar(): Promise<NotificacionAltaDireccion[]>
         dias_esperando: dias,
         monto,
         critico: dias > 5,
-        link_modulo: "/admin/portal-alta-direccion/bandeja",
+        link_modulo: "/admin/portal-administracion/bandeja",
       };
     })
-    .filter((n): n is NotificacionAltaDireccion => n !== null);
+    .filter((n): n is NotificacionAdministracion => n !== null);
 }
 
 /* ──────────────────────────────────────────────────────────
    Q3) Comisiones internas en espera de autorización
    ────────────────────────────────────────────────────────── */
 
-async function fetchComisionesInternasEspera(): Promise<NotificacionAltaDireccion[]> {
+async function fetchComisionesInternasEspera(): Promise<NotificacionAdministracion[]> {
   const { data, error } = await supabase
     .from("comisionistas")
     .select(
@@ -370,7 +370,7 @@ async function fetchComisionesInternasEspera(): Promise<NotificacionAltaDireccio
   const cuentas = await fetchCuentasByIds(Array.from(porCuenta.keys()));
   const enriched = await enrichCuentas(cuentas);
 
-  const out: NotificacionAltaDireccion[] = [];
+  const out: NotificacionAdministracion[] = [];
   for (const [id, lista] of porCuenta) {
     const en = enriched.get(id);
     if (!en) continue;
@@ -396,7 +396,7 @@ async function fetchComisionesInternasEspera(): Promise<NotificacionAltaDireccio
       dias_esperando: dias,
       monto,
       critico: dias > 5,
-      link_modulo: "/admin/portal-alta-direccion/bandeja",
+      link_modulo: "/admin/portal-administracion/bandeja",
     });
   }
   return out;
@@ -406,7 +406,7 @@ async function fetchComisionesInternasEspera(): Promise<NotificacionAltaDireccio
    Q4) Facturas SOZU vencidas sin cobrar
    ────────────────────────────────────────────────────────── */
 
-async function fetchFacturasSozuVencidas(): Promise<NotificacionAltaDireccion[]> {
+async function fetchFacturasSozuVencidas(): Promise<NotificacionAdministracion[]> {
   const { data, error } = await supabase
     .from("cuentas_cobranza")
     .select(CUENTA_FIELDS)
@@ -430,7 +430,7 @@ async function fetchFacturasSozuVencidas(): Promise<NotificacionAltaDireccion[]>
 
   const enriched = await enrichCuentas(vencidas);
 
-  return vencidas.map<NotificacionAltaDireccion>((r) => {
+  return vencidas.map<NotificacionAdministracion>((r) => {
     const en = enriched.get(r.id)!;
     const precio = r.precio_final ?? 0;
     const pct = r.porcentaje_comision_venta ?? 0;
@@ -450,7 +450,7 @@ async function fetchFacturasSozuVencidas(): Promise<NotificacionAltaDireccion[]>
       dias_esperando: diasVencida,
       monto: comision,
       critico: true,
-      link_modulo: "/admin/portal-alta-direccion/facturas-por-cobrar",
+      link_modulo: "/admin/portal-administracion/facturas-por-cobrar",
     };
   });
 }
@@ -459,7 +459,7 @@ async function fetchFacturasSozuVencidas(): Promise<NotificacionAltaDireccion[]>
    Q5) Facturas por pagar autorizadas sin liquidar
    ────────────────────────────────────────────────────────── */
 
-async function fetchFacturasPorPagarPendientes(): Promise<NotificacionAltaDireccion[]> {
+async function fetchFacturasPorPagarPendientes(): Promise<NotificacionAdministracion[]> {
   const { data, error } = await supabase
     .from("comisionistas")
     .select(
@@ -487,7 +487,7 @@ async function fetchFacturasPorPagarPendientes(): Promise<NotificacionAltaDirecc
   const enriched = await enrichCuentas(cuentas);
 
   return filas
-    .map<NotificacionAltaDireccion | null>((c) => {
+    .map<NotificacionAdministracion | null>((c) => {
       const en = enriched.get(c.id_cuenta_cobranza);
       if (!en) return null;
       // Sólo aplican aquellas donde el desarrollador YA pagó a SOZU,
@@ -515,18 +515,18 @@ async function fetchFacturasPorPagarPendientes(): Promise<NotificacionAltaDirecc
         dias_esperando: dias,
         monto,
         critico: dias > UMBRAL_CRITICO_DIAS,
-        link_modulo: "/admin/portal-alta-direccion/facturas-por-pagar",
+        link_modulo: "/admin/portal-administracion/facturas-por-pagar",
       };
     })
-    .filter((n): n is NotificacionAltaDireccion => n !== null);
+    .filter((n): n is NotificacionAdministracion => n !== null);
 }
 
 /* ──────────────────────────────────────────────────────────
    Hook público
    ────────────────────────────────────────────────────────── */
 
-export function useNotificacionesAltaDireccion() {
-  return useQuery<NotificacionAltaDireccion[]>({
+export function useNotificacionesAdministracion() {
+  return useQuery<NotificacionAdministracion[]>({
     queryKey: ["notificaciones-alta-direccion"],
     queryFn: async () => {
       const [q1, q2, q3, q4, q5] = await Promise.all([

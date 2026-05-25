@@ -31,14 +31,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Kpi, PageHeader, Panel } from "@/components/admin/portal-alta-direccion/ui";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { Kpi, PageHeader, Panel } from "@/components/admin/portal-administracion/ui";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
-import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
+import { ExpedienteDrawer } from "@/components/admin/portal-administracion/drawers/ExpedienteDrawer";
+import { PagoExternoContent } from "@/components/admin/portal-administracion/drawers/content/PagoExternoContent";
 import { useNavigate } from "react-router-dom";
-import { getVentaContext } from "@/components/admin/portal-alta-direccion/drawers/ventaContexts";
+import { getVentaContext } from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useComisionesExternas,
   type ComisionExterna,
@@ -105,7 +105,7 @@ function Antiguedad({
    Página
    ────────────────────────────────────────────────────────── */
 
-export default function AltaDireccionComisionesExternasPage() {
+export default function AdministracionComisionesExternasPage() {
   const [search, setSearch] = useState("");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
@@ -557,7 +557,7 @@ export default function AltaDireccionComisionesExternasPage() {
                       onClick: () => {
                         setSelected(null);
                         navigate(
-                          `/admin/portal-alta-direccion/bandeja#${encodeURIComponent(
+                          `/admin/portal-administracion/bandeja#${encodeURIComponent(
                             folioCuenta,
                           )}`,
                         );

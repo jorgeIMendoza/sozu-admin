@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 
 /* ──────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ function WidgetCobrar({ d }: { d: SaludFinancieraData["dinero_por_cobrar"] }) {
         description="Facturado a desarrolladores, pendiente de cobro"
         subInfo={<EmptyContent message="Sin datos para los filtros aplicados" />}
         ctaLabel="Ver Facturas por Cobrar"
-        ctaHref="/admin/portal-alta-direccion/facturas-por-cobrar"
+        ctaHref="/admin/portal-administracion/facturas-por-cobrar"
       />
     );
   }
@@ -167,7 +167,7 @@ function WidgetCobrar({ d }: { d: SaludFinancieraData["dinero_por_cobrar"] }) {
         </>
       }
       ctaLabel="Ver Facturas por Cobrar"
-      ctaHref="/admin/portal-alta-direccion/facturas-por-cobrar"
+      ctaHref="/admin/portal-administracion/facturas-por-cobrar"
     />
   );
 }
@@ -188,7 +188,7 @@ function WidgetDeuda({ d }: { d: SaludFinancieraData["deuda_colaboradores"] }) {
         description="Pagos pendientes a externos"
         subInfo={<EmptyContent message="Sin datos para los filtros aplicados" />}
         ctaLabel="Ver Facturas por Pagar"
-        ctaHref="/admin/portal-alta-direccion/facturas-por-pagar"
+        ctaHref="/admin/portal-administracion/facturas-por-pagar"
       />
     );
   }
@@ -227,7 +227,7 @@ function WidgetDeuda({ d }: { d: SaludFinancieraData["deuda_colaboradores"] }) {
         </>
       }
       ctaLabel="Ver Facturas por Pagar"
-      ctaHref="/admin/portal-alta-direccion/facturas-por-pagar"
+      ctaHref="/admin/portal-administracion/facturas-por-pagar"
     />
   );
 }
@@ -256,7 +256,7 @@ function WidgetComisiones({
           />
         }
         ctaLabel="Revisar en Bandeja"
-        ctaHref="/admin/portal-alta-direccion/bandeja"
+        ctaHref="/admin/portal-administracion/bandeja"
       />
     );
   }
@@ -285,7 +285,7 @@ function WidgetComisiones({
         </>
       }
       ctaLabel="Revisar en Bandeja"
-      ctaHref="/admin/portal-alta-direccion/bandeja"
+      ctaHref="/admin/portal-administracion/bandeja"
     />
   );
 }
@@ -366,7 +366,7 @@ function WidgetFinanciamiento({
         )
       }
       ctaLabel={sano ? "Sin casos activos" : "Ver casos"}
-      ctaHref={sano ? undefined : "/admin/portal-alta-direccion/bandeja"}
+      ctaHref={sano ? undefined : "/admin/portal-administracion/bandeja"}
       ctaDisabled={sano}
     />
   );

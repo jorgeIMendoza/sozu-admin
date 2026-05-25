@@ -22,20 +22,20 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
+import { AdministracionFiltersProvider } from "@/contexts/AdministracionFiltersContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
-  "/admin/portal-alta-direccion/dashboard",
-  "/admin/portal-alta-direccion/notificaciones",
-  "/admin/portal-alta-direccion/prospectos",
-  "/admin/portal-alta-direccion/pipeline",
-  "/admin/portal-alta-direccion/bandeja",
-  "/admin/portal-alta-direccion/ciclo-venta",
-  "/admin/portal-alta-direccion/facturas-por-cobrar",
-  "/admin/portal-alta-direccion/facturas-por-pagar",
-  "/admin/portal-alta-direccion/comisiones-externas",
-  "/admin/portal-alta-direccion/comisiones-internas",
+  "/admin/portal-administracion/dashboard",
+  "/admin/portal-administracion/notificaciones",
+  "/admin/portal-administracion/prospectos",
+  "/admin/portal-administracion/pipeline",
+  "/admin/portal-administracion/bandeja",
+  "/admin/portal-administracion/ciclo-venta",
+  "/admin/portal-administracion/facturas-por-cobrar",
+  "/admin/portal-administracion/facturas-por-pagar",
+  "/admin/portal-administracion/comisiones-externas",
+  "/admin/portal-administracion/comisiones-internas",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -53,39 +53,39 @@ const navGroups: NavGroup[] = [
   {
     label: "Visión",
     items: [
-      { label: "Dashboard",      path: "/admin/portal-alta-direccion/dashboard",       icon: LayoutDashboard },
-      { label: "Notificaciones", path: "/admin/portal-alta-direccion/notificaciones",  icon: Bell },
+      { label: "Dashboard",      path: "/admin/portal-administracion/dashboard",       icon: LayoutDashboard },
+      { label: "Notificaciones", path: "/admin/portal-administracion/notificaciones",  icon: Bell },
     ],
   },
   {
     label: "Comercial",
     items: [
-      { label: "Citas Comerciales", path: "/admin/portal-alta-direccion/citas",      icon: CalendarCheck },
-      { label: "Prospectos",        path: "/admin/portal-alta-direccion/prospectos", icon: UserSearch },
-      { label: "Pipeline",          path: "/admin/portal-alta-direccion/pipeline",   icon: Briefcase },
+      { label: "Citas Comerciales", path: "/admin/portal-administracion/citas",      icon: CalendarCheck },
+      { label: "Prospectos",        path: "/admin/portal-administracion/prospectos", icon: UserSearch },
+      { label: "Pipeline",          path: "/admin/portal-administracion/pipeline",   icon: Briefcase },
       // "Ofertas" oculto en esta fase de demo; ruta sigue viva en App.tsx por URL directa.
     ],
   },
   {
     label: "Operación",
     items: [
-      { label: "Bandeja de Validaciones", path: "/admin/portal-alta-direccion/bandeja",      icon: Inbox },
-      { label: "Ciclo de Venta",          path: "/admin/portal-alta-direccion/ciclo-venta",  icon: Workflow },
+      { label: "Bandeja de Validaciones", path: "/admin/portal-administracion/bandeja",      icon: Inbox },
+      { label: "Ciclo de Venta",          path: "/admin/portal-administracion/ciclo-venta",  icon: Workflow },
       // "Cobranza" y "Contratos" ocultas en esta fase de demo; rutas vivas en App.tsx por URL directa.
       {
         label: "Facturas",
         icon: FileText,
         children: [
-          { label: "Por Cobrar", path: "/admin/portal-alta-direccion/facturas-por-cobrar" },
-          { label: "Por Pagar",  path: "/admin/portal-alta-direccion/facturas-por-pagar"  },
+          { label: "Por Cobrar", path: "/admin/portal-administracion/facturas-por-cobrar" },
+          { label: "Por Pagar",  path: "/admin/portal-administracion/facturas-por-pagar"  },
         ],
       },
       {
         label: "Comisiones",
         icon: Percent,
         children: [
-          { label: "Externas", path: "/admin/portal-alta-direccion/comisiones-externas" },
-          { label: "Internas", path: "/admin/portal-alta-direccion/comisiones-internas" },
+          { label: "Externas", path: "/admin/portal-administracion/comisiones-externas" },
+          { label: "Internas", path: "/admin/portal-administracion/comisiones-internas" },
         ],
       },
     ],
@@ -94,7 +94,7 @@ const navGroups: NavGroup[] = [
   // ocultada en esta fase. Las rutas siguen vivas en App.tsx por URL directa.
 ];
 
-export const PortalAltaDireccionLayout = () => {
+export const PortalAdministracionLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
@@ -129,7 +129,7 @@ export const PortalAltaDireccionLayout = () => {
         }
       }
     }
-    return "Alta Dirección";
+    return "Administración";
   })();
 
   const userName = profile?.nombre || profile?.email || "Usuario";
@@ -145,7 +145,7 @@ export const PortalAltaDireccionLayout = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">Alta Dirección</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">Administración</p>
           </div>
         </div>
       </div>
@@ -250,7 +250,7 @@ export const PortalAltaDireccionLayout = () => {
   );
 
   return (
-    <AltaDireccionFiltersProvider>
+    <AdministracionFiltersProvider>
       <div className="min-h-screen flex">
         <aside
           className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30"
@@ -268,14 +268,14 @@ export const PortalAltaDireccionLayout = () => {
         <div className="flex-1 lg:ml-[232px]">
           <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-6 h-14">
             <div className="flex items-center gap-2 text-sm text-foreground">
-              <span className="font-medium">Portal Alta Dirección</span>
+              <span className="font-medium">Portal de Administración</span>
               <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground">{currentSection}</span>
             </div>
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0 text-right">
                 <p className="text-sm font-medium text-foreground truncate">{userName}</p>
-                <p className="text-xs text-muted-foreground truncate">Alta Dirección</p>
+                <p className="text-xs text-muted-foreground truncate">Administración</p>
               </div>
               <Avatar className="h-9 w-9 shrink-0">
                 <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-bold">
@@ -296,7 +296,7 @@ export const PortalAltaDireccionLayout = () => {
               </button>
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
-                  Alta Dirección
+                  Administración
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-tight truncate">{currentSection}</p>
               </div>
@@ -316,8 +316,8 @@ export const PortalAltaDireccionLayout = () => {
           </main>
         </div>
       </div>
-    </AltaDireccionFiltersProvider>
+    </AdministracionFiltersProvider>
   );
 };
 
-export default PortalAltaDireccionLayout;
+export default PortalAdministracionLayout;
