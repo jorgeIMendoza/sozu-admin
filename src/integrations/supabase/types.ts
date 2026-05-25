@@ -3591,6 +3591,76 @@ export type Database = {
           },
         ]
       }
+      creditos_hipotecarios: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_cita_firma: string | null
+          fecha_creacion: string
+          fecha_pago_banco: string | null
+          fecha_vobo: string | null
+          id: number
+          id_banco: number | null
+          id_cuenta_cobranza: number
+          monto_credito: number
+          observaciones: string | null
+          pago_banco_estatus: string
+          vobo_banco: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_cita_firma?: string | null
+          fecha_creacion?: string
+          fecha_pago_banco?: string | null
+          fecha_vobo?: string | null
+          id?: never
+          id_banco?: number | null
+          id_cuenta_cobranza: number
+          monto_credito?: number
+          observaciones?: string | null
+          pago_banco_estatus?: string
+          vobo_banco?: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_cita_firma?: string | null
+          fecha_creacion?: string
+          fecha_pago_banco?: string | null
+          fecha_vobo?: string | null
+          id?: never
+          id_banco?: number | null
+          id_cuenta_cobranza?: number
+          monto_credito?: number
+          observaciones?: string | null
+          pago_banco_estatus?: string
+          vobo_banco?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creditos_hipotecarios_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creditos_hipotecarios_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: true
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creditos_hipotecarios_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: true
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
+      }
       cta_events: {
         Row: {
           ab_test_id: number | null
@@ -3712,16 +3782,13 @@ export type Database = {
           collection_id: number | null
           contrato_draft: string | null
           email_autoriza_comision: string | null
-          email_autoriza_comision_externa: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
           es_draft_factura_comision: boolean | null
           es_pagada_comision_venta: boolean
           estatus_autorizacion_comision: string
-          estatus_autorizacion_comision_externa: string
           fecha_actualizacion: string
           fecha_autorizacion_comision: string | null
-          fecha_autorizacion_comision_externa: string | null
           fecha_compra: string | null
           fecha_creacion: string
           fecha_escritura: string | null
@@ -3739,7 +3806,6 @@ export type Database = {
           monto_cobro_cancelacion: number | null
           monto_comision_pagado: number
           notas_rechazo_comision: string | null
-          notas_rechazo_comision_externa: string | null
           numero_escritura: string | null
           numero_unidad_privativa: string | null
           porcentaje_comision_venta: number
@@ -3758,16 +3824,13 @@ export type Database = {
           collection_id?: number | null
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
-          email_autoriza_comision_externa?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
-          estatus_autorizacion_comision_externa?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
-          fecha_autorizacion_comision_externa?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -3785,7 +3848,6 @@ export type Database = {
           monto_cobro_cancelacion?: number | null
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
-          notas_rechazo_comision_externa?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -3804,16 +3866,13 @@ export type Database = {
           collection_id?: number | null
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
-          email_autoriza_comision_externa?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
-          estatus_autorizacion_comision_externa?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
-          fecha_autorizacion_comision_externa?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -3831,7 +3890,6 @@ export type Database = {
           monto_cobro_cancelacion?: number | null
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
-          notas_rechazo_comision_externa?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -3890,6 +3948,112 @@ export type Database = {
             columns: ["id_oferta"]
             isOneToOne: false
             referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demandas: {
+        Row: {
+          activo: boolean
+          estatus_demanda: string
+          fecha_actualizacion: string
+          fecha_compromiso_entrega: string | null
+          fecha_creacion: string
+          id: number
+          id_cuenta_cobranza: number
+          id_propiedad: number
+          id_proyecto: number | null
+          observaciones: string | null
+          responsable: string | null
+        }
+        Insert: {
+          activo?: boolean
+          estatus_demanda?: string
+          fecha_actualizacion?: string
+          fecha_compromiso_entrega?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_cuenta_cobranza: number
+          id_propiedad: number
+          id_proyecto?: number | null
+          observaciones?: string | null
+          responsable?: string | null
+        }
+        Update: {
+          activo?: boolean
+          estatus_demanda?: string
+          fecha_actualizacion?: string
+          fecha_compromiso_entrega?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_cuenta_cobranza?: number
+          id_propiedad?: number
+          id_proyecto?: number | null
+          observaciones?: string | null
+          responsable?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demandas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demandas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "demandas_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demandas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demandas_timeline: {
+        Row: {
+          creado_por: string | null
+          descripcion: string
+          fecha_creacion: string
+          id: number
+          id_demanda: number
+          tipo_evento: string
+        }
+        Insert: {
+          creado_por?: string | null
+          descripcion: string
+          fecha_creacion?: string
+          id?: never
+          id_demanda: number
+          tipo_evento: string
+        }
+        Update: {
+          creado_por?: string | null
+          descripcion?: string
+          fecha_creacion?: string
+          id?: never
+          id_demanda?: number
+          tipo_evento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demandas_timeline_id_demanda_fkey"
+            columns: ["id_demanda"]
+            isOneToOne: false
+            referencedRelation: "demandas"
             referencedColumns: ["id"]
           },
         ]
@@ -4264,6 +4428,313 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas: {
+        Row: {
+          activo: boolean
+          entregado_por: string | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_entrega: string | null
+          fecha_programada: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          id_propiedad: number
+          id_proyecto: number | null
+          muebles_daiku_estatus: string
+          punto_reunion: string | null
+          telefono_contacto: string | null
+        }
+        Insert: {
+          activo?: boolean
+          entregado_por?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_entrega?: string | null
+          fecha_programada?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_propiedad: number
+          id_proyecto?: number | null
+          muebles_daiku_estatus?: string
+          punto_reunion?: string | null
+          telefono_contacto?: string | null
+        }
+        Update: {
+          activo?: boolean
+          entregado_por?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_entrega?: string | null
+          fecha_programada?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_propiedad?: number
+          id_proyecto?: number | null
+          muebles_daiku_estatus?: string
+          punto_reunion?: string | null
+          telefono_contacto?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "entregas_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_checklist_categorias: {
+        Row: {
+          activo: boolean
+          cargo: string | null
+          estatus: string
+          fecha_creacion: string
+          fecha_vobo: string | null
+          id: number
+          id_entrega: number
+          items_completos: number
+          nombre: string
+          responsable: string | null
+          total_items: number
+        }
+        Insert: {
+          activo?: boolean
+          cargo?: string | null
+          estatus?: string
+          fecha_creacion?: string
+          fecha_vobo?: string | null
+          id?: never
+          id_entrega: number
+          items_completos?: number
+          nombre: string
+          responsable?: string | null
+          total_items?: number
+        }
+        Update: {
+          activo?: boolean
+          cargo?: string | null
+          estatus?: string
+          fecha_creacion?: string
+          fecha_vobo?: string | null
+          id?: never
+          id_entrega?: number
+          items_completos?: number
+          nombre?: string
+          responsable?: string | null
+          total_items?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_checklist_categorias_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_checklist_items: {
+        Row: {
+          activo: boolean
+          estatus: string
+          fecha_creacion: string
+          id: number
+          id_categoria: number
+          nombre: string
+          observacion: string | null
+        }
+        Insert: {
+          activo?: boolean
+          estatus?: string
+          fecha_creacion?: string
+          id?: never
+          id_categoria: number
+          nombre: string
+          observacion?: string | null
+        }
+        Update: {
+          activo?: boolean
+          estatus?: string
+          fecha_creacion?: string
+          id?: never
+          id_categoria?: number
+          nombre?: string
+          observacion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_checklist_items_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "entregas_checklist_categorias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_evidencia: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          id: number
+          id_categoria: number | null
+          id_entrega: number
+          nombre: string | null
+          subido_por: string | null
+          tipo: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          id_categoria?: number | null
+          id_entrega: number
+          nombre?: string | null
+          subido_por?: string | null
+          tipo: string
+          url: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          id_categoria?: number | null
+          id_entrega?: number
+          nombre?: string | null
+          subido_por?: string | null
+          tipo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_evidencia_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "entregas_checklist_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_evidencia_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_firmas: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          firma_data_url: string | null
+          id: number
+          id_entrega: number
+          ip_dispositivo: string | null
+          nombre_firmante: string | null
+          tipo_firmante: string
+          user_agent: string | null
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          firma_data_url?: string | null
+          id?: never
+          id_entrega: number
+          ip_dispositivo?: string | null
+          nombre_firmante?: string | null
+          tipo_firmante: string
+          user_agent?: string | null
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          firma_data_url?: string | null
+          id?: never
+          id_entrega?: number
+          ip_dispositivo?: string | null
+          nombre_firmante?: string | null
+          tipo_firmante?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_firmas_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_observaciones: {
+        Row: {
+          activo: boolean
+          descripcion: string
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_entrega: number
+          id_ticket_postventa: number | null
+          prioridad: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion: string
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_entrega: number
+          id_ticket_postventa?: number | null
+          prioridad?: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_entrega?: number
+          id_ticket_postventa?: number | null
+          prioridad?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_observaciones_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
             referencedColumns: ["id"]
           },
         ]
@@ -8324,6 +8795,22 @@ export type Database = {
         }
         Relationships: []
       }
+      v_pagos_efectivo: {
+        Row: {
+          clave_rastreo: string | null
+          fecha_acordada: string | null
+          fecha_pago: string | null
+          id_cuenta_cobranza: number | null
+          metodo_pago: string | null
+          monto: number | null
+          numero_propiedad: string | null
+          pago: string | null
+          pago_aplicado: number | null
+          url_cep: string | null
+          url_recibo: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
@@ -8784,6 +9271,14 @@ export type Database = {
         }
         Returns: Json
       }
+      get_kpis_alta_direccion: {
+        Args: {
+          p_fecha_fin?: string
+          p_fecha_inicio?: string
+          p_proyecto_id?: number
+        }
+        Returns: Json
+      }
       get_offers_with_agent: {
         Args: { property_id: number }
         Returns: {
@@ -8808,6 +9303,16 @@ export type Database = {
           lead_name: string
           lead_telefono: string
         }[]
+      }
+      get_pending_payments: {
+        Args: {
+          p_excluir_metodos?: string[]
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_metodo?: string
+          p_proyecto?: string
+        }
+        Returns: Json
       }
       get_properties_with_details: {
         Args: never
@@ -9005,6 +9510,12 @@ export type Database = {
         | { Args: { user_id: string }; Returns: boolean }
       mark_email_confirmed: { Args: never; Returns: undefined }
       mark_password_changed: { Args: never; Returns: undefined }
+      obtener_pagos_sin_cep: {
+        Args: { p_edificio?: string }
+        Returns: {
+          linea_banxico: string
+        }[]
+      }
       recalcular_pago_completado_acuerdos: {
         Args: { p_id_cuenta_cobranza?: number }
         Returns: number
