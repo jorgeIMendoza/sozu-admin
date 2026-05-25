@@ -204,6 +204,28 @@ const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/port
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
+// Portal de Administración (clon de Alta Dirección reutilizando páginas)
+const AdminDashboard            = AltaDireccionDashboard;
+const AdminCitas                = AltaDireccionCitas;
+const AdminProspectos           = AltaDireccionProspectos;
+const AdminPipeline             = AltaDireccionPipeline;
+const AdminOfertas              = AltaDireccionOfertas;
+const AdminCobranza             = AltaDireccionCobranza;
+const AdminContratos            = AltaDireccionContratos;
+const AdminFacturas             = AltaDireccionFacturas;
+const AdminComisiones           = AltaDireccionComisiones;
+const AdminRedComercial         = AltaDireccionRedComercial;
+const AdminReportes             = AltaDireccionReportes;
+const AdminAuditoria            = AltaDireccionAuditoria;
+const AdminConfiguracion        = AltaDireccionConfiguracion;
+const AdminNotificaciones       = AltaDireccionNotificaciones;
+const AdminBandejaValidaciones  = AltaDireccionBandejaValidaciones;
+const AdminCicloVenta           = AltaDireccionCicloVenta;
+const AdminFacturasPorCobrar    = AltaDireccionFacturasPorCobrar;
+const AdminFacturasPorPagar     = AltaDireccionFacturasPorPagar;
+const AdminComisionesExternas   = AltaDireccionComisionesExternas;
+const AdminComisionesInternas   = AltaDireccionComisionesInternas;
+
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
 const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));

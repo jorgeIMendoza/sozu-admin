@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 import { AgentPortalLayout } from "./agent-portal/AgentPortalLayout";
 import { PortalEscrituracionLayout } from "./portal-escrituracion/PortalEscrituracionLayout";
 import { PortalAltaDireccionLayout } from "./portal-alta-direccion/PortalAltaDireccionLayout";
+import { PortalAdministracionLayout } from "./portal-administracion/PortalAdministracionLayout";
 import { PortalEmbajadorLayout } from "./portal-embajador/PortalEmbajadorLayout";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
@@ -55,6 +56,10 @@ export const AdminLayout = () => {
 
   if (location.pathname.startsWith("/admin/portal-alta-direccion")) {
     return <PortalAltaDireccionLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-administracion")) {
+    return <PortalAdministracionLayout />;
   }
 
   if (location.pathname.startsWith("/admin/portal-embajador")) {
