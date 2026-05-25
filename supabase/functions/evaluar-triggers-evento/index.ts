@@ -533,14 +533,13 @@ Deno.serve(async (req) => {
         metrics.acuerdosEncontrados = rows?.length || 0;
         console.log(`${tag} trigger ${trig.id} offset ${offset} fecha=${fechaObjetivo} → ${metrics.acuerdosEncontrados} acuerdos`);
 
-        const acuerdosFiltrados = (rows || []).filter((ac: any) => {
-          const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
-          return !!idPropiedad;
-        });
+        // Separar cuentas con propiedad (inmuebles) de cuentas sin propiedad (productos/servicios)
+        const acuerdosConPropiedad = (rows || []).filter((ac: any) => !!ac?.cuentas_cobranza?.id_propiedad);
+        const acuerdosSinPropiedad = (rows || []).filter((ac: any) => !ac?.cuentas_cobranza?.id_propiedad);
 
-        const propiedadIds = [...new Set(acuerdosFiltrados.map((ac: any) => ac.cuentas_cobranza.id_propiedad))];
-        if (propiedadIds.length === 0) {
-          addMotivo(metrics, 'Sin propiedades relacionadas para filtrar desarrollos');
+        const propiedadIds = [...new Set(acuerdosConPropiedad.map((ac: any) => ac.cuentas_cobranza.id_propiedad))];
+        if (propiedadIds.length === 0 && acuerdosSinPropiedad.length === 0) {
+          addMotivo(metrics, 'Sin acuerdos elegibles');
           await finalizeExecutionLog(supabaseAdmin, executionId, metrics);
           continue;
         }
@@ -579,7 +578,9 @@ Deno.serve(async (req) => {
           : { data: [] as any[] };
         const rowsFilteredByProject = (rows || []).filter((ac: any) => {
           const idPropiedad = ac?.cuentas_cobranza?.id_propiedad;
-          const idEdificioModelo = idPropiedad ? edificioModeloByPropiedad.get(idPropiedad) : undefined;
+          // Cuentas de productos/servicios no tienen id_propiedad: se incluyen siempre
+          if (!idPropiedad) return true;
+          const idEdificioModelo = edificioModeloByPropiedad.get(idPropiedad);
           const idEdificio = idEdificioModelo ? edificioByModelo.get(idEdificioModelo) : undefined;
           const idProyecto = idEdificio ? proyectoByEdificio.get(idEdificio) : undefined;
           return !!idProyecto && selectedProjectIds.includes(idProyecto);
