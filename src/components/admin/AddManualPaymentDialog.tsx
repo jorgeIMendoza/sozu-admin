@@ -534,9 +534,7 @@ export function AddManualPaymentDialog({
         // Determine siguiente_accion based on account type
         const siguienteAccion = esMantenimiento
           ? 'aplicar_pago_manual_mantenimiento'
-          : (tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') 
-            ? 'aplicar_pago_manual_producto'
-            : 'aplicar_pago_manual';
+          : 'aplicar_pago_manual';
         
         const webhookBody = {
           success: true,
