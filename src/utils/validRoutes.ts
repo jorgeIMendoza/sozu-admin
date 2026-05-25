@@ -147,6 +147,13 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-alta-direccion/reportes',
   '/admin/portal-alta-direccion/auditoria',
   '/admin/portal-alta-direccion/configuracion',
+  // Portal Embajadores
+  '/admin/embajadores/gestion',
+  '/admin/portal-embajador/inicio',
+  '/admin/portal-embajador/mis-referidos',
+  '/admin/portal-embajador/registrar-referido',
+  '/admin/portal-embajador/comisiones',
+  '/admin/portal-embajador/perfil',
 ]);
 
 export function isValidRoute(route: string): boolean {

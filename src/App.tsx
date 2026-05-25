@@ -204,6 +204,14 @@ const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/port
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
+// Portal Embajadores
+const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
+const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));
+const EmbajadorMisReferidos    = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorMisReferidos })));
+const EmbajadorRegistrarReferido = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorRegistrarReferido })));
+const EmbajadorComisiones      = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorComisiones })));
+const EmbajadorPerfil          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorPerfil })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -538,6 +546,14 @@ const App = () => (
                   <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
                   <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+
+                 {/* Portal Embajadores */}
+                 <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
+                 <Route path="portal-embajador/inicio"             element={<EmbajadorInicio />} />
+                 <Route path="portal-embajador/mis-referidos"      element={<EmbajadorMisReferidos />} />
+                 <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
+                 <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
+                 <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
