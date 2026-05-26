@@ -61,6 +61,13 @@ export type FacturaComisionSozuPorGenerar = {
   /** Cliente (lead/comprador principal). */
   cliente_nombre: string | null;
   cliente_rfc: string | null;
+  /** Datos fiscales reales del receptor (= persona dueña de la entidad). */
+  receptor_razon_social: string | null;
+  receptor_rfc: string | null;
+  receptor_regimen_codigo: string | null;
+  receptor_regimen_nombre: string | null;
+  receptor_uso_cfdi_codigo: string | null;
+  receptor_uso_cfdi_nombre: string | null;
 };
 
 const PAD_ID = (id: number) => String(id).padStart(6, "0");
@@ -195,7 +202,8 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     (prodsRaw || []).map((p: any) => [p.id, p]),
   );
 
-  // 9) Entidades relacionadas (dueño + STP comisión + facturar?)
+  // 9) Entidades relacionadas (dueño + STP comisión + datos fiscales del receptor).
+  //    Se embed la persona completa con sus campos fiscales (rfc, regimen, uso_cfdi).
   const entIds = Array.from(
     new Set(
       (props || [])
@@ -207,11 +215,46 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     ? ((await (supabase as any)
         .from("entidades_relacionadas")
         .select(
-          "id, cuenta_stp_comisiones, facturar_comision_sozu, personas!fk_entrel_persona(nombre_legal, nombre_comercial)",
+          "id, cuenta_stp_comisiones, facturar_comision_sozu, personas!fk_entrel_persona(nombre_legal, nombre_comercial, rfc, regimen, uso_cfdi)",
         )
         .in("id", entIds)) as any)
     : { data: [] };
   const entMap = new Map<number, any>((ents || []).map((e: any) => [e.id, e]));
+
+  // 9b) Catálogos fiscales (regimen + uso_cfdi) — para traducir códigos a nombres.
+  const regimenCodigos = Array.from(
+    new Set(
+      (ents || [])
+        .map((e: any) => e.personas?.regimen)
+        .filter((x: any): x is string => !!x),
+    ),
+  );
+  const { data: regimenes } = regimenCodigos.length
+    ? ((await (supabase as any)
+        .from("regimen")
+        .select("id, nombre")
+        .in("id", regimenCodigos)) as any)
+    : { data: [] };
+  const regimenMap = new Map<string, string>(
+    (regimenes || []).map((r: any) => [String(r.id), r.nombre as string]),
+  );
+
+  const usoCfdiCodigos = Array.from(
+    new Set(
+      (ents || [])
+        .map((e: any) => e.personas?.uso_cfdi)
+        .filter((x: any): x is string => !!x),
+    ),
+  );
+  const { data: usosCfdi } = usoCfdiCodigos.length
+    ? ((await (supabase as any)
+        .from("uso_cfdi")
+        .select("codigo, nombre")
+        .in("codigo", usoCfdiCodigos)) as any)
+    : { data: [] };
+  const usoCfdiMap = new Map<string, string>(
+    (usosCfdi || []).map((u: any) => [u.codigo as string, u.nombre as string]),
+  );
 
   // 10) Personas (cliente / lead)
   const personaIds = Array.from(
@@ -266,6 +309,11 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     const esDraft = !!c.es_draft_factura_comision && !!url && !urlPendiente;
     const estado: EstadoFacturaSozu = esDraft ? "draft" : "por_generar";
 
+    // Datos fiscales del receptor — vienen del embed personas vía la entidad dueña.
+    const receptorPersona = entidad?.personas ?? null;
+    const regimenCod = (receptorPersona?.regimen as string | null) ?? null;
+    const usoCfdiCod = (receptorPersona?.uso_cfdi as string | null) ?? null;
+
     result.push({
       id_cuenta_cobranza: c.id,
       folio_cuenta: formatId(c.id, tipo),
@@ -287,6 +335,13 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       url_factura_xml_comision: c.url_factura_xml_comision ?? null,
       cliente_nombre: persona?.nombre_legal ?? null,
       cliente_rfc: persona?.rfc ?? null,
+      // Receptor fiscal (usado en el drawer)
+      receptor_razon_social: receptorPersona?.nombre_legal ?? null,
+      receptor_rfc: (receptorPersona?.rfc as string | null) ?? null,
+      receptor_regimen_codigo: regimenCod,
+      receptor_regimen_nombre: regimenCod ? regimenMap.get(regimenCod) ?? null : null,
+      receptor_uso_cfdi_codigo: usoCfdiCod,
+      receptor_uso_cfdi_nombre: usoCfdiCod ? usoCfdiMap.get(usoCfdiCod) ?? null : null,
     });
   }
 

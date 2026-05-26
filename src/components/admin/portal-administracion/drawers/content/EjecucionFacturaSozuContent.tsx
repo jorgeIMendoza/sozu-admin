@@ -310,15 +310,48 @@ export function EjecucionFacturaSozuContent({
       {/* ─── Datos fiscales · Receptor (Entidad Dueña) ─── */}
       <Section title="Datos fiscales · Receptor">
         <div className="grid grid-cols-2 gap-3">
-          <KV icon={Building2} label="Razón social" value={entity.entidad_duena || "—"} />
+          <KV
+            icon={Building2}
+            label="Razón social"
+            value={entity.receptor_razon_social || entity.entidad_duena || "—"}
+          />
           <KV
             icon={Receipt}
             label="RFC receptor"
-            value="Resuelto por edge function al timbrar"
+            value={entity.receptor_rfc || "Sin RFC registrado"}
+            mono
           />
-          <KV icon={FileText} label="Uso de CFDI" value="G03 · Gastos en general" />
-          <KV icon={FileText} label="Forma de pago" value="03 · Transferencia electrónica" />
+          <KV
+            icon={FileText}
+            label="Régimen fiscal"
+            value={
+              entity.receptor_regimen_codigo
+                ? `${entity.receptor_regimen_codigo}${
+                    entity.receptor_regimen_nombre ? ` · ${entity.receptor_regimen_nombre}` : ""
+                  }`
+                : "Sin régimen registrado"
+            }
+          />
+          <KV
+            icon={FileText}
+            label="Uso de CFDI"
+            value={
+              entity.receptor_uso_cfdi_codigo
+                ? `${entity.receptor_uso_cfdi_codigo}${
+                    entity.receptor_uso_cfdi_nombre ? ` · ${entity.receptor_uso_cfdi_nombre}` : ""
+                  }`
+                : "Sin uso CFDI registrado"
+            }
+          />
         </div>
+        {(!entity.receptor_rfc ||
+          !entity.receptor_regimen_codigo ||
+          !entity.receptor_uso_cfdi_codigo) && (
+          <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-2 px-1">
+            ⚠ Algún dato fiscal del receptor está vacío. Completa el perfil de la persona dueña antes
+            de timbrar — la edge function fallará si faltan estos campos.
+          </p>
+        )}
       </Section>
 
       {/* ─── Cuenta STP de comisión ─── */}
