@@ -352,28 +352,62 @@ export function AppNotariaDashboard() {
 
   const cuentaIds = useMemo(() => rawCuentas.map((c: any) => c.id as number), [rawCuentas]);
 
-  // ── Payments sum ───────────────────────────────────────────────────────────
-  const { data: pagosData = [] } = useQuery({
-    queryKey: ['app-notaria-pagos', cuentaIds],
+  // ── Acuerdos de pago (plan de pagos pactado por cuenta) ───────────────────
+  const { data: acuerdosData = [] } = useQuery({
+    queryKey: ['app-notaria-acuerdos', cuentaIds],
     enabled: cuentaIds.length > 0,
     staleTime: 2 * 60_000,
     queryFn: async () => {
       const { data } = await supabase
-        .from('pagos')
-        .select('id_cuenta_cobranza, monto')
+        .from('acuerdos_pago')
+        .select('id, id_cuenta_cobranza')
         .in('id_cuenta_cobranza', cuentaIds as any)
         .eq('activo', true);
       return (data ?? []) as any[];
     },
   });
 
+  const acuerdoIds = useMemo(
+    () => acuerdosData.map((a: any) => a.id as number),
+    [acuerdosData],
+  );
+
+  // id_acuerdo_pago → id_cuenta_cobranza (reverse lookup)
+  const acuerdoCuentaMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const a of acuerdosData) map[a.id] = a.id_cuenta_cobranza;
+    return map;
+  }, [acuerdosData]);
+
+  // ── Aplicaciones de pago — monto real pagado al precio (sin multas) ───────
+  // Fuente correcta: aplicaciones_pago.monto WHERE es_multa=false
+  // Consistente con RelacionPagos, EstadoCuenta y DetalleCuenta.
+  const { data: aplicacionesData = [] } = useQuery({
+    queryKey: ['app-notaria-aplicaciones', acuerdoIds],
+    enabled: acuerdoIds.length > 0,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('aplicaciones_pago')
+        .select('id_acuerdo_pago, monto')
+        .in('id_acuerdo_pago', acuerdoIds as any)
+        .eq('activo', true)
+        .eq('es_multa', false);
+      return (data ?? []) as any[];
+    },
+  });
+
+  // Suma de aplicaciones por cuenta (monto efectivamente pagado al precio de venta)
   const pagosSum = useMemo(() => {
     const map: Record<number, number> = {};
-    for (const p of pagosData) {
-      map[p.id_cuenta_cobranza] = (map[p.id_cuenta_cobranza] || 0) + Number(p.monto);
+    for (const ap of aplicacionesData) {
+      const cuentaId = acuerdoCuentaMap[ap.id_acuerdo_pago];
+      if (cuentaId !== undefined) {
+        map[cuentaId] = (map[cuentaId] || 0) + Number(ap.monto);
+      }
     }
     return map;
-  }, [pagosData]);
+  }, [aplicacionesData, acuerdoCuentaMap]);
 
   // ── Creditos hipotecarios ──────────────────────────────────────────────────
   const { data: creditosData = [] } = useQuery({
@@ -654,7 +688,11 @@ export function AppNotariaDashboard() {
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground hidden sm:block">Última actualización: {lastUpdated}</span>
           <button
-            onClick={() => { refetchAll(); qc.invalidateQueries({ queryKey: ['app-notaria-pagos'] }); }}
+            onClick={() => {
+              refetchAll();
+              qc.invalidateQueries({ queryKey: ['app-notaria-acuerdos'] });
+              qc.invalidateQueries({ queryKey: ['app-notaria-aplicaciones'] });
+            }}
             className="p-1.5 rounded-md hover:bg-muted text-muted-foreground transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
