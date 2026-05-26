@@ -1,13 +1,15 @@
 import { useState } from "react";
 import {
   Calendar,
+  Clock,
   DollarSign,
   Home,
+  Ruler,
   User,
+  Users,
   Receipt,
   Building2,
   Landmark,
-  Tag,
   FileText,
   Loader2,
 } from "lucide-react";
@@ -16,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +35,7 @@ import {
   type FacturaComisionSozuPorGenerar,
   useGenerarFacturaComisionSozu,
 } from "@/hooks/useFacturasComisionSozuPorGenerar";
+import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 
 export function EjecucionFacturaSozuContent({
   entity,
@@ -42,9 +46,13 @@ export function EjecucionFacturaSozuContent({
 }) {
   const { toast } = useToast();
   const generar = useGenerarFacturaComisionSozu();
+  const { data: detalle, isLoading: detalleLoading } = useExpedienteVentaDetalle(
+    entity.folio_cuenta,
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [notas, setNotas] = useState("");
 
+  // Cálculo de comisión — consistente con Admin Panel Comisiones.tsx (subtotal + IVA si aplica).
   const subtotal = (entity.precio_final * entity.porcentaje_comision_venta) / 100;
   const iva = entity.iva_incluido ? subtotal * 0.16 : 0;
   const total = subtotal + iva;
@@ -77,40 +85,141 @@ export function EjecucionFacturaSozuContent({
         description: message,
         variant: "destructive",
       });
-      // El drawer permanece abierto para reintentar.
       setConfirmOpen(false);
     }
   };
 
+  // Datos derivados — preferir el expediente real, fallback al entity de la tabla.
+  const proyecto = detalle?.proyecto_nombre || entity.proyecto_nombre || "—";
+  const edificio = detalle?.edificio_nombre || entity.edificio_nombre || "—";
+  const modelo = detalle?.modelo_nombre || entity.modelo_nombre || "—";
+  const numeroDepto = detalle?.numero_departamento || entity.numero_departamento || "—";
+  const tipo = detalle?.tipo || entity.tipo;
+  const metraje = detalle?.metraje ?? 0;
+  const precioM2 = detalle?.precio_m2 ?? 0;
+  const precioFinal = detalle?.precio_final ?? entity.precio_final;
+  const fechaCompra = detalle?.fecha_compra || entity.fecha_compra || "—";
+  const diasEsperando = detalle?.dias_desde_compra ?? 0;
+  const compradorPrincipal = detalle?.compradores?.[0]?.nombre || entity.cliente_nombre || "—";
+  const rfcComprador = detalle?.rfc_comprador || entity.cliente_rfc || "—";
+  const copropietarios = (detalle?.compradores ?? [])
+    .slice(1)
+    .map((c) => c.nombre)
+    .join(", ");
+
   return (
     <div className="space-y-6">
-      {/* ─── Sección 1: Datos de la operación ─── */}
-      <Section title="Datos de la operación">
-        <div className="grid grid-cols-2 gap-3">
-          <KV
-            icon={Home}
-            label="Propiedad"
-            value={[
-              entity.proyecto_nombre || "—",
-              entity.modelo_nombre || "—",
-              entity.numero_departamento ? `Depto ${entity.numero_departamento}` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          />
-          <KV
-            icon={Tag}
-            label="Tipo de operación"
-            value={<Badge variant="outline">{entity.tipo}</Badge>}
-          />
-          <KV icon={Tag} label="Producto" value={entity.producto_nombre || "—"} />
-          <KV icon={Building2} label="Entidad dueña" value={entity.entidad_duena || "—"} />
-          <KV icon={User} label="Cliente" value={entity.cliente_nombre || "—"} />
-          <KV icon={Calendar} label="Fecha de venta" value={entity.fecha_compra || "—"} />
+      {/* ─── Resumen de la venta ─── */}
+      <Section
+        title="Resumen de la venta"
+        body={
+          <p className="text-sm text-foreground leading-relaxed">
+            Venta cerrada hace{" "}
+            <span className="font-semibold">{diasEsperando} días</span>. Receptor (desarrollador):{" "}
+            <span className="font-semibold">{detalle?.propietario || entity.entidad_duena || "—"}</span>.
+          </p>
+        }
+      >
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <KV icon={Calendar} label="Fecha venta reconocida" value={fechaCompra} />
+          <KV icon={Clock} label="Días esperando" value={`${diasEsperando} días`} />
         </div>
       </Section>
 
-      {/* ─── Sección 2: Cálculo de comisión ─── */}
+      {/* ─── Datos de la propiedad ─── */}
+      <Section title="Datos de la propiedad">
+        <div className="grid grid-cols-2 gap-3">
+          <KV icon={Home} label="Proyecto" value={proyecto} />
+          <KV icon={Home} label="Edificio" value={edificio} />
+          <KV icon={Home} label="Modelo" value={modelo} />
+          <KV icon={Home} label="No. Depto" value={numeroDepto} />
+          <KV icon={Home} label="Tipo" value={<Badge variant="outline">{tipo}</Badge>} />
+          {tipo !== "Propiedad" && (detalle?.producto_nombre || entity.producto_nombre) && (
+            <KV
+              icon={Home}
+              label="Producto"
+              value={detalle?.producto_nombre || entity.producto_nombre || "—"}
+            />
+          )}
+          <KV
+            icon={Ruler}
+            label="Metraje"
+            value={metraje > 0 ? `${metraje.toFixed(2)} m²` : "—"}
+          />
+          <KV
+            icon={DollarSign}
+            label="Precio / m²"
+            value={precioM2 > 0 ? fmtMxn(precioM2) : "—"}
+          />
+          <KV icon={DollarSign} label="Precio final" value={fmtMxn(precioFinal)} />
+        </div>
+      </Section>
+
+      {/* ─── Comprador ─── */}
+      <Section title="Comprador">
+        {detalleLoading && !detalle ? (
+          <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando comprador…
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <KV icon={User} label="Nombre" value={compradorPrincipal} />
+            <KV icon={Receipt} label="RFC" value={rfcComprador} mono />
+            {copropietarios && (
+              <KV icon={Users} label="Copropietarios" value={copropietarios} />
+            )}
+          </div>
+        )}
+      </Section>
+
+      {/* ─── Comprobantes de pago del cliente ─── */}
+      <Section title="Comprobantes de pago del cliente">
+        {detalleLoading && !detalle ? (
+          <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando comprobantes…
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {detalle?.pago_apartado ? (
+              <PagoRow
+                etiqueta="Apartado"
+                fecha={detalle.pago_apartado.fecha}
+                monto={detalle.pago_apartado.monto}
+                urlRecibo={detalle.pago_apartado.url_recibo}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">Sin pago de apartado registrado</p>
+            )}
+            {detalle?.pago_enganche ? (
+              <PagoRow
+                etiqueta="Enganche"
+                fecha={detalle.pago_enganche.fecha}
+                monto={detalle.pago_enganche.monto}
+                urlRecibo={detalle.pago_enganche.url_recibo}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">Sin pago de enganche registrado</p>
+            )}
+          </div>
+        )}
+      </Section>
+
+      {/* ─── Documentos ─── */}
+      <Section title="Documentos">
+        {detalleLoading && !detalle ? (
+          <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando documentos…
+          </p>
+        ) : (
+          <DocRow
+            label="Contrato firmado completamente"
+            url={detalle?.url_contrato_firmado ?? null}
+            estado={detalle?.url_contrato_firmado ? "Disponible" : "Pendiente"}
+          />
+        )}
+      </Section>
+
+      {/* ─── Cálculo de comisión ─── */}
       <Section title="Cálculo de comisión">
         <div className="rounded-md border border-border bg-card divide-y">
           <RowKV label="Precio final" value={fmtMxn(entity.precio_final)} />
@@ -128,35 +237,21 @@ export function EjecucionFacturaSozuContent({
         </div>
       </Section>
 
-      {/* ─── Sección 3: Datos fiscales ─── */}
+      {/* ─── Datos fiscales ─── */}
       <Section title="Datos fiscales">
         <div className="grid grid-cols-2 gap-3">
           <KV
             icon={Receipt}
             label="RFC receptor"
-            value={entity.cliente_rfc || "Heredado de entidad dueña"}
-            mono
+            value="Resuelto por edge function al timbrar"
           />
-          <KV
-            icon={Building2}
-            label="Razón social"
-            value={entity.entidad_duena || "—"}
-          />
+          <KV icon={Building2} label="Razón social" value={entity.entidad_duena || "—"} />
           <KV icon={FileText} label="Uso de CFDI" value="G03 · Gastos en general" />
           <KV icon={FileText} label="Forma de pago" value="03 · Transferencia electrónica" />
-          <KV
-            icon={FileText}
-            label="Método de pago"
-            value={entity.iva_incluido ? "PUE · Pago en una exhibición" : "PPD · Pago en parcialidades"}
-          />
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2 px-1">
-          Los datos fiscales finales los completa la edge function al timbrar
-          contra el catálogo SAT y la configuración del receptor.
-        </p>
       </Section>
 
-      {/* ─── Sección 4: STP ─── */}
+      {/* ─── Cuenta STP de comisión ─── */}
       <Section title="Cuenta STP de comisión">
         <KV
           icon={Landmark}
@@ -178,26 +273,14 @@ export function EjecucionFacturaSozuContent({
           onChange={(e) => setNotas(e.target.value)}
           className="min-h-[60px] text-sm"
         />
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Las notas se guardan en la bitácora de actividad junto con la acción.
-        </p>
       </Section>
 
-      {/* ─── Footer de acción ─── */}
+      {/* ─── Footer ─── */}
       <div className="border-t pt-3 flex items-center justify-end gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          disabled={generar.isPending}
-        >
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={generar.isPending}>
           Cancelar
         </Button>
-        <Button
-          size="sm"
-          onClick={() => setConfirmOpen(true)}
-          disabled={generar.isPending}
-        >
+        <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={generar.isPending}>
           {generar.isPending ? (
             <>
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -223,8 +306,8 @@ export function EjecucionFacturaSozuContent({
               <strong className="text-foreground">{entity.entidad_duena || "la entidad dueña"}</strong>?
               <br />
               <span className="text-xs text-muted-foreground mt-2 block">
-                Folio cuenta: {entity.folio_cuenta} ·{" "}
-                {entity.proyecto_nombre} {entity.numero_departamento ? `· Depto ${entity.numero_departamento}` : ""}
+                Folio cuenta: {entity.folio_cuenta} · {proyecto}
+                {numeroDepto !== "—" ? ` · Depto ${numeroDepto}` : ""}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -253,6 +336,10 @@ export function EjecucionFacturaSozuContent({
   );
 }
 
+/* ──────────────────────────────────────────────────────────
+   Helpers locales (mismos shapes que ComisionInternaContent).
+   ────────────────────────────────────────────────────────── */
+
 function RowKV({
   label,
   value,
@@ -274,6 +361,84 @@ function RowKV({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function PagoRow({
+  etiqueta,
+  fecha,
+  monto,
+  urlRecibo,
+}: {
+  etiqueta: string;
+  fecha: string;
+  monto: number;
+  urlRecibo: string | null;
+}) {
+  return (
+    <div className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-2 bg-card">
+      <div className="min-w-0">
+        <p className="font-medium text-foreground">{etiqueta}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">{fecha}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-semibold tabular-nums">{fmtMxn(monto)}</p>
+        {urlRecibo && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-[10px] px-2"
+            title="Ver comprobante"
+            onClick={() => window.open(urlRecibo, "_blank")}
+          >
+            <FileText className="h-3 w-3 mr-1" />
+            Recibo
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocRow({
+  label,
+  url,
+  estado,
+}: {
+  label: string;
+  url: string | null;
+  estado: string;
+}) {
+  const isAvailable = !!url;
+  return (
+    <div className="flex items-center justify-between text-sm border border-border rounded-md px-3 py-2 bg-card">
+      <div className="min-w-0">
+        <p className="font-medium text-foreground">{label}</p>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[10px] mt-0.5",
+            isAvailable
+              ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+              : "text-muted-foreground",
+          )}
+        >
+          {estado}
+        </Badge>
+      </div>
+      {url && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-[10px] px-2"
+          title="Ver documento"
+          onClick={() => window.open(url, "_blank")}
+        >
+          <FileText className="h-3 w-3 mr-1" />
+          Ver
+        </Button>
+      )}
     </div>
   );
 }
