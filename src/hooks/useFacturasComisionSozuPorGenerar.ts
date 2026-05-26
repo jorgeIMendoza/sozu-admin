@@ -16,16 +16,23 @@ import { ENVIRONMENT } from "@/lib/config";
  *   6. cuentas_cobranza.porcentaje_comision_venta > 0
  *   7. propiedades.id_estatus_disponibilidad = 5 (Vendida)
  *
- * Los gates 5 y 6 garantizan que ya se hizo el análisis de precio +
- * porcentaje de comisión (sin ellos la comisión a facturar sería $0,
- * lo cual no tiene sentido para Administración).
+ * Las cuentas permanecen visibles en dos estados:
  *
- * NO se aplican gates adicionales (enganche pagado, facturar_comision_sozu,
- * url_factura_comision) — son responsabilidad de la edge function al timbrar.
+ *   - estado_factura = 'por_generar' → no hay url_factura_comision
+ *   - estado_factura = 'draft' → url presente y es_draft_factura_comision=true
  *
- * La generación se hace con la misma edge function que el Admin Panel:
- * `generar-factura-comision-sozu`.
+ * El admin valida el draft y decide si timbrar (`useTimbrarFacturaComisionSozu`)
+ * o regenerar (`useGenerarFacturaComisionSozu` de nuevo). Cuando la factura
+ * se timbra, es_draft pasa a false y la fila desaparece del listado a menos
+ * que estatus_autorizacion_comision siga en 'En espera' — eso ya es flujo
+ * de la Bandeja de Validaciones del director.
+ *
+ * Emisor del CFDI: SOZU REAL ESTATE VENTURES S.A. de C.V. (configurado del
+ * lado de la edge function `generar-factura-comision-sozu`).
+ * Receptor: la entidad dueña de la propiedad (campo `entidad_duena`).
  */
+
+export type EstadoFacturaSozu = "por_generar" | "draft";
 
 export type FacturaComisionSozuPorGenerar = {
   id_cuenta_cobranza: number;
@@ -45,11 +52,22 @@ export type FacturaComisionSozuPorGenerar = {
   /** Monto total a facturar (precio_final × pct/100, con IVA si aplica). */
   monto_comision: number;
   fecha_compra: string | null;
-  /** Para "Regenerar" (url ya contiene pendiente-de-generar). */
-  es_regenerar: boolean;
+  /** Estado del CFDI: 'por_generar' (sin url) o 'draft' (url presente + es_draft=true). */
+  estado_factura: EstadoFacturaSozu;
+  /** URL del PDF de la factura draft (cuando estado='draft'). */
+  url_factura_comision: string | null;
+  /** URL del XML de la factura. */
+  url_factura_xml_comision: string | null;
   /** Cliente (lead/comprador principal). */
   cliente_nombre: string | null;
   cliente_rfc: string | null;
+  /** Datos fiscales reales del receptor (= persona dueña de la entidad). */
+  receptor_razon_social: string | null;
+  receptor_rfc: string | null;
+  receptor_regimen_codigo: string | null;
+  receptor_regimen_nombre: string | null;
+  receptor_uso_cfdi_codigo: string | null;
+  receptor_uso_cfdi_nombre: string | null;
 };
 
 const PAD_ID = (id: number) => String(id).padStart(6, "0");
@@ -71,7 +89,7 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       .select(
         `id, precio_final, porcentaje_comision_venta, iva_incluido,
          id_oferta, id_propiedad, fecha_compra,
-         url_factura_comision`,
+         url_factura_comision, url_factura_xml_comision, es_draft_factura_comision`,
       )
       .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
@@ -184,7 +202,8 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     (prodsRaw || []).map((p: any) => [p.id, p]),
   );
 
-  // 9) Entidades relacionadas (dueño + STP comisión + facturar?)
+  // 9) Entidades relacionadas (dueño + STP comisión + datos fiscales del receptor).
+  //    Se embed la persona completa con sus campos fiscales (rfc, regimen, uso_cfdi).
   const entIds = Array.from(
     new Set(
       (props || [])
@@ -196,11 +215,46 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     ? ((await (supabase as any)
         .from("entidades_relacionadas")
         .select(
-          "id, cuenta_stp_comisiones, facturar_comision_sozu, personas!fk_entrel_persona(nombre_legal, nombre_comercial)",
+          "id, cuenta_stp_comisiones, facturar_comision_sozu, personas!fk_entrel_persona(nombre_legal, nombre_comercial, rfc, regimen, uso_cfdi)",
         )
         .in("id", entIds)) as any)
     : { data: [] };
   const entMap = new Map<number, any>((ents || []).map((e: any) => [e.id, e]));
+
+  // 9b) Catálogos fiscales (regimen + uso_cfdi) — para traducir códigos a nombres.
+  const regimenCodigos = Array.from(
+    new Set(
+      (ents || [])
+        .map((e: any) => e.personas?.regimen)
+        .filter((x: any): x is string => !!x),
+    ),
+  );
+  const { data: regimenes } = regimenCodigos.length
+    ? ((await (supabase as any)
+        .from("regimen")
+        .select("id, nombre")
+        .in("id", regimenCodigos)) as any)
+    : { data: [] };
+  const regimenMap = new Map<string, string>(
+    (regimenes || []).map((r: any) => [String(r.id), r.nombre as string]),
+  );
+
+  const usoCfdiCodigos = Array.from(
+    new Set(
+      (ents || [])
+        .map((e: any) => e.personas?.uso_cfdi)
+        .filter((x: any): x is string => !!x),
+    ),
+  );
+  const { data: usosCfdi } = usoCfdiCodigos.length
+    ? ((await (supabase as any)
+        .from("uso_cfdi")
+        .select("codigo, nombre")
+        .in("codigo", usoCfdiCodigos)) as any)
+    : { data: [] };
+  const usoCfdiMap = new Map<string, string>(
+    (usosCfdi || []).map((u: any) => [u.codigo as string, u.nombre as string]),
+  );
 
   // 10) Personas (cliente / lead)
   const personaIds = Array.from(
@@ -251,7 +305,14 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       entidad?.personas?.nombre_comercial || entidad?.personas?.nombre_legal || null;
 
     const url: string | null = c.url_factura_comision ?? null;
-    const esRegenerar = !!url && /pendiente-de-generar/i.test(url);
+    const urlPendiente = !!url && /pendiente-de-generar/i.test(url);
+    const esDraft = !!c.es_draft_factura_comision && !!url && !urlPendiente;
+    const estado: EstadoFacturaSozu = esDraft ? "draft" : "por_generar";
+
+    // Datos fiscales del receptor — vienen del embed personas vía la entidad dueña.
+    const receptorPersona = entidad?.personas ?? null;
+    const regimenCod = (receptorPersona?.regimen as string | null) ?? null;
+    const usoCfdiCod = (receptorPersona?.uso_cfdi as string | null) ?? null;
 
     result.push({
       id_cuenta_cobranza: c.id,
@@ -269,9 +330,18 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       iva_incluido: !!c.iva_incluido,
       monto_comision: total,
       fecha_compra: c.fecha_compra ?? null,
-      es_regenerar: esRegenerar,
+      estado_factura: estado,
+      url_factura_comision: urlPendiente ? null : url,
+      url_factura_xml_comision: c.url_factura_xml_comision ?? null,
       cliente_nombre: persona?.nombre_legal ?? null,
       cliente_rfc: persona?.rfc ?? null,
+      // Receptor fiscal (usado en el drawer)
+      receptor_razon_social: receptorPersona?.nombre_legal ?? null,
+      receptor_rfc: (receptorPersona?.rfc as string | null) ?? null,
+      receptor_regimen_codigo: regimenCod,
+      receptor_regimen_nombre: regimenCod ? regimenMap.get(regimenCod) ?? null : null,
+      receptor_uso_cfdi_codigo: usoCfdiCod,
+      receptor_uso_cfdi_nombre: usoCfdiCod ? usoCfdiMap.get(usoCfdiCod) ?? null : null,
     });
   }
 
@@ -288,9 +358,8 @@ export function useFacturasComisionSozuPorGenerar() {
 
 /**
  * Mutación: invoca la edge function `generar-factura-comision-sozu`
- * (la misma que usa el Admin Panel, mismo body shape).
- *
- * Al éxito, invalida la query del listado para que el item desaparezca.
+ * (la misma que usa el Admin Panel, mismo body shape). Genera DRAFT —
+ * no timbra. La fila permanece en el listado con estado_factura='draft'.
  */
 export function useGenerarFacturaComisionSozu() {
   const queryClient = useQueryClient();
@@ -307,6 +376,32 @@ export function useGenerarFacturaComisionSozu() {
       queryClient.invalidateQueries({ queryKey: ["facturas_comision_sozu_por_generar"] });
       // Mantener invalidación cruzada con el Admin Panel para que ambas vistas se sincronicen.
       queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+      queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+    },
+  });
+}
+
+/**
+ * Mutación: invoca la edge function `timbrar-factura-comision-sozu`
+ * (la misma que usa el Admin Panel). Aplica sobre un draft previo y
+ * deja la factura timbrada (es_draft pasa a false). Tras timbrar la
+ * fila desaparece del listado de "Por Generar".
+ */
+export function useTimbrarFacturaComisionSozu() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id_cuenta_cobranza: number) => {
+      const { data, error } = await (supabase as any).functions.invoke(
+        "timbrar-factura-comision-sozu",
+        { body: { id_cuenta_cobranza, environment: ENVIRONMENT } },
+      );
+      if (error) throw error;
+      return data as { message?: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["facturas_comision_sozu_por_generar"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones"] });
+      queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
     },
   });
 }
