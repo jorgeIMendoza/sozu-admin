@@ -650,11 +650,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                   </TableHeader>
                   <TableBody>
                     {facturasSozuPage.map((f) => {
-                      const stpMasked = f.cuenta_stp_comisiones
-                        ? f.cuenta_stp_comisiones.length > 10
-                          ? `${f.cuenta_stp_comisiones.slice(0, 4)}••••••${f.cuenta_stp_comisiones.slice(-4)}`
-                          : f.cuenta_stp_comisiones
-                        : null;
+                      // STP completa — se usa como referencia en procesos posteriores
+                      // (rastreo de SPEI, conciliación STP). No enmascarar.
+                      const stpFull = f.cuenta_stp_comisiones ?? null;
                       return (
                         <TableRow key={f.id_cuenta_cobranza}>
                           <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
@@ -672,7 +670,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                           </TableCell>
                           <TableCell className="text-sm">{f.numero_departamento || "—"}</TableCell>
                           <TableCell className="text-xs">{f.entidad_duena || "—"}</TableCell>
-                          <TableCell className="text-xs font-mono">{stpMasked || "—"}</TableCell>
+                          <TableCell className="text-xs font-mono whitespace-nowrap">
+                            {stpFull || "—"}
+                          </TableCell>
                           <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
                             {fmtMxn(f.precio_final)}
                           </TableCell>
