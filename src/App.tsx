@@ -11,6 +11,7 @@ import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext
 import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationContext";
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
+import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { AdminLayout } from "./components/admin/AdminLayout";
@@ -261,12 +262,14 @@ const isRegistroSubdomain = matchPortal('registro');
 const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
 const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
+const isEmbajadoresSubdomain = matchPortal('embajadores');
 
 // Determine portal context from subdomain for login page branding
-const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | null => {
+const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
   if (isAgentesSubdomain) return 'agentes';
   if (isInmobiliariasSubdomain) return 'inmobiliarias';
   if (isClientesSubdomain) return 'clientes';
+  if (isEmbajadoresSubdomain) return 'embajadores';
   return null;
 };
 const portalContext = getPortalContext();
@@ -289,6 +292,7 @@ const App = () => (
             <ClienteImpersonationProvider>
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
+            <EmbajadorImpersonationProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
                 <Routes>
@@ -347,6 +351,31 @@ const App = () => (
                     <Route path="portal-inmobiliaria/reportes" element={<InmobReportes />} />
                     <Route path="portal-inmobiliaria/configuracion" element={<InmobConfiguracion />} />
                     <Route path="*" element={<Navigate to="/admin/portal-inmobiliaria/dashboard" replace />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              ) : isEmbajadoresSubdomain ? (
+                <Routes>
+                  <Route path="/login" element={<Login portalContext="embajadores" />} />
+                  <Route path="/auth/login" element={<Login portalContext="embajadores" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
+                    <Route path="portal-embajador/inicio" element={<EmbajadorInicio />} />
+                    <Route path="portal-embajador/mis-referidos" element={<EmbajadorMisReferidos />} />
+                    <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
+                    <Route path="portal-embajador/comisiones" element={<EmbajadorComisiones />} />
+                    <Route path="portal-embajador/perfil" element={<EmbajadorPerfil />} />
+                    <Route path="*" element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
@@ -614,6 +643,7 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
