@@ -28,7 +28,12 @@ export type EntityType =
   | "comision_interna"
   | "excepcion"
   | "factura_por_cobrar"
-  | "comision_externa";
+  | "comision_externa"
+  // Ejecución (Portal de Administración) — autorizadas por Dirección, listas para ejecutar
+  | "ejecucion_cobro"
+  | "ejecucion_pago_externo"
+  | "ejecucion_dispersion"
+  | "ejecucion_excepcion";
 
 export const ENTITY_LABEL: Record<EntityType, string> = {
   venta_para_facturar: "Venta para facturar",
@@ -37,6 +42,10 @@ export const ENTITY_LABEL: Record<EntityType, string> = {
   excepcion: "Excepción",
   factura_por_cobrar: "Factura por cobrar",
   comision_externa: "Comisión externa",
+  ejecucion_cobro: "Cobro por gestionar",
+  ejecucion_pago_externo: "Pago a externo por ejecutar",
+  ejecucion_dispersion: "Dispersión interna",
+  ejecucion_excepcion: "Excepción por aplicar",
 };
 
 export const ENTITY_TONE: Record<EntityType, string> = {
@@ -46,6 +55,10 @@ export const ENTITY_TONE: Record<EntityType, string> = {
   excepcion: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   factura_por_cobrar: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   comision_externa: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  ejecucion_cobro: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  ejecucion_pago_externo: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  ejecucion_dispersion: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  ejecucion_excepcion: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
 };
 
 export const ENTITY_SUBTITLE: Record<EntityType, string> = {
@@ -55,6 +68,10 @@ export const ENTITY_SUBTITLE: Record<EntityType, string> = {
   excepcion: "Decisión fuera de política — requiere VoBo Dirección",
   factura_por_cobrar: "CFDI emitido por SOZU al desarrollador",
   comision_externa: "Obligación de SOZU con colaborador externo",
+  ejecucion_cobro: "Venta con factura autorizada por Dirección — pendiente de emisión o cobro",
+  ejecucion_pago_externo: "Pago a externo autorizado por Dirección y con cobro previo confirmado",
+  ejecucion_dispersion: "Comisión interna autorizada por Dirección — lista para dispersar",
+  ejecucion_excepcion: "Excepción a política aprobada por Dirección — pendiente de aplicar en sistema",
 };
 
 /* ──────────────────────────────────────────────────────────

@@ -225,6 +225,10 @@ const AdminFacturasPorCobrar    = lazyRetry(() => import("./pages/admin/portal-a
 const AdminFacturasPorPagar     = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorPagarPage"));
 const AdminComisionesExternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesExternasPage"));
 const AdminComisionesInternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesInternasPage"));
+const AdminBandejaEjecucion     = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionBandejaEjecucionPage"));
+const AdminPagosEjecutados      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionPagosEjecutadosPage"));
+const AdminCFDIsEmitidos        = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionCFDIsEmitidosPage"));
+const AdminConciliacionSTP      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionConciliacionSTPPage"));
 
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
@@ -590,6 +594,11 @@ const App = () => (
                  <Route path="portal-administracion/facturas-por-pagar" element={<AdminFacturasPorPagar />} />
                  <Route path="portal-administracion/comisiones-externas" element={<AdminComisionesExternas />} />
                  <Route path="portal-administracion/comisiones-internas" element={<AdminComisionesInternas />} />
+                 {/* Portal de Administración — secciones propias (no derivadas de Alta Dirección) */}
+                 <Route path="portal-administracion/bandeja-ejecucion" element={<AdminBandejaEjecucion />} />
+                 <Route path="portal-administracion/pagos-ejecutados" element={<AdminPagosEjecutados />} />
+                 <Route path="portal-administracion/cfdis-emitidos" element={<AdminCFDIsEmitidos />} />
+                 <Route path="portal-administracion/conciliacion-stp" element={<AdminConciliacionSTP />} />
 
                  {/* Portal Embajadores */}
                  <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
