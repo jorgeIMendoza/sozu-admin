@@ -6,24 +6,19 @@ import { ENVIRONMENT } from "@/lib/config";
  * Hook que entrega las cuentas de cobranza listas para generar la Factura
  * de Comisión SOZU al desarrollador.
  *
- * ESPEJO de la lógica del Admin Panel en src/pages/admin/Comisiones.tsx
- * (queryKey ["comisiones"]). Cualquier cambio al criterio "Por generar" en
- * esa página debe replicarse aquí.
+ * Filtro aplicado (definido por Ramón — 3 condiciones explícitas):
  *
- * Filtro aplicado (mismo criterio bajo el cual el Admin Panel pinta el
- * botón Generar/Regenerar habilitado):
+ *   1. cuentas_cobranza.activo = true
+ *   2. cuentas_cobranza.id_cuenta_cobranza_padre IS NULL (excluye mantenimiento)
+ *   3. cuentas_cobranza.estatus_autorizacion_comision = 'En espera'
+ *   4. cuentas_cobranza.es_pagada_comision_venta = false
+ *   5. propiedades.id_estatus_disponibilidad = 5 (Vendida)
  *
- *   1. id_cuenta_cobranza_padre IS NULL (excluye mantenimiento)
- *   2. La cuenta tiene acuerdos_pago de enganche (id_concepto=2 activo)
- *      Y todos esos acuerdos tienen pago_completado=true (enganche pagado)
- *   3. propiedades.id_estatus_disponibilidad = 5 (Vendida)
- *   4. entidades_relacionadas.facturar_comision_sozu = true (el dueño
- *      requiere factura SOZU; cuando es false el Admin Panel pinta "—")
- *   5. (url_factura_comision IS NULL) OR (url contiene "pendiente-de-generar")
+ * NO se aplican gates adicionales (enganche pagado, facturar_comision_sozu,
+ * url_factura_comision) — son responsabilidad de la edge function al timbrar.
  *
- * Los drafts (es_draft_factura_comision=true) NO entran en esta lista —
- * el Admin Panel los muestra con acción "Timbrar" en un flow distinto.
- * Se manejarán en una sección futura del Portal de Administración.
+ * La generación se hace con la misma edge function que el Admin Panel:
+ * `generar-factura-comision-sozu`.
  */
 
 export type FacturaComisionSozuPorGenerar = {
@@ -59,8 +54,9 @@ const formatId = (id: number, tipo: FacturaComisionSozuPorGenerar["tipo"]) =>
     : `CC-${PAD_ID(id)}`;
 
 async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSozuPorGenerar[]> {
-  // 1) Cuentas base (sin padre). PostgREST en prod tiene max-rows=1000 server-side,
-  //    así que paginamos manualmente hasta cubrir todo (~1.5k cuentas hoy, crece lento).
+  // 1) Cuentas base con los 4 filtros del usuario aplicados en BD.
+  //    PostgREST en prod tiene max-rows=1000 server-side, así que paginamos
+  //    manualmente. Hoy en dev son ~62 candidatos antes del gate Vendida.
   const cuentasRows: Array<any> = [];
   const PAGE = 1000;
   for (let offset = 0; ; offset += PAGE) {
@@ -68,11 +64,14 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       .from("cuentas_cobranza")
       .select(
         `id, precio_final, porcentaje_comision_venta, iva_incluido,
-         id_oferta, fecha_compra,
-         url_factura_comision, es_draft_factura_comision`,
+         id_oferta, id_propiedad, fecha_compra,
+         url_factura_comision`,
       )
+      .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
-      .order("id", { ascending: true })
+      .eq("estatus_autorizacion_comision", "En espera")
+      .eq("es_pagada_comision_venta", false)
+      .order("id", { ascending: false })
       .range(offset, offset + PAGE - 1)) as any;
     if (error) throw error;
     const rows = (data || []) as Array<any>;
@@ -82,46 +81,12 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
   }
   if (!cuentasRows.length) return [];
 
-  // 2) Pre-filtrar por url_factura_comision (Por generar = null o pendiente)
-  const candidatos = cuentasRows.filter((c) => {
-    const url: string | null = c.url_factura_comision ?? null;
-    const esPendiente = !!url && /pendiente-de-generar/i.test(url);
-    return !url || esPendiente;
-  });
-  if (!candidatos.length) return [];
+  const cuentasBase = cuentasRows;
 
-  const candidatoIds = candidatos.map((c) => c.id as number);
-
-  // 3) Gate de enganche completado (igual que Admin Panel)
-  const { data: acuerdosPend } = (await (supabase as any)
-    .from("acuerdos_pago")
-    .select("id_cuenta_cobranza")
-    .in("id_cuenta_cobranza", candidatoIds)
-    .eq("id_concepto", 2)
-    .eq("activo", true)
-    .eq("pago_completado", false)) as any;
-  const ccConEnganchePendiente = new Set<number>(
-    (acuerdosPend || []).map((a: any) => a.id_cuenta_cobranza),
-  );
-
-  const { data: acuerdosCon } = (await (supabase as any)
-    .from("acuerdos_pago")
-    .select("id_cuenta_cobranza")
-    .in("id_cuenta_cobranza", candidatoIds)
-    .eq("id_concepto", 2)
-    .eq("activo", true)) as any;
-  const ccConEnganche = new Set<number>(
-    (acuerdosCon || []).map((a: any) => a.id_cuenta_cobranza),
-  );
-
-  const conEnganchePagado = candidatos.filter(
-    (c) => ccConEnganche.has(c.id) && !ccConEnganchePendiente.has(c.id),
-  );
-  if (!conEnganchePagado.length) return [];
-
-  // 4) Cargar ofertas → propiedad / producto
+  // 2) Cargar ofertas → propiedad / producto (necesario para resolver tipo y
+  //    para fallback de id_propiedad cuando cc.id_propiedad es NULL).
   const ofertaIds = Array.from(
-    new Set(conEnganchePagado.map((c) => c.id_oferta).filter((x): x is number => !!x)),
+    new Set(cuentasBase.map((c) => c.id_oferta).filter((x): x is number => !!x)),
   );
   const { data: ofs } = ofertaIds.length
     ? ((await (supabase as any)
@@ -131,12 +96,11 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     : { data: [] };
   const ofMap = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
 
-  // 5) Propiedades (estatus_disponibilidad + edificio_modelo + dueño)
-  const propIds = Array.from(
-    new Set(
-      (ofs || []).map((o: any) => o.id_propiedad).filter((x: any): x is number => !!x),
-    ),
-  );
+  // 3) Propiedades (estatus_disponibilidad + edificio_modelo + dueño).
+  //    Considera cc.id_propiedad directo + fallback a oferta.id_propiedad.
+  const propIdsCc = cuentasBase.map((c) => c.id_propiedad).filter((x: any): x is number => !!x);
+  const propIdsOferta = (ofs || []).map((o: any) => o.id_propiedad).filter((x: any): x is number => !!x);
+  const propIds = Array.from(new Set([...propIdsCc, ...propIdsOferta]));
   const { data: props } = propIds.length
     ? ((await (supabase as any)
         .from("propiedades")
@@ -246,11 +210,12 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     : { data: [] };
   const persMap = new Map<number, any>((pers || []).map((p: any) => [p.id, p]));
 
-  // 11) Componer + filtros finales (vendida + dueño facturar=true)
+  // 8) Componer + único filtro final del usuario: propiedad Vendida.
   const result: FacturaComisionSozuPorGenerar[] = [];
-  for (const c of conEnganchePagado) {
+  for (const c of cuentasBase) {
     const oferta = c.id_oferta ? ofMap.get(c.id_oferta) : null;
-    const propiedad = oferta?.id_propiedad ? propMap.get(oferta.id_propiedad) : null;
+    const idPropEfectivo: number | null = c.id_propiedad ?? oferta?.id_propiedad ?? null;
+    const propiedad = idPropEfectivo ? propMap.get(idPropEfectivo) : null;
     const em = propiedad?.id_edificio_modelo ? emMap.get(propiedad.id_edificio_modelo) : null;
     const edificio = em?.id_edificio ? edMap.get(em.id_edificio) : null;
     const proyectoNombre = edificio?.id_proyecto ? projMap.get(edificio.id_proyecto) : null;
@@ -260,10 +225,8 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       : null;
     const persona = oferta?.id_persona_lead ? persMap.get(oferta.id_persona_lead) : null;
 
-    // Gate Vendida
+    // Único gate adicional en JS (estatus_disponibilidad vive en propiedades).
     if (propiedad?.id_estatus_disponibilidad !== 5) continue;
-    // Gate dueño requiere factura SOZU
-    if (entidad?.facturar_comision_sozu !== true) continue;
 
     let tipo: FacturaComisionSozuPorGenerar["tipo"] = "Propiedad";
     if (oferta?.id_producto && producto) {
