@@ -89,8 +89,8 @@ export function useCicloVentaCasos() {
         ofertaToProducto.set(o.id, o.id_producto);
       });
 
-      const propiedadMap = new Map(
-        propiedadesVendidas.map((p) => [
+      const propiedadMap = new Map<number, { numero: string; idEdificioModelo: any; idEntidadDueno: any; metraje: number; precioLista: number; }>(
+        propiedadesVendidas.map((p): [number, { numero: string; idEdificioModelo: any; idEntidadDueno: any; metraje: number; precioLista: number; }] => [
           p.id,
           {
             numero: p.numero_propiedad ?? "",

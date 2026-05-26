@@ -1779,7 +1779,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .eq('id', personaId)
         .single();
 
-      const selectedConfig = trainingConfigs.find((c: any) => c.id === selectedConfigId);
+      const selectedConfig: any = trainingConfigs.find((c: any) => c.id === selectedConfigId);
       // Resolve the project for this config that belongs to the agent
       const selectedProyectoId = (selectedConfig?.proyecto_ids as number[] | undefined)
         ?.find((pid) => agentProjectIds.includes(pid)) ?? null;
