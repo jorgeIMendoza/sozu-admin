@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import {
+  Receipt,
   FileOutput,
   HandCoins,
   Users,
@@ -9,6 +10,8 @@ import {
   ArrowDown,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -48,10 +51,15 @@ import {
   EjecucionExcepcionContent,
   type EjecucionExcepcionEntity,
 } from "@/components/admin/portal-administracion/drawers/content/EjecucionExcepcionContent";
+import { EjecucionFacturaSozuContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionFacturaSozuContent";
 import {
   getVentaContext,
   resolveCobFolio,
 } from "@/components/admin/portal-administracion/drawers/ventaContexts";
+import {
+  useFacturasComisionSozuPorGenerar,
+  type FacturaComisionSozuPorGenerar,
+} from "@/hooks/useFacturasComisionSozuPorGenerar";
 
 /* ──────────────────────────────────────────────────────────
    Tipos extendidos para filas (entity + extras de tabla)
@@ -68,6 +76,7 @@ type DispersionRow = EjecucionDispersionEntity;
 type ExcepcionRow = EjecucionExcepcionEntity;
 
 type SelectedItem =
+  | { tipo: "factura_sozu"; data: FacturaComisionSozuPorGenerar }
   | { tipo: "cobro"; data: CobroRow }
   | { tipo: "pago_externo"; data: PagoExternoRow }
   | { tipo: "dispersion"; data: DispersionRow }
@@ -332,13 +341,19 @@ function KpiCard({
   onClick,
 }: {
   label: string;
-  count: number;
+  count: number | string;
   amountLabel: string;
   icon: typeof FileOutput;
-  tone: "emerald" | "amber" | "blue" | "orange";
+  tone: "teal" | "emerald" | "amber" | "blue" | "orange";
   onClick: () => void;
 }) {
   const toneClasses: Record<typeof tone, { bg: string; ring: string; iconBg: string; iconText: string }> = {
+    teal: {
+      bg: "bg-teal-50 dark:bg-teal-950/30",
+      ring: "ring-teal-200 dark:ring-teal-900/40 hover:ring-teal-300",
+      iconBg: "bg-teal-100 dark:bg-teal-900/50",
+      iconText: "text-teal-700 dark:text-teal-300",
+    },
     emerald: {
       bg: "bg-emerald-50 dark:bg-emerald-950/30",
       ring: "ring-emerald-200 dark:ring-emerald-900/40 hover:ring-emerald-300",
@@ -435,11 +450,21 @@ function SectionHeader({
 export default function PortalAdministracionBandejaEjecucionPage() {
   const [selected, setSelected] = useState<SelectedItem | null>(null);
 
+  const facturasSozuRef = useRef<HTMLDivElement>(null);
   const cobrosRef = useRef<HTMLDivElement>(null);
   const externosRef = useRef<HTMLDivElement>(null);
   const dispersionesRef = useRef<HTMLDivElement>(null);
   const excepcionesRef = useRef<HTMLDivElement>(null);
 
+  // BD real: facturas comisión SOZU por generar
+  const {
+    data: facturasSozu,
+    isLoading: facturasSozuLoading,
+    error: facturasSozuError,
+  } = useFacturasComisionSozuPorGenerar();
+
+  const [sortFacturasSozu, setSortFacturasSozu] = useState<SortDir>("desc"); // más recientes primero (default por spec)
+  const [pageFacturasSozu, setPageFacturasSozu] = useState(0);
   const [sortCobros, setSortCobros] = useState<SortDir>("asc");
   const [pageCobros, setPageCobros] = useState(0);
   const [sortExternos, setSortExternos] = useState<SortDir>("asc");
@@ -455,6 +480,27 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       (a, b) => factor * (a.dias_desde_autorizacion - b.dias_desde_autorizacion),
     );
   };
+
+  // Facturas SOZU: orden por fecha_compra (más recientes/antiguas).
+  // Cuando fecha_compra es null (raro pero posible) queda al final en asc/desc.
+  const facturasSozuSorted = useMemo(() => {
+    const rows = facturasSozu ?? [];
+    return [...rows].sort((a, b) => {
+      const da = a.fecha_compra ? new Date(a.fecha_compra).getTime() : 0;
+      const db = b.fecha_compra ? new Date(b.fecha_compra).getTime() : 0;
+      return sortFacturasSozu === "asc" ? da - db : db - da;
+    });
+  }, [facturasSozu, sortFacturasSozu]);
+  const facturasSozuTotal = facturasSozu?.length ?? 0;
+  const facturasSozuTotalPages = Math.max(1, Math.ceil(facturasSozuTotal / PAGE_SIZE));
+  const facturasSozuPage = useMemo(
+    () => facturasSozuSorted.slice(pageFacturasSozu * PAGE_SIZE, (pageFacturasSozu + 1) * PAGE_SIZE),
+    [facturasSozuSorted, pageFacturasSozu],
+  );
+  const facturasSozuMonto = useMemo(
+    () => (facturasSozu ?? []).reduce((s, r) => s + r.monto_comision, 0),
+    [facturasSozu],
+  );
 
   const cobrosSorted = useMemo(() => sortBy(MOCK_COBROS, sortCobros), [sortCobros]);
   const externosSorted = useMemo(() => sortBy(MOCK_PAGOS_EXTERNOS, sortExternos), [sortExternos]);
@@ -502,7 +548,21 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       />
 
       {/* ─── KPIs ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-8">
+        <KpiCard
+          label="Facturas SOZU por generar"
+          count={facturasSozuLoading ? "…" : facturasSozuTotal}
+          amountLabel={
+            facturasSozuLoading
+              ? "Cargando…"
+              : facturasSozuError
+                ? "Error al cargar"
+                : fmtMxn(facturasSozuMonto)
+          }
+          icon={Receipt}
+          tone="teal"
+          onClick={() => scrollTo(facturasSozuRef)}
+        />
         <KpiCard
           label="Cobros por gestionar"
           count={MOCK_COBROS.length}
@@ -536,6 +596,126 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           onClick={() => scrollTo(excepcionesRef)}
         />
       </div>
+
+      {/* ─── 0. Facturas Comisión SOZU por Generar (BD real) ─── */}
+      <section ref={facturasSozuRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
+        <SectionHeader
+          icon={Receipt}
+          iconColor="bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300"
+          title="Facturas Comisión SOZU por Generar"
+          description="Cuentas de cobranza con estatus Vendida sin factura SOZU emitida. Requieren generación de CFDI para iniciar cobranza al desarrollador."
+          count={facturasSozuTotal}
+          right={
+            <SortToggle
+              value={sortFacturasSozu}
+              onChange={(v) => {
+                setSortFacturasSozu(v);
+                setPageFacturasSozu(0);
+              }}
+            />
+          }
+        />
+        <Card>
+          <CardContent className="p-0">
+            {facturasSozuLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando facturas comisión SOZU…
+              </div>
+            ) : facturasSozuError ? (
+              <div className="py-10 text-center text-sm text-red-600">
+                Error al cargar: {(facturasSozuError as Error).message}
+              </div>
+            ) : facturasSozuPage.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No hay facturas SOZU pendientes de generar.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">No. Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">Producto</TableHead>
+                      <TableHead className="text-xs">No. Depa</TableHead>
+                      <TableHead className="text-xs">Entidad Dueña</TableHead>
+                      <TableHead className="text-xs">STP de Comisión</TableHead>
+                      <TableHead className="text-xs text-right">Precio final</TableHead>
+                      <TableHead className="text-xs text-right">% Comisión</TableHead>
+                      <TableHead className="text-xs text-right">Comisión</TableHead>
+                      <TableHead className="text-xs text-right">Fact. Comisión SOZU</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {facturasSozuPage.map((f) => {
+                      const stpMasked = f.cuenta_stp_comisiones
+                        ? f.cuenta_stp_comisiones.length > 10
+                          ? `${f.cuenta_stp_comisiones.slice(0, 4)}••••••${f.cuenta_stp_comisiones.slice(-4)}`
+                          : f.cuenta_stp_comisiones
+                        : null;
+                      return (
+                        <TableRow key={f.id_cuenta_cobranza}>
+                          <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
+                            {f.folio_cuenta}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                              {f.tipo}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">{f.proyecto_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm">{f.modelo_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {f.producto_nombre || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">{f.numero_departamento || "—"}</TableCell>
+                          <TableCell className="text-xs">{f.entidad_duena || "—"}</TableCell>
+                          <TableCell className="text-xs font-mono">{stpMasked || "—"}</TableCell>
+                          <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                            {fmtMxn(f.precio_final)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">
+                            {f.porcentaje_comision_venta.toFixed(2)}%
+                          </TableCell>
+                          <TableCell className="text-sm text-right font-semibold tabular-nums">
+                            {fmtMxn(f.monto_comision)}
+                            {f.iva_incluido && (
+                              <span className="block text-[9px] text-muted-foreground font-normal">
+                                IVA incluido
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => setSelected({ tipo: "factura_sozu", data: f })}
+                              aria-label={`Generar factura SOZU para ${f.folio_cuenta}`}
+                            >
+                              <FileText className="h-3.5 w-3.5 mr-1" />
+                              {f.es_regenerar ? "Regenerar" : "Generar"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <PaginationBar
+          page={pageFacturasSozu}
+          totalPages={facturasSozuTotalPages}
+          totalCount={facturasSozuTotal}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPageFacturasSozu}
+        />
+      </section>
 
       {/* ─── 1. Cobros por gestionar ─── */}
       <section ref={cobrosRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
@@ -905,6 +1085,35 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         const onOpenChange = (o: boolean) => {
           if (!o) close();
         };
+
+        if (selected.tipo === "factura_sozu") {
+          const f = selected.data;
+          // No usamos ventaContexts: la BD real ya provee proyecto/cliente/precio reales.
+          const vctx = {
+            folio: f.folio_cuenta,
+            propiedad: [f.proyecto_nombre, f.modelo_nombre, f.numero_departamento ? `Depto ${f.numero_departamento}` : null]
+              .filter(Boolean)
+              .join(" · ") || "—",
+            cliente: f.cliente_nombre || "—",
+            cliente_rfc: f.cliente_rfc ?? undefined,
+            precio_venta: f.precio_final,
+            comision_total_sozu: f.monto_comision,
+            porcentaje_comision: f.porcentaje_comision_venta,
+            estado_venta: "Vendida" as const,
+            dias_desde_apartado: 0,
+          };
+          return (
+            <EjecucionDrawer
+              open={open}
+              onOpenChange={onOpenChange}
+              entityType="ejecucion_factura_sozu"
+              entityId={f.folio_cuenta}
+              ventaContext={vctx}
+            >
+              <EjecucionFacturaSozuContent entity={f} onClose={close} />
+            </EjecucionDrawer>
+          );
+        }
 
         if (selected.tipo === "cobro") {
           const c = selected.data;

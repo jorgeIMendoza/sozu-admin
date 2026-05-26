@@ -21,7 +21,11 @@ export function EjecucionDrawer({
   onOpenChange: (open: boolean) => void;
   entityType: Extract<
     EntityType,
-    "ejecucion_cobro" | "ejecucion_pago_externo" | "ejecucion_dispersion" | "ejecucion_excepcion"
+    | "ejecucion_factura_sozu"
+    | "ejecucion_cobro"
+    | "ejecucion_pago_externo"
+    | "ejecucion_dispersion"
+    | "ejecucion_excepcion"
   >;
   entityId: string;
   subtitle?: string;
