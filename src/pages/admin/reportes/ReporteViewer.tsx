@@ -571,10 +571,11 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
   // Define preferred column order for known reports
   const preferredColumnOrder = useMemo(() => [
     // Unified report columns - exact order requested
-    'proyecto', 'dueno', 'compradores', 
-    'numero_departamento', 'id_cuenta_cobranza', 'numero_cuenta', 'tipo', 'categoria', 'producto', 'nombre_producto',
+    'proyecto', 'dueno', 'compradores',
+    'numero_departamento', 'id_cuenta_cobranza', 'cuenta_cobranza', 'numero_cuenta', 'tipo', 'categoria', 'producto', 'nombre_producto',
+    'nombre_cliente', 'modelo', 'vendedor',
     'precio_final', 'monto_durante_obra', 'monto_a_la_entrega',
-    'pagado_durante_obra', 'pagado_a_la_entrega', 
+    'pagado_durante_obra', 'pagado_a_la_entrega',
     'restante_durante_obra', 'restante_a_la_entrega',
     // Simple products report columns
     'pagado', 'restante',
@@ -589,6 +590,9 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     // Reporte Mensual de Pagos columns
     'nombre_dueno', 'numero_departamento', 'tipo', 'nombre_producto', 'numero_cuenta', 'fecha_pago',
     'metodo_pago', 'clave_rastreo', 'cuenta_clabe', 'concepto_pago', 'monto_pago', 'compradores',
+    // Cartera Activa — Proyección de Pagos columns
+    'pago_contraentrega', 'fecha_contraentrega', 'fecha_ultimo_pago_completo',
+    'atrasado_a_la_fecha', 'esperado_sig_mes_sin_atrasados', 'esperado_sig_mes_con_atrasados',
   ], []);
 
   // Calculate Cartera Vencida chart data
@@ -819,7 +823,12 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     'pagado_durante_obra',
     'pagado_a_la_entrega',
     'restante_durante_obra',
-    'restante_a_la_entrega'
+    'restante_a_la_entrega',
+    // Cartera Activa — Proyección de Pagos
+    'pago_contraentrega',
+    'atrasado_a_la_fecha',
+    'esperado_sig_mes_sin_atrasados',
+    'esperado_sig_mes_con_atrasados',
   ];
 
   // Prepare chart data for line chart
@@ -882,7 +891,12 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
       'pagado_durante_obra': '#60a5fa', // lighter blue
       'pagado_a_la_entrega': '#4ade80', // lighter green
       'restante_durante_obra': '#1d4ed8', // darker blue
-      'restante_a_la_entrega': '#15803d'  // darker green
+      'restante_a_la_entrega': '#15803d', // darker green
+      // Cartera Activa — Proyección de Pagos
+      'pago_contraentrega': '#0891b2',          // cyan
+      'atrasado_a_la_fecha': '#dc2626',         // red
+      'esperado_sig_mes_sin_atrasados': '#7c3aed', // violet
+      'esperado_sig_mes_con_atrasados': '#4f46e5', // indigo-dark
     };
 
     // Calculate total for percentage
@@ -1053,7 +1067,12 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     'pagado_durante_obra': '#166534', // dark green
     'pagado_a_la_entrega': '#22c55e', // light green
     'restante_durante_obra': '#991b1b', // dark red
-    'restante_a_la_entrega': '#ef4444'  // light red
+    'restante_a_la_entrega': '#ef4444', // light red
+    // Cartera Activa — Proyección de Pagos
+    'pago_contraentrega': '#0891b2',          // cyan
+    'atrasado_a_la_fecha': '#b91c1c',         // deep red
+    'esperado_sig_mes_sin_atrasados': '#7c3aed', // violet
+    'esperado_sig_mes_con_atrasados': '#4f46e5', // indigo-dark
   };
 
   // Stroke width for lines
