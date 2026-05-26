@@ -582,14 +582,32 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
 
   // 2) cuentas_cobranza por id (todas las cuentas referenciadas)
   const ccIds = Array.from(new Set(comisRows.map((r) => r.id_cuenta_cobranza).filter(Boolean)));
-  const { data: ccs } = ccIds.length
-    ? ((await (supabase as any)
+  // El SELECT intenta incluir `estatus_autorizacion_comision_externa`. La
+  // columna existe en dev pero el DDL puede no estar aplicado en prod aún
+  // (ver Ejecuciones_manuales/autorizacion_comision_sozu.md). Si PostgREST
+  // devuelve 400 por columna inexistente, reintentamos sin ella y defaulteamos
+  // a "En espera" — el mismo valor del DDL. Sin este fallback, supabase-js
+  // entrega `data=undefined` silenciosamente y toda la tabla de Comisiones
+  // internas pierde detalle (proyecto/edificio/modelo/precio).
+  let ccs: Array<any> = [];
+  if (ccIds.length) {
+    let resp = await (supabase as any)
+      .from("cuentas_cobranza")
+      .select(
+        "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa"
+      )
+      .in("id", ccIds);
+    if (resp.error && resp.error.code === "42703") {
+      resp = await (supabase as any)
         .from("cuentas_cobranza")
         .select(
-          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa"
+          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta"
         )
-        .in("id", ccIds)) as any)
-    : { data: [] };
+        .in("id", ccIds);
+    }
+    if (resp.error) throw resp.error;
+    ccs = resp.data ?? [];
+  }
   const ccById = new Map<number, any>((ccs || []).map((c: any) => [c.id, c]));
 
   // 2b) Ofertas para deducir tipo (Producto/Servicio si id_producto, si no Propiedad)

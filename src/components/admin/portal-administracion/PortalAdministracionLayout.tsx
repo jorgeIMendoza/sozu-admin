@@ -2,19 +2,19 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
-  CalendarCheck,
-  UserSearch,
-  Briefcase,
+  Bell,
+  Inbox,
+  Workflow,
+  FileOutput,
+  HandCoins,
+  Users,
+  CheckCircle2,
   FileText,
-  Percent,
+  GitMerge,
+  BarChart3,
   ArrowLeft,
   LogOut,
   Menu,
-  Inbox,
-  Workflow,
-  Bell,
-  ChevronDown,
-  ChevronRight,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -28,78 +28,77 @@ import { GlobalFilterBar } from "./GlobalFilterBar";
 const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-administracion/dashboard",
   "/admin/portal-administracion/notificaciones",
-  "/admin/portal-administracion/prospectos",
-  "/admin/portal-administracion/pipeline",
-  "/admin/portal-administracion/bandeja",
+  "/admin/portal-administracion/bandeja-ejecucion",
   "/admin/portal-administracion/ciclo-venta",
   "/admin/portal-administracion/facturas-por-cobrar",
   "/admin/portal-administracion/facturas-por-pagar",
   "/admin/portal-administracion/comisiones-externas",
   "/admin/portal-administracion/comisiones-internas",
+  "/admin/portal-administracion/pagos-ejecutados",
+  "/admin/portal-administracion/cfdis-emitidos",
+  "/admin/portal-administracion/conciliacion-stp",
+  "/admin/portal-administracion/reportes",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
-type NavParent = { label: string; icon: LucideIcon; children: { label: string; path: string }[] };
-type NavItem = NavLeaf | NavParent;
 
 interface NavGroup {
   label: string;
-  items: NavItem[];
+  items: NavLeaf[];
 }
 
-const isParent = (i: NavItem): i is NavParent => "children" in i;
-
+// El cockpit de Administración EJECUTA decisiones que Dirección ya validó.
+// Por eso la taxonomía agrupa por fase del flujo operativo (Ejecución,
+// Pagos y Cobranza, Historial) en lugar de calcar el sidebar de Alta Dirección.
 const navGroups: NavGroup[] = [
   {
     label: "Visión",
     items: [
-      { label: "Dashboard",      path: "/admin/portal-administracion/dashboard",       icon: LayoutDashboard },
-      { label: "Notificaciones", path: "/admin/portal-administracion/notificaciones",  icon: Bell },
+      { label: "Dashboard",      path: "/admin/portal-administracion/dashboard",      icon: LayoutDashboard },
+      { label: "Notificaciones", path: "/admin/portal-administracion/notificaciones", icon: Bell },
     ],
   },
   {
-    label: "Comercial",
+    label: "Ejecución",
     items: [
-      { label: "Citas Comerciales", path: "/admin/portal-administracion/citas",      icon: CalendarCheck },
-      { label: "Prospectos",        path: "/admin/portal-administracion/prospectos", icon: UserSearch },
-      { label: "Pipeline",          path: "/admin/portal-administracion/pipeline",   icon: Briefcase },
-      // "Ofertas" oculto en esta fase de demo; ruta sigue viva en App.tsx por URL directa.
+      { label: "Bandeja de Ejecución", path: "/admin/portal-administracion/bandeja-ejecucion", icon: Inbox },
+      { label: "Ciclo de Venta",       path: "/admin/portal-administracion/ciclo-venta",       icon: Workflow },
     ],
   },
   {
-    label: "Operación",
+    label: "Pagos y Cobranza",
     items: [
-      { label: "Bandeja de Validaciones", path: "/admin/portal-administracion/bandeja",      icon: Inbox },
-      { label: "Ciclo de Venta",          path: "/admin/portal-administracion/ciclo-venta",  icon: Workflow },
-      // "Cobranza" y "Contratos" ocultas en esta fase de demo; rutas vivas en App.tsx por URL directa.
-      {
-        label: "Facturas",
-        icon: FileText,
-        children: [
-          { label: "Por Cobrar", path: "/admin/portal-administracion/facturas-por-cobrar" },
-          { label: "Por Pagar",  path: "/admin/portal-administracion/facturas-por-pagar"  },
-        ],
-      },
-      {
-        label: "Comisiones",
-        icon: Percent,
-        children: [
-          { label: "Externas", path: "/admin/portal-administracion/comisiones-externas" },
-          { label: "Internas", path: "/admin/portal-administracion/comisiones-internas" },
-        ],
-      },
+      { label: "Facturas por Cobrar", path: "/admin/portal-administracion/facturas-por-cobrar", icon: FileOutput },
+      { label: "Facturas por Pagar",  path: "/admin/portal-administracion/facturas-por-pagar",  icon: Inbox },
+      { label: "Comisiones Externas", path: "/admin/portal-administracion/comisiones-externas", icon: HandCoins },
+      { label: "Comisiones Internas", path: "/admin/portal-administracion/comisiones-internas", icon: Users },
     ],
   },
-  // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
-  // ocultada en esta fase. Las rutas siguen vivas en App.tsx por URL directa.
+  {
+    label: "Historial",
+    items: [
+      { label: "Pagos Ejecutados", path: "/admin/portal-administracion/pagos-ejecutados", icon: CheckCircle2 },
+      { label: "CFDIs Emitidos",   path: "/admin/portal-administracion/cfdis-emitidos",   icon: FileText },
+      { label: "Conciliación STP", path: "/admin/portal-administracion/conciliacion-stp", icon: GitMerge },
+    ],
+  },
+  {
+    label: "Administración",
+    items: [
+      { label: "Reportes", path: "/admin/portal-administracion/reportes", icon: BarChart3 },
+    ],
+  },
 ];
+
+// Diferenciación visual respecto a Alta Dirección (que es bg-primary verde).
+const BADGE_CLASS = "bg-teal-600 text-white";
+const AVATAR_CLASS = "bg-teal-600 text-white";
 
 export const PortalAdministracionLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -109,24 +108,10 @@ export const PortalAdministracionLayout = () => {
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
-
   const currentSection = (() => {
     for (const g of navGroups) {
       for (const item of g.items) {
-        if (isParent(item)) {
-          const child = item.children.find((c) => isActive(c.path));
-          if (child) return `${item.label} · ${child.label}`;
-        } else if (isActive(item.path)) {
-          return item.label;
-        }
+        if (isActive(item.path)) return item.label;
       }
     }
     return "Administración";
@@ -140,7 +125,10 @@ export const PortalAdministracionLayout = () => {
     <>
       <div className="px-4 pt-4 pb-4 border-b border-border">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">
+          <div className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold shrink-0",
+            BADGE_CLASS,
+          )}>
             S
           </div>
           <div className="min-w-0">
@@ -158,50 +146,6 @@ export const PortalAdministracionLayout = () => {
             </p>
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                if (isParent(item)) {
-                  const groupActive = item.children.some((c) => isActive(c.path));
-                  const expanded = expandedGroups.has(item.label) || groupActive;
-                  return (
-                    <div key={item.label}>
-                      <button
-                        onClick={() => toggleGroup(item.label)}
-                        className={cn(
-                          "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
-                          groupActive
-                            ? "bg-primary/10 text-primary font-semibold"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={groupActive ? 2 : 1.75} />
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {expanded
-                          ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                          : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />}
-                      </button>
-                      {expanded && (
-                        <div className="mt-0.5 ml-6 space-y-0.5">
-                          {item.children.map((child) => {
-                            const childActive = isActive(child.path);
-                            return (
-                              <button
-                                key={child.path}
-                                onClick={() => handleNavigate(child.path)}
-                                className={cn(
-                                  "w-full flex items-center px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150",
-                                  childActive
-                                    ? "bg-primary/10 text-primary font-semibold"
-                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                )}
-                              >
-                                {child.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
                 const active = isActive(item.path);
                 return (
                   <button
@@ -210,7 +154,7 @@ export const PortalAdministracionLayout = () => {
                     className={cn(
                       "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
                       active
-                        ? "bg-primary/10 text-primary font-semibold"
+                        ? "bg-teal-600/10 text-teal-700 dark:text-teal-300 font-semibold"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
@@ -278,7 +222,7 @@ export const PortalAdministracionLayout = () => {
                 <p className="text-xs text-muted-foreground truncate">Administración</p>
               </div>
               <Avatar className="h-9 w-9 shrink-0">
-                <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-bold">
+                <AvatarFallback className={cn("text-[13px] font-bold", AVATAR_CLASS)}>
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -302,7 +246,7 @@ export const PortalAdministracionLayout = () => {
               </div>
             </div>
             <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="bg-primary text-primary-foreground text-[12px] font-bold">
+              <AvatarFallback className={cn("text-[12px] font-bold", AVATAR_CLASS)}>
                 {initials}
               </AvatarFallback>
             </Avatar>

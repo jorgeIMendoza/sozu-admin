@@ -276,7 +276,7 @@ export default function AdministracionDashboardPage() {
     <>
       <PageHeader
         title="Dashboard Ejecutivo"
-        description="Resumen financiero y comercial de SOZU"
+        description="Resumen operativo del equipo administrativo — pagos, cobranza y ejecución"
       />
 
       {/* ─── Filtros ─── */}
