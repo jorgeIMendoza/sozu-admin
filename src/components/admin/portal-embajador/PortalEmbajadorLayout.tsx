@@ -6,7 +6,9 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEmbajadorImpersonation } from "@/contexts/EmbajadorImpersonationContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { EmbajadorImpersonationSelector } from "./EmbajadorImpersonationSelector";
 
 const NAV = [
   { label: "Inicio",             path: "/admin/portal-embajador/inicio",            icon: Home },
@@ -20,12 +22,19 @@ export const PortalEmbajadorLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const { impersonatedEmbajadorName, isImpersonating } = useEmbajadorImpersonation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const go = (p: string) => { navigate(p); setMobileOpen(false); };
+
+  const displayName = isImpersonating
+    ? impersonatedEmbajadorName
+    : profile?.nombre || "Embajador";
 
   const SidebarBody = () => (
     <div className="flex h-full flex-col bg-card text-card-foreground">
@@ -55,12 +64,14 @@ export const PortalEmbajadorLayout = () => {
         })}
       </nav>
       <div className="border-t p-4 space-y-2">
-        <button
-          onClick={() => navigate("/admin")}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" /> Volver al admin
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => navigate("/admin")}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Volver al admin
+          </button>
+        )}
         <button
           onClick={() => signOut()}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -71,7 +82,7 @@ export const PortalEmbajadorLayout = () => {
     </div>
   );
 
-  const initials = (profile?.nombre || "EM").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (displayName || "EM").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <div className="min-h-screen bg-background">
@@ -90,11 +101,19 @@ export const PortalEmbajadorLayout = () => {
           <button className="lg:hidden p-2 -ml-2" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex-1" />
+          <div className="flex-1 flex items-center">
+            {isSuperAdmin && (
+              <div className="hidden sm:flex">
+                <EmbajadorImpersonationSelector />
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <div className="text-sm font-medium">{profile?.nombre || "Embajador"}</div>
-              <div className="text-xs text-muted-foreground">{profile?.rol_nombre}</div>
+              <div className="text-sm font-medium">{displayName}</div>
+              <div className="text-xs text-muted-foreground">
+                {isImpersonating ? "Vista embajador" : profile?.rol_nombre}
+              </div>
             </div>
             <Avatar className="h-8 w-8">
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
