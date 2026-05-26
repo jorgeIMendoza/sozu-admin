@@ -6,13 +6,19 @@ import { ENVIRONMENT } from "@/lib/config";
  * Hook que entrega las cuentas de cobranza listas para generar la Factura
  * de Comisión SOZU al desarrollador.
  *
- * Filtro aplicado (definido por Ramón — 3 condiciones explícitas):
+ * Filtro aplicado (definido por Ramón):
  *
  *   1. cuentas_cobranza.activo = true
  *   2. cuentas_cobranza.id_cuenta_cobranza_padre IS NULL (excluye mantenimiento)
  *   3. cuentas_cobranza.estatus_autorizacion_comision = 'En espera'
  *   4. cuentas_cobranza.es_pagada_comision_venta = false
- *   5. propiedades.id_estatus_disponibilidad = 5 (Vendida)
+ *   5. cuentas_cobranza.precio_final > 0
+ *   6. cuentas_cobranza.porcentaje_comision_venta > 0
+ *   7. propiedades.id_estatus_disponibilidad = 5 (Vendida)
+ *
+ * Los gates 5 y 6 garantizan que ya se hizo el análisis de precio +
+ * porcentaje de comisión (sin ellos la comisión a facturar sería $0,
+ * lo cual no tiene sentido para Administración).
  *
  * NO se aplican gates adicionales (enganche pagado, facturar_comision_sozu,
  * url_factura_comision) — son responsabilidad de la edge function al timbrar.
@@ -71,6 +77,8 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       .is("id_cuenta_cobranza_padre", null)
       .eq("estatus_autorizacion_comision", "En espera")
       .eq("es_pagada_comision_venta", false)
+      .gt("precio_final", 0)
+      .gt("porcentaje_comision_venta", 0)
       .order("id", { ascending: false })
       .range(offset, offset + PAGE - 1)) as any;
     if (error) throw error;
