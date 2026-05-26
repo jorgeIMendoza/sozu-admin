@@ -2,11 +2,15 @@ import { ExpedienteDrawer } from "./ExpedienteDrawer";
 import type { EntityType, VentaContext } from "./types";
 
 /**
- * EjecucionDrawer — chrome del Portal de Administración para las 4 acciones
- * operativas de la Bandeja de Ejecución (cobro, pago externo, dispersión,
- * excepción). Es un thin wrapper sobre ExpedienteDrawer: reusa el header,
- * la VentaContextCard y el footer; el componente de contenido recibe la
- * acción específica (timbrar, ejecutar SPEI, dispersar, aplicar).
+ * EjecucionDrawer — chrome del Portal de Administración para las acciones
+ * operativas de la Bandeja de Ejecución (factura SOZU, cobro, pago externo,
+ * dispersión, excepción). Es un thin wrapper sobre ExpedienteDrawer.
+ *
+ * Por defecto oculta la VentaContextCard (folio/cliente/estado) porque los
+ * contenidos de Ejecución muestran toda esa información en sus secciones
+ * (Resumen de la venta, Datos de la propiedad, Comprador), y duplicarla
+ * agrega ruido visual sin valor. Override `hideVentaContext={false}` si
+ * algún contenido nuevo NO la presenta internamente.
  */
 export function EjecucionDrawer({
   open,
@@ -15,6 +19,7 @@ export function EjecucionDrawer({
   entityId,
   subtitle,
   ventaContext,
+  hideVentaContext = true,
   children,
 }: {
   open: boolean;
@@ -30,6 +35,7 @@ export function EjecucionDrawer({
   entityId: string;
   subtitle?: string;
   ventaContext: VentaContext;
+  hideVentaContext?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -40,6 +46,7 @@ export function EjecucionDrawer({
       entityId={entityId}
       subtitle={subtitle}
       ventaContext={ventaContext}
+      hideVentaContext={hideVentaContext}
     >
       {children}
     </ExpedienteDrawer>
