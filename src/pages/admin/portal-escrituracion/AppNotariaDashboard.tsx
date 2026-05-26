@@ -239,17 +239,18 @@ export function AppNotariaDashboard() {
   const canView     = isAdmin || !!profile?.id_notario;
 
   // ── Accounts — waterfall flat queries (avoids PostgREST embedded-join issues) ──
-  const { data: rawCuentas = [], isLoading: loadingCuentas, refetch: refetchAll } = useQuery({
+  const { data: rawCuentas = [], isLoading: loadingCuentas, refetch: refetchAll, isError: cuentasIsError, error: cuentasError } = useQuery({
     queryKey: ['app-notaria-cuentas', notarioId, isAdmin],
     enabled: canView && (isAdmin ? adminNotarioId !== null : true),
     queryFn: async () => {
       if (!notarioId) return [];
 
       // 1. Flat cuentas — filter only by id_notario, no embedded joins
+      // Note: 'saldo' is not a column in cuentas_cobranza (it's only in a view)
       console.debug('[AppNotaria] querying id_notario =', notarioId);
       const { data: cuentasRaw, error: cuentasErr } = await (supabase as any)
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, id_notario, precio_final, saldo, fecha_compra, fecha_actualizacion, numero_escritura, fecha_escritura, activo')
+        .select('id, id_propiedad, id_notario, precio_final, fecha_compra, fecha_actualizacion, numero_escritura, fecha_escritura, activo')
         .eq('activo', true)
         .eq('id_notario', notarioId)
         .order('fecha_actualizacion', { ascending: false });
@@ -744,8 +745,13 @@ export function AppNotariaDashboard() {
 
       {/* ── DEV: diagnóstico cuando notaría seleccionada pero sin cuentas ── */}
       {import.meta.env.DEV && notarioId && !loadingCuentas && allRows.length === 0 && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-800 font-mono">
-          [DEV] id_notario={notarioId} — 0 cuentas en cuentas_cobranza. Verifica con: SELECT id, id_notario FROM cuentas_cobranza WHERE id_notario = {notarioId};
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-800 font-mono space-y-0.5">
+          {cuentasIsError ? (
+            <p>[DEV ERROR] Query falló: {String(cuentasError)}</p>
+          ) : (
+            <p>[DEV] id_notario={notarioId} — 0 cuentas en cuentas_cobranza.</p>
+          )}
+          <p>SQL: SELECT id, id_notario FROM cuentas_cobranza WHERE id_notario = {notarioId};</p>
         </div>
       )}
 
