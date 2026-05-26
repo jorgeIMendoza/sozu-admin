@@ -238,40 +238,114 @@ export function AppNotariaDashboard() {
     : (profile?.notaria_nombre ?? null);
   const canView     = isAdmin || !!profile?.id_notario;
 
-  // ── Accounts ───────────────────────────────────────────────────────────────
+  // ── Accounts — waterfall flat queries (avoids PostgREST embedded-join issues) ──
   const { data: rawCuentas = [], isLoading: loadingCuentas, refetch: refetchAll } = useQuery({
     queryKey: ['app-notaria-cuentas', notarioId, isAdmin],
     enabled: canView && (isAdmin ? adminNotarioId !== null : true),
     queryFn: async () => {
-      let q = (supabase as any)
+      if (!notarioId) return [];
+
+      // 1. Flat cuentas — filter only by id_notario, no embedded joins
+      console.debug('[AppNotaria] querying id_notario =', notarioId);
+      const { data: cuentasRaw, error: cuentasErr } = await (supabase as any)
         .from('cuentas_cobranza')
-        .select(`
-          id, precio_final, fecha_compra, fecha_actualizacion,
-          numero_escritura, fecha_escritura, id_notario, activo,
-          propiedades(
-            id, numero_propiedad,
-            edificios_modelos(
-              edificios(
-                nombre,
-                proyectos(id, nombre)
-              )
-            )
-          ),
-          compradores(
-            id_persona,
-            activo,
-            personas(id, nombre_legal, nombre_comercial, email, rfc)
-          )
-        `)
+        .select('id, id_propiedad, id_notario, precio_final, saldo, fecha_compra, fecha_actualizacion, numero_escritura, fecha_escritura, activo')
         .eq('activo', true)
+        .eq('id_notario', notarioId)
         .order('fecha_actualizacion', { ascending: false });
 
-      if (!isAdmin && notarioId) q = q.eq('id_notario', notarioId);
-      else if (!isAdmin)          return [];
+      if (cuentasErr) {
+        console.error('[AppNotaria] cuentas error:', cuentasErr.message);
+        throw new Error(cuentasErr.message);
+      }
+      console.debug('[AppNotaria] cuentas encontradas:', cuentasRaw?.length ?? 0);
+      if (!cuentasRaw?.length) return [];
 
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as any[];
+      const propIds    = [...new Set(cuentasRaw.map((c: any) => c.id_propiedad).filter(Boolean))] as number[];
+      const cuentaIds_ = cuentasRaw.map((c: any) => c.id) as number[];
+
+      // 2. Propiedades
+      const { data: props } = await supabase
+        .from('propiedades')
+        .select('id, numero_propiedad, id_edificio_modelo')
+        .in('id', propIds);
+      const propMap: Record<number, any> = {};
+      for (const p of props ?? []) propMap[p.id] = p;
+
+      // 3. Edificios_modelos
+      const modeloIds = [...new Set((props ?? []).map((p: any) => p.id_edificio_modelo).filter(Boolean))] as number[];
+      const { data: modelos } = await supabase
+        .from('edificios_modelos')
+        .select('id, id_edificio')
+        .in('id', modeloIds);
+      const modeloMap: Record<number, any> = {};
+      for (const m of modelos ?? []) modeloMap[m.id] = m;
+
+      // 4. Edificios
+      const edificioIds = [...new Set((modelos ?? []).map((m: any) => m.id_edificio).filter(Boolean))] as number[];
+      const { data: edificios } = await supabase
+        .from('edificios')
+        .select('id, nombre, id_proyecto')
+        .in('id', edificioIds);
+      const edificioMap: Record<number, any> = {};
+      for (const e of edificios ?? []) edificioMap[e.id] = e;
+
+      // 5. Proyectos
+      const proyectoIds = [...new Set((edificios ?? []).map((e: any) => e.id_proyecto).filter(Boolean))] as number[];
+      const { data: proyectos_ } = await supabase
+        .from('proyectos')
+        .select('id, nombre')
+        .in('id', proyectoIds);
+      const proyectoMap: Record<number, any> = {};
+      for (const p of proyectos_ ?? []) proyectoMap[p.id] = p;
+
+      // 6. Compradores
+      const { data: compradores } = await supabase
+        .from('compradores')
+        .select('id_cuenta_cobranza, id_persona, activo')
+        .in('id_cuenta_cobranza', cuentaIds_)
+        .eq('activo', true);
+
+      // 7. Personas
+      const personaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))] as number[];
+      const { data: personas } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, nombre_comercial, email, rfc')
+        .in('id', personaIds);
+      const personaMap: Record<number, any> = {};
+      for (const p of personas ?? []) personaMap[p.id] = p;
+
+      // Primary comprador per cuenta
+      const compByCuenta: Record<number, any> = {};
+      for (const c of compradores ?? []) {
+        if (!compByCuenta[c.id_cuenta_cobranza]) {
+          compByCuenta[c.id_cuenta_cobranza] = {
+            id_persona: c.id_persona,
+            activo:     c.activo,
+            personas:   personaMap[c.id_persona] ?? null,
+          };
+        }
+      }
+
+      // Merge into shape expected by allRows useMemo
+      return cuentasRaw.map((c: any) => {
+        const prop    = propMap[c.id_propiedad] ?? null;
+        const modelo  = prop ? modeloMap[prop.id_edificio_modelo] ?? null : null;
+        const edificio = modelo ? edificioMap[modelo.id_edificio] ?? null : null;
+        const proyecto = edificio ? proyectoMap[edificio.id_proyecto] ?? null : null;
+        const comp    = compByCuenta[c.id] ?? null;
+        return {
+          ...c,
+          propiedades: prop ? {
+            ...prop,
+            edificios_modelos: modelo ? {
+              ...modelo,
+              edificios: edificio ? { ...edificio, proyectos: proyecto } : null,
+            } : null,
+          } : null,
+          compradores: comp ? [comp] : [],
+        };
+      });
     },
   });
 
@@ -443,6 +517,11 @@ export function AppNotariaDashboard() {
       lastUpdatedAt:     proceso?.fecha_actualizacion ?? c.fecha_actualizacion ?? null,
     } satisfies NotaryRow;
   }), [rawCuentas, pagosSum, creditosMap, procesosMap, citasMap]);
+
+  // DEV debug
+  if (import.meta.env.DEV) {
+    console.debug('[AppNotaria] effectiveNotarioId', notarioId, '| rows construidas:', allRows.length);
+  }
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => ({
@@ -660,6 +739,13 @@ export function AppNotariaDashboard() {
           <Stamp className="h-10 w-10 text-muted-foreground/30" />
           <p className="text-sm font-medium text-muted-foreground">Selecciona una notaría para ver sus unidades</p>
           <p className="text-xs text-muted-foreground">Usa el selector de arriba para elegir una notaría activa.</p>
+        </div>
+      )}
+
+      {/* ── DEV: diagnóstico cuando notaría seleccionada pero sin cuentas ── */}
+      {import.meta.env.DEV && notarioId && !loadingCuentas && allRows.length === 0 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-800 font-mono">
+          [DEV] id_notario={notarioId} — 0 cuentas en cuentas_cobranza. Verifica con: SELECT id, id_notario FROM cuentas_cobranza WHERE id_notario = {notarioId};
         </div>
       )}
 
