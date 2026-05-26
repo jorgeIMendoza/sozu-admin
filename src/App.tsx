@@ -204,6 +204,36 @@ const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/port
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 
+// Portal de Administración (módulo independiente, copia de Alta Dirección)
+const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
+const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
+const AdminProspectos           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionProspectos })));
+const AdminPipeline             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionPipeline })));
+const AdminOfertas              = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionOfertas })));
+const AdminCobranza             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCobranza })));
+const AdminContratos            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionContratos })));
+const AdminFacturas             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionFacturas })));
+const AdminComisiones           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionComisiones })));
+const AdminRedComercial         = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionRedComercial })));
+const AdminReportes             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionReportes })));
+const AdminAuditoria            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionAuditoria })));
+const AdminConfiguracion        = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionConfiguracion })));
+const AdminNotificaciones       = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionNotificacionesPage"));
+const AdminBandejaValidaciones  = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionBandejaValidacionesPage"));
+const AdminCicloVenta           = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionCicloVentaPage"));
+const AdminFacturasPorCobrar    = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorCobrarPage"));
+const AdminFacturasPorPagar     = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorPagarPage"));
+const AdminComisionesExternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesExternasPage"));
+const AdminComisionesInternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesInternasPage"));
+
+// Portal Embajadores
+const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
+const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));
+const EmbajadorMisReferidos    = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorMisReferidos })));
+const EmbajadorRegistrarReferido = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorRegistrarReferido })));
+const EmbajadorComisiones      = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorComisiones })));
+const EmbajadorPerfil          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorPerfil })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -538,6 +568,36 @@ const App = () => (
                   <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
                   <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+
+                 {/* Portal de Administración (clon de Alta Dirección) */}
+                 <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
+                 <Route path="portal-administracion/citas" element={<AdminCitas />} />
+                 <Route path="portal-administracion/prospectos" element={<AdminProspectos />} />
+                 <Route path="portal-administracion/pipeline" element={<AdminPipeline />} />
+                 <Route path="portal-administracion/ofertas" element={<AdminOfertas />} />
+                 <Route path="portal-administracion/cobranza" element={<AdminCobranza />} />
+                 <Route path="portal-administracion/contratos" element={<AdminContratos />} />
+                 <Route path="portal-administracion/facturas" element={<AdminFacturas />} />
+                 <Route path="portal-administracion/comisiones" element={<AdminComisiones />} />
+                 <Route path="portal-administracion/red-comercial" element={<AdminRedComercial />} />
+                 <Route path="portal-administracion/reportes" element={<AdminReportes />} />
+                 <Route path="portal-administracion/auditoria" element={<AdminAuditoria />} />
+                 <Route path="portal-administracion/configuracion" element={<AdminConfiguracion />} />
+                 <Route path="portal-administracion/notificaciones" element={<AdminNotificaciones />} />
+                 <Route path="portal-administracion/bandeja" element={<AdminBandejaValidaciones />} />
+                 <Route path="portal-administracion/ciclo-venta" element={<AdminCicloVenta />} />
+                 <Route path="portal-administracion/facturas-por-cobrar" element={<AdminFacturasPorCobrar />} />
+                 <Route path="portal-administracion/facturas-por-pagar" element={<AdminFacturasPorPagar />} />
+                 <Route path="portal-administracion/comisiones-externas" element={<AdminComisionesExternas />} />
+                 <Route path="portal-administracion/comisiones-internas" element={<AdminComisionesInternas />} />
+
+                 {/* Portal Embajadores */}
+                 <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
+                 <Route path="portal-embajador/inicio"             element={<EmbajadorInicio />} />
+                 <Route path="portal-embajador/mis-referidos"      element={<EmbajadorMisReferidos />} />
+                 <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
+                 <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
+                 <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -10,11 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
+import { PageHeader } from "@/components/admin/portal-administracion/ui";
 import {
   SaludFinancieraWidgets,
   type SaludFinancieraData,
-} from "@/components/admin/portal-alta-direccion/SaludFinancieraWidgets";
+} from "@/components/admin/portal-administracion/SaludFinancieraWidgets";
 import {
   useFacturasPorCobrar,
   type FacturaPorCobrar,
@@ -219,7 +219,7 @@ function computeSaludData({
    Página Dashboard
    ══════════════════════════════════════════════════════════ */
 
-export default function AltaDireccionDashboardPage() {
+export default function AdministracionDashboardPage() {
   const [desarrollo, setDesarrollo] = useState<DesarrolloFilter>("all");
   const [canal, setCanal] = useState<CanalFilter>("all");
   const [periodo, setPeriodo] = useState<PeriodoFilter>("all");

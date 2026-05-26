@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "@/components/ui/table";
+import {
   EXPEDIENTES, STAGES, HEALTH_META, NOTARIAS, NOTARIOS, AVALUOS,
   BORRADORES, PLANTILLAS, CITAS_FIRMA, ENTREGAS, INSCRIPCIONES,
   fmtMxn,
