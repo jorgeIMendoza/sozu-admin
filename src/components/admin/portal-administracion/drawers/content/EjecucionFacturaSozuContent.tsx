@@ -34,8 +34,18 @@ import { Section, KV } from "./_shared";
 import {
   type FacturaComisionSozuPorGenerar,
   useGenerarFacturaComisionSozu,
+  useTimbrarFacturaComisionSozu,
 } from "@/hooks/useFacturasComisionSozuPorGenerar";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
+
+// Emisor del CFDI (lo configura del lado de la edge function; se replica aquí
+// solo para mostrarlo en "Datos fiscales — Emisor").
+const SOZU_EMISOR = {
+  razon_social: "SOZU REAL ESTATE VENTURES S.A. de C.V.",
+  rfc: "SRE241001ABC",
+} as const;
+
+type PendingAction = null | "generar" | "regenerar" | "timbrar";
 
 export function EjecucionFacturaSozuContent({
   entity,
@@ -46,11 +56,15 @@ export function EjecucionFacturaSozuContent({
 }) {
   const { toast } = useToast();
   const generar = useGenerarFacturaComisionSozu();
+  const timbrar = useTimbrarFacturaComisionSozu();
   const { data: detalle, isLoading: detalleLoading } = useExpedienteVentaDetalle(
     entity.folio_cuenta,
   );
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [notas, setNotas] = useState("");
+
+  const isDraft = entity.estado_factura === "draft";
+  const isWorking = generar.isPending || timbrar.isPending;
 
   // Cálculo de comisión — consistente con Admin Panel Comisiones.tsx (subtotal + IVA si aplica).
   const subtotal = (entity.precio_final * entity.porcentaje_comision_venta) / 100;
@@ -58,34 +72,49 @@ export function EjecucionFacturaSozuContent({
   const total = subtotal + iva;
 
   const handleConfirm = async () => {
+    const action = pendingAction;
+    if (!action) return;
     try {
-      const data = await generar.mutateAsync(entity.id_cuenta_cobranza);
-      if (data?.not_applicable) {
+      if (action === "timbrar") {
+        await timbrar.mutateAsync(entity.id_cuenta_cobranza);
         toast({
-          title: "No aplica",
-          description: data.message || "La cuenta no requiere factura SOZU.",
-        });
-      } else if (data?.already_exists) {
-        toast({
-          title: "Ya existe",
-          description: data.message || "La factura ya fue generada previamente.",
+          title: "Factura timbrada",
+          description: `${entity.folio_cuenta} timbrada exitosamente.`,
         });
       } else {
-        toast({
-          title: "CFDI generado",
-          description: `Factura draft generada para ${entity.folio_cuenta}.`,
-        });
+        const data = await generar.mutateAsync(entity.id_cuenta_cobranza);
+        if (data?.not_applicable) {
+          toast({
+            title: "No aplica",
+            description: data.message || "La cuenta no requiere factura SOZU.",
+          });
+        } else if (data?.already_exists) {
+          toast({
+            title: "Ya existe",
+            description: data.message || "La factura ya fue generada previamente.",
+          });
+        } else {
+          toast({
+            title: action === "regenerar" ? "Draft regenerado" : "Draft generado",
+            description: `Factura draft ${
+              action === "regenerar" ? "regenerada" : "generada"
+            } para ${entity.folio_cuenta}. Valida los datos antes de timbrar.`,
+          });
+        }
       }
-      setConfirmOpen(false);
+      setPendingAction(null);
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error desconocido al generar CFDI";
+      const message =
+        err instanceof Error
+          ? err.message
+          : `Error desconocido al ${action === "timbrar" ? "timbrar" : "generar"} CFDI`;
       toast({
-        title: "Error al generar",
+        title: action === "timbrar" ? "Error al timbrar" : "Error al generar",
         description: message,
         variant: "destructive",
       });
-      setConfirmOpen(false);
+      setPendingAction(null);
     }
   };
 
@@ -109,6 +138,36 @@ export function EjecucionFacturaSozuContent({
 
   return (
     <div className="space-y-6">
+      {/* ─── Estado actual del CFDI ─── */}
+      <div
+        className={cn(
+          "rounded-md border px-3 py-2 flex items-center justify-between",
+          isDraft
+            ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900/50"
+            : "border-teal-300 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-900/50",
+        )}
+      >
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            Estado del CFDI
+          </p>
+          <p className="text-sm font-semibold text-foreground mt-0.5">
+            {isDraft ? "Draft generado · pendiente de validar y timbrar" : "Por generar"}
+          </p>
+        </div>
+        {isDraft && entity.url_factura_comision && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 border-amber-400 text-amber-700 dark:text-amber-200"
+            onClick={() => window.open(entity.url_factura_comision!, "_blank")}
+          >
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            Ver factura draft
+          </Button>
+        )}
+      </div>
+
       {/* ─── Resumen de la venta ─── */}
       <Section
         title="Resumen de la venta"
@@ -237,15 +296,26 @@ export function EjecucionFacturaSozuContent({
         </div>
       </Section>
 
-      {/* ─── Datos fiscales ─── */}
-      <Section title="Datos fiscales">
+      {/* ─── Datos fiscales · Emisor (SOZU) ─── */}
+      <Section title="Datos fiscales · Emisor">
         <div className="grid grid-cols-2 gap-3">
+          <KV icon={Building2} label="Razón social" value={SOZU_EMISOR.razon_social} />
+          <KV icon={Receipt} label="RFC" value={SOZU_EMISOR.rfc} mono />
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2 px-1">
+          SOZU presta servicios profesionales de intermediación; emite el CFDI a la entidad dueña.
+        </p>
+      </Section>
+
+      {/* ─── Datos fiscales · Receptor (Entidad Dueña) ─── */}
+      <Section title="Datos fiscales · Receptor">
+        <div className="grid grid-cols-2 gap-3">
+          <KV icon={Building2} label="Razón social" value={entity.entidad_duena || "—"} />
           <KV
             icon={Receipt}
             label="RFC receptor"
             value="Resuelto por edge function al timbrar"
           />
-          <KV icon={Building2} label="Razón social" value={entity.entidad_duena || "—"} />
           <KV icon={FileText} label="Uso de CFDI" value="G03 · Gastos en general" />
           <KV icon={FileText} label="Forma de pago" value="03 · Transferencia electrónica" />
         </div>
@@ -275,35 +345,108 @@ export function EjecucionFacturaSozuContent({
         />
       </Section>
 
-      {/* ─── Footer ─── */}
-      <div className="border-t pt-3 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onClose} disabled={generar.isPending}>
+      {/* ─── Footer · acciones contextuales ─── */}
+      <div className="border-t pt-3 flex items-center justify-end gap-2 flex-wrap">
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={isWorking}>
           Cancelar
         </Button>
-        <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={generar.isPending}>
-          {generar.isPending ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              Generando CFDI…
-            </>
-          ) : (
-            <>
-              <FileText className="h-3.5 w-3.5 mr-1.5" />
-              {entity.es_regenerar ? "Regenerar CFDI" : "Generar CFDI"}
-            </>
-          )}
-        </Button>
+        {isDraft ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPendingAction("regenerar")}
+              disabled={isWorking}
+            >
+              {generar.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Regenerando…
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Regenerar draft
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setPendingAction("timbrar")}
+              disabled={isWorking}
+            >
+              {timbrar.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Timbrando…
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Timbrar CFDI
+                </>
+              )}
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            onClick={() => setPendingAction("generar")}
+            disabled={isWorking}
+          >
+            {generar.isPending ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Generando CFDI…
+              </>
+            ) : (
+              <>
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
+                Generar CFDI
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* ─── Modal de confirmación ─── */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar generación de CFDI</AlertDialogTitle>
+            <AlertDialogTitle>
+              {pendingAction === "timbrar"
+                ? "Confirmar timbrado del CFDI"
+                : pendingAction === "regenerar"
+                  ? "Confirmar regeneración del draft"
+                  : "Confirmar generación del CFDI"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Confirmas la generación del CFDI por{" "}
-              <strong className="text-foreground">{fmtMxn(total)}</strong> a{" "}
-              <strong className="text-foreground">{entity.entidad_duena || "la entidad dueña"}</strong>?
+              {pendingAction === "timbrar" ? (
+                <>
+                  Esta acción <strong className="text-foreground">timbrará</strong> el draft actual
+                  por{" "}
+                  <strong className="text-foreground">{fmtMxn(total)}</strong> a{" "}
+                  <strong className="text-foreground">
+                    {entity.entidad_duena || "la entidad dueña"}
+                  </strong>
+                  . Es <strong>irreversible</strong> ante el SAT.
+                </>
+              ) : (
+                <>
+                  Esta acción {pendingAction === "regenerar" ? "regenerará el draft" : "generará un draft"}{" "}
+                  por{" "}
+                  <strong className="text-foreground">{fmtMxn(total)}</strong> a{" "}
+                  <strong className="text-foreground">
+                    {entity.entidad_duena || "la entidad dueña"}
+                  </strong>
+                  . El CFDI quedará en estado borrador para validar antes de timbrar.
+                </>
+              )}
               <br />
               <span className="text-xs text-muted-foreground mt-2 block">
                 Folio cuenta: {entity.folio_cuenta} · {proyecto}
@@ -312,19 +455,23 @@ export function EjecucionFacturaSozuContent({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={generar.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isWorking}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 void handleConfirm();
               }}
-              disabled={generar.isPending}
+              disabled={isWorking}
             >
-              {generar.isPending ? (
+              {isWorking ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  Generando…
+                  {pendingAction === "timbrar" ? "Timbrando…" : "Generando…"}
                 </>
+              ) : pendingAction === "timbrar" ? (
+                "Sí, timbrar"
+              ) : pendingAction === "regenerar" ? (
+                "Sí, regenerar"
               ) : (
                 "Sí, generar"
               )}

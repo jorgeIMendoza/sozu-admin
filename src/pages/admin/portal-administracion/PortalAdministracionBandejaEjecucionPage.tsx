@@ -688,16 +688,30 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8"
-                              onClick={() => setSelected({ tipo: "factura_sozu", data: f })}
-                              aria-label={`Generar factura SOZU para ${f.folio_cuenta}`}
-                            >
-                              <FileText className="h-3.5 w-3.5 mr-1" />
-                              {f.es_regenerar ? "Regenerar" : "Generar"}
-                            </Button>
+                            <div className="inline-flex items-center gap-1.5">
+                              {f.estado_factura === "draft" && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-950/40 whitespace-nowrap"
+                                >
+                                  Draft
+                                </Badge>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                onClick={() => setSelected({ tipo: "factura_sozu", data: f })}
+                                aria-label={
+                                  f.estado_factura === "draft"
+                                    ? `Validar draft factura SOZU ${f.folio_cuenta}`
+                                    : `Generar factura SOZU para ${f.folio_cuenta}`
+                                }
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" />
+                                {f.estado_factura === "draft" ? "Validar" : "Generar"}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
