@@ -9316,6 +9316,18 @@ export type Database = {
           lead_telefono: string
         }[]
       }
+      get_pagos_pendientes_cep: {
+        Args: {
+          p_edificio: string
+          p_limite?: number
+          p_metodo_pago_like: string
+        }
+        Returns: {
+          clave_rastreo: string
+          id_pago_representativo: number
+          url_recibo: string
+        }[]
+      }
       get_pending_payments: {
         Args: {
           p_excluir_metodos?: string[]
