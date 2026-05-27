@@ -188,9 +188,9 @@ export default function AdministrarMenus() {
                     const isSpecial = isPortal || allSubsSoloA;
 
                     return (
-                      <div key={menu.id} className={`border rounded-lg overflow-hidden ${isSpecial ? 'border-l-4 border-l-indigo-400 dark:border-l-indigo-500' : ''}`}>
+                      <div key={menu.id} className={`overflow-hidden ${isPortal ? 'border-2 border-blue-300 dark:border-blue-700 rounded-lg' : allSubsSoloA ? 'border border-l-4 border-l-indigo-400 dark:border-l-indigo-500 rounded-lg' : 'border rounded-lg'}`}>
                         {/* Menu Header - Sortable */}
-                        <div className={`flex items-center gap-2 ${isSpecial ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : 'bg-card'}`}>
+                        <div className={`flex items-center gap-2 ${isPortal ? 'bg-blue-50 dark:bg-blue-950/40' : 'bg-card'}`}>
                           <div className="flex-1">
                             <SortableMenuCard
                               menu={menu}
