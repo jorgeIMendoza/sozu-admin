@@ -54,7 +54,7 @@ export default function GestionEmbajadores() {
     <div className="space-y-6 max-w-[1400px] mx-auto">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Embajadores</h1>
+          <h1 className="text-3xl font-bold">Administración de Embajadores</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Administra el programa de referidos premium. Los embajadores únicamente refieren clientes, no participan en la venta.
           </p>
