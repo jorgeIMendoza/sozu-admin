@@ -176,7 +176,7 @@ import {
        17: Building2,          // Portal Inmobiliaria
        18: User,                // Portal Cliente
        19: Receipt,             // Portal Cobranza
-       22: UserPlus,            // Portal Embajadores
+       22: UserPlus,            // Embajadores (admin)
     };
  
 export interface DynamicMenuItem {
@@ -363,7 +363,8 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
           const isPortalByName = /^Portal\s/i.test(menuData.menuNombre);
           const menuIcon =
             iconMapByMenuId[menuId] ||
-            (isPortalByName && /escritura/i.test(menuData.menuNombre) ? ScrollText : Settings);
+            (isPortalByName && /embajador/i.test(menuData.menuNombre) ? UserPlus :
+            isPortalByName && /escritura/i.test(menuData.menuNombre) ? ScrollText : Settings);
  
           // Dashboard es especial - es un menu sin hijos que lleva directo a /admin
           if (menuId === DASHBOARD_MENU_ID && menuData.children.length === 1) {
