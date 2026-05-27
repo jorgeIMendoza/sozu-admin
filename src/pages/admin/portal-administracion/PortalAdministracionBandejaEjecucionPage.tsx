@@ -4,7 +4,6 @@ import {
   FileOutput,
   HandCoins,
   Users,
-  AlertTriangle,
   Clock,
   Eye,
   ArrowDown,
@@ -40,19 +39,8 @@ import {
   EjecucionPagoExternoContent,
   type EjecucionPagoExternoEntity,
 } from "@/components/admin/portal-administracion/drawers/content/EjecucionPagoExternoContent";
-import {
-  EjecucionDispersionContent,
-  type EjecucionDispersionEntity,
-} from "@/components/admin/portal-administracion/drawers/content/EjecucionDispersionContent";
-import {
-  EjecucionExcepcionContent,
-  type EjecucionExcepcionEntity,
-} from "@/components/admin/portal-administracion/drawers/content/EjecucionExcepcionContent";
+import { EjecucionDispersionExpedienteContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionDispersionExpedienteContent";
 import { EjecucionFacturaSozuContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionFacturaSozuContent";
-import {
-  getVentaContext,
-  resolveCobFolio,
-} from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useFacturasComisionSozuPorGenerar,
   type FacturaComisionSozuPorGenerar,
@@ -65,86 +53,21 @@ import {
   useCobrosPorGestionar,
   type CobroPorGestionar,
 } from "@/hooks/useCobrosPorGestionar";
+import {
+  useComisionesExternas,
+  type ComisionExterna,
+  type TipoBeneficiarioComExt,
+} from "@/hooks/useComisionesExternas";
 
 /* ──────────────────────────────────────────────────────────
    Tipos extendidos para filas (entity + extras de tabla)
    ────────────────────────────────────────────────────────── */
 
-type PagoExternoRow = EjecucionPagoExternoEntity & {
-  flag_cobro_previo: true; // Por construcción, sólo aparecen los que cumplen
-};
-
-type ExcepcionRow = EjecucionExcepcionEntity;
-
 type SelectedItem =
   | { tipo: "factura_sozu"; data: FacturaComisionSozuPorGenerar }
   | { tipo: "cobro"; data: CobroPorGestionar }
-  | { tipo: "pago_externo"; data: PagoExternoRow }
-  | { tipo: "dispersion_interna"; data: DispersionInternaPendiente }
-  | { tipo: "excepcion"; data: ExcepcionRow };
-
-/* ──────────────────────────────────────────────────────────
-   Mock data — coherente con COB-1041..1046 / COM-871..875
-   del Portal de Alta Dirección. Todos los registros aquí
-   están en estado "autorizado por Dirección" (= ya pasaron
-   por la Bandeja de Validaciones del Director).
-   ────────────────────────────────────────────────────────── */
-
-const MOCK_PAGOS_EXTERNOS: PagoExternoRow[] = [
-  {
-    folio: "COM-EXT-2841",
-    beneficiario_nombre: "Vivalta Inmobiliaria SA de CV",
-    beneficiario_tipo: "Inmobiliaria",
-    venta_ref: "COB-1041",
-    monto: 47250,
-    clabe_destino: "6461••••••3456",
-    dias_desde_autorizacion: 1,
-    flag_cobro_previo: true,
-  },
-  {
-    folio: "COM-EXT-2842",
-    beneficiario_nombre: "Carlos Mendoza Broker",
-    beneficiario_tipo: "Broker",
-    venta_ref: "COB-1042",
-    monto: 24000,
-    clabe_destino: "0021••••••7890",
-    dias_desde_autorizacion: 3,
-    flag_cobro_previo: true,
-  },
-  {
-    folio: "COM-EXT-2843",
-    beneficiario_nombre: "DLR Aliado Comercial",
-    beneficiario_tipo: "Aliado comercial",
-    venta_ref: "COB-1046",
-    monto: 76000,
-    clabe_destino: "1271••••••2233",
-    dias_desde_autorizacion: 6,
-    flag_cobro_previo: true,
-  },
-];
-
-const MOCK_EXCEPCIONES: ExcepcionRow[] = [
-  {
-    folio: "EXC-104",
-    tipo: "Descuento",
-    venta_concepto_afectado: "COB-1045 · Daiku A-205",
-    delta: -45000,
-    aprobada_por: "Dirección General",
-    fecha_aprobacion: "2026-05-21",
-    decision_texto:
-      "Se autoriza un descuento extraordinario de $45,000.00 MXN al cliente Carlos Mendoza dado el cierre acumulado del proyecto. La pieza pasa a venta con precio efectivo $1,475,000.00 MXN.",
-  },
-  {
-    folio: "EXC-105",
-    tipo: "Parcial fuera de esquema",
-    venta_concepto_afectado: "COB-1043 · Monócolo B-1",
-    delta: -15000,
-    aprobada_por: "Director Comercial",
-    fecha_aprobacion: "2026-05-23",
-    decision_texto:
-      "Se aprueba pago parcial fuera del esquema estándar (60/40 vs. esquema vigente 70/30) para sumar liquidez al proyecto. Aplica únicamente a la cuenta COB-1043.",
-  },
-];
+  | { tipo: "pago_externo"; data: ComisionExterna }
+  | { tipo: "dispersion_interna"; data: DispersionInternaPendiente };
 
 /* ──────────────────────────────────────────────────────────
    Helpers visuales (Antigüedad, Sort, Pagination)
@@ -179,6 +102,20 @@ const ESTATUS_COBRO_TONE: Record<CobroPorGestionar["estatus"], string> = {
   Declinado:
     "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-300",
 };
+
+const BENEFICIARIO_TIPO_LABEL: Record<TipoBeneficiarioComExt, string> = {
+  inmobiliaria: "Inmobiliaria",
+  broker: "Broker",
+  aliado_comercial: "Aliado comercial",
+  agente_externo: "Agente externo",
+};
+
+const padCcId = (id: number) => String(id).padStart(6, "0");
+
+const formatCuentaFolio = (c: ComisionExterna) =>
+  c.tipo === "Producto" || c.tipo === "Servicio"
+    ? `CCP-${padCcId(c.id_cuenta_cobranza)}`
+    : `CC-${padCcId(c.id_cuenta_cobranza)}`;
 
 function SortToggle({
   value,
@@ -374,7 +311,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const cobrosRef = useRef<HTMLDivElement>(null);
   const externosRef = useRef<HTMLDivElement>(null);
   const dispersionesRef = useRef<HTMLDivElement>(null);
-  const excepcionesRef = useRef<HTMLDivElement>(null);
 
   // BD real: facturas comisión SOZU por generar
   const {
@@ -399,6 +335,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     error: cobrosError,
   } = useCobrosPorGestionar();
 
+  // BD real: pagos a externos por ejecutar — comisionistas externos autorizados
+  // (estado='aprobada' o 'facturada') y todavía no pagados.
+  const {
+    data: comisionesExternasAll,
+    isLoading: externosLoading,
+    error: externosError,
+  } = useComisionesExternas();
+
   const [sortFacturasSozu, setSortFacturasSozu] = useState<SortDir>("desc"); // más recientes primero (default por spec)
   const [pageFacturasSozu, setPageFacturasSozu] = useState(0);
   const [sortCobros, setSortCobros] = useState<SortDir>("asc");
@@ -407,8 +351,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const [pageExternos, setPageExternos] = useState(0);
   const [sortDispersiones, setSortDispersiones] = useState<SortDir>("asc");
   const [pageDispersiones, setPageDispersiones] = useState(0);
-  const [sortExcepciones, setSortExcepciones] = useState<SortDir>("asc");
-  const [pageExcepciones, setPageExcepciones] = useState(0);
 
   const sortBy = <T extends { dias_desde_autorizacion: number }>(rows: T[], dir: SortDir) => {
     const factor = dir === "asc" ? -1 : 1;
@@ -454,7 +396,27 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     [cobros],
   );
 
-  const externosSorted = useMemo(() => sortBy(MOCK_PAGOS_EXTERNOS, sortExternos), [sortExternos]);
+  // Pagos externos por ejecutar — filtrados a autorizados (aprobada/facturada),
+  // no pagados, ordenados por antigüedad.
+  const externosFiltrados = useMemo(
+    () =>
+      (comisionesExternasAll ?? []).filter(
+        (c) => c.estado === "aprobada" || c.estado === "facturada",
+      ),
+    [comisionesExternasAll],
+  );
+  const externosSorted = useMemo(() => {
+    const factor = sortExternos === "asc" ? -1 : 1;
+    return [...externosFiltrados].sort(
+      (a, b) => factor * (a.dias_desde_devengo - b.dias_desde_devengo),
+    );
+  }, [externosFiltrados, sortExternos]);
+  const externosTotal = externosFiltrados.length;
+  const externosTotalPages = Math.max(1, Math.ceil(externosTotal / PAGE_SIZE));
+  const externosMonto = useMemo(
+    () => externosFiltrados.reduce((s, r) => s + r.monto_comision, 0),
+    [externosFiltrados],
+  );
 
   // Dispersiones internas: orden por fecha_compra (igual que Facturas SOZU).
   const dispersionesInternasSorted = useMemo(() => {
@@ -474,14 +436,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     () => (dispersionesInternas ?? []).reduce((s, r) => s + r.monto_a_dispersar, 0),
     [dispersionesInternas],
   );
-  const excepcionesSorted = useMemo(
-    () =>
-      [...MOCK_EXCEPCIONES].sort((a, b) => {
-        const factor = sortExcepciones === "asc" ? 1 : -1;
-        return factor * a.fecha_aprobacion.localeCompare(b.fecha_aprobacion);
-      }),
-    [sortExcepciones],
-  );
 
   const paginate = <T,>(rows: T[], page: number) =>
     rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -489,15 +443,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const cobrosPage = paginate(cobrosSorted, pageCobros);
   const externosPage = paginate(externosSorted, pageExternos);
   const dispersionesInternasPage = paginate(dispersionesInternasSorted, pageDispersiones);
-  const excepcionesPage = paginate(excepcionesSorted, pageExcepciones);
-
-  const totales = useMemo(
-    () => ({
-      externos: MOCK_PAGOS_EXTERNOS.reduce((s, r) => s + r.monto, 0),
-      excepciones: MOCK_EXCEPCIONES.reduce((s, r) => s + Math.abs(r.delta), 0),
-    }),
-    [],
-  );
 
   const scrollTo = (ref: React.RefObject<HTMLDivElement>) => {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -512,7 +457,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       />
 
       {/* ─── KPIs ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <KpiCard
           label="Facturas SOZU por generar"
           count={facturasSozuLoading ? "…" : facturasSozuTotal}
@@ -543,8 +488,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <KpiCard
           label="Pagos a externos por ejecutar"
-          count={MOCK_PAGOS_EXTERNOS.length}
-          amountLabel={fmtMxn(totales.externos)}
+          count={externosLoading ? "…" : externosTotal}
+          amountLabel={
+            externosLoading
+              ? "Cargando…"
+              : externosError
+                ? "Error al cargar"
+                : fmtMxn(externosMonto)
+          }
           icon={HandCoins}
           tone="amber"
           onClick={() => scrollTo(externosRef)}
@@ -562,14 +513,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={Users}
           tone="blue"
           onClick={() => scrollTo(dispersionesRef)}
-        />
-        <KpiCard
-          label="Excepciones por aplicar"
-          count={MOCK_EXCEPCIONES.length}
-          amountLabel={`Delta abs. ${fmtMxn(totales.excepciones)}`}
-          icon={AlertTriangle}
-          tone="orange"
-          onClick={() => scrollTo(excepcionesRef)}
         />
       </div>
 
@@ -847,8 +790,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={HandCoins}
           iconColor="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
           title="Pagos a externos por ejecutar"
-          description="Comisiones a inmobiliarias, brokers, aliados y agentes — autorizadas y con cobro previo confirmado"
-          count={MOCK_PAGOS_EXTERNOS.length}
+          description="Comisiones a inmobiliarias, brokers, aliados y agentes externos — autorizadas por Dirección y pendientes de pago"
+          count={externosTotal}
           right={
             <SortToggle
               value={sortExternos}
@@ -861,7 +804,15 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <Card>
           <CardContent className="p-0">
-            {externosPage.length === 0 ? (
+            {externosLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando pagos a externos…
+              </div>
+            ) : externosError ? (
+              <div className="py-10 text-center text-sm text-red-600">
+                Error al cargar: {(externosError as Error).message}
+              </div>
+            ) : externosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 No hay pagos a externos pendientes de ejecutar.
               </div>
@@ -870,48 +821,100 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Folio</TableHead>
-                      <TableHead className="text-xs">Beneficiario</TableHead>
-                      <TableHead className="text-xs">Venta ref</TableHead>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Nombre comisionista</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs text-right">% Comisión</TableHead>
                       <TableHead className="text-xs text-right">Monto</TableHead>
-                      <TableHead className="text-xs">CLABE destino</TableHead>
                       <TableHead className="text-xs">Antigüedad</TableHead>
+                      <TableHead className="text-xs">Flag cobro</TableHead>
+                      <TableHead className="text-xs text-right">Factura</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {externosPage.map((p) => (
-                      <TableRow key={p.folio}>
-                        <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
-                          {p.folio}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div>{p.beneficiario_nombre}</div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {p.beneficiario_tipo}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{p.venta_ref}</TableCell>
-                        <TableCell className="text-sm text-right font-semibold tabular-nums">
-                          {fmtMxn(p.monto)}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{p.clabe_destino}</TableCell>
-                        <TableCell>
-                          <Antiguedad dias={p.dias_desde_autorizacion} umbral={5} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => setSelected({ tipo: "pago_externo", data: p })}
-                            aria-label={`Ejecutar pago ${p.folio}`}
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-1" /> Ejecutar pago
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {externosPage.map((p) => {
+                      const puedePagar = p.ya_se_cobro_al_desarrollador;
+                      return (
+                        <TableRow key={p.id_comisionista}>
+                          <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
+                            {formatCuentaFolio(p)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <div>{p.beneficiario_nombre}</div>
+                            {p.beneficiario_rfc && (
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {p.beneficiario_rfc}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                              {BENEFICIARIO_TIPO_LABEL[p.beneficiario_tipo]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">
+                            {p.porcentaje_comision.toFixed(2)}%
+                          </TableCell>
+                          <TableCell className="text-sm text-right font-semibold tabular-nums">
+                            {fmtMxn(p.monto_comision)}
+                          </TableCell>
+                          <TableCell>
+                            <Antiguedad dias={p.dias_desde_devengo} umbral={5} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] whitespace-nowrap",
+                                p.ya_se_cobro_al_desarrollador
+                                  ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-200 dark:bg-emerald-950/40"
+                                  : "border-red-400 text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-950/40",
+                              )}
+                              title={
+                                p.ya_se_cobro_al_desarrollador
+                                  ? "Cobro al desarrollador confirmado — pago habilitado"
+                                  : "Aún no se cobra al desarrollador — pago bloqueado"
+                              }
+                            >
+                              {p.ya_se_cobro_al_desarrollador ? "Cobrado" : "Pendiente"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {p.url_factura ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                onClick={() => window.open(p.url_factura!, "_blank")}
+                                aria-label={`Ver factura ${p.folio_comision}`}
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" /> Ver PDF
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              disabled={!puedePagar}
+                              onClick={() => setSelected({ tipo: "pago_externo", data: p })}
+                              aria-label={`Ejecutar pago ${p.folio_comision}`}
+                              title={
+                                puedePagar
+                                  ? "Ejecutar pago a externo"
+                                  : "Bloqueado: aún no se cobra al desarrollador"
+                              }
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" /> Ejecutar pago
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -920,8 +923,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         </Card>
         <PaginationBar
           page={pageExternos}
-          totalPages={Math.max(1, Math.ceil(MOCK_PAGOS_EXTERNOS.length / PAGE_SIZE))}
-          totalCount={MOCK_PAGOS_EXTERNOS.length}
+          totalPages={externosTotalPages}
+          totalCount={externosTotal}
           pageSize={PAGE_SIZE}
           onPageChange={setPageExternos}
         />
@@ -1037,94 +1040,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
       </section>
 
-      {/* ─── 4. Excepciones por aplicar ─── */}
-      <section ref={excepcionesRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
-        <SectionHeader
-          icon={AlertTriangle}
-          iconColor="bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
-          title="Excepciones por aplicar"
-          description="Excepciones a política aprobadas por Dirección — pendientes de aplicar en sistema"
-          count={MOCK_EXCEPCIONES.length}
-          right={
-            <SortToggle
-              value={sortExcepciones}
-              onChange={(v) => {
-                setSortExcepciones(v);
-                setPageExcepciones(0);
-              }}
-            />
-          }
-        />
-        <Card>
-          <CardContent className="p-0">
-            {excepcionesPage.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay excepciones pendientes de aplicar.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Folio</TableHead>
-                      <TableHead className="text-xs">Tipo</TableHead>
-                      <TableHead className="text-xs">Venta / Concepto</TableHead>
-                      <TableHead className="text-xs text-right">Delta</TableHead>
-                      <TableHead className="text-xs">Aprobada por</TableHead>
-                      <TableHead className="text-xs">Fecha</TableHead>
-                      <TableHead className="text-xs text-right">Acción</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {excepcionesPage.map((e) => (
-                      <TableRow key={e.folio}>
-                        <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
-                          {e.folio}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="whitespace-nowrap">
-                            {e.tipo}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{e.venta_concepto_afectado}</TableCell>
-                        <TableCell className="text-sm text-right font-semibold tabular-nums">
-                          <span className={e.delta < 0 ? "text-red-700" : "text-emerald-700"}>
-                            {e.delta < 0 ? "" : "+"}
-                            {fmtMxn(e.delta)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm">{e.aprobada_por}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground tabular-nums">
-                          {e.fecha_aprobacion}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => setSelected({ tipo: "excepcion", data: e })}
-                            aria-label={`Aplicar excepción ${e.folio}`}
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-1" /> Aplicar en sistema
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <PaginationBar
-          page={pageExcepciones}
-          totalPages={Math.max(1, Math.ceil(MOCK_EXCEPCIONES.length / PAGE_SIZE))}
-          totalCount={MOCK_EXCEPCIONES.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPageExcepciones}
-        />
-      </section>
-
       {/* ─── Drawer ─── */}
       {selected && (() => {
         const close = () => setSelected(null);
@@ -1202,26 +1117,51 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
         if (selected.tipo === "pago_externo") {
           const p = selected.data;
-          const cob = resolveCobFolio(p.venta_ref);
-          const vctx = getVentaContext(cob);
+          const pagoEntity: EjecucionPagoExternoEntity = {
+            folio: p.folio_comision,
+            beneficiario_nombre: p.beneficiario_nombre,
+            beneficiario_tipo:
+              p.beneficiario_tipo === "inmobiliaria"
+                ? "Inmobiliaria"
+                : p.beneficiario_tipo === "broker"
+                  ? "Broker"
+                  : p.beneficiario_tipo === "aliado_comercial"
+                    ? "Aliado comercial"
+                    : "Agente externo",
+            venta_ref: formatCuentaFolio(p),
+            monto: p.monto_comision,
+            clabe_destino: "—",
+            dias_desde_autorizacion: p.dias_desde_devengo,
+          };
+          const propiedadLabel =
+            [p.proyecto_nombre, p.modelo_nombre, p.numero_departamento ? `Depto ${p.numero_departamento}` : null]
+              .filter(Boolean)
+              .join(" · ") || "—";
+          const vctx = {
+            folio: formatCuentaFolio(p),
+            propiedad: propiedadLabel,
+            cliente: p.beneficiario_nombre,
+            precio_venta: p.precio_final,
+            comision_total_sozu: p.monto_comision,
+            porcentaje_comision: p.porcentaje_comision,
+            estado_venta: "Vendida" as const,
+            dias_desde_apartado: p.dias_desde_devengo,
+          };
           return (
             <EjecucionDrawer
               open={open}
               onOpenChange={onOpenChange}
               entityType="ejecucion_pago_externo"
-              entityId={p.folio}
+              entityId={p.folio_comision}
               ventaContext={vctx}
             >
-              <EjecucionPagoExternoContent entity={p} onClose={close} />
+              <EjecucionPagoExternoContent entity={pagoEntity} onClose={close} />
             </EjecucionDrawer>
           );
         }
 
         if (selected.tipo === "dispersion_interna") {
           const d = selected.data;
-          // Drawer per-cuenta: el detalle por comisionista vive en otra pantalla.
-          // Adaptamos al shape del drawer existente con un "comisionista" agregado
-          // que representa al equipo SOZU completo de esa cuenta.
           const diasDesdeCompra = d.fecha_compra
             ? Math.max(
                 0,
@@ -1230,15 +1170,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                 ),
               )
             : 0;
-          const dispersionEntity: EjecucionDispersionEntity = {
-            folio: d.folio_cuenta,
-            comisionista_nombre: `Equipo SOZU (${d.comisionistas_pendientes})`,
-            comisionista_rol: "Dispersión interna agregada",
-            venta_ref: d.folio_cuenta,
-            monto: d.monto_a_dispersar,
-            metodo_inicial: "STP",
-            dias_desde_autorizacion: diasDesdeCompra,
-          };
           const vctx = {
             folio: d.folio_cuenta,
             propiedad:
@@ -1260,24 +1191,10 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               entityId={d.folio_cuenta}
               ventaContext={vctx}
             >
-              <EjecucionDispersionContent entity={dispersionEntity} onClose={close} />
-            </EjecucionDrawer>
-          );
-        }
-
-        if (selected.tipo === "excepcion") {
-          const e = selected.data;
-          const cob = resolveCobFolio(e.venta_concepto_afectado);
-          const vctx = getVentaContext(cob);
-          return (
-            <EjecucionDrawer
-              open={open}
-              onOpenChange={onOpenChange}
-              entityType="ejecucion_excepcion"
-              entityId={e.folio}
-              ventaContext={vctx}
-            >
-              <EjecucionExcepcionContent entity={e} onClose={close} />
+              <EjecucionDispersionExpedienteContent
+                entity={{ folio_cuenta: d.folio_cuenta, id_cuenta_cobranza: d.id_cuenta_cobranza }}
+                onClose={close}
+              />
             </EjecucionDrawer>
           );
         }
