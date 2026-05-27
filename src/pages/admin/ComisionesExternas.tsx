@@ -67,7 +67,8 @@ async function fetchAllCuentasConComisionistas() {
         porcentaje_comision_venta,
         iva_incluido,
         id_oferta,
-        es_pagada_comision_venta
+        es_pagada_comision_venta,
+        estatus_autorizacion_comision_externa
       `)
       .is("id_cuenta_cobranza_padre", null)
       .order("id", { ascending: false })
@@ -312,19 +313,28 @@ export default function ComisionesExternas() {
       let facturasMap = new Map<string, string>();
       
       if (tipoDocFactura && cuentaIds.length > 0) {
-        const { data: facturas } = await supabase
-          .from('documentos')
-          .select('id_cuenta_cobranza, url, numero')
-          .in('id_cuenta_cobranza', cuentaIds)
-          .eq('id_tipo_documento', tipoDocFactura)
-          .eq('activo', true);
-        
-        facturas?.forEach(f => {
-          if (f.numero && f.url && f.id_cuenta_cobranza) {
-            const key = `${f.numero}_${f.id_cuenta_cobranza}`;
-            facturasMap.set(key, f.url);
-          }
-        });
+        const facturaBatchSize = 200;
+        const facturaChunks: number[][] = [];
+        for (let i = 0; i < cuentaIds.length; i += facturaBatchSize) {
+          facturaChunks.push(cuentaIds.slice(i, i + facturaBatchSize));
+        }
+        const facturaResults = await Promise.all(
+          facturaChunks.map((batch) =>
+            supabase
+              .from('documentos')
+              .select('id_cuenta_cobranza, url, numero')
+              .in('id_cuenta_cobranza', batch)
+              .eq('id_tipo_documento', tipoDocFactura)
+              .eq('activo', true)
+          )
+        );
+        for (const { data: facturas } of facturaResults) {
+          facturas?.forEach(f => {
+            if (f.url && f.id_cuenta_cobranza) {
+              facturasMap.set(String(f.id_cuenta_cobranza), f.url);
+            }
+          });
+        }
       }
 
       // Paso 8: Combinar datos - filtrar solo cuentas con al menos un comisionista externo
@@ -357,8 +367,7 @@ export default function ComisionesExternas() {
           .map(c => {
             const userData = usuariosMap.get(c.email_usuario);
             const esExterno = emailsInmobiliarias.has(c.email_usuario) || emailsAgentesInmobiliarios.has(c.email_usuario);
-            const facturaKey = `${c.email_usuario}_${cuenta.id}`;
-            const urlFactura = facturasMap.get(facturaKey) || null;
+            const urlFactura = facturasMap.get(String(cuenta.id)) || null;
             
             return {
               ...c,
@@ -487,6 +496,15 @@ export default function ComisionesExternas() {
         .from('documentos')
         .getPublicUrl(filePath);
 
+      // Opción B: resolver id_persona de la empresa (pm) para vincular la factura
+      // a nivel de persona/empresa, no solo por email
+      const { data: personaData } = await supabase
+        .from('personas')
+        .select('id')
+        .eq('email', email)
+        .eq('activo', true)
+        .maybeSingle();
+
       const { error: docError } = await supabase
         .from('documentos')
         .insert({
@@ -494,11 +512,12 @@ export default function ComisionesExternas() {
           id_tipo_documento: tipoDocFactura,
           url: urlData.publicUrl,
           numero: email,
+          id_persona: personaData?.id ?? null,
           activo: true
         });
 
       if (docError) throw docError;
-      
+
       return { email, idCuenta, url: urlData.publicUrl };
     },
     onSuccess: () => {
@@ -786,13 +805,16 @@ export default function ComisionesExternas() {
                       const anyConFactura = comisionistasExternos.some((c: any) => c.urlFactura && c.aprobada && !c.pagada);
                       const anyAprobadaSinFactura = comisionistasExternos.some((c: any) => c.aprobada && !c.urlFactura && !c.pagada);
                       const anySinAprobar = comisionistasExternos.some((c: any) => !c.aprobada);
+                      const pagoAutorizado = anyConFactura && cuenta.estatus_autorizacion_comision_externa === "Autorizado";
 
                       if (allPagadas) {
                         return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pagada</Badge>;
+                      } else if (pagoAutorizado) {
+                        return <Badge className="bg-violet-500/10 text-violet-600 border-violet-500/20">Pago autorizado</Badge>;
                       } else if (anyConFactura) {
                         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>;
                       } else if (anyAprobadaSinFactura) {
-                        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobado/Sin factura</Badge>;
+                        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobada/Sin factura</Badge>;
                       } else if (anySinAprobar) {
                         return <Badge variant="outline" className="bg-muted text-muted-foreground">Sin aprobar</Badge>;
                       }
@@ -865,10 +887,12 @@ export default function ComisionesExternas() {
                                   <TableCell>
                                     {com.pagada ? (
                                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Pagada</Badge>
+                                    ) : com.aprobada && com.urlFactura && cuenta.estatus_autorizacion_comision_externa === "Autorizado" ? (
+                                      <Badge className="bg-violet-500/10 text-violet-600 border-violet-500/20">Pago autorizado</Badge>
                                     ) : com.aprobada && com.urlFactura ? (
                                       <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pendiente de pago</Badge>
                                     ) : com.aprobada && !com.urlFactura ? (
-                                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobado/Sin factura</Badge>
+                                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">Aprobada/Sin factura</Badge>
                                     ) : (
                                       <Badge variant="outline" className="bg-muted text-muted-foreground">Sin aprobar</Badge>
                                     )}

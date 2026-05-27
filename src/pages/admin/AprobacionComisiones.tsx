@@ -208,15 +208,20 @@ export default function AprobacionComisiones() {
 
       if (productosError) throw productosError;
 
-      // Paso 4: Obtener comisionistas para todas las cuentas
+      // Paso 4: Obtener comisionistas en batches para evitar URI too long con .in() masivo
       const cuentaIds = cuentas.map(c => c.id);
-      const { data: comisionistas, error: comisionistasError } = await supabase
-        .from("comisionistas")
-        .select("*")
-        .in("id_cuenta_cobranza", cuentaIds)
-        .eq("activo", true);
-
-      if (comisionistasError) throw comisionistasError;
+      const comisionistasBatchSize = 200;
+      let comisionistas: any[] = [];
+      for (let i = 0; i < cuentaIds.length; i += comisionistasBatchSize) {
+        const batch = cuentaIds.slice(i, i + comisionistasBatchSize);
+        const { data: batchData, error: batchError } = await supabase
+          .from("comisionistas")
+          .select("*")
+          .in("id_cuenta_cobranza", batch)
+          .eq("activo", true);
+        if (batchError) throw batchError;
+        if (batchData) comisionistas = [...comisionistas, ...batchData];
+      }
 
       // Paso 5: Obtener nombres de usuarios y personas para los comisionistas
       const comisionistaEmails = [...new Set(comisionistas?.map(c => c.email_usuario) || [])] as string[];

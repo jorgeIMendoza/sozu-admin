@@ -11,6 +11,8 @@ import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext
 import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationContext";
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
+import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
+import { AmbassadorsProvider } from "@/store/AmbassadorsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { AdminLayout } from "./components/admin/AdminLayout";
@@ -205,6 +207,47 @@ const AltaDireccionRedComercial = lazyRetry(() => import("./pages/admin/portal-a
 const AltaDireccionReportes = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionReportes })));
 const AltaDireccionAuditoria = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionAuditoria })));
 const AltaDireccionConfiguracion = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionConfiguracion })));
+const AltaDireccionNotificaciones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionNotificacionesPage"));
+const AltaDireccionBandejaValidaciones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionBandejaValidacionesPage"));
+const AltaDireccionCicloVenta = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionCicloVentaPage"));
+const AltaDireccionFacturasPorCobrar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorCobrarPage"));
+const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorPagarPage"));
+const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
+const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
+
+// Portal de Administración (módulo independiente, copia de Alta Dirección)
+const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
+const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
+const AdminProspectos           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionProspectos })));
+const AdminPipeline             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionPipeline })));
+const AdminOfertas              = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionOfertas })));
+const AdminCobranza             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCobranza })));
+const AdminContratos            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionContratos })));
+const AdminFacturas             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionFacturas })));
+const AdminComisiones           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionComisiones })));
+const AdminRedComercial         = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionRedComercial })));
+const AdminReportes             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionReportes })));
+const AdminAuditoria            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionAuditoria })));
+const AdminConfiguracion        = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionConfiguracion })));
+const AdminNotificaciones       = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionNotificacionesPage"));
+const AdminBandejaValidaciones  = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionBandejaValidacionesPage"));
+const AdminCicloVenta           = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionCicloVentaPage"));
+const AdminFacturasPorCobrar    = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorCobrarPage"));
+const AdminFacturasPorPagar     = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionFacturasPorPagarPage"));
+const AdminComisionesExternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesExternasPage"));
+const AdminComisionesInternas   = lazyRetry(() => import("./pages/admin/portal-administracion/AdministracionComisionesInternasPage"));
+const AdminBandejaEjecucion     = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionBandejaEjecucionPage"));
+const AdminPagosEjecutados      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionPagosEjecutadosPage"));
+const AdminCFDIsEmitidos        = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionCFDIsEmitidosPage"));
+const AdminConciliacionSTP      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionConciliacionSTPPage"));
+
+// Portal Embajadores
+const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
+const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));
+const EmbajadorMisReferidos    = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorMisReferidos })));
+const EmbajadorRegistrarReferido = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorRegistrarReferido })));
+const EmbajadorComisiones      = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorComisiones })));
+const EmbajadorPerfil          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorPerfil })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -222,16 +265,21 @@ const queryClient = new QueryClient({
 });
 
 const hostname = window.location.hostname;
-const isRegistroSubdomain = hostname === 'registro.sozu.com';
-const isInmobiliariasSubdomain = hostname === 'inmobiliarias.sozu.com';
-const isAgentesSubdomain = hostname === 'agentes.sozu.com';
-const isClientesSubdomain = hostname === 'clientes.sozu.com';
+// Match both production (portal.sozu.com) and dev (portal-dev.sozu.com) subdomains
+const matchPortal = (portal: string) =>
+  hostname === `${portal}.sozu.com` || hostname === `${portal}-dev.sozu.com`;
+const isRegistroSubdomain = matchPortal('registro');
+const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
+const isAgentesSubdomain = matchPortal('agentes');
+const isClientesSubdomain = matchPortal('clientes');
+const isEmbajadoresSubdomain = matchPortal('embajadores');
 
 // Determine portal context from subdomain for login page branding
-const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | null => {
+const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
   if (isAgentesSubdomain) return 'agentes';
   if (isInmobiliariasSubdomain) return 'inmobiliarias';
   if (isClientesSubdomain) return 'clientes';
+  if (isEmbajadoresSubdomain) return 'embajadores';
   return null;
 };
 const portalContext = getPortalContext();
@@ -254,6 +302,8 @@ const App = () => (
             <ClienteImpersonationProvider>
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
+            <EmbajadorImpersonationProvider>
+           <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
                 <Routes>
@@ -312,6 +362,31 @@ const App = () => (
                     <Route path="portal-inmobiliaria/reportes" element={<InmobReportes />} />
                     <Route path="portal-inmobiliaria/configuracion" element={<InmobConfiguracion />} />
                     <Route path="*" element={<Navigate to="/admin/portal-inmobiliaria/dashboard" replace />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              ) : isEmbajadoresSubdomain ? (
+                <Routes>
+                  <Route path="/login" element={<Login portalContext="embajadores" />} />
+                  <Route path="/auth/login" element={<Login portalContext="embajadores" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
+                    <Route path="portal-embajador/inicio" element={<EmbajadorInicio />} />
+                    <Route path="portal-embajador/mis-referidos" element={<EmbajadorMisReferidos />} />
+                    <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
+                    <Route path="portal-embajador/comisiones" element={<EmbajadorComisiones />} />
+                    <Route path="portal-embajador/perfil" element={<EmbajadorPerfil />} />
+                    <Route path="*" element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
@@ -539,6 +614,48 @@ const App = () => (
                   <Route path="portal-alta-direccion/reportes" element={<AltaDireccionReportes />} />
                   <Route path="portal-alta-direccion/auditoria" element={<AltaDireccionAuditoria />} />
                   <Route path="portal-alta-direccion/configuracion" element={<AltaDireccionConfiguracion />} />
+                  <Route path="portal-alta-direccion/notificaciones" element={<AltaDireccionNotificaciones />} />
+                  <Route path="portal-alta-direccion/bandeja" element={<AltaDireccionBandejaValidaciones />} />
+                  <Route path="portal-alta-direccion/ciclo-venta" element={<AltaDireccionCicloVenta />} />
+                  <Route path="portal-alta-direccion/facturas-por-cobrar" element={<AltaDireccionFacturasPorCobrar />} />
+                  <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
+                  <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
+                  <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+
+                 {/* Portal de Administración (clon de Alta Dirección) */}
+                 <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
+                 <Route path="portal-administracion/citas" element={<AdminCitas />} />
+                 <Route path="portal-administracion/prospectos" element={<AdminProspectos />} />
+                 <Route path="portal-administracion/pipeline" element={<AdminPipeline />} />
+                 <Route path="portal-administracion/ofertas" element={<AdminOfertas />} />
+                 <Route path="portal-administracion/cobranza" element={<AdminCobranza />} />
+                 <Route path="portal-administracion/contratos" element={<AdminContratos />} />
+                 <Route path="portal-administracion/facturas" element={<AdminFacturas />} />
+                 <Route path="portal-administracion/comisiones" element={<AdminComisiones />} />
+                 <Route path="portal-administracion/red-comercial" element={<AdminRedComercial />} />
+                 <Route path="portal-administracion/reportes" element={<AdminReportes />} />
+                 <Route path="portal-administracion/auditoria" element={<AdminAuditoria />} />
+                 <Route path="portal-administracion/configuracion" element={<AdminConfiguracion />} />
+                 <Route path="portal-administracion/notificaciones" element={<AdminNotificaciones />} />
+                 <Route path="portal-administracion/bandeja" element={<AdminBandejaValidaciones />} />
+                 <Route path="portal-administracion/ciclo-venta" element={<AdminCicloVenta />} />
+                 <Route path="portal-administracion/facturas-por-cobrar" element={<AdminFacturasPorCobrar />} />
+                 <Route path="portal-administracion/facturas-por-pagar" element={<AdminFacturasPorPagar />} />
+                 <Route path="portal-administracion/comisiones-externas" element={<AdminComisionesExternas />} />
+                 <Route path="portal-administracion/comisiones-internas" element={<AdminComisionesInternas />} />
+                 {/* Portal de Administración — secciones propias (no derivadas de Alta Dirección) */}
+                 <Route path="portal-administracion/bandeja-ejecucion" element={<AdminBandejaEjecucion />} />
+                 <Route path="portal-administracion/pagos-ejecutados" element={<AdminPagosEjecutados />} />
+                 <Route path="portal-administracion/cfdis-emitidos" element={<AdminCFDIsEmitidos />} />
+                 <Route path="portal-administracion/conciliacion-stp" element={<AdminConciliacionSTP />} />
+
+                 {/* Portal Embajadores */}
+                 <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
+                 <Route path="portal-embajador/inicio"             element={<EmbajadorInicio />} />
+                 <Route path="portal-embajador/mis-referidos"      element={<EmbajadorMisReferidos />} />
+                 <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
+                 <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
+                 <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
@@ -546,6 +663,8 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </AmbassadorsProvider>
+            </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>

@@ -58,6 +58,8 @@ async function fetchAllComisionistas() {
   }
 
   const emailsInmobiliarias = new Set<string>();
+  // Opción B: mapa email → id_persona para lookup de facturas por empresa
+  const emailToPmPersonaId = new Map<string, number>();
   {
     let offset = 0;
     const batch = 1000;
@@ -65,12 +67,17 @@ async function fetchAllComisionistas() {
     while (more) {
       const { data } = await supabase
         .from('personas')
-        .select('email')
+        .select('id, email')
         .eq('tipo_persona', 'pm')
         .eq('activo', true)
         .not('email', 'is', null)
         .range(offset, offset + batch - 1);
-      (data || []).forEach(i => { if (i.email) emailsInmobiliarias.add(i.email); });
+      (data || []).forEach(i => {
+        if (i.email) {
+          emailsInmobiliarias.add(i.email);
+          emailToPmPersonaId.set(i.email, i.id);
+        }
+      });
       more = (data?.length || 0) === batch;
       offset += batch;
     }
@@ -79,18 +86,25 @@ async function fetchAllComisionistas() {
   // Obtener facturas de comisiones externas (con URL)
   const tipoDocFactura = await getTipoDocumentoFactura();
   const facturasExternasMap = new Map<string, string | boolean>();
+  // Opción B: mapa secundario por id_persona + id_cuenta
+  const facturasPersonaMap = new Map<string, string | boolean>();
 
   if (tipoDocFactura) {
     const { data: facturas } = await supabase
       .from('documentos')
-      .select('id_cuenta_cobranza, numero, url')
+      .select('id_cuenta_cobranza, numero, url, id_persona')
       .eq('id_tipo_documento', tipoDocFactura)
       .eq('activo', true);
-    
+
     facturas?.forEach(f => {
       if (f.numero && f.id_cuenta_cobranza) {
         const key = `${f.numero}_${f.id_cuenta_cobranza}`;
         facturasExternasMap.set(key, f.url || true);
+      }
+      // Opción B: indexar también por id_persona de la empresa
+      if (f.id_persona && f.id_cuenta_cobranza) {
+        const key = `${f.id_persona}_${f.id_cuenta_cobranza}`;
+        facturasPersonaMap.set(key, f.url || true);
       }
     });
   }
@@ -180,27 +194,29 @@ async function fetchAllComisionistas() {
           facturaComisionSozu,
         };
       }).filter((com: any) => {
+        // Helper: verifica si un comisionista externo tiene factura (por email o por id_persona de empresa)
+        const tieneFactura = (emailUsuario: string, idCuenta: number): boolean => {
+          if (facturasExternasMap.has(`${emailUsuario}_${idCuenta}`)) return true;
+          // Opción B: también verificar por id_persona de la empresa (pm)
+          const pmPersonaId = emailToPmPersonaId.get(emailUsuario);
+          if (pmPersonaId && facturasPersonaMap.has(`${pmPersonaId}_${idCuenta}`)) return true;
+          return false;
+        };
+
         if (com.esExterno) {
-          // Solo incluir externos si tienen factura cargada
-          const facturaKey = `${com.email_usuario}_${com.id_cuenta_cobranza}`;
-          return facturasExternasMap.has(facturaKey);
+          return tieneFactura(com.email_usuario, com.id_cuenta_cobranza);
         }
         // Para internos: verificar que TODOS los externos de esa cuenta ya tengan factura
-        // Si hay algún externo sin factura en la misma cuenta, no mostrar la cuenta
         const externosDeEstaCuenta = data.filter((other: any) => {
-          const otherEsExterno = emailsAgentesInmobiliarios.has(other.email_usuario) || 
+          const otherEsExterno = emailsAgentesInmobiliarios.has(other.email_usuario) ||
                                   emailsInmobiliarias.has(other.email_usuario);
           return otherEsExterno && other.id_cuenta_cobranza === com.id_cuenta_cobranza;
         });
-        // Si hay externos en esta cuenta, verificar que todos tengan factura
         if (externosDeEstaCuenta.length > 0) {
-          const todosExternosConFactura = externosDeEstaCuenta.every((ext: any) => {
-            const facturaKey = `${ext.email_usuario}_${ext.id_cuenta_cobranza}`;
-            return facturasExternasMap.has(facturaKey);
-          });
-          return todosExternosConFactura;
+          return externosDeEstaCuenta.every((ext: any) =>
+            tieneFactura(ext.email_usuario, ext.id_cuenta_cobranza)
+          );
         }
-        // Si no hay externos en esta cuenta, incluir normalmente
         return true;
       });
 

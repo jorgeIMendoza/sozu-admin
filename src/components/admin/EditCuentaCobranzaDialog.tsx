@@ -4976,7 +4976,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
                     {!esComisionEfectivo && (
                       <div className="space-y-2">
-                        <Label>Opciones de IVA</Label>
+                        <Label>Desglosar IVA</Label>
                         <div className="flex items-center space-x-3 h-10 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
                           <Checkbox
                             id="iva-incluido"
@@ -4994,14 +4994,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                             htmlFor="iva-incluido"
                             className="text-sm font-medium cursor-pointer select-none"
                           >
-                            IVA (16%)
+                            Desglosar IVA (16%)
                           </Label>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Monto en la factura: {cuentaDetalle?.precio_final && porcentajeComision ? 
-                            new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                              ((cuentaDetalle.precio_final * porcentajeComision) / 100) * (ivaIncluido ? 1.16 : 1)
-                            ) : '$0.00'} ({ivaIncluido ? '16% IVA' : '0% IVA'})
+                          {(() => {
+                            const fmt = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
+                            const base = (cuentaDetalle?.precio_final && porcentajeComision)
+                              ? (cuentaDetalle.precio_final * porcentajeComision) / 100
+                              : 0;
+                            const iva = ivaIncluido ? base * 0.16 : 0;
+                            return `Monto en la factura: ${fmt(base)} + ${fmt(iva)} (${ivaIncluido ? '16% IVA' : '0% IVA'})`;
+                          })()}
                         </p>
                       </div>
                     )}

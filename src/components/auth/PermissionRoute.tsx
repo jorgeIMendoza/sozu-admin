@@ -50,8 +50,8 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow portal-alta-direccion routes only for Super Admin
-  if (location.pathname.startsWith('/admin/portal-alta-direccion')) {
+  // Allow portal-embajador routes only for Super Admin
+  if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1) {
       return <>{children}</>;
     }

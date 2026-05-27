@@ -6,12 +6,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.claude/
 
 node_modules
 dist
 dist-ssr
 *.local
-!.env
+.env
 !.env.development
 !.env.example
 
@@ -30,7 +31,13 @@ dist-ssr
 firebase.json
 
 # Manual execution scripts (DDLs, DMLs, edge functions)
-Ejecuciones_manuales/
+Ejecuciones_manuales/*
 
-# Lovable internal
-.lovable
+# Lovable internal (la carpeta viaja en el repo, su contenido es local)
+.lovable/*
+!.lovable/.gitkeep
+
+# Playwright MCP (screenshots y logs generados por Claude)
+.playwright-mcp/
+*.png
+bundle*.js
