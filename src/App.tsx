@@ -646,7 +646,6 @@ const App = () => (
               )}
             </Suspense>
             </EmbajadorImpersonationProvider>
-           </AmbassadorsProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
