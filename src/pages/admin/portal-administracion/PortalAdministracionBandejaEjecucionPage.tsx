@@ -60,6 +60,10 @@ import {
   useFacturasComisionSozuPorGenerar,
   type FacturaComisionSozuPorGenerar,
 } from "@/hooks/useFacturasComisionSozuPorGenerar";
+import {
+  useDispersionesInternasPendientes,
+  type DispersionInternaPendiente,
+} from "@/hooks/useDispersionesInternasPendientes";
 
 /* ──────────────────────────────────────────────────────────
    Tipos extendidos para filas (entity + extras de tabla)
@@ -71,15 +75,13 @@ type PagoExternoRow = EjecucionPagoExternoEntity & {
   flag_cobro_previo: true; // Por construcción, sólo aparecen los que cumplen
 };
 
-type DispersionRow = EjecucionDispersionEntity;
-
 type ExcepcionRow = EjecucionExcepcionEntity;
 
 type SelectedItem =
   | { tipo: "factura_sozu"; data: FacturaComisionSozuPorGenerar }
   | { tipo: "cobro"; data: CobroRow }
   | { tipo: "pago_externo"; data: PagoExternoRow }
-  | { tipo: "dispersion"; data: DispersionRow }
+  | { tipo: "dispersion_interna"; data: DispersionInternaPendiente }
   | { tipo: "excepcion"; data: ExcepcionRow };
 
 /* ──────────────────────────────────────────────────────────
@@ -161,45 +163,6 @@ const MOCK_PAGOS_EXTERNOS: PagoExternoRow[] = [
     clabe_destino: "1271••••••2233",
     dias_desde_autorizacion: 6,
     flag_cobro_previo: true,
-  },
-];
-
-const MOCK_DISPERSIONES: DispersionRow[] = [
-  {
-    folio: "COM-871",
-    comisionista_nombre: "Keity Galindo Bojorques",
-    comisionista_rol: "Asesor Comercial",
-    venta_ref: "COB-1041",
-    monto: 2750,
-    metodo_inicial: "STP",
-    dias_desde_autorizacion: 1,
-  },
-  {
-    folio: "COM-872",
-    comisionista_nombre: "Rodrigo Ter Veen Sánchez",
-    comisionista_rol: "Asesor Comercial",
-    venta_ref: "COB-1041",
-    monto: 11000,
-    metodo_inicial: "STP",
-    dias_desde_autorizacion: 1,
-  },
-  {
-    folio: "COM-873",
-    comisionista_nombre: "Jose Ramón Escobar",
-    comisionista_rol: "Coordinador Comercial",
-    venta_ref: "COB-1042",
-    monto: 24000,
-    metodo_inicial: "Nómina",
-    dias_desde_autorizacion: 3,
-  },
-  {
-    folio: "COM-875",
-    comisionista_nombre: "Yenisse Delgadillo",
-    comisionista_rol: "Director Comercial",
-    venta_ref: "COB-1043",
-    monto: 9558,
-    metodo_inicial: "STP",
-    dias_desde_autorizacion: 8,
   },
 ];
 
@@ -463,6 +426,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     error: facturasSozuError,
   } = useFacturasComisionSozuPorGenerar();
 
+  // BD real: dispersiones internas pendientes (comisionistas autorizados,
+  // todavía no pagados, agrupados por cuenta_cobranza).
+  const {
+    data: dispersionesInternas,
+    isLoading: dispersionesInternasLoading,
+    error: dispersionesInternasError,
+  } = useDispersionesInternasPendientes();
+
   const [sortFacturasSozu, setSortFacturasSozu] = useState<SortDir>("desc"); // más recientes primero (default por spec)
   const [pageFacturasSozu, setPageFacturasSozu] = useState(0);
   const [sortCobros, setSortCobros] = useState<SortDir>("asc");
@@ -504,9 +475,24 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
   const cobrosSorted = useMemo(() => sortBy(MOCK_COBROS, sortCobros), [sortCobros]);
   const externosSorted = useMemo(() => sortBy(MOCK_PAGOS_EXTERNOS, sortExternos), [sortExternos]);
-  const dispersionesSorted = useMemo(
-    () => sortBy(MOCK_DISPERSIONES, sortDispersiones),
-    [sortDispersiones],
+
+  // Dispersiones internas: orden por fecha_compra (igual que Facturas SOZU).
+  const dispersionesInternasSorted = useMemo(() => {
+    const rows = dispersionesInternas ?? [];
+    return [...rows].sort((a, b) => {
+      const da = a.fecha_compra ? new Date(a.fecha_compra).getTime() : 0;
+      const db = b.fecha_compra ? new Date(b.fecha_compra).getTime() : 0;
+      return sortDispersiones === "asc" ? da - db : db - da;
+    });
+  }, [dispersionesInternas, sortDispersiones]);
+  const dispersionesInternasTotal = dispersionesInternas?.length ?? 0;
+  const dispersionesInternasTotalPages = Math.max(
+    1,
+    Math.ceil(dispersionesInternasTotal / PAGE_SIZE),
+  );
+  const dispersionesInternasMonto = useMemo(
+    () => (dispersionesInternas ?? []).reduce((s, r) => s + r.monto_a_dispersar, 0),
+    [dispersionesInternas],
   );
   const excepcionesSorted = useMemo(
     () =>
@@ -522,14 +508,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
   const cobrosPage = paginate(cobrosSorted, pageCobros);
   const externosPage = paginate(externosSorted, pageExternos);
-  const dispersionesPage = paginate(dispersionesSorted, pageDispersiones);
+  const dispersionesInternasPage = paginate(dispersionesInternasSorted, pageDispersiones);
   const excepcionesPage = paginate(excepcionesSorted, pageExcepciones);
 
   const totales = useMemo(
     () => ({
       cobros: MOCK_COBROS.reduce((s, r) => s + r.monto_factura, 0),
       externos: MOCK_PAGOS_EXTERNOS.reduce((s, r) => s + r.monto, 0),
-      dispersiones: MOCK_DISPERSIONES.reduce((s, r) => s + r.monto, 0),
       excepciones: MOCK_EXCEPCIONES.reduce((s, r) => s + Math.abs(r.delta), 0),
     }),
     [],
@@ -581,8 +566,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <KpiCard
           label="Dispersiones internas pendientes"
-          count={MOCK_DISPERSIONES.length}
-          amountLabel={fmtMxn(totales.dispersiones)}
+          count={dispersionesInternasLoading ? "…" : dispersionesInternasTotal}
+          amountLabel={
+            dispersionesInternasLoading
+              ? "Cargando…"
+              : dispersionesInternasError
+                ? "Error al cargar"
+                : fmtMxn(dispersionesInternasMonto)
+          }
           icon={Users}
           tone="blue"
           onClick={() => scrollTo(dispersionesRef)}
@@ -913,8 +904,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={Users}
           iconColor="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
           title="Dispersiones internas pendientes"
-          description="Comisiones internas autorizadas por Dirección — listas para dispersar al equipo SOZU"
-          count={MOCK_DISPERSIONES.length}
+          description="Cuentas con comisiones internas autorizadas por Dirección — listas para dispersar al equipo SOZU"
+          count={dispersionesInternasTotal}
           right={
             <SortToggle
               value={sortDispersiones}
@@ -927,7 +918,15 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <Card>
           <CardContent className="p-0">
-            {dispersionesPage.length === 0 ? (
+            {dispersionesInternasLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando dispersiones internas…
+              </div>
+            ) : dispersionesInternasError ? (
+              <div className="py-10 text-center text-sm text-red-600">
+                Error al cargar: {(dispersionesInternasError as Error).message}
+              </div>
+            ) : dispersionesInternasPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 No hay dispersiones internas pendientes.
               </div>
@@ -936,53 +935,58 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Folio</TableHead>
-                      <TableHead className="text-xs">Comisionista</TableHead>
-                      <TableHead className="text-xs">Venta ref</TableHead>
-                      <TableHead className="text-xs text-right">Monto</TableHead>
-                      <TableHead className="text-xs">Método</TableHead>
-                      <TableHead className="text-xs">Antigüedad</TableHead>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Edificio</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">No. Departamento</TableHead>
+                      <TableHead className="text-xs text-right">Precio final</TableHead>
+                      <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
+                      <TableHead className="text-xs">Fecha Antigüedad</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dispersionesPage.map((d) => (
-                      <TableRow key={d.folio}>
+                    {dispersionesInternasPage.map((d) => (
+                      <TableRow key={d.id_cuenta_cobranza}>
                         <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
-                          {d.folio}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div>{d.comisionista_nombre}</div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {d.comisionista_rol}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{d.venta_ref}</TableCell>
-                        <TableCell className="text-sm text-right font-semibold tabular-nums">
-                          {fmtMxn(d.monto)}
+                          {d.folio_cuenta}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              d.metodo_inicial === "STP"
-                                ? "border-blue-300 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40"
-                                : "border-violet-300 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40"
-                            }
-                          >
-                            {d.metodo_inicial}
+                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                            {d.tipo}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Antiguedad dias={d.dias_desde_autorizacion} umbral={5} />
+                        <TableCell className="text-sm">{d.proyecto_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm">{d.edificio_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          {d.tipo === "Propiedad"
+                            ? d.modelo_nombre || "—"
+                            : d.producto_nombre || d.modelo_nombre || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">{d.numero_departamento || "—"}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                          {fmtMxn(d.precio_final)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-semibold tabular-nums">
+                          {fmtMxn(d.monto_a_dispersar)}
+                          {d.iva_incluido && (
+                            <span className="block text-[9px] text-muted-foreground font-normal">
+                              IVA incluido
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                          {d.fecha_compra || "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-8"
-                            onClick={() => setSelected({ tipo: "dispersion", data: d })}
-                            aria-label={`Ejecutar dispersión ${d.folio}`}
+                            onClick={() => setSelected({ tipo: "dispersion_interna", data: d })}
+                            aria-label={`Ejecutar dispersión ${d.folio_cuenta}`}
                           >
                             <Eye className="h-3.5 w-3.5 mr-1" /> Ejecutar dispersión
                           </Button>
@@ -997,8 +1001,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         </Card>
         <PaginationBar
           page={pageDispersiones}
-          totalPages={Math.max(1, Math.ceil(MOCK_DISPERSIONES.length / PAGE_SIZE))}
-          totalCount={MOCK_DISPERSIONES.length}
+          totalPages={dispersionesInternasTotalPages}
+          totalCount={dispersionesInternasTotal}
           pageSize={PAGE_SIZE}
           onPageChange={setPageDispersiones}
         />
@@ -1162,19 +1166,50 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           );
         }
 
-        if (selected.tipo === "dispersion") {
+        if (selected.tipo === "dispersion_interna") {
           const d = selected.data;
-          const cob = resolveCobFolio(d.venta_ref);
-          const vctx = getVentaContext(cob);
+          // Drawer per-cuenta: el detalle por comisionista vive en otra pantalla.
+          // Adaptamos al shape del drawer existente con un "comisionista" agregado
+          // que representa al equipo SOZU completo de esa cuenta.
+          const diasDesdeCompra = d.fecha_compra
+            ? Math.max(
+                0,
+                Math.floor(
+                  (Date.now() - new Date(d.fecha_compra).getTime()) / 86_400_000,
+                ),
+              )
+            : 0;
+          const dispersionEntity: EjecucionDispersionEntity = {
+            folio: d.folio_cuenta,
+            comisionista_nombre: `Equipo SOZU (${d.comisionistas_pendientes})`,
+            comisionista_rol: "Dispersión interna agregada",
+            venta_ref: d.folio_cuenta,
+            monto: d.monto_a_dispersar,
+            metodo_inicial: "STP",
+            dias_desde_autorizacion: diasDesdeCompra,
+          };
+          const vctx = {
+            folio: d.folio_cuenta,
+            propiedad:
+              [d.proyecto_nombre, d.modelo_nombre, d.numero_departamento ? `Depto ${d.numero_departamento}` : null]
+                .filter(Boolean)
+                .join(" · ") || "—",
+            cliente: "—",
+            precio_venta: d.precio_final,
+            comision_total_sozu: d.monto_a_dispersar,
+            porcentaje_comision: 0,
+            estado_venta: "Vendida" as const,
+            dias_desde_apartado: diasDesdeCompra,
+          };
           return (
             <EjecucionDrawer
               open={open}
               onOpenChange={onOpenChange}
               entityType="ejecucion_dispersion"
-              entityId={d.folio}
+              entityId={d.folio_cuenta}
               ventaContext={vctx}
             >
-              <EjecucionDispersionContent entity={d} onClose={close} />
+              <EjecucionDispersionContent entity={dispersionEntity} onClose={close} />
             </EjecucionDrawer>
           );
         }
