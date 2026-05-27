@@ -9,6 +9,7 @@ import {
   FileText, CalendarDays, Loader2, Upload, Scale,
   ChevronRight, MoreHorizontal, Send, MessageSquare,
   AlertTriangle, HeartHandshake, ArrowRight, Plus, AlertCircle,
+  Bell, Shield, Gavel, Building2, FileBadge, ScrollText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,6 +49,22 @@ interface LegalRow {
   responseDeadline: string | null;
   docsCount:        number;
   lastUpdatedAt:    string | null;
+  // Proceso de demanda (requiere DDL AJ-P1)
+  tipoNotificacion:          string | null;
+  fechaNotificacion:         string | null;
+  diasRegularizacion:        number;
+  fechaLimiteRegularizacion: string | null;
+  estatusRegularizacion:     string;
+  fechaPresentacionDemanda:  string | null;
+  estatusAdmisionJuzgado:    string;
+  fechaAdmision:             string | null;
+  fechaEmplazamiento:        string | null;
+  estatusEmplazamiento:      string;
+  fechaContestacionDemanda:  string | null;
+  fechaAudienciaProceso:     string | null;
+  fechaSentencia:            string | null;
+  resultadoProceso:          string;
+  observacionesJuridicas:    string | null;
 }
 
 interface AbogadoItem {
@@ -57,7 +74,10 @@ interface AbogadoItem {
   tipo_abogado: string;
 }
 
-type ActionType = 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo';
+type ActionType =
+  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo'
+  | 'notificacion' | 'regularizacion' | 'proc_demanda' | 'admision'
+  | 'emplazamiento' | 'contestacion' | 'audiencia_proc' | 'sentencia' | 'acuerdo_proc';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -72,6 +92,24 @@ const STATUS_META: Record<LegalCaseStatus, { label: string; cls: string }> = {
 };
 
 const TIPO_ACUERDO_OPTIONS = ['CONVENIO', 'SENTENCIA', 'DESISTIMIENTO', 'OTRO'] as const;
+
+const TIPO_NOTIFICACION_OPTIONS  = ['NOTARIO', 'CORREO_ELECTRONICO', 'OTRO']                                         as const;
+const ESTATUS_REG_OPTIONS        = ['EN_ESPERA', 'REGULARIZADO', 'NO_REGULARIZADO', 'VENCIDO']                       as const;
+const ESTATUS_ADMISION_OPTIONS   = ['PENDIENTE', 'PRESENTADA', 'ADMITIDA', 'PREVENIDA', 'RECHAZADA']                 as const;
+const ESTATUS_EMPL_OPTIONS       = ['PENDIENTE', 'REALIZADO', 'NO_LOCALIZADO', 'REPROGRAMADO']                       as const;
+const RESULTADO_PROCESO_OPTIONS  = ['EN_PROCESO', 'ACUERDO', 'SENTENCIA_FAVORABLE', 'SENTENCIA_DESFAVORABLE', 'CERRADO'] as const;
+const TIPO_DOC_PROCESO_OPTIONS   = ['NOTIFICACION','ACUSE_CORREO','ACTA_NOTARIAL','DEMANDA','ACUSE_JUZGADO','AUTO_ADMISION','EMPLAZAMIENTO','CONTESTACION','AUDIENCIA','SENTENCIA','CONVENIO_ACUERDO','OTRO'] as const;
+
+const PROCESO_STEPS = [
+  { key: 'notificacion',   label: 'Notificación',          Icon: Bell      },
+  { key: 'regularizacion', label: 'Regularización',        Icon: Shield    },
+  { key: 'presentacion',   label: 'Presentación juzgado',  Icon: FileBadge },
+  { key: 'admision',       label: 'Admisión',              Icon: Building2 },
+  { key: 'emplazamiento',  label: 'Emplazamiento',         Icon: Send      },
+  { key: 'contestacion',   label: 'Contestación',          Icon: MessageSquare },
+  { key: 'audiencia',      label: 'Audiencia',             Icon: CalendarDays  },
+  { key: 'sentencia',      label: 'Sentencia / Acuerdo',   Icon: Gavel     },
+] as const;
 
 const fmtMxn = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
@@ -117,7 +155,7 @@ function KpiCard({ icon, label, count, value, colorCls, active, onClick }: {
 function SkeletonRow() {
   return (
     <tr className="border-b border-border">
-      {Array.from({ length: 9 }).map((_, i) => (
+      {Array.from({ length: 13 }).map((_, i) => (
         <td key={i} className="px-3 py-3">
           <div className="h-4 bg-muted/60 rounded animate-pulse" style={{ width: `${60 + (i * 13) % 40}%` }} />
         </td>
@@ -178,7 +216,7 @@ function AppJuridicoDashboardInner() {
   const [statusFilter,   setStatusFilter]   = useState('');
   const [kpiFilter,      setKpiFilter]      = useState('');
   const [selectedRow,    setSelectedRow]    = useState<LegalRow | null>(null);
-  const [detailTab,      setDetailTab]      = useState<'resumen' | 'documentos' | 'bitacora' | 'audiencias' | 'acuerdos'>('resumen');
+  const [detailTab,      setDetailTab]      = useState<'resumen' | 'documentos' | 'bitacora' | 'audiencias' | 'acuerdos' | 'proceso'>('resumen');
   const [adminAbogadoId, setAdminAbogadoId] = useState<number | null>(null);
 
   // Action dialog state
@@ -195,6 +233,46 @@ function AppJuridicoDashboardInner() {
     setActionInput3('');
   };
   const closeAction = () => { setAction(null); setActionInput(''); };
+
+  // ── Proceso de demanda form state ──────────────────────────────────────────
+  const [procesoForm, setProcesoForm] = useState({
+    tipoNotificacion:         'NOTARIO',
+    fechaNotificacion:        '',
+    diasRegularizacion:       '15',
+    estatusRegularizacion:    'EN_ESPERA',
+    fechaPresentacionDemanda: '',
+    estatusAdmisionJuzgado:   'PENDIENTE',
+    fechaAdmision:            '',
+    fechaEmplazamiento:       '',
+    estatusEmplazamiento:     'PENDIENTE',
+    fechaContestacionDemanda: '',
+    fechaAudienciaProceso:    '',
+    fechaSentencia:           '',
+    resultadoProceso:         'EN_PROCESO',
+    observacionesJuridicas:   '',
+  });
+
+  const setPF = (k: keyof typeof procesoForm, v: string) =>
+    setProcesoForm(p => ({ ...p, [k]: v }));
+
+  const loadProcesoFromRow = (row: LegalRow) => {
+    setProcesoForm({
+      tipoNotificacion:         row.tipoNotificacion         ?? 'NOTARIO',
+      fechaNotificacion:        row.fechaNotificacion        ?? '',
+      diasRegularizacion:       String(row.diasRegularizacion ?? 15),
+      estatusRegularizacion:    row.estatusRegularizacion    ?? 'EN_ESPERA',
+      fechaPresentacionDemanda: row.fechaPresentacionDemanda ?? '',
+      estatusAdmisionJuzgado:   row.estatusAdmisionJuzgado   ?? 'PENDIENTE',
+      fechaAdmision:            row.fechaAdmision            ?? '',
+      fechaEmplazamiento:       row.fechaEmplazamiento       ?? '',
+      estatusEmplazamiento:     row.estatusEmplazamiento     ?? 'PENDIENTE',
+      fechaContestacionDemanda: row.fechaContestacionDemanda ?? '',
+      fechaAudienciaProceso:    row.fechaAudienciaProceso    ?? '',
+      fechaSentencia:           row.fechaSentencia           ?? '',
+      resultadoProceso:         row.resultadoProceso         ?? 'EN_PROCESO',
+      observacionesJuridicas:   row.observacionesJuridicas   ?? '',
+    });
+  };
 
   // ── Abogados list (admin only) ─────────────────────────────────────────────
   const { data: abogadosList = [] } = useQuery({
@@ -260,29 +338,34 @@ function AppJuridicoDashboardInner() {
     staleTime: 2 * 60_000,
     queryFn: async () => {
       // DDL probes (parallel) — determines available columns and tables
-      const [aj1Probe, perfilesProbe] = await Promise.allSettled([
+      const [aj1Probe, perfilesProbe, procesoProbe] = await Promise.allSettled([
         (supabase as any).from('demandas').select('porcentaje_penalizacion').limit(0),
         (supabase as any).from('app_juridico_perfiles').select('id').limit(0),
+        (supabase as any).from('demandas').select('tipo_notificacion').limit(0),
       ]);
 
-      const hasAj1   = aj1Probe.status      === 'fulfilled' && !(aj1Probe.value as any)?.error;
-      const hasAppJu = perfilesProbe.status === 'fulfilled' && !(perfilesProbe.value as any)?.error;
-      console.debug('[AppJuridico] DDL probes — hasAj1:', hasAj1, 'hasAppJu:', hasAppJu);
+      const hasAj1     = aj1Probe.status      === 'fulfilled' && !(aj1Probe.value     as any)?.error;
+      const hasAppJu   = perfilesProbe.status === 'fulfilled' && !(perfilesProbe.value as any)?.error;
+      const hasProceso = procesoProbe.status  === 'fulfilled' && !(procesoProbe.value  as any)?.error;
+      console.debug('[AppJuridico] DDL probes — hasAj1:', hasAj1, 'hasAppJu:', hasAppJu, 'hasProceso:', hasProceso);
 
       // Flat select — NO PostgREST joins (demandas has no FK to proyectos)
       const aj1Cols = hasAj1
         ? ', porcentaje_penalizacion, monto_reclamado, monto_negociado, fecha_proxima_audiencia, fecha_limite_respuesta'
         : '';
+      const procesoCols = hasProceso
+        ? ', tipo_notificacion, fecha_notificacion, dias_regularizacion, fecha_limite_regularizacion, estatus_regularizacion, fecha_presentacion_demanda, estatus_admision_juzgado, fecha_admision, fecha_emplazamiento, estatus_emplazamiento, fecha_contestacion_demanda, fecha_audiencia_proceso, fecha_sentencia, resultado_proceso, observaciones_juridicas'
+        : '';
 
       let q = (supabase as any)
         .from('demandas')
-        .select(`id, id_cuenta_cobranza, id_propiedad, estatus_demanda, fecha_compromiso_entrega, responsable, observaciones, fecha_creacion, fecha_actualizacion${aj1Cols}`)
+        .select(`id, id_cuenta_cobranza, id_propiedad, estatus_demanda, fecha_compromiso_entrega, responsable, observaciones, fecha_creacion, fecha_actualizacion${aj1Cols}${procesoCols}`)
         .eq('activo', true)
         .order('fecha_actualizacion', { ascending: false });
 
       if (!isAdmin) {
         if (!assignedIds || assignedIds.length === 0) {
-          return { rows: [], hasAj1, hasAppJu, assignedEmpty: true, entityMaps: null };
+          return { rows: [], hasAj1, hasAppJu, hasProceso, assignedEmpty: true, entityMaps: null };
         }
         q = q.in('id', assignedIds);
       } else if (adminAbogadoId) {
@@ -293,7 +376,7 @@ function AppJuridicoDashboardInner() {
             .eq('id_perfil_juridico', adminAbogadoId)
             .eq('estatus', 'ACTIVA');
           const ids = (aIds ?? []).map((a: any) => a.id_demanda as number);
-          if (ids.length === 0) return { rows: [], hasAj1, hasAppJu, entityMaps: null };
+          if (ids.length === 0) return { rows: [], hasAj1, hasAppJu, hasProceso, entityMaps: null };
           q = q.in('id', ids);
         } catch { /* no asignaciones table yet */ }
       }
@@ -301,13 +384,13 @@ function AppJuridicoDashboardInner() {
       const { data: rawDem, error: demError } = await q;
       if (demError) {
         console.error('[AppJuridicoDashboard] demandas query:', demError);
-        return { rows: [], hasAj1, hasAppJu, queryError: demError.message as string, entityMaps: null };
+        return { rows: [], hasAj1, hasAppJu, hasProceso, queryError: demError.message as string, entityMaps: null };
       }
 
       const demandas = (rawDem ?? []) as any[];
       console.debug('[AppJuridico] demandas loaded:', demandas.length, 'rows');
 
-      if (!demandas.length) return { rows: demandas, hasAj1, hasAppJu, entityMaps: null };
+      if (!demandas.length) return { rows: demandas, hasAj1, hasAppJu, hasProceso, entityMaps: null };
 
       const cuentaIds = [...new Set(demandas.map((d: any) => d.id_cuenta_cobranza).filter(Boolean))] as number[];
       const propIds   = [...new Set(demandas.map((d: any) => d.id_propiedad).filter(Boolean))]   as number[];
@@ -373,13 +456,14 @@ function AppJuridicoDashboardInner() {
       };
 
       console.debug('[AppJuridico] entityMaps — cuentas:', cuentas.length, 'personas:', personas.length, 'proyectos:', proyectos.length);
-      return { rows: demandas, hasAj1, hasAppJu, entityMaps };
+      return { rows: demandas, hasAj1, hasAppJu, hasProceso, entityMaps };
     },
   });
 
   const rawDemandas    = demandasResult?.rows        ?? [];
   const hasAj1Cols     = demandasResult?.hasAj1      ?? false;
   const hasAppJuridico = demandasResult?.hasAppJu    ?? false;
+  const hasProcesoCol  = demandasResult?.hasProceso  ?? false;
   const inlineError    = demandasResult?.queryError  ?? null;
 
   const accountIds = useMemo(
@@ -558,6 +642,22 @@ function AppJuridicoDashboardInner() {
         responseDeadline: d.fecha_limite_respuesta  ?? null,
         docsCount:        docsCountMap[d.id] ?? 0,
         lastUpdatedAt:    d.fecha_actualizacion ?? null,
+        // Proceso de demanda
+        tipoNotificacion:          d.tipo_notificacion          ?? null,
+        fechaNotificacion:         d.fecha_notificacion         ?? null,
+        diasRegularizacion:        Number(d.dias_regularizacion ?? 15),
+        fechaLimiteRegularizacion: d.fecha_limite_regularizacion ?? null,
+        estatusRegularizacion:     d.estatus_regularizacion     ?? 'EN_ESPERA',
+        fechaPresentacionDemanda:  d.fecha_presentacion_demanda ?? null,
+        estatusAdmisionJuzgado:    d.estatus_admision_juzgado   ?? 'PENDIENTE',
+        fechaAdmision:             d.fecha_admision             ?? null,
+        fechaEmplazamiento:        d.fecha_emplazamiento        ?? null,
+        estatusEmplazamiento:      d.estatus_emplazamiento      ?? 'PENDIENTE',
+        fechaContestacionDemanda:  d.fecha_contestacion_demanda ?? null,
+        fechaAudienciaProceso:     d.fecha_audiencia_proceso    ?? null,
+        fechaSentencia:            d.fecha_sentencia            ?? null,
+        resultadoProceso:          d.resultado_proceso          ?? 'EN_PROCESO',
+        observacionesJuridicas:    d.observaciones_juridicas    ?? null,
       } satisfies LegalRow;
     });
   }, [rawDemandas, demandasResult, pagosSum, docsCountMap]);
@@ -744,6 +844,23 @@ function AppJuridicoDashboardInner() {
       qc.invalidateQueries({ queryKey: ['app-juridico-timeline'] });
     },
     onError: (err: any) => toast.error('Error', { description: err.message }),
+  });
+
+  const { mutateAsync: saveProcesoField, isPending: savingProceso } = useMutation({
+    mutationFn: async ({ demandaId, fields, eventoLabel }: { demandaId: number; fields: Record<string, any>; eventoLabel: string }) => {
+      if (!hasProcesoCol) throw new Error('Columnas proceso_demanda no existen. Ejecuta DDL AJ-P1 en app_juridico_proceso_demanda_ddl.md.');
+      const { error } = await (supabase as any)
+        .from('demandas').update(fields).eq('id', demandaId);
+      if (error) throw new Error(error.message);
+      await insertTimeline(demandaId, 'PROCESO_DEMANDA', eventoLabel);
+    },
+    onSuccess: () => {
+      toast.success('Proceso actualizado');
+      qc.invalidateQueries({ queryKey: ['app-juridico-demandas'] });
+      qc.invalidateQueries({ queryKey: ['app-juridico-timeline'] });
+      closeAction();
+    },
+    onError: (err: any) => toast.error('Error al actualizar proceso', { description: err.message }),
   });
 
   // ── Action helpers ─────────────────────────────────────────────────────────
@@ -993,7 +1110,7 @@ function AppJuridicoDashboardInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Proyecto', 'Unidad — Cliente', 'Precio Final', 'Pagado', 'Por cobrar', 'Estatus', '% Penalidad', 'Observaciones', 'Acciones'].map(h => (
+                    {['Proyecto', 'Unidad — Cliente', 'Precio Final', 'Pagado', 'Por cobrar', 'Estatus', '% Penalidad', 'Observaciones', 'Etapa proceso', 'Fecha notif.', 'Días rest.', 'Próx. acción', 'Acciones'].map(h => (
                       <th key={h} className="px-3 py-3 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1034,6 +1151,45 @@ function AppJuridicoDashboardInner() {
                       <td className="px-3 py-3 max-w-[180px]">
                         <p className="text-xs text-muted-foreground line-clamp-2">{row.observations || '—'}</p>
                       </td>
+                      {/* Etapa proceso */}
+                      <td className="px-3 py-3 text-center">
+                        {hasProcesoCol ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            {row.fechaSentencia ? 'Sentencia'
+                              : row.fechaAudienciaProceso ? 'Audiencia'
+                              : row.fechaContestacionDemanda ? 'Contestación'
+                              : row.fechaEmplazamiento ? 'Emplazamiento'
+                              : row.fechaAdmision ? 'Admisión'
+                              : row.fechaPresentacionDemanda ? 'Presentación'
+                              : row.fechaNotificacion ? 'Regularización'
+                              : '—'}
+                          </span>
+                        ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
+                      </td>
+                      {/* Fecha notificación */}
+                      <td className="px-3 py-3 text-center tabular-nums">
+                        <span className="text-[11px] text-muted-foreground">{hasProcesoCol ? fmtDate(row.fechaNotificacion) : '—'}</span>
+                      </td>
+                      {/* Días restantes */}
+                      <td className="px-3 py-3 text-center tabular-nums">
+                        {hasProcesoCol && row.fechaLimiteRegularizacion && row.estatusRegularizacion === 'EN_ESPERA' ? (() => {
+                          const d = Math.ceil((new Date(row.fechaLimiteRegularizacion).getTime() - Date.now()) / 86400000);
+                          return <span className={cn('text-xs font-semibold', d < 0 ? 'text-red-600' : d <= 5 ? 'text-amber-600' : 'text-slate-600')}>{d < 0 ? `${d}` : `${d}d`}</span>;
+                        })() : <span className="text-[11px] text-muted-foreground/40">—</span>}
+                      </td>
+                      {/* Próxima acción */}
+                      <td className="px-3 py-3 max-w-[120px]">
+                        <span className="text-[11px] text-muted-foreground">
+                          {hasProcesoCol
+                            ? row.resultadoProceso !== 'EN_PROCESO' ? row.resultadoProceso.replace(/_/g, ' ')
+                            : row.fechaAudienciaProceso ? `Aud. ${fmtDate(row.fechaAudienciaProceso)}`
+                            : row.estatusAdmisionJuzgado === 'PENDIENTE' && row.fechaPresentacionDemanda ? 'Esperar admisión'
+                            : row.estatusRegularizacion === 'EN_ESPERA' && row.fechaNotificacion ? 'Regularizar'
+                            : row.fechaNotificacion ? 'Presentar demanda'
+                            : 'Notificar'
+                            : '—'}
+                        </span>
+                      </td>
                       <td className="px-3 py-3 text-center">
                         <button onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('resumen'); }}
                           className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors">
@@ -1066,14 +1222,22 @@ function AppJuridicoDashboardInner() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-border shrink-0">
-              {(['resumen', 'documentos', 'bitacora', 'audiencias', 'acuerdos'] as const).map(tab => (
-                <button key={tab} onClick={() => setDetailTab(tab)}
+            <div className="flex border-b border-border shrink-0 overflow-x-auto">
+              {(['resumen', 'documentos', 'bitacora', 'audiencias', 'acuerdos', 'proceso'] as const).map(tab => (
+                <button key={tab} onClick={() => {
+                  setDetailTab(tab);
+                  if (tab === 'proceso') loadProcesoFromRow(selectedRow);
+                }}
                   className={cn(
-                    'flex-1 py-2 text-[11px] font-medium transition-colors',
+                    'flex-1 min-w-[52px] py-2 text-[11px] font-medium transition-colors whitespace-nowrap px-1',
                     detailTab === tab ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground',
                   )}>
-                  {tab === 'resumen' ? 'Resumen' : tab === 'documentos' ? `Docs (${selectedRow.docsCount})` : tab === 'bitacora' ? 'Bitácora' : tab === 'audiencias' ? `Aud. (${selectedAudiencias.length})` : `Acuerdos (${selectedAcuerdos.length})`}
+                  {tab === 'resumen' ? 'Resumen'
+                    : tab === 'documentos' ? `Docs (${selectedRow.docsCount})`
+                    : tab === 'bitacora'   ? 'Bitácora'
+                    : tab === 'audiencias' ? `Aud. (${selectedAudiencias.length})`
+                    : tab === 'acuerdos'   ? `Acuerdos (${selectedAcuerdos.length})`
+                    : <span className="flex items-center gap-1">Proceso {selectedRow.fechaNotificacion && <span className="size-1.5 rounded-full bg-primary inline-block" />}</span>}
                 </button>
               ))}
             </div>
@@ -1266,6 +1430,199 @@ function AppJuridicoDashboardInner() {
                   </button>
                 </section>
               )}
+
+              {/* ── Proceso de demanda ── */}
+              {detailTab === 'proceso' && (() => {
+                const today = new Date();
+                const regVencida = !!selectedRow.fechaNotificacion
+                  && selectedRow.estatusRegularizacion !== 'REGULARIZADO'
+                  && !!selectedRow.fechaLimiteRegularizacion
+                  && today > new Date(selectedRow.fechaLimiteRegularizacion);
+
+                const diasRestantes = selectedRow.fechaLimiteRegularizacion && selectedRow.estatusRegularizacion === 'EN_ESPERA'
+                  ? Math.ceil((new Date(selectedRow.fechaLimiteRegularizacion).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                  : null;
+
+                return (
+                  <section className="space-y-4">
+                    {!hasProcesoCol && (
+                      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-800">
+                          DDL pendiente. Ejecuta <span className="font-mono">AJ-P1</span> en{' '}
+                          <span className="font-mono">app_juridico_proceso_demanda_ddl.md</span> para habilitar este módulo.
+                        </p>
+                      </div>
+                    )}
+
+                    {regVencida && (
+                      <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                        <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-red-700">Regularización vencida</p>
+                          <p className="text-[11px] text-red-600 mt-0.5">Plazo expirado el {fmtDate(selectedRow.fechaLimiteRegularizacion)}. Proceder con demanda.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {diasRestantes !== null && !regVencida && diasRestantes <= 5 && (
+                      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-800 font-medium">Quedan {diasRestantes} días para regularizar</p>
+                      </div>
+                    )}
+
+                    {/* Timeline visual */}
+                    <div className="space-y-2">
+                      {[
+                        {
+                          step: 1, key: 'notificacion', label: 'Notificación', Icon: Bell,
+                          fecha: selectedRow.fechaNotificacion,
+                          badge: selectedRow.tipoNotificacion,
+                          done: !!selectedRow.fechaNotificacion,
+                          actionType: 'notificacion' as ActionType,
+                          actionLabel: 'Registrar notificación',
+                        },
+                        {
+                          step: 2, key: 'regularizacion', label: 'Regularización', Icon: Shield,
+                          fecha: selectedRow.fechaLimiteRegularizacion,
+                          badge: selectedRow.estatusRegularizacion,
+                          done: selectedRow.estatusRegularizacion === 'REGULARIZADO',
+                          actionType: 'regularizacion' as ActionType,
+                          actionLabel: selectedRow.estatusRegularizacion === 'REGULARIZADO' ? 'Regularizado ✓' : 'Marcar regularizado',
+                        },
+                        {
+                          step: 3, key: 'presentacion', label: 'Presentación juzgado', Icon: FileBadge,
+                          fecha: selectedRow.fechaPresentacionDemanda,
+                          badge: selectedRow.estatusAdmisionJuzgado,
+                          done: ['PRESENTADA','ADMITIDA'].includes(selectedRow.estatusAdmisionJuzgado),
+                          actionType: 'proc_demanda' as ActionType,
+                          actionLabel: 'Registrar presentación',
+                        },
+                        {
+                          step: 4, key: 'admision', label: 'Admisión', Icon: Building2,
+                          fecha: selectedRow.fechaAdmision,
+                          badge: selectedRow.estatusAdmisionJuzgado === 'ADMITIDA' ? 'ADMITIDA' : undefined,
+                          done: selectedRow.estatusAdmisionJuzgado === 'ADMITIDA',
+                          actionType: 'admision' as ActionType,
+                          actionLabel: 'Registrar admisión',
+                        },
+                        {
+                          step: 5, key: 'emplazamiento', label: 'Emplazamiento', Icon: Send,
+                          fecha: selectedRow.fechaEmplazamiento,
+                          badge: selectedRow.estatusEmplazamiento,
+                          done: selectedRow.estatusEmplazamiento === 'REALIZADO',
+                          actionType: 'emplazamiento' as ActionType,
+                          actionLabel: 'Registrar emplazamiento',
+                        },
+                        {
+                          step: 6, key: 'contestacion', label: 'Contestación', Icon: MessageSquare,
+                          fecha: selectedRow.fechaContestacionDemanda,
+                          badge: selectedRow.fechaContestacionDemanda ? 'RECIBIDA' : undefined,
+                          done: !!selectedRow.fechaContestacionDemanda,
+                          actionType: 'contestacion' as ActionType,
+                          actionLabel: 'Registrar contestación',
+                        },
+                        {
+                          step: 7, key: 'audiencia', label: 'Audiencia', Icon: CalendarDays,
+                          fecha: selectedRow.fechaAudienciaProceso,
+                          badge: selectedRow.fechaAudienciaProceso ? 'PROGRAMADA' : undefined,
+                          done: !!selectedRow.fechaAudienciaProceso,
+                          actionType: 'audiencia_proc' as ActionType,
+                          actionLabel: 'Registrar audiencia',
+                        },
+                        {
+                          step: 8, key: 'sentencia', label: 'Sentencia / Acuerdo', Icon: Gavel,
+                          fecha: selectedRow.fechaSentencia,
+                          badge: selectedRow.resultadoProceso !== 'EN_PROCESO' ? selectedRow.resultadoProceso : undefined,
+                          done: ['ACUERDO','SENTENCIA_FAVORABLE','SENTENCIA_DESFAVORABLE','CERRADO'].includes(selectedRow.resultadoProceso),
+                          actionType: 'sentencia' as ActionType,
+                          actionLabel: 'Registrar sentencia/acuerdo',
+                        },
+                      ].map(({ step, label, Icon, fecha, badge, done, actionType, actionLabel }, idx, arr) => (
+                        <div key={label} className="relative pl-8">
+                          {idx < arr.length - 1 && (
+                            <div className={cn('absolute left-[15px] top-7 w-px h-full', done ? 'bg-primary/40' : 'bg-border')} />
+                          )}
+                          <div className={cn(
+                            'absolute left-0 top-1 flex items-center justify-center h-7 w-7 rounded-full border-2 text-[10px] font-bold',
+                            done ? 'bg-primary border-primary text-white' : 'bg-white border-border text-muted-foreground',
+                          )}>
+                            {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Icon className="h-3 w-3" />}
+                          </div>
+                          <div className="bg-white border border-border rounded-lg p-2.5 mb-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className={cn('text-xs font-semibold', done ? 'text-foreground' : 'text-muted-foreground')}>{step}. {label}</p>
+                                {fecha && <p className="text-[11px] text-muted-foreground mt-0.5">{fmtDate(fecha)}</p>}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {badge && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                                    {badge.replace(/_/g, ' ')}
+                                  </span>
+                                )}
+                                <button
+                                  disabled={!hasProcesoCol || savingProceso}
+                                  onClick={() => { openAction(actionType, selectedRow); }}
+                                  className={cn(
+                                    'text-[10px] px-2 py-1 rounded-md transition-colors',
+                                    done ? 'bg-muted text-muted-foreground hover:bg-muted/80' : 'bg-primary text-white hover:bg-primary/90',
+                                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                                  )}
+                                >
+                                  {done ? 'Editar' : 'Registrar'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Observaciones jurídicas */}
+                    {selectedRow.observacionesJuridicas && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Observaciones jurídicas</p>
+                        <p className="text-xs text-foreground leading-relaxed">{selectedRow.observacionesJuridicas}</p>
+                      </div>
+                    )}
+
+                    {/* Resultado final */}
+                    {selectedRow.resultadoProceso && selectedRow.resultadoProceso !== 'EN_PROCESO' && (
+                      <div className={cn(
+                        'flex items-center gap-2 rounded-xl px-3 py-2.5 border',
+                        selectedRow.resultadoProceso === 'SENTENCIA_FAVORABLE' ? 'bg-emerald-50 border-emerald-200' :
+                        selectedRow.resultadoProceso === 'ACUERDO' ? 'bg-purple-50 border-purple-200' :
+                        'bg-slate-50 border-slate-200',
+                      )}>
+                        <ScrollText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div>
+                          <p className="text-xs font-semibold">Resultado: {selectedRow.resultadoProceso.replace(/_/g, ' ')}</p>
+                          {selectedRow.fechaSentencia && <p className="text-[11px] text-muted-foreground">{fmtDate(selectedRow.fechaSentencia)}</p>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Acciones rápidas proceso */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Acciones proceso</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { label: 'Subir documento',        icon: Upload,      action: () => toast.info('Ejecuta DDL AJ-P2 para habilitar documentos del proceso', { duration: 4000 }) },
+                          { label: 'Obs. jurídicas',         icon: ScrollText,  action: () => { openAction('notificacion', selectedRow); } },
+                        ].map(({ label, icon: Icon, action }) => (
+                          <button key={label} onClick={action}
+                            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors text-left">
+                            <Icon className="h-3 w-3 text-primary shrink-0" />
+                            <span className="leading-tight">{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
             </div>
 
             <div className="p-4 border-t border-border shrink-0">
@@ -1415,6 +1772,336 @@ function AppJuridicoDashboardInner() {
                   <Button className="flex-1" disabled={!actionInput || !actionInput2.trim() || !actionInput3 || addingAcuerdo}
                     onClick={() => addAcuerdo({ demandaId: action.row.demandaId, tipo: actionInput, descripcion: actionInput2.trim(), fecha: actionInput3 })}>
                     {addingAcuerdo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Notificación ── */}
+            {action.type === 'notificacion' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar notificación</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Tipo de notificación *</label>
+                    <Select value={procesoForm.tipoNotificacion} onValueChange={v => setPF('tipoNotificacion', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TIPO_NOTIFICACION_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de notificación *</label>
+                    <input type="date" value={procesoForm.fechaNotificacion} onChange={e => setPF('fechaNotificacion', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Días para regularizar *</label>
+                    <input type="number" min={1} max={90} value={procesoForm.diasRegularizacion} onChange={e => setPF('diasRegularizacion', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                    {procesoForm.fechaNotificacion && Number(procesoForm.diasRegularizacion) > 0 && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Límite: {fmtDate(new Date(new Date(procesoForm.fechaNotificacion).getTime() + Number(procesoForm.diasRegularizacion) * 86400000).toISOString().slice(0,10))}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Observaciones jurídicas</label>
+                    <textarea value={procesoForm.observacionesJuridicas} onChange={e => setPF('observacionesJuridicas', e.target.value)} rows={3}
+                      placeholder="Notas adicionales..."
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaNotificacion || savingProceso}
+                    onClick={() => {
+                      const limite = procesoForm.fechaNotificacion && Number(procesoForm.diasRegularizacion) > 0
+                        ? new Date(new Date(procesoForm.fechaNotificacion).getTime() + Number(procesoForm.diasRegularizacion) * 86400000).toISOString().slice(0,10)
+                        : null;
+                      saveProcesoField({
+                        demandaId: action.row.demandaId,
+                        fields: {
+                          tipo_notificacion: procesoForm.tipoNotificacion,
+                          fecha_notificacion: procesoForm.fechaNotificacion,
+                          dias_regularizacion: Number(procesoForm.diasRegularizacion),
+                          ...(limite ? { fecha_limite_regularizacion: limite } : {}),
+                          estatus_regularizacion: 'EN_ESPERA',
+                          ...(procesoForm.observacionesJuridicas ? { observaciones_juridicas: procesoForm.observacionesJuridicas } : {}),
+                        },
+                        eventoLabel: `Notificación registrada vía ${procesoForm.tipoNotificacion} el ${fmtDate(procesoForm.fechaNotificacion)}`,
+                      });
+                    }}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Regularización ── */}
+            {action.type === 'regularizacion' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Marcar regularizado</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Estatus regularización *</label>
+                    <Select value={procesoForm.estatusRegularizacion} onValueChange={v => setPF('estatusRegularizacion', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ESTATUS_REG_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Observaciones</label>
+                    <textarea value={procesoForm.observacionesJuridicas} onChange={e => setPF('observacionesJuridicas', e.target.value)} rows={2}
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { estatus_regularizacion: procesoForm.estatusRegularizacion, ...(procesoForm.observacionesJuridicas ? { observaciones_juridicas: procesoForm.observacionesJuridicas } : {}) },
+                      eventoLabel: `Regularización: ${procesoForm.estatusRegularizacion}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Guardar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Presentación juzgado ── */}
+            {action.type === 'proc_demanda' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar presentación en juzgado</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de presentación *</label>
+                    <input type="date" value={procesoForm.fechaPresentacionDemanda} onChange={e => setPF('fechaPresentacionDemanda', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Estatus admisión</label>
+                    <Select value={procesoForm.estatusAdmisionJuzgado} onValueChange={v => setPF('estatusAdmisionJuzgado', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ESTATUS_ADMISION_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaPresentacionDemanda || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { fecha_presentacion_demanda: procesoForm.fechaPresentacionDemanda, estatus_admision_juzgado: procesoForm.estatusAdmisionJuzgado },
+                      eventoLabel: `Demanda presentada en juzgado el ${fmtDate(procesoForm.fechaPresentacionDemanda)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Admisión ── */}
+            {action.type === 'admision' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar admisión del juzgado</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de admisión *</label>
+                    <input type="date" value={procesoForm.fechaAdmision} onChange={e => setPF('fechaAdmision', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Estatus admisión *</label>
+                    <Select value={procesoForm.estatusAdmisionJuzgado} onValueChange={v => setPF('estatusAdmisionJuzgado', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ESTATUS_ADMISION_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaAdmision || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { fecha_admision: procesoForm.fechaAdmision, estatus_admision_juzgado: procesoForm.estatusAdmisionJuzgado },
+                      eventoLabel: `Admisión ${procesoForm.estatusAdmisionJuzgado} el ${fmtDate(procesoForm.fechaAdmision)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Emplazamiento ── */}
+            {action.type === 'emplazamiento' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar emplazamiento</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de emplazamiento *</label>
+                    <input type="date" value={procesoForm.fechaEmplazamiento} onChange={e => setPF('fechaEmplazamiento', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Estatus emplazamiento *</label>
+                    <Select value={procesoForm.estatusEmplazamiento} onValueChange={v => setPF('estatusEmplazamiento', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ESTATUS_EMPL_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaEmplazamiento || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { fecha_emplazamiento: procesoForm.fechaEmplazamiento, estatus_emplazamiento: procesoForm.estatusEmplazamiento },
+                      eventoLabel: `Emplazamiento ${procesoForm.estatusEmplazamiento} el ${fmtDate(procesoForm.fechaEmplazamiento)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Contestación ── */}
+            {action.type === 'contestacion' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar contestación de demanda</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de contestación *</label>
+                  <input type="date" value={procesoForm.fechaContestacionDemanda} onChange={e => setPF('fechaContestacionDemanda', e.target.value)}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaContestacionDemanda || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { fecha_contestacion_demanda: procesoForm.fechaContestacionDemanda },
+                      eventoLabel: `Contestación recibida el ${fmtDate(procesoForm.fechaContestacionDemanda)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Audiencia ── */}
+            {action.type === 'audiencia_proc' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar audiencia del proceso</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de audiencia *</label>
+                  <input type="date" value={procesoForm.fechaAudienciaProceso} onChange={e => setPF('fechaAudienciaProceso', e.target.value)}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaAudienciaProceso || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: { fecha_audiencia_proceso: procesoForm.fechaAudienciaProceso },
+                      eventoLabel: `Audiencia programada para ${fmtDate(procesoForm.fechaAudienciaProceso)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Sentencia ── */}
+            {action.type === 'sentencia' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar sentencia / resultado</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de sentencia *</label>
+                    <input type="date" value={procesoForm.fechaSentencia} onChange={e => setPF('fechaSentencia', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Resultado del proceso *</label>
+                    <Select value={procesoForm.resultadoProceso} onValueChange={v => setPF('resultadoProceso', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {RESULTADO_PROCESO_OPTIONS.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Observaciones jurídicas</label>
+                    <textarea value={procesoForm.observacionesJuridicas} onChange={e => setPF('observacionesJuridicas', e.target.value)} rows={3}
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaSentencia || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: {
+                        fecha_sentencia: procesoForm.fechaSentencia,
+                        resultado_proceso: procesoForm.resultadoProceso,
+                        ...(procesoForm.observacionesJuridicas ? { observaciones_juridicas: procesoForm.observacionesJuridicas } : {}),
+                      },
+                      eventoLabel: `Sentencia: ${procesoForm.resultadoProceso.replace(/_/g, ' ')} el ${fmtDate(procesoForm.fechaSentencia)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ── Proceso: Acuerdo proceso (alias proc) ── */}
+            {action.type === 'acuerdo_proc' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar acuerdo del proceso</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha del acuerdo *</label>
+                    <input type="date" value={procesoForm.fechaSentencia} onChange={e => setPF('fechaSentencia', e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Observaciones</label>
+                    <textarea value={procesoForm.observacionesJuridicas} onChange={e => setPF('observacionesJuridicas', e.target.value)} rows={3}
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!procesoForm.fechaSentencia || savingProceso}
+                    onClick={() => saveProcesoField({
+                      demandaId: action.row.demandaId,
+                      fields: {
+                        resultado_proceso: 'ACUERDO',
+                        ...(procesoForm.fechaSentencia ? { fecha_sentencia: procesoForm.fechaSentencia } : {}),
+                        ...(procesoForm.observacionesJuridicas ? { observaciones_juridicas: procesoForm.observacionesJuridicas } : {}),
+                      },
+                      eventoLabel: `Acuerdo registrado el ${fmtDate(procesoForm.fechaSentencia)}`,
+                    })}>
+                    {savingProceso ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
                   </Button>
                 </div>
               </>
