@@ -645,6 +645,7 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </AmbassadorsProvider>
             </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
