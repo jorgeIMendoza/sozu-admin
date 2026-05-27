@@ -184,11 +184,13 @@ export default function AdministrarMenus() {
                     const menuSubmenus = submenus.filter(s => s.menu_id === menu.id);
                     const isExpanded = expandedMenus.has(menu.id);
                     const isPortal = /^Portal\s/i.test(menu.nombre);
+                    const allSubsSoloA = menuSubmenus.length > 0 && menuSubmenus.every(s => s.solo_usuarioa);
+                    const isSpecial = isPortal || allSubsSoloA;
 
                     return (
-                      <div key={menu.id} className={`border rounded-lg overflow-hidden ${isPortal ? 'border-l-4 border-l-indigo-400 dark:border-l-indigo-500' : ''}`}>
+                      <div key={menu.id} className={`border rounded-lg overflow-hidden ${isSpecial ? 'border-l-4 border-l-indigo-400 dark:border-l-indigo-500' : ''}`}>
                         {/* Menu Header - Sortable */}
-                        <div className={`flex items-center gap-2 ${isPortal ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : 'bg-card'}`}>
+                        <div className={`flex items-center gap-2 ${isSpecial ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : 'bg-card'}`}>
                           <div className="flex-1">
                             <SortableMenuCard
                               menu={menu}
@@ -198,6 +200,11 @@ export default function AdministrarMenus() {
                           {isPortal && (
                             <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-600 dark:text-indigo-400 shrink-0">
                               Portal
+                            </Badge>
+                          )}
+                          {!isPortal && allSubsSoloA && (
+                            <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-600 dark:text-indigo-400 shrink-0">
+                              Solo A
                             </Badge>
                           )}
                           <Collapsible open={isExpanded} onOpenChange={() => toggleMenu(menu.id)}>
@@ -239,7 +246,7 @@ export default function AdministrarMenus() {
                                     strategy={verticalListSortingStrategy}
                                   >
                                     {menuSubmenus.map(submenu => (
-                                      <div key={submenu.id} className="flex items-center gap-1">
+                                      <div key={submenu.id} className={`flex items-center gap-1 rounded ${submenu.solo_usuarioa ? 'bg-indigo-50/60 dark:bg-indigo-950/30 ring-1 ring-indigo-200 dark:ring-indigo-800' : ''}`}>
                                         <div className="flex-1">
                                           <SortableSubmenuRow
                                             submenu={submenu}
