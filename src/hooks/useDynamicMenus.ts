@@ -187,6 +187,7 @@ export interface DynamicMenuItem {
     children?: DynamicMenuChild[];
     isPortal?: boolean;
     isRestrictedPortal?: boolean;
+    isSoloA?: boolean;
   }
  
 export interface DynamicMenuChild {
@@ -388,11 +389,14 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
               isRestrictedPortal: allSoloUsuarioA,
             });
           } else {
+            const allSubsOfMenu = (submenusData as unknown as RawSubmenu[])?.filter(s => s.menu_id === menuId && s.vista_front_end) || [];
+            const allChildrenSoloA = allSubsOfMenu.length > 0 && allSubsOfMenu.every(s => s.solo_usuarioa === true);
             items.push({
               title: menuData.menuNombre,
               icon: menuIcon,
               menuId,
               children: menuData.children,
+              isSoloA: allChildrenSoloA,
             });
           }
        });
