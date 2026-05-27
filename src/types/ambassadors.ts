@@ -64,7 +64,8 @@ export interface AdvisorNotification {
 }
 
 export interface Advisor {
-  id: string;
+  id: string;        // email del usuario (clave única usada para asignaciones)
+  idPersona?: number; // id en tabla personas (para id_persona_duena_lead)
   name: string;
   role: string;
   phone?: string;
