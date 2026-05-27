@@ -35,10 +35,7 @@ import { PageHeader } from "@/components/admin/portal-administracion/ui";
 import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { EjecucionDrawer } from "@/components/admin/portal-administracion/drawers/EjecucionDrawer";
-import {
-  EjecucionCobroContent,
-  type EjecucionCobroEntity,
-} from "@/components/admin/portal-administracion/drawers/content/EjecucionCobroContent";
+import { EjecucionCobroExpedienteContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionCobroExpedienteContent";
 import {
   EjecucionPagoExternoContent,
   type EjecucionPagoExternoEntity,
@@ -64,12 +61,14 @@ import {
   useDispersionesInternasPendientes,
   type DispersionInternaPendiente,
 } from "@/hooks/useDispersionesInternasPendientes";
+import {
+  useCobrosPorGestionar,
+  type CobroPorGestionar,
+} from "@/hooks/useCobrosPorGestionar";
 
 /* ──────────────────────────────────────────────────────────
    Tipos extendidos para filas (entity + extras de tabla)
    ────────────────────────────────────────────────────────── */
-
-type CobroRow = EjecucionCobroEntity;
 
 type PagoExternoRow = EjecucionPagoExternoEntity & {
   flag_cobro_previo: true; // Por construcción, sólo aparecen los que cumplen
@@ -79,7 +78,7 @@ type ExcepcionRow = EjecucionExcepcionEntity;
 
 type SelectedItem =
   | { tipo: "factura_sozu"; data: FacturaComisionSozuPorGenerar }
-  | { tipo: "cobro"; data: CobroRow }
+  | { tipo: "cobro"; data: CobroPorGestionar }
   | { tipo: "pago_externo"; data: PagoExternoRow }
   | { tipo: "dispersion_interna"; data: DispersionInternaPendiente }
   | { tipo: "excepcion"; data: ExcepcionRow };
@@ -90,48 +89,6 @@ type SelectedItem =
    están en estado "autorizado por Dirección" (= ya pasaron
    por la Bandeja de Validaciones del Director).
    ────────────────────────────────────────────────────────── */
-
-const MOCK_COBROS: CobroRow[] = [
-  {
-    folio: "COB-1041",
-    propiedad: "Daiku · A-201",
-    cliente: "María García López",
-    desarrollador_receptor: "Grupo Daiku Desarrollos SA de CV",
-    monto_factura: 94500,
-    estado_actual: "Por emitir",
-    dias_desde_autorizacion: 2,
-  },
-  {
-    folio: "COB-1042",
-    propiedad: "Bottura · PH-3",
-    cliente: "Juan Pérez Silva",
-    desarrollador_receptor: "Grupo Bottura SA de CV",
-    monto_factura: 120000,
-    estado_actual: "Emitida, esperando cobro",
-    dias_desde_autorizacion: 5,
-    folio_cfdi_actual: "F-V-1184",
-  },
-  {
-    folio: "COB-1043",
-    propiedad: "Monócolo · B-1",
-    cliente: "Sofía Rivera Mendoza",
-    desarrollador_receptor: "Constructora Monócolo SA de CV",
-    monto_factura: 53100,
-    estado_actual: "Emitida, esperando cobro",
-    dias_desde_autorizacion: 8,
-    folio_cfdi_actual: "F-V-1185",
-  },
-  {
-    folio: "COB-1044",
-    propiedad: "Daiku · C-402",
-    cliente: "Familia López-Núñez (copropietarios)",
-    desarrollador_receptor: "Grupo Daiku Desarrollos SA de CV",
-    monto_factura: 82500,
-    estado_actual: "Vencida",
-    dias_desde_autorizacion: 35,
-    folio_cfdi_actual: "F-V-1180",
-  },
-];
 
 const MOCK_PAGOS_EXTERNOS: PagoExternoRow[] = [
   {
@@ -214,12 +171,12 @@ function Antiguedad({ dias, umbral }: { dias: number; umbral: number }) {
   );
 }
 
-const ESTADO_COBRO_TONE: Record<CobroRow["estado_actual"], string> = {
-  "Por emitir":
+const ESTATUS_COBRO_TONE: Record<CobroPorGestionar["estatus"], string> = {
+  "Por Autorizar":
     "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300",
-  "Emitida, esperando cobro":
-    "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300",
-  Vencida:
+  Autorizado:
+    "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300",
+  Declinado:
     "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-300",
 };
 
@@ -434,6 +391,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     error: dispersionesInternasError,
   } = useDispersionesInternasPendientes();
 
+  // BD real: cobros por gestionar (cuentas con factura SOZU timbrada,
+  // pendientes/autorizadas/declinadas para cobro al desarrollador).
+  const {
+    data: cobros,
+    isLoading: cobrosLoading,
+    error: cobrosError,
+  } = useCobrosPorGestionar();
+
   const [sortFacturasSozu, setSortFacturasSozu] = useState<SortDir>("desc"); // más recientes primero (default por spec)
   const [pageFacturasSozu, setPageFacturasSozu] = useState(0);
   const [sortCobros, setSortCobros] = useState<SortDir>("asc");
@@ -473,7 +438,22 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     [facturasSozu],
   );
 
-  const cobrosSorted = useMemo(() => sortBy(MOCK_COBROS, sortCobros), [sortCobros]);
+  // Cobros: orden por fecha_compra (igual que Facturas SOZU / Dispersiones).
+  const cobrosSorted = useMemo(() => {
+    const rows = cobros ?? [];
+    return [...rows].sort((a, b) => {
+      const da = a.fecha_compra ? new Date(a.fecha_compra).getTime() : 0;
+      const db = b.fecha_compra ? new Date(b.fecha_compra).getTime() : 0;
+      return sortCobros === "asc" ? da - db : db - da;
+    });
+  }, [cobros, sortCobros]);
+  const cobrosTotal = cobros?.length ?? 0;
+  const cobrosTotalPages = Math.max(1, Math.ceil(cobrosTotal / PAGE_SIZE));
+  const cobrosMonto = useMemo(
+    () => (cobros ?? []).reduce((s, r) => s + r.monto_factura, 0),
+    [cobros],
+  );
+
   const externosSorted = useMemo(() => sortBy(MOCK_PAGOS_EXTERNOS, sortExternos), [sortExternos]);
 
   // Dispersiones internas: orden por fecha_compra (igual que Facturas SOZU).
@@ -513,7 +493,6 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
   const totales = useMemo(
     () => ({
-      cobros: MOCK_COBROS.reduce((s, r) => s + r.monto_factura, 0),
       externos: MOCK_PAGOS_EXTERNOS.reduce((s, r) => s + r.monto, 0),
       excepciones: MOCK_EXCEPCIONES.reduce((s, r) => s + Math.abs(r.delta), 0),
     }),
@@ -550,8 +529,14 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <KpiCard
           label="Cobros por gestionar"
-          count={MOCK_COBROS.length}
-          amountLabel={fmtMxn(totales.cobros)}
+          count={cobrosLoading ? "…" : cobrosTotal}
+          amountLabel={
+            cobrosLoading
+              ? "Cargando…"
+              : cobrosError
+                ? "Error al cargar"
+                : fmtMxn(cobrosMonto)
+          }
           icon={FileOutput}
           tone="emerald"
           onClick={() => scrollTo(cobrosRef)}
@@ -728,8 +713,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={FileOutput}
           iconColor="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
           title="Cobros por gestionar"
-          description="Ventas con factura autorizada por Dirección, pendientes de emisión o cobro"
-          count={MOCK_COBROS.length}
+          description="Cuentas con factura SOZU timbrada — esperando autorización del Director o ya autorizadas/declinadas"
+          count={cobrosTotal}
           right={
             <SortToggle
               value={sortCobros}
@@ -742,7 +727,15 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         />
         <Card>
           <CardContent className="p-0">
-            {cobrosPage.length === 0 ? (
+            {cobrosLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando cobros…
+              </div>
+            ) : cobrosError ? (
+              <div className="py-10 text-center text-sm text-red-600">
+                Error al cargar: {(cobrosError as Error).message}
+              </div>
+            ) : cobrosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 Sin cobros pendientes de gestión.
               </div>
@@ -751,38 +744,74 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Folio</TableHead>
-                      <TableHead className="text-xs">Propiedad</TableHead>
-                      <TableHead className="text-xs">Cliente / Receptor</TableHead>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">Producto</TableHead>
+                      <TableHead className="text-xs">No. Depa</TableHead>
+                      <TableHead className="text-xs">Entidad Dueña</TableHead>
+                      <TableHead className="text-xs">Comprador</TableHead>
+                      <TableHead className="text-xs text-right">Precio final</TableHead>
                       <TableHead className="text-xs text-right">Monto factura</TableHead>
-                      <TableHead className="text-xs">Estado actual</TableHead>
-                      <TableHead className="text-xs">Antigüedad</TableHead>
+                      <TableHead className="text-xs">Fecha Antigüedad</TableHead>
+                      <TableHead className="text-xs">Estatus</TableHead>
+                      <TableHead className="text-xs text-right">Factura</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {cobrosPage.map((c) => (
-                      <TableRow key={c.folio}>
+                      <TableRow key={c.id_cuenta_cobranza}>
                         <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
-                          {c.folio}
+                          {c.folio_cuenta}
                         </TableCell>
-                        <TableCell className="text-sm">{c.propiedad}</TableCell>
-                        <TableCell className="text-sm">
-                          <div>{c.cliente}</div>
-                          <div className="text-[10px] text-muted-foreground truncate">
-                            {c.desarrollador_receptor}
-                          </div>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                            {c.tipo}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{c.proyecto_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm">{c.modelo_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {c.producto_nombre || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">{c.numero_departamento || "—"}</TableCell>
+                        <TableCell className="text-xs">{c.entidad_duena || "—"}</TableCell>
+                        <TableCell className="text-xs">{c.comprador_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                          {fmtMxn(c.precio_final)}
                         </TableCell>
                         <TableCell className="text-sm text-right font-semibold tabular-nums">
                           {fmtMxn(c.monto_factura)}
+                          {c.iva_incluido && (
+                            <span className="block text-[9px] text-muted-foreground font-normal">
+                              IVA incluido
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                          {c.fecha_compra || "—"}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={ESTADO_COBRO_TONE[c.estado_actual]}>
-                            {c.estado_actual}
+                          <Badge variant="outline" className={ESTATUS_COBRO_TONE[c.estatus]}>
+                            {c.estatus}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Antiguedad dias={c.dias_desde_autorizacion} umbral={10} />
+                        <TableCell className="text-right">
+                          {c.url_factura_pdf ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => window.open(c.url_factura_pdf!, "_blank")}
+                              aria-label={`Ver factura ${c.folio_cuenta}`}
+                            >
+                              <FileText className="h-3.5 w-3.5 mr-1" /> Ver PDF
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -790,7 +819,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                             variant="outline"
                             className="h-8"
                             onClick={() => setSelected({ tipo: "cobro", data: c })}
-                            aria-label={`Ejecutar cobro ${c.folio}`}
+                            aria-label={`Ejecutar cobro ${c.folio_cuenta}`}
                           >
                             <Eye className="h-3.5 w-3.5 mr-1" /> Ejecutar
                           </Button>
@@ -805,8 +834,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         </Card>
         <PaginationBar
           page={pageCobros}
-          totalPages={Math.max(1, Math.ceil(MOCK_COBROS.length / PAGE_SIZE))}
-          totalCount={MOCK_COBROS.length}
+          totalPages={cobrosTotalPages}
+          totalCount={cobrosTotal}
           pageSize={PAGE_SIZE}
           onPageChange={setPageCobros}
         />
@@ -1135,16 +1164,38 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
         if (selected.tipo === "cobro") {
           const c = selected.data;
-          const vctx = getVentaContext(c.folio);
+          const diasDesdeCompra = c.fecha_compra
+            ? Math.max(
+                0,
+                Math.floor(
+                  (Date.now() - new Date(c.fecha_compra).getTime()) / 86_400_000,
+                ),
+              )
+            : 0;
+          const propiedadLabel =
+            [c.proyecto_nombre, c.modelo_nombre, c.numero_departamento ? `Depto ${c.numero_departamento}` : null]
+              .filter(Boolean)
+              .join(" · ") || "—";
+          const vctx = {
+            folio: c.folio_cuenta,
+            propiedad: propiedadLabel,
+            cliente: c.comprador_nombre || "—",
+            cliente_rfc: c.cliente_rfc ?? undefined,
+            precio_venta: c.precio_final,
+            comision_total_sozu: c.monto_factura,
+            porcentaje_comision: c.porcentaje_comision_venta,
+            estado_venta: "Vendida" as const,
+            dias_desde_apartado: diasDesdeCompra,
+          };
           return (
             <EjecucionDrawer
               open={open}
               onOpenChange={onOpenChange}
               entityType="ejecucion_cobro"
-              entityId={c.folio}
+              entityId={c.folio_cuenta}
               ventaContext={vctx}
             >
-              <EjecucionCobroContent entity={c} onClose={close} />
+              <EjecucionCobroExpedienteContent entity={c} onClose={close} />
             </EjecucionDrawer>
           );
         }
