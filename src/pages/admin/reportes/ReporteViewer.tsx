@@ -802,7 +802,11 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
     const numericColumns = columns.filter(col => {
       const firstValue = fullData[0][col];
-      return typeof firstValue === 'number' && !col.toLowerCase().includes('id');
+      if (col.toLowerCase().includes('id')) return false;
+      if (typeof firstValue === 'number') return true;
+      // Also accept string numbers (NUMERIC from some JSONB serializations)
+      if (typeof firstValue === 'string' && firstValue !== '' && !isNaN(Number(firstValue))) return true;
+      return false;
     });
 
     const totals: Record<string, number> = {};
@@ -1465,15 +1469,21 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
   };
 
   // Render clickable cuenta cell
-  const renderCuentaCell = (value: unknown, columnName: string): React.ReactNode => {
+  const renderCuentaCell = (value: unknown, columnName: string, row?: Record<string, unknown>): React.ReactNode => {
     const cuentaColumns = ['numero_cuenta', 'id_cuenta', 'id_cuenta_cobranza', 'cuenta'];
     const isAccountColumn = cuentaColumns.some(col => columnName.toLowerCase().includes(col));
-    
+
     if (!isAccountColumn) {
       return formatCellValue(value, columnName);
     }
-    
-    const displayValue = String(value || '-');
+
+    let displayValue = String(value ?? '-');
+    // If the value is a plain integer (raw cc.id, not yet formatted), format it
+    if (/^\d+$/.test(displayValue) && displayValue !== '-') {
+      const tipo = String(row?.['tipo'] || '').toLowerCase();
+      const prefix = tipo === 'producto' ? 'CCP' : 'CC';
+      displayValue = `${prefix}-${displayValue.padStart(6, '0')}`;
+    }
     const cuentaId = extractCuentaId(displayValue);
     
     // If user has permission and we have a valid cuenta ID, make it clickable
@@ -3495,7 +3505,7 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
                       <TableRow key={idx}>
                         {columns.map((col) => (
                           <TableCell key={col} className="whitespace-nowrap">
-                            {renderCuentaCell(row[col], col)}
+                            {renderCuentaCell(row[col], col, row)}
                           </TableCell>
                         ))}
                       </TableRow>
