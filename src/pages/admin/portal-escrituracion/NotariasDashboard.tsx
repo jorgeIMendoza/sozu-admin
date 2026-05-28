@@ -608,6 +608,8 @@ export function NotariasDashboard() {
     },
     onSuccess: (_, { cuentaId, notarioId }) => {
       qc.invalidateQueries({ queryKey: ['notarias-cuentas', proyectoId] });
+      // Sync App Notaría — invalidate all variants so the dashboard reflects the new assignment
+      qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
       const notName = notarioId ? (notarios.find(n => n.id === notarioId)?.notaria ?? '') : 'Sin asignar';
       toast.success(`Notaría actualizada: ${notName}`);
       // Update selected panel if open

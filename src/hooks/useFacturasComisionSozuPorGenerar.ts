@@ -15,6 +15,10 @@ import { ENVIRONMENT } from "@/lib/config";
  *   5. cuentas_cobranza.precio_final > 0
  *   6. cuentas_cobranza.porcentaje_comision_venta > 0
  *   7. propiedades.id_estatus_disponibilidad = 5 (Vendida)
+ *   8. propiedades.id_entidad_relacionada_dueno IS NOT NULL (entidad dueña configurada)
+ *   9. entidades_relacionadas.facturar_comision_sozu = true (flag activado ← clave)
+ *  10. monto_comision (precio × pct, con IVA si aplica) > 0
+ *  11. No existe ya una factura timbrada (url real presente y es_draft=false ⇒ excluida)
  *
  * Las cuentas permanecen visibles en dos estados:
  *
@@ -287,8 +291,12 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
       : null;
     const persona = oferta?.id_persona_lead ? persMap.get(oferta.id_persona_lead) : null;
 
-    // Único gate adicional en JS (estatus_disponibilidad vive en propiedades).
+    // Gates en JS (campos que viven en tablas anidadas, no en cuentas_cobranza).
+    // — Propiedad debe estar Vendida.
     if (propiedad?.id_estatus_disponibilidad !== 5) continue;
+    // — Entidad dueña configurada + flag de facturación activo (regla clave).
+    if (!entidad) continue;
+    if (!entidad.facturar_comision_sozu) continue;
 
     let tipo: FacturaComisionSozuPorGenerar["tipo"] = "Propiedad";
     if (oferta?.id_producto && producto) {
@@ -300,6 +308,8 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     const pct = Number(c.porcentaje_comision_venta ?? 0);
     const subtotal = (precio * pct) / 100;
     const total = c.iva_incluido ? subtotal * 1.16 : subtotal;
+    // — Monto de comisión > 0 (defensa adicional al filtro de precio×pct en BD).
+    if (total <= 0) continue;
 
     const entidadDuena =
       entidad?.personas?.nombre_comercial || entidad?.personas?.nombre_legal || null;
@@ -307,6 +317,9 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     const url: string | null = c.url_factura_comision ?? null;
     const urlPendiente = !!url && /pendiente-de-generar/i.test(url);
     const esDraft = !!c.es_draft_factura_comision && !!url && !urlPendiente;
+    // — Si existe factura timbrada (url real y NO draft), excluir la cuenta.
+    const yaTimbrada = !!url && !urlPendiente && !esDraft;
+    if (yaTimbrada) continue;
     const estado: EstadoFacturaSozu = esDraft ? "draft" : "por_generar";
 
     // Datos fiscales del receptor — vienen del embed personas vía la entidad dueña.

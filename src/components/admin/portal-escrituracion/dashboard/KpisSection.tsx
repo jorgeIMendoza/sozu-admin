@@ -1,6 +1,5 @@
 import { Package, FileCheck, FolderOpen, Receipt, ShieldAlert, Clock3, Wallet, Landmark, CalendarDays, Scale, PackageCheck, ShieldCheck } from 'lucide-react';
 import { useEscrituracionDashboard } from '@/contexts/EscrituracionDashboardContext';
-import { KPI_DATA } from '@/data/escrituracion/dashboardMockData';
 
 const KPI_CONFIG = [
   { key: 'inventario',            label: 'Inventario',                     icon: Package,      color: 'text-blue-500',   bg: 'bg-blue-50',   unit: 'unidades'  },
@@ -25,31 +24,27 @@ const CLICKABLE_CARDS: Record<string, { filterValue: string; activeClass: string
 };
 
 export function KpisSection() {
-  const { proyectoActivo, inventarioActivo, escrituradosActivo, demandasActivo, entregasActivo, filtroEtapa, setFiltroEtapa } = useEscrituracionDashboard();
-  const nombreProyecto = proyectoActivo?.nombre || 'Margot';
-
-  // Usamos el mock data por defecto, o ceros si no coincide con los mocks
-  const data = KPI_DATA[nombreProyecto as keyof typeof KPI_DATA] || {
-    inventario: 0,
-    escriturados: 0,
-    expedientesDocumentos: 0,
-    relacionPagos: 0,
-    alertasPld: 0,
-    enProceso: 0,
-    recursosPropios: 0,
-    creditoHipotecario: 0,
-    citas: 0,
-    demandas: 0,
-    entregas: 0,
-    postventa: 0,
-  };
+  const {
+    inventarioActivo, escrituradosActivo, expedientesDocumentosActivo,
+    relacionPagosActivo, alertasPldActivo, enProcesoActivo,
+    recursosPropiosActivo, creditoHipotecarioActivo, citasActivo,
+    demandasActivo, entregasActivo, postventaActivo,
+    filtroEtapa, setFiltroEtapa,
+  } = useEscrituracionDashboard();
 
   const displayData = {
-    ...data,
-    inventario: inventarioActivo,
-    escriturados: escrituradosActivo,
-    demandas: demandasActivo,
-    entregas: entregasActivo,
+    inventario:            inventarioActivo,
+    escriturados:          escrituradosActivo,
+    expedientesDocumentos: expedientesDocumentosActivo,
+    relacionPagos:         relacionPagosActivo,
+    alertasPld:            alertasPldActivo,
+    enProceso:             enProcesoActivo,
+    recursosPropios:       recursosPropiosActivo,
+    creditoHipotecario:    creditoHipotecarioActivo,
+    citas:                 citasActivo,
+    demandas:              demandasActivo,
+    entregas:              entregasActivo,
+    postventa:             postventaActivo,
   };
 
   return (

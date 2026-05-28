@@ -6,15 +6,18 @@ import { Link } from "react-router-dom";
 interface ComingSoonProps {
   title: string;
   description?: string;
+  hideBack?: boolean;
 }
 
-const ComingSoon = ({ title, description }: ComingSoonProps) => {
+const ComingSoon = ({ title, description, hideBack }: ComingSoonProps) => {
   return (
     <div className="space-y-6">
-      <Link to="/admin" className="inline-flex items-center text-primary hover:text-primary-hover">
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Volver al Dashboard
-      </Link>
+      {!hideBack && (
+        <Link to="/admin" className="inline-flex items-center text-primary hover:text-primary-hover">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Volver al Dashboard
+        </Link>
+      )}
 
       <Card className="max-w-md mx-auto">
         <CardContent className="text-center p-8">
@@ -23,9 +26,11 @@ const ComingSoon = ({ title, description }: ComingSoonProps) => {
           <p className="text-muted-foreground mb-6">
             {description || "Esta sección está en desarrollo y estará disponible próximamente."}
           </p>
-          <Button asChild className="bg-primary hover:bg-primary-hover">
-            <Link to="/admin">Volver al Dashboard</Link>
-          </Button>
+          {!hideBack && (
+            <Button asChild className="bg-primary hover:bg-primary-hover">
+              <Link to="/admin">Volver al Dashboard</Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

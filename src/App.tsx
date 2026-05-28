@@ -179,10 +179,19 @@ const EscPlantillas = lazyRetry(() => import("./pages/admin/portal-escrituracion
 const EscFirmas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscFirmas })));
 const EscCitas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCitas })));
 const EscEntregas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregas })));
+const EscEntregaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregaDetalle })));
 const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRPP })));
 const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
 const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
 const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
+const EscDemandas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDemandas })));
+const EscPostventa = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventa })));
+const EscPostventaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventaDetalle })));
+const EscWorkflow     = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscWorkflow })));
+const EscAppNotaria         = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotaria })));
+const EscAppNotariaUsuarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotariaUsuarios })));
+const EscAppJuridico        = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppJuridico })));
+const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotariaLogin"));
 
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
@@ -425,6 +434,7 @@ const App = () => (
                 <Route path="/registro" element={<Registro />} />
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
+                <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
                 
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
@@ -579,10 +589,27 @@ const App = () => (
                   <Route path="portal-escrituracion/firmas" element={<EscFirmas />} />
                   <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
+                  <Route path="portal-escrituracion/entregas/:id" element={<EscEntregaDetalle />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
                   <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
+                  <Route path="portal-escrituracion/demandas" element={<EscDemandas />} />
+                  <Route path="portal-escrituracion/postventa" element={<EscPostventa />} />
+                  <Route path="portal-escrituracion/postventa/:id" element={<EscPostventaDetalle />} />
+                  <Route path="portal-escrituracion/workflow" element={<EscWorkflow />} />
+                  <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
+                  <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
+                  <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  {/* Portal Notaría — independiente del Portal Escrituración */}
+                  <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
+                  {/* Portal Jurídico — independiente del Portal Escrituración */}
+                  <Route path="portal-juridico/inicio" element={<EscAppJuridico />} />
+                  {/* Administrar Notarios — menú admin principal */}
+                  <Route path="notarios/administrar" element={<EscNotarios />} />
+                  {/* Administrar Jurídico — menú admin principal */}
+                  <Route path="juridico/administrar" element={<ComingSoon title="Administrar Jurídico" hideBack />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />

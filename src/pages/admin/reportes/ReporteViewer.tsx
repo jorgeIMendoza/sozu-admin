@@ -473,10 +473,12 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
           }
           
           const { data } = await supabase.rpc('execute_safe_query', { query_text: query });
-          let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
-            value: String(item.id),
-            label: String(item.nombre_legal || item.nombre),
-          }));
+          let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || [])
+            .filter((item) => item.id != null)
+            .map((item) => ({
+              value: String(item.id),
+              label: String(item.nombre_legal || item.nombre),
+            }));
           
           // For Representante de empresa dueña, handle project filter specially
           if (filtro.nombre === 'id_proyecto' && isRepresentanteEmpresaDuena && accessibleProjectIds.length > 0) {
@@ -802,7 +804,11 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
     const numericColumns = columns.filter(col => {
       const firstValue = fullData[0][col];
-      return typeof firstValue === 'number' && !col.toLowerCase().includes('id');
+      if (col.toLowerCase().includes('id')) return false;
+      if (typeof firstValue === 'number') return true;
+      // Also accept string numbers (NUMERIC from some JSONB serializations)
+      if (typeof firstValue === 'string' && firstValue !== '' && !isNaN(Number(firstValue))) return true;
+      return false;
     });
 
     const totals: Record<string, number> = {};
@@ -1465,15 +1471,21 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
   };
 
   // Render clickable cuenta cell
-  const renderCuentaCell = (value: unknown, columnName: string): React.ReactNode => {
+  const renderCuentaCell = (value: unknown, columnName: string, row?: Record<string, unknown>): React.ReactNode => {
     const cuentaColumns = ['numero_cuenta', 'id_cuenta', 'id_cuenta_cobranza', 'cuenta'];
     const isAccountColumn = cuentaColumns.some(col => columnName.toLowerCase().includes(col));
-    
+
     if (!isAccountColumn) {
       return formatCellValue(value, columnName);
     }
-    
-    const displayValue = String(value || '-');
+
+    let displayValue = String(value ?? '-');
+    // Si el valor es un entero crudo (cc.id sin formatear), convertir a CC-XXXXXX o CCP-XXXXXX
+    if (/^\d+$/.test(displayValue)) {
+      const tipo = String(row?.['tipo'] || '').toLowerCase();
+      const prefix = tipo === 'producto' ? 'CCP' : 'CC';
+      displayValue = `${prefix}-${displayValue.padStart(6, '0')}`;
+    }
     const cuentaId = extractCuentaId(displayValue);
     
     // If user has permission and we have a valid cuenta ID, make it clickable
@@ -1817,11 +1829,16 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
                     {/* Check if this is a simple report (products) or detailed (properties) */}
                     {(() => {
-                      const hasDetailedBreakdown = summaryData.numericColumns.includes('monto_durante_obra') || 
+                      const hasDetailedBreakdown = summaryData.numericColumns.includes('monto_durante_obra') ||
                                                    summaryData.numericColumns.includes('monto_a_la_entrega');
                       const hasSimplePagado = summaryData.numericColumns.includes('pagado');
                       const hasSimpleRestante = summaryData.numericColumns.includes('restante');
-                      
+
+                      // No KPI breakdown for reports without cobranza columns (e.g. cartera activa)
+                      if (!hasDetailedBreakdown && !hasSimplePagado && !hasSimpleRestante) {
+                        return null;
+                      }
+
                       // Simple view for products report (only pagado/restante without breakdown)
                       if (!hasDetailedBreakdown && (hasSimplePagado || hasSimpleRestante)) {
                         return (
@@ -3495,7 +3512,7 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
                       <TableRow key={idx}>
                         {columns.map((col) => (
                           <TableCell key={col} className="whitespace-nowrap">
-                            {renderCuentaCell(row[col], col)}
+                            {renderCuentaCell(row[col], col, row)}
                           </TableCell>
                         ))}
                       </TableRow>
