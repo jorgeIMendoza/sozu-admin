@@ -11,8 +11,11 @@ import {
   ChevronRight,
   Loader2,
   FileText,
+  Search,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -352,6 +355,18 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const [sortDispersiones, setSortDispersiones] = useState<SortDir>("asc");
   const [pageDispersiones, setPageDispersiones] = useState(0);
 
+  // Buscador global — filtra por No. Cuenta, Comprador y No. Depa en las 4 secciones.
+  // (Externos y Dispersiones internas no tienen comprador; matchean solo por folio y No. Depa.)
+  const [search, setSearch] = useState("");
+  const searchQuery = search.trim().toLowerCase();
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPageFacturasSozu(0);
+    setPageCobros(0);
+    setPageExternos(0);
+    setPageDispersiones(0);
+  };
+
   const sortBy = <T extends { dias_desde_autorizacion: number }>(rows: T[], dir: SortDir) => {
     const factor = dir === "asc" ? -1 : 1;
     return [...rows].sort(
@@ -369,11 +384,19 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       return sortFacturasSozu === "asc" ? da - db : db - da;
     });
   }, [facturasSozu, sortFacturasSozu]);
+  const facturasSozuVisible = useMemo(() => {
+    if (!searchQuery) return facturasSozuSorted;
+    return facturasSozuSorted.filter((f) => {
+      const fields = [f.folio_cuenta, f.cliente_nombre, f.numero_departamento];
+      return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
+    });
+  }, [facturasSozuSorted, searchQuery]);
   const facturasSozuTotal = facturasSozu?.length ?? 0;
-  const facturasSozuTotalPages = Math.max(1, Math.ceil(facturasSozuTotal / PAGE_SIZE));
+  const facturasSozuVisibleCount = facturasSozuVisible.length;
+  const facturasSozuTotalPages = Math.max(1, Math.ceil(facturasSozuVisibleCount / PAGE_SIZE));
   const facturasSozuPage = useMemo(
-    () => facturasSozuSorted.slice(pageFacturasSozu * PAGE_SIZE, (pageFacturasSozu + 1) * PAGE_SIZE),
-    [facturasSozuSorted, pageFacturasSozu],
+    () => facturasSozuVisible.slice(pageFacturasSozu * PAGE_SIZE, (pageFacturasSozu + 1) * PAGE_SIZE),
+    [facturasSozuVisible, pageFacturasSozu],
   );
   const facturasSozuMonto = useMemo(
     () => (facturasSozu ?? []).reduce((s, r) => s + r.monto_comision, 0),
@@ -389,8 +412,16 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       return sortCobros === "asc" ? da - db : db - da;
     });
   }, [cobros, sortCobros]);
+  const cobrosVisible = useMemo(() => {
+    if (!searchQuery) return cobrosSorted;
+    return cobrosSorted.filter((c) => {
+      const fields = [c.folio_cuenta, c.comprador_nombre, c.numero_departamento];
+      return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
+    });
+  }, [cobrosSorted, searchQuery]);
   const cobrosTotal = cobros?.length ?? 0;
-  const cobrosTotalPages = Math.max(1, Math.ceil(cobrosTotal / PAGE_SIZE));
+  const cobrosVisibleCount = cobrosVisible.length;
+  const cobrosTotalPages = Math.max(1, Math.ceil(cobrosVisibleCount / PAGE_SIZE));
   const cobrosMonto = useMemo(
     () => (cobros ?? []).reduce((s, r) => s + r.monto_factura, 0),
     [cobros],
@@ -411,8 +442,17 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       (a, b) => factor * (a.dias_desde_devengo - b.dias_desde_devengo),
     );
   }, [externosFiltrados, sortExternos]);
+  // Externos no tienen comprador en el dataset: matchean por folio (No. Cuenta) y No. Depa.
+  const externosVisible = useMemo(() => {
+    if (!searchQuery) return externosSorted;
+    return externosSorted.filter((p) => {
+      const fields = [formatCuentaFolio(p), p.numero_departamento];
+      return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
+    });
+  }, [externosSorted, searchQuery]);
   const externosTotal = externosFiltrados.length;
-  const externosTotalPages = Math.max(1, Math.ceil(externosTotal / PAGE_SIZE));
+  const externosVisibleCount = externosVisible.length;
+  const externosTotalPages = Math.max(1, Math.ceil(externosVisibleCount / PAGE_SIZE));
   const externosMonto = useMemo(
     () => externosFiltrados.reduce((s, r) => s + r.monto_comision, 0),
     [externosFiltrados],
@@ -427,10 +467,19 @@ export default function PortalAdministracionBandejaEjecucionPage() {
       return sortDispersiones === "asc" ? da - db : db - da;
     });
   }, [dispersionesInternas, sortDispersiones]);
+  // Dispersiones internas no tienen comprador en el dataset: matchean por folio y No. Depa.
+  const dispersionesInternasVisible = useMemo(() => {
+    if (!searchQuery) return dispersionesInternasSorted;
+    return dispersionesInternasSorted.filter((d) => {
+      const fields = [d.folio_cuenta, d.numero_departamento];
+      return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
+    });
+  }, [dispersionesInternasSorted, searchQuery]);
   const dispersionesInternasTotal = dispersionesInternas?.length ?? 0;
+  const dispersionesInternasVisibleCount = dispersionesInternasVisible.length;
   const dispersionesInternasTotalPages = Math.max(
     1,
-    Math.ceil(dispersionesInternasTotal / PAGE_SIZE),
+    Math.ceil(dispersionesInternasVisibleCount / PAGE_SIZE),
   );
   const dispersionesInternasMonto = useMemo(
     () => (dispersionesInternas ?? []).reduce((s, r) => s + r.monto_a_dispersar, 0),
@@ -440,9 +489,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const paginate = <T,>(rows: T[], page: number) =>
     rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const cobrosPage = paginate(cobrosSorted, pageCobros);
-  const externosPage = paginate(externosSorted, pageExternos);
-  const dispersionesInternasPage = paginate(dispersionesInternasSorted, pageDispersiones);
+  const cobrosPage = paginate(cobrosVisible, pageCobros);
+  const externosPage = paginate(externosVisible, pageExternos);
+  const dispersionesInternasPage = paginate(dispersionesInternasVisible, pageDispersiones);
 
   const scrollTo = (ref: React.RefObject<HTMLDivElement>) => {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -455,6 +504,31 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         description="Operaciones autorizadas por Dirección · pendientes de ejecutar"
         action={<Badge variant="outline">Datos demo</Badge>}
       />
+
+      {/* ─── Buscador global ─── */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Buscar por No. Cuenta, Comprador o No. Depa…"
+            className="pl-9 pr-9"
+            aria-label="Buscar en Bandeja de Ejecución"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange("")}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ─── KPIs ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
@@ -523,7 +597,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           iconColor="bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300"
           title="Facturas Comisión SOZU por Generar"
           description="Cuentas de cobranza con estatus Vendida sin factura SOZU emitida. Requieren generación de CFDI para iniciar cobranza al desarrollador."
-          count={facturasSozuTotal}
+          count={facturasSozuVisibleCount}
           right={
             <SortToggle
               value={sortFacturasSozu}
@@ -546,7 +620,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : facturasSozuPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay facturas SOZU pendientes de generar.
+                {searchQuery
+                  ? "Sin resultados que coincidan con la búsqueda."
+                  : "No hay facturas SOZU pendientes de generar."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -644,7 +720,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         <PaginationBar
           page={pageFacturasSozu}
           totalPages={facturasSozuTotalPages}
-          totalCount={facturasSozuTotal}
+          totalCount={facturasSozuVisibleCount}
           pageSize={PAGE_SIZE}
           onPageChange={setPageFacturasSozu}
         />
@@ -657,7 +733,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           iconColor="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
           title="Cobros por gestionar"
           description="Cuentas con factura SOZU timbrada — esperando autorización del Director o ya autorizadas/declinadas"
-          count={cobrosTotal}
+          count={cobrosVisibleCount}
           right={
             <SortToggle
               value={sortCobros}
@@ -680,7 +756,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : cobrosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                Sin cobros pendientes de gestión.
+                {searchQuery
+                  ? "Sin resultados que coincidan con la búsqueda."
+                  : "Sin cobros pendientes de gestión."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -778,7 +856,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         <PaginationBar
           page={pageCobros}
           totalPages={cobrosTotalPages}
-          totalCount={cobrosTotal}
+          totalCount={cobrosVisibleCount}
           pageSize={PAGE_SIZE}
           onPageChange={setPageCobros}
         />
@@ -791,7 +869,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           iconColor="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
           title="Pagos a externos por ejecutar"
           description="Comisiones a inmobiliarias, brokers, aliados y agentes externos — autorizadas por Dirección y pendientes de pago"
-          count={externosTotal}
+          count={externosVisibleCount}
           right={
             <SortToggle
               value={sortExternos}
@@ -814,7 +892,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : externosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay pagos a externos pendientes de ejecutar.
+                {searchQuery
+                  ? "Sin resultados que coincidan con la búsqueda."
+                  : "No hay pagos a externos pendientes de ejecutar."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -924,7 +1004,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         <PaginationBar
           page={pageExternos}
           totalPages={externosTotalPages}
-          totalCount={externosTotal}
+          totalCount={externosVisibleCount}
           pageSize={PAGE_SIZE}
           onPageChange={setPageExternos}
         />
@@ -937,7 +1017,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           iconColor="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
           title="Dispersiones internas pendientes"
           description="Cuentas con comisiones internas autorizadas por Dirección — listas para dispersar al equipo SOZU"
-          count={dispersionesInternasTotal}
+          count={dispersionesInternasVisibleCount}
           right={
             <SortToggle
               value={sortDispersiones}
@@ -960,7 +1040,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : dispersionesInternasPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay dispersiones internas pendientes.
+                {searchQuery
+                  ? "Sin resultados que coincidan con la búsqueda."
+                  : "No hay dispersiones internas pendientes."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1034,7 +1116,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         <PaginationBar
           page={pageDispersiones}
           totalPages={dispersionesInternasTotalPages}
-          totalCount={dispersionesInternasTotal}
+          totalCount={dispersionesInternasVisibleCount}
           pageSize={PAGE_SIZE}
           onPageChange={setPageDispersiones}
         />

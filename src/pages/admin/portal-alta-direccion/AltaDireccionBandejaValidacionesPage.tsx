@@ -1336,7 +1336,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
               </div>
             ) : VENTAS_FACTURAR.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay ventas pendientes de facturar al desarrollador.
+                No hay ventas pendientes a validar para que SOZU cobre su comisión.
               </div>
             ) : (
               <div className="overflow-x-auto">
