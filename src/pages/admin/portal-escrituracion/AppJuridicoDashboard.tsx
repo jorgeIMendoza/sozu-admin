@@ -938,12 +938,6 @@ function AppJuridicoDashboardInner() {
   return (
     <div className="space-y-5">
 
-      {/* Dev debug box — remove when dashboard confirmed working */}
-      {import.meta.env.DEV && (
-        <div className="mb-2 rounded border border-blue-200 bg-blue-50 p-3 text-xs font-mono text-blue-800">
-          Portal Jurídico debug: mounted | authLoading={String(authLoading)} | isAdmin={String(isAdmin)} | canView={String(canView)} | rows={rawDemandas?.length ?? 0} | loading={String(isLoading)}
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
