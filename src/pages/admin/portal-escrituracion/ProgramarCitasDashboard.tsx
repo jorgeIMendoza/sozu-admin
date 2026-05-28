@@ -46,14 +46,18 @@ interface CitaRow {
 }
 
 interface NuevaCitaForm {
-  idTipoCita: number | null;
-  fecha: Date;
-  horaInicio: string;
-  horaFin: string;
-  idPersona: number | null;
-  clienteSearch: string;
-  ubicacion: string;
-  notas: string;
+  idTipoCita:    number | null;
+  fecha:         Date;
+  horaInicio:    string;
+  horaFin:       string;
+  // Unidad seleccionada (auto-rellena idPersona)
+  unidadId:      number | null;   // propiedades.id
+  unidadLabel:   string;          // '1001 · Torre'
+  clienteNombre: string;          // nombre del comprador
+  torreNombre:   string;          // nombre del edificio
+  idPersona:     number | null;   // auto-llenado desde comprador
+  ubicacion:     string;
+  notas:         string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -323,37 +327,43 @@ function NuevaCitaDialog({
 }) {
   const qc = useQueryClient();
 
-  const [form, setForm] = useState<NuevaCitaForm>({
-    idTipoCita:    null,
+  const EMPTY_FORM: NuevaCitaForm = {
+    idTipoCita:    tiposCita.length === 1 ? tiposCita[0].id : null,
     fecha:         defaultDate,
     horaInicio:    '10:00',
     horaFin:       '11:00',
+    unidadId:      null,
+    unidadLabel:   '',
+    clienteNombre: '',
+    torreNombre:   '',
     idPersona:     null,
-    clienteSearch: '',
     ubicacion:     '',
     notas:         '',
-  });
-  const [personaResults, setPersonaResults] = useState<{ id: number; nombre_legal: string }[]>([]);
-  const [searchingPersona, setSearchingPersona] = useState(false);
-  const [showPersonaResults, setShowPersonaResults] = useState(false);
-  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const personaDropRef = useRef<HTMLDivElement>(null);
+  };
+
+  const [form, setForm] = useState<NuevaCitaForm>(EMPTY_FORM);
+  // Búsqueda de unidad (local — no en form)
+  const [unidadSearch, setUnidadSearch]     = useState('');
+  const [unidadDropOpen, setUnidadDropOpen] = useState(false);
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setForm({
-        idTipoCita: tiposCita.length === 1 ? tiposCita[0].id : null,
-        fecha: defaultDate,
-        horaInicio: '10:00',
-        horaFin: '11:00',
-        idPersona: null,
-        clienteSearch: '',
-        ubicacion: '',
-        notas: '',
+        idTipoCita:    tiposCita.length === 1 ? tiposCita[0].id : null,
+        fecha:         defaultDate,
+        horaInicio:    '10:00',
+        horaFin:       '11:00',
+        unidadId:      null,
+        unidadLabel:   '',
+        clienteNombre: '',
+        torreNombre:   '',
+        idPersona:     null,
+        ubicacion:     '',
+        notas:         '',
       });
-      setPersonaResults([]);
-      setShowPersonaResults(false);
+      setUnidadSearch('');
+      setUnidadDropOpen(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -363,29 +373,84 @@ function NuevaCitaDialog({
     setForm(f => ({ ...f, fecha: defaultDate }));
   }, [defaultDate]);
 
-  // Search personas
-  const handleClienteSearch = (val: string) => {
-    setForm(f => ({ ...f, clienteSearch: val, idPersona: null }));
-    if (searchRef.current) clearTimeout(searchRef.current);
-    if (val.trim().length < 2) { setPersonaResults([]); setShowPersonaResults(false); return; }
-    searchRef.current = setTimeout(async () => {
-      setSearchingPersona(true);
-      const { data } = await supabase
-        .from('personas')
-        .select('id, nombre_legal')
-        .ilike('nombre_legal', `%${val}%`)
-        .eq('activo', true)
-        .limit(8);
-      setPersonaResults(data || []);
-      setShowPersonaResults(true);
-      setSearchingPersona(false);
-    }, 300);
-  };
+  // ── Precargar unidades del proyecto ──────────────────────────────────────
+  const { data: unidades = [], isLoading: loadingUnidades } = useQuery({
+    queryKey: ['citas-unidades', proyectoId],
+    queryFn: async (): Promise<{ propId: number; numero: string; label: string; torreNombre: string; clienteNombre: string; idPersona: number | null }[]> => {
+      if (!proyectoId) return [];
 
-  const selectPersona = (p: { id: number; nombre_legal: string }) => {
-    setForm(f => ({ ...f, idPersona: p.id, clienteSearch: p.nombre_legal }));
-    setShowPersonaResults(false);
-  };
+      // 1. Edificios del proyecto
+      const { data: edificios } = await supabase
+        .from('edificios').select('id, nombre')
+        .eq('id_proyecto', proyectoId).eq('activo', true);
+      const edifMap: Record<number, string> = Object.fromEntries((edificios ?? []).map(e => [e.id, e.nombre]));
+      const edifIds = Object.keys(edifMap).map(Number);
+      if (!edifIds.length) return [];
+
+      // 2. Modelos
+      const { data: modelos } = await supabase
+        .from('edificios_modelos').select('id, id_edificio').in('id_edificio', edifIds);
+      const modeloEdifMap: Record<number, number> = Object.fromEntries((modelos ?? []).map(m => [m.id, m.id_edificio]));
+      const modeloIds = Object.keys(modeloEdifMap).map(Number);
+      if (!modeloIds.length) return [];
+
+      // 3. Propiedades activas
+      const { data: props } = await supabase
+        .from('propiedades').select('id, numero_propiedad, id_edificio_modelo')
+        .in('id_edificio_modelo', modeloIds).eq('activo', true).order('numero_propiedad');
+      if (!props?.length) return [];
+      const propIds = props.map(p => p.id);
+
+      // 4. Cuentas de cobranza
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza').select('id, id_propiedad').in('id_propiedad', propIds).eq('activo', true);
+      const propToCuenta: Record<number, number> = Object.fromEntries((cuentas ?? []).map(c => [c.id_propiedad, c.id]));
+      const cuentaIds = (cuentas ?? []).map(c => c.id);
+
+      // 5. Compradores → persona
+      const { data: compradores } = await supabase
+        .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+      const cuentaToPersonaId: Record<number, number> = {};
+      (compradores ?? []).forEach(c => { if (!cuentaToPersonaId[c.id_cuenta_cobranza]) cuentaToPersonaId[c.id_cuenta_cobranza] = c.id_persona; });
+
+      // 6. Nombres de personas
+      const personaIds = [...new Set(Object.values(cuentaToPersonaId))];
+      let personaMap: Record<number, string> = {};
+      if (personaIds.length) {
+        const { data: personas } = await supabase
+          .from('personas').select('id, nombre_legal').in('id', personaIds as number[]);
+        personaMap = Object.fromEntries((personas ?? []).map(p => [p.id, p.nombre_legal ?? '—']));
+      }
+
+      return props
+        .filter(p => propToCuenta[p.id])
+        .map(p => {
+          const edifId = modeloEdifMap[p.id_edificio_modelo];
+          const torreNombre = edifMap[edifId] ?? '—';
+          const cuentaId = propToCuenta[p.id];
+          const personaId = cuentaToPersonaId[cuentaId] ?? null;
+          return {
+            propId:       p.id,
+            numero:       p.numero_propiedad ?? '—',
+            label:        `${p.numero_propiedad ?? '—'} · ${torreNombre}`,
+            torreNombre,
+            clienteNombre: personaId ? (personaMap[personaId] ?? '—') : '—',
+            idPersona:    personaId,
+          };
+        });
+    },
+    enabled: open && !!proyectoId,
+    staleTime: 60_000,
+  });
+
+  // Filtrado de unidades por búsqueda de texto
+  const unidadesFiltradas = useMemo(() => {
+    const q = unidadSearch.toLowerCase().trim();
+    if (!q) return unidades.slice(0, 12);
+    return unidades
+      .filter(u => u.numero.toLowerCase().includes(q) || u.clienteNombre.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [unidades, unidadSearch]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -521,42 +586,104 @@ function NuevaCitaDialog({
             </div>
           </div>
 
-          {/* Cliente */}
+          {/* Unidad */}
           <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Cliente</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Unidad *</label>
             <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                value={form.clienteSearch}
-                onChange={e => handleClienteSearch(e.target.value)}
-                onFocus={() => { if (personaResults.length > 0) setShowPersonaResults(true); }}
-                placeholder="Buscar por nombre…"
-                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                placeholder={loadingUnidades ? 'Cargando unidades…' : 'Escribe el número de unidad o nombre del cliente…'}
+                value={form.unidadId ? form.unidadLabel : unidadSearch}
+                readOnly={!!form.unidadId}
+                onChange={e => {
+                  setUnidadSearch(e.target.value);
+                  setUnidadDropOpen(true);
+                  if (!e.target.value) setForm(f => ({ ...f, unidadId: null, unidadLabel: '', clienteNombre: '', torreNombre: '', idPersona: null }));
+                }}
+                onFocus={() => { if (!form.unidadId) setUnidadDropOpen(true); }}
+                onBlur={() => setTimeout(() => {
+                  // Auto-seleccionar si hay exactamente 1 resultado
+                  if (!form.unidadId && unidadesFiltradas.length === 1) {
+                    const u = unidadesFiltradas[0];
+                    setForm(f => ({ ...f, unidadId: u.propId, unidadLabel: u.label, clienteNombre: u.clienteNombre, torreNombre: u.torreNombre, idPersona: u.idPersona }));
+                    setUnidadSearch(u.label);
+                  }
+                  setUnidadDropOpen(false);
+                }, 150)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && unidadesFiltradas.length > 0) {
+                    const u = unidadesFiltradas[0];
+                    setForm(f => ({ ...f, unidadId: u.propId, unidadLabel: u.label, clienteNombre: u.clienteNombre, torreNombre: u.torreNombre, idPersona: u.idPersona }));
+                    setUnidadSearch(u.label);
+                    setUnidadDropOpen(false);
+                    e.preventDefault();
+                  }
+                  if (e.key === 'Escape') setUnidadDropOpen(false);
+                }}
+                className={`w-full pl-8 pr-8 py-2 text-sm border rounded-xl outline-none focus:ring-2 focus:ring-indigo-300 ${
+                  form.unidadId
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-default'
+                    : 'bg-white border-slate-200'
+                }`}
               />
-              {searchingPersona && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-slate-400" />
-              )}
-              {form.idPersona && !searchingPersona && (
-                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-500" />
-              )}
-              {showPersonaResults && personaResults.length > 0 && (
-                <div
-                  ref={personaDropRef}
-                  className="absolute top-full left-0 right-0 mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto"
+              {form.unidadId && (
+                <button
+                  type="button"
+                  onClick={() => { setForm(f => ({ ...f, unidadId: null, unidadLabel: '', clienteNombre: '', torreNombre: '', idPersona: null })); setUnidadSearch(''); setUnidadDropOpen(false); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
                 >
-                  {personaResults.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => selectPersona(p)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-slate-700"
-                    >
-                      {p.nombre_legal}
-                    </button>
-                  ))}
-                </div>
+                  <X className="w-3 h-3" />
+                </button>
               )}
             </div>
+
+            {/* Resultados inline */}
+            {unidadDropOpen && !form.unidadId && (
+              <div className="mt-1 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                {unidadesFiltradas.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-slate-400 text-center">
+                    {loadingUnidades ? 'Cargando…' : unidadSearch ? 'Sin resultados para esa búsqueda' : 'Escribe para buscar…'}
+                  </p>
+                ) : (
+                  <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+                    {unidadesFiltradas.map(u => (
+                      <button
+                        key={u.propId}
+                        type="button"
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setForm(f => ({ ...f, unidadId: u.propId, unidadLabel: u.label, clienteNombre: u.clienteNombre, torreNombre: u.torreNombre, idPersona: u.idPersona }));
+                          setUnidadSearch(u.label);
+                          setUnidadDropOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 flex items-center gap-3 transition-colors"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                          <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-800">{u.label}</p>
+                          <p className="text-xs text-slate-400 truncate">{u.clienteNombre}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Card de confirmación de unidad identificada */}
+            {form.unidadId && (
+              <div className="mt-2 border border-emerald-200 rounded-xl bg-emerald-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Unidad identificada
+                </p>
+                <p className="text-xs text-slate-600">Cliente: <span className="font-medium text-slate-800">{form.clienteNombre}</span></p>
+                <p className="text-xs text-slate-500">Proyecto · Torre: <span className="font-medium">{proyectoNombre} · {form.torreNombre}</span></p>
+              </div>
+            )}
           </div>
 
           {/* Proyecto (read-only) */}

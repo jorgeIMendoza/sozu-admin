@@ -1,6 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ChevronLeft,
   Phone,
@@ -25,6 +28,7 @@ import {
   History,
   Info,
   X,
+  Loader2,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -97,10 +101,34 @@ interface TicketDetalle {
   comentarios: ComentarioItem[];
 }
 
-// ─── Demo Data ────────────────────────────────────────────────────────────────
+// ─── Helper: map tipo_evento to icono key ─────────────────────────────────────
 
-const DEMO_DETALLE: Record<string, TicketDetalle> = {
-  'PV-2031': {
+function tipoEventoToIcono(tipo: string): string {
+  const map: Record<string, string> = {
+    CREACION: 'plus',
+    ASIGNACION: 'user',
+    CAMBIO_ESTATUS: 'activity',
+    EVIDENCIA_INICIAL: 'camera',
+    EVIDENCIA_REPARACION: 'camera',
+    DIAGNOSTICO: 'search',
+    VISITA: 'calendar',
+    REPARACION: 'wrench',
+    CONFIRMACION_CLIENTE: 'send',
+    RECHAZO_CLIENTE: 'alert',
+    CIERRE: 'check',
+    REAPERTURA: 'activity',
+    ESCALAMIENTO: 'alert',
+    NOTA: 'activity',
+    SLA_VENCIDO: 'alert',
+  };
+  return map[tipo] ?? 'activity';
+}
+
+// ─── Badge / Color Meta (previously preceded by demo data, now removed) ──────
+// Real data loaded from DB in PostventaDetalle component
+
+const _placeholderForTypeCheck: Record<string, TicketDetalle> = {
+  'PLACEHOLDER': {
     id: 'PV-2031',
     unidad: '305B',
     torre: 'Torre B',
@@ -483,109 +511,324 @@ function GarantiaProgress({ ticket }: { ticket: TicketDetalle }) {
 export function PostventaDetalle() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { profile } = useAuth();
 
-  const ticket = DEMO_DETALLE[id ?? 'PV-2031'] ?? DEMO_DETALLE['PV-2031'];
+  const numericId = parseInt((id ?? '').replace('PV-', '')) || 0;
 
-  // ── Local state ──
+  // ── Queries ─────────────────────────────────────────────────────────────────
+
+  const { data: ticketDB, isLoading: ticketLoading, refetch: refetchTicket } = useQuery({
+    queryKey: ['pv-ticket-detalle', numericId],
+    queryFn: async () => {
+      if (!numericId) return null;
+      const { data, error } = await (supabase as any)
+        .from('postventa_tickets')
+        .select(`
+          id, id_propiedad, id_cuenta_cobranza, id_postventa_categoria_garantia,
+          subcategoria, descripcion, canal_recepcion, prioridad, estatus,
+          garantia_estatus, fecha_vencimiento_garantia, sla_horas,
+          fecha_limite_sla, sla_cumplido, responsable,
+          diagnostico, causa_probable, solucion_propuesta,
+          descripcion_reparacion, piezas_reemplazadas,
+          fecha_reparacion, fecha_creacion, fecha_actualizacion,
+          postventa_categorias_garantia(id, nombre)
+        `)
+        .eq('id', numericId)
+        .single();
+      if (error) { console.error('Error fetching ticket:', error); return null; }
+      return data as any;
+    },
+    enabled: !!numericId,
+  });
+
+  const { data: comentariosDB = [], refetch: refetchComentarios } = useQuery({
+    queryKey: ['pv-comentarios', numericId],
+    queryFn: async () => {
+      if (!numericId) return [];
+      const { data } = await (supabase as any)
+        .from('postventa_comentarios')
+        .select('id, comentario, tipo, creado_por, fecha_creacion')
+        .eq('id_postventa_ticket', numericId)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: !!numericId,
+  });
+
+  const { data: actividadDB = [], refetch: refetchActividad } = useQuery({
+    queryKey: ['pv-actividad', numericId],
+    queryFn: async () => {
+      if (!numericId) return [];
+      const { data } = await (supabase as any)
+        .from('postventa_log_actividades')
+        .select('id, tipo_evento, descripcion, creado_por, fecha_creacion')
+        .eq('id_postventa_ticket', numericId)
+        .order('fecha_creacion', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: !!numericId,
+  });
+
+  const { data: evidenciasDB = [], refetch: refetchEvidencias } = useQuery({
+    queryKey: ['pv-evidencias', numericId],
+    queryFn: async () => {
+      if (!numericId) return [];
+      const { data } = await (supabase as any)
+        .from('postventa_evidencias')
+        .select('id, tipo_evidencia, tipo_archivo, url, nombre, subido_por, fecha_creacion')
+        .eq('id_postventa_ticket', numericId)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: !!numericId,
+  });
+
+  // ── Local state ─────────────────────────────────────────────────────────────
+
   const [activeTab, setActiveTab] = useState<TabId>('detalle');
-
-  // Detalle tab editable fields
-  const [diagnostico, setDiagnostico] = useState(ticket.diagnostico);
-  const [causaProbable, setCausaProbable] = useState(ticket.causaProbable);
-  const [solucionPropuesta, setSolucionPropuesta] = useState(ticket.solucionPropuesta);
-
-  // Evidencia reparacion tab
-  const [descReparacion, setDescReparacion] = useState(ticket.descripcionReparacion);
-  const [piezas, setPiezas] = useState(ticket.piezasReemplazadas);
-  const [fechaReparacion, setFechaReparacion] = useState(ticket.fechaReparacion ?? '');
+  const [diagnostico, setDiagnostico] = useState('');
+  const [causaProbable, setCausaProbable] = useState('');
+  const [solucionPropuesta, setSolucionPropuesta] = useState('');
+  const [descReparacion, setDescReparacion] = useState('');
+  const [piezas, setPiezas] = useState('');
+  const [fechaReparacion, setFechaReparacion] = useState('');
   const [evidReparacionFiles, setEvidreparacionFiles] = useState<File[]>([]);
-  const [localEvidReparacion, setLocalEvidReparacion] = useState<EvidenciaItem[]>(ticket.evidenciaReparacion);
-
-  // Evidencia inicial upload
-  const [localEvidInicial, setLocalEvidInicial] = useState<EvidenciaItem[]>(ticket.evidenciaInicial);
-
-  // Comentarios
-  const [comentarios, setComentarios] = useState<ComentarioItem[]>(ticket.comentarios);
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [tipoComentario, setTipoComentario] = useState<'INTERNO' | 'CLIENTE' | 'PROVEEDOR'>('CLIENTE');
-
-  // File input refs
   const fileInputInicialRef = useRef<HTMLInputElement>(null);
   const fileInputReparacionRef = useRef<HTMLInputElement>(null);
 
-  // ── Derived ──
-  const canCerrar = localEvidReparacion.length > 0 && descReparacion.trim().length > 0;
-  const canSolicitarConfirmacion =
-    localEvidReparacion.length > 0 && descReparacion.trim().length > 0;
-  const sinProveedor =
-    ticket.proveedor === 'Sin proveedor' || ticket.proveedor === '';
+  // ── Sync editable fields from DB ─────────────────────────────────────────────
 
-  // ── Handlers ──
+  useEffect(() => {
+    if (ticketDB) {
+      setDiagnostico(ticketDB.diagnostico ?? '');
+      setCausaProbable(ticketDB.causa_probable ?? '');
+      setSolucionPropuesta(ticketDB.solucion_propuesta ?? '');
+      setDescReparacion(ticketDB.descripcion_reparacion ?? '');
+      setPiezas(ticketDB.piezas_reemplazadas ?? '');
+      setFechaReparacion(ticketDB.fecha_reparacion ?? '');
+    }
+  }, [ticketDB]);
 
-  function handleGuardarDetalle() {
+  // ── Loading / Not Found ──────────────────────────────────────────────────────
+
+  if (ticketLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-500">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-sm">Cargando ticket…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ticketDB) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
+        <AlertTriangle className="w-10 h-10 text-amber-500" />
+        <p className="text-slate-600 text-sm font-medium">Ticket {id} no encontrado</p>
+        <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:underline">
+          Volver al dashboard
+        </button>
+      </div>
+    );
+  }
+
+  // ── Derived from DB ──────────────────────────────────────────────────────────
+
+  const ahora = new Date();
+  const limiteSla = ticketDB.fecha_limite_sla ? new Date(ticketDB.fecha_limite_sla) : null;
+  const slaVencido = limiteSla ? limiteSla < ahora && ticketDB.sla_cumplido !== true : false;
+  const slaLabel = limiteSla
+    ? (slaVencido ? '⚠ Vencido' : `✓ ${limiteSla.toLocaleDateString('es-MX')}`)
+    : '—';
+
+  const evidInicial: EvidenciaItem[] = evidenciasDB
+    .filter((e: any) => e.tipo_evidencia === 'INICIAL')
+    .map((e: any) => ({
+      nombre: e.nombre ?? 'archivo',
+      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : 'FOTO',
+      fecha: e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleString('es-MX') : '—',
+      subidoPor: e.subido_por ?? '—',
+    }));
+
+  const evidReparacion: EvidenciaItem[] = evidenciasDB
+    .filter((e: any) => e.tipo_evidencia === 'REPARACION')
+    .map((e: any) => ({
+      nombre: e.nombre ?? 'archivo',
+      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : 'FOTO',
+      fecha: e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleString('es-MX') : '—',
+      subidoPor: e.subido_por ?? '—',
+    }));
+
+  const actividadMapped: ActividadItem[] = actividadDB.map((a: any) => ({
+    tipo: a.tipo_evento ?? 'NOTA',
+    descripcion: a.descripcion ?? '',
+    fecha: a.fecha_creacion ? new Date(a.fecha_creacion).toLocaleString('es-MX') : '—',
+    por: a.creado_por ?? 'Sistema',
+    icono: tipoEventoToIcono(a.tipo_evento ?? ''),
+  }));
+
+  const comentariosMapped: ComentarioItem[] = comentariosDB.map((c: any) => ({
+    texto: c.comentario ?? '',
+    tipo: (c.tipo ?? 'INTERNO') as 'INTERNO' | 'CLIENTE' | 'PROVEEDOR',
+    fecha: c.fecha_creacion ? new Date(c.fecha_creacion).toLocaleString('es-MX') : '—',
+    por: c.creado_por ?? '—',
+  }));
+
+  // Build TicketDetalle for render helpers
+  const ticket: TicketDetalle = {
+    id: `PV-${ticketDB.id}`,
+    unidad: '—',
+    torre: '—',
+    proyecto: '—',
+    cliente: '—',
+    telefono: '—',
+    fechaEntrega: '—',
+    fechaCreacion: ticketDB.fecha_creacion
+      ? new Date(ticketDB.fecha_creacion).toLocaleString('es-MX') : '—',
+    categoria: ticketDB.postventa_categorias_garantia?.nombre ?? '—',
+    subcategoria: ticketDB.subcategoria ?? '—',
+    descripcion: ticketDB.descripcion ?? '',
+    prioridad: ticketDB.prioridad as PrioridadTicket,
+    estatus: ticketDB.estatus as EstatusTicket,
+    garantiaEstatus: (ticketDB.garantia_estatus ?? 'VIGENTE') as GarantiaEstatus,
+    fechaVencimientoGarantia: ticketDB.fecha_vencimiento_garantia
+      ? new Date(ticketDB.fecha_vencimiento_garantia + 'T00:00:00').toLocaleDateString('es-MX')
+      : '—',
+    slaLabel,
+    slaVencido,
+    responsable: ticketDB.responsable ?? 'Sin asignar',
+    proveedor: 'Sin proveedor',
+    diagnostico,
+    causaProbable,
+    solucionPropuesta,
+    descripcionReparacion: descReparacion,
+    piezasReemplazadas: piezas,
+    fechaReparacion: fechaReparacion || null,
+    evidenciaInicial: evidInicial,
+    evidenciaReparacion: evidReparacion,
+    actividad: actividadMapped,
+    comentarios: comentariosMapped,
+  };
+
+  const canCerrar = evidReparacion.length > 0 && descReparacion.trim().length > 0;
+  const canSolicitarConfirmacion = evidReparacion.length > 0 && descReparacion.trim().length > 0;
+  const sinProveedor = true; // no id_proveedor in wizard for now
+
+  // ── DB helpers ───────────────────────────────────────────────────────────────
+
+  async function insertLog(tipoEvento: string, descripcionEvento: string) {
+    await (supabase as any).from('postventa_log_actividades').insert({
+      id_postventa_ticket: numericId,
+      tipo_evento: tipoEvento,
+      descripcion: descripcionEvento,
+      creado_por: profile?.email ?? 'admin',
+    });
+  }
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  async function handleGuardarDetalle() {
+    const { error } = await (supabase as any)
+      .from('postventa_tickets')
+      .update({
+        diagnostico: diagnostico || null,
+        causa_probable: causaProbable || null,
+        solucion_propuesta: solucionPropuesta || null,
+      })
+      .eq('id', numericId);
+    if (error) { toast.error(error.message); return; }
+    await insertLog('DIAGNOSTICO', 'Diagnóstico / causa / solución propuesta actualizados');
     toast.success('Diagnóstico guardado correctamente');
+    refetchTicket();
+    refetchActividad();
+  }
+
+  async function handleGuardarReparacion() {
+    if (!descReparacion.trim()) {
+      toast.error('La descripción de reparación es requerida');
+      return;
+    }
+    const { error } = await (supabase as any)
+      .from('postventa_tickets')
+      .update({
+        descripcion_reparacion: descReparacion || null,
+        piezas_reemplazadas: piezas || null,
+        fecha_reparacion: fechaReparacion || null,
+        estatus: 'EN_REPARACION',
+      })
+      .eq('id', numericId);
+    if (error) { toast.error(error.message); return; }
+    await insertLog('REPARACION', `Reparación registrada${fechaReparacion ? ` — fecha: ${fechaReparacion}` : ''}`);
+    toast.success('Evidencia de reparación guardada correctamente');
+    refetchTicket();
+    refetchActividad();
+  }
+
+  async function handleEnviarComentario() {
+    if (!nuevoComentario.trim()) {
+      toast.error('Escribe un comentario antes de enviar');
+      return;
+    }
+    const { error } = await (supabase as any).from('postventa_comentarios').insert({
+      id_postventa_ticket: numericId,
+      comentario: nuevoComentario.trim(),
+      tipo: tipoComentario,
+      creado_por: profile?.email ?? 'admin',
+    });
+    if (error) { toast.error(error.message); return; }
+    await insertLog('NOTA', `Comentario ${tipoComentario.toLowerCase()} agregado`);
+    setNuevoComentario('');
+    toast.success('Comentario enviado');
+    refetchComentarios();
+    refetchActividad();
+  }
+
+  async function handleCerrarTicket() {
+    if (!canCerrar) return;
+    const { error } = await (supabase as any)
+      .from('postventa_tickets')
+      .update({ estatus: 'CERRADO', sla_cumplido: !slaVencido })
+      .eq('id', numericId);
+    if (error) { toast.error(error.message); return; }
+    await insertLog('CIERRE', 'Ticket cerrado');
+    toast.success('Ticket cerrado exitosamente');
+    refetchTicket();
+    refetchActividad();
+  }
+
+  async function handleSolicitarConfirmacion() {
+    const { error } = await (supabase as any)
+      .from('postventa_tickets')
+      .update({ estatus: 'PENDIENTE_CLIENTE' })
+      .eq('id', numericId);
+    if (error) { toast.error(error.message); return; }
+    await insertLog('CONFIRMACION_CLIENTE', 'Solicitud de confirmación enviada al cliente');
+    toast.success('Solicitud de confirmación enviada al cliente');
+    refetchTicket();
+    refetchActividad();
   }
 
   function handleSubirEvidenciaInicial(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    const nuevas: EvidenciaItem[] = files.map((f) => ({
-      nombre: f.name,
-      tipo: f.type.startsWith('video') ? 'VIDEO' : 'FOTO',
-      fecha: new Date().toLocaleString('es-MX'),
-      subidoPor: 'Admin',
-    }));
-    setLocalEvidInicial((prev) => [...prev, ...nuevas]);
-    toast.success(`${files.length} archivo(s) cargado(s) como evidencia inicial`);
+    // TODO: upload to Supabase Storage + INSERT postventa_evidencias
+    toast.info(`${files.length} archivo(s) seleccionados. Subida a Storage pendiente de implementar.`);
     if (fileInputInicialRef.current) fileInputInicialRef.current.value = '';
   }
 
   function handleSubirEvidenciaReparacion(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    const nuevas: EvidenciaItem[] = files.map((f) => ({
-      nombre: f.name,
-      tipo: f.type.startsWith('video') ? 'VIDEO' : 'FOTO',
-      fecha: new Date().toLocaleString('es-MX'),
-      subidoPor: 'Admin',
-    }));
-    setLocalEvidReparacion((prev) => [...prev, ...nuevas]);
     setEvidreparacionFiles((prev) => [...prev, ...files]);
-    toast.success(`${files.length} archivo(s) de reparación cargados`);
+    // TODO: upload to Supabase Storage + INSERT postventa_evidencias
+    toast.info(`${files.length} archivo(s) seleccionados. Subida a Storage pendiente de implementar.`);
     if (fileInputReparacionRef.current) fileInputReparacionRef.current.value = '';
-  }
-
-  function handleGuardarReparacion() {
-    if (!descReparacion.trim()) {
-      toast.error('La descripción de reparación es requerida');
-      return;
-    }
-    toast.success('Evidencia de reparación guardada correctamente');
-  }
-
-  function handleEnviarComentario() {
-    if (!nuevoComentario.trim()) {
-      toast.error('Escribe un comentario antes de enviar');
-      return;
-    }
-    const nuevo: ComentarioItem = {
-      texto: nuevoComentario.trim(),
-      tipo: tipoComentario,
-      fecha: new Date().toLocaleString('es-MX'),
-      por: 'Admin',
-    };
-    setComentarios((prev) => [...prev, nuevo]);
-    setNuevoComentario('');
-    toast.success('Comentario enviado');
-  }
-
-  function handleCerrarTicket() {
-    if (!canCerrar) return;
-    toast.success('Ticket cerrado exitosamente');
-  }
-
-  function handleSolicitarConfirmacion() {
-    toast.success('Solicitud de confirmación enviada al cliente');
   }
 
   function handleEscalar() {
@@ -593,7 +836,7 @@ export function PostventaDetalle() {
   }
 
   function handleContactarCliente() {
-    toast.success(`Abriendo comunicación con ${ticket.cliente}`);
+    toast.success('Abriendo comunicación con el cliente');
   }
 
   function handleAsignarProveedor() {
@@ -602,9 +845,9 @@ export function PostventaDetalle() {
 
   // ── Render helpers ──
 
-  const estatusMeta = ESTATUS_META[ticket.estatus];
-  const prioridadMeta = PRIORIDAD_META[ticket.prioridad];
-  const garantiaMeta = GARANTIA_META[ticket.garantiaEstatus];
+  const estatusMeta = ESTATUS_META[ticket.estatus] ?? ESTATUS_META.NUEVO;
+  const prioridadMeta = PRIORIDAD_META[ticket.prioridad] ?? PRIORIDAD_META.MEDIA;
+  const garantiaMeta = GARANTIA_META[ticket.garantiaEstatus] ?? GARANTIA_META.VIGENTE;
 
   function renderCommentBadge(tipo: ComentarioItem['tipo']) {
     switch (tipo) {
@@ -716,7 +959,7 @@ export function PostventaDetalle() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-500">
-            {localEvidInicial.length} archivo(s) de evidencia inicial
+            {evidInicial.length} archivo(s) de evidencia inicial
           </span>
           <button
             onClick={() => fileInputInicialRef.current?.click()}
@@ -735,14 +978,14 @@ export function PostventaDetalle() {
           />
         </div>
 
-        {localEvidInicial.length === 0 ? (
+        {evidInicial.length === 0 ? (
           <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center">
             <Camera size={32} className="mx-auto text-slate-300 mb-2" />
             <p className="text-sm text-slate-400">Sin evidencia inicial cargada</p>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3">
-            {localEvidInicial.map((ev, idx) => (
+            {evidInicial.map((ev, idx) => (
               <EvidenciaCard key={idx} item={ev} />
             ))}
           </div>
@@ -758,11 +1001,11 @@ export function PostventaDetalle() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-slate-500">
-              {localEvidReparacion.length} archivo(s) de evidencia de reparación
+              {evidReparacion.length} archivo(s) de evidencia de reparación
             </span>
           </div>
 
-          {localEvidReparacion.length === 0 ? (
+          {evidReparacion.length === 0 ? (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
               <AlertTriangle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-amber-700">
@@ -771,7 +1014,7 @@ export function PostventaDetalle() {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3">
-              {localEvidReparacion.map((ev, idx) => (
+              {evidReparacion.map((ev, idx) => (
                 <EvidenciaCard key={idx} item={ev} />
               ))}
             </div>
@@ -894,14 +1137,14 @@ export function PostventaDetalle() {
     return (
       <div className="space-y-4">
         {/* Existing comments */}
-        {comentarios.length === 0 ? (
+        {comentariosMapped.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-xl p-6 text-center">
             <MessageSquare size={28} className="mx-auto text-slate-300 mb-2" />
             <p className="text-sm text-slate-400">Sin comentarios aún</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {comentarios.map((c, idx) => (
+            {comentariosMapped.map((c, idx) => (
               <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   {renderCommentBadge(c.tipo)}
@@ -1198,7 +1441,9 @@ export function PostventaDetalle() {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Canal</span>
-                <span className="text-slate-700 font-medium">Portal cliente</span>
+                <span className="text-slate-700 font-medium">
+                  {ticketDB.canal_recepcion?.replace('_', ' ').replace('_', ' ') ?? '—'}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Prioridad</span>

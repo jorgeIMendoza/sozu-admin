@@ -336,16 +336,21 @@ export function RelacionPagos() {
     },
   });
 
-  // Only fetch when a project is selected
+  // Only fetch when a project is selected.
+  // IMPORTANT: pass `search` to the RPC so the DB filters first, avoiding the
+  // p_limit:5000 cap cutting off pagos when a project has thousands of records.
+  // Client-side filter below further narrows to exact num_propiedad match.
   const { pagos: allPagos, isLoading } = useRelacionPagos({
     proyectoId,
+    search,          // server-side pre-filter
     page: 1,
     pageSize: 5000,
     tipoCuenta: 'propiedad',
     enabled: !!proyectoId,
   });
 
-  // Client-side filtering: numeric → exact unit, text → substring on client name
+  // Client-side exact filter on top of the server pre-filter:
+  //   numeric → exact unit match  |  text → substring on client name
   const filteredPagos = useMemo(() => {
     const term = search.trim();
     if (!term) return allPagos;
@@ -564,7 +569,12 @@ export function RelacionPagos() {
           ) : (
             <>
               <KpiCard label="Total pagos" value={total.toLocaleString('es-MX')} />
-              <KpiCard label="Total pagado" value={fmtMxn(totalMonto)} valueClass="text-emerald-600" />
+              {/* En vista de cuenta única usar totalPagadoCuenta (aplicaciones_pago) como fuente de verdad */}
+              <KpiCard
+                label="Total pagado"
+                value={fmtMxn(singleCuentaId && cuentaResumen ? totalPagadoCuenta : totalMonto)}
+                valueClass="text-emerald-600"
+              />
               <KpiCard label="Con comprobante" value={totalConCep.toLocaleString('es-MX')} colSpan />
             </>
           )}

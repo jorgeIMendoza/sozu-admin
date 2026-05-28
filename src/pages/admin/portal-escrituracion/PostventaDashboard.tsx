@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
+import PostventaConfiguracion from './PostventaConfiguracion';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import {
@@ -109,20 +111,22 @@ const PROVEEDORES_TOP = [
 interface WizardForm {
   unidadId: string;
   categoria: string;
+  categoriaId: number | null;
   subcategoria: string;
   descripcion: string;
   canal: string;
   files: File[];
   prioridad: PrioridadTicket | '';
-  responsable: string;
+  responsable: string;     // nombre del personal de mantenimiento asignado
+  personalId: number | null;  // id en tabla personas
   proveedor: string;
   fechaCompromiso: string;
   comentarios: string;
 }
 
 const EMPTY_FORM: WizardForm = {
-  unidadId: '', categoria: '', subcategoria: '', descripcion: '', canal: '',
-  files: [], prioridad: '', responsable: '', proveedor: '', fechaCompromiso: '', comentarios: '',
+  unidadId: '', categoria: '', categoriaId: null, subcategoria: '', descripcion: '', canal: '',
+  files: [], prioridad: '', responsable: '', personalId: null, proveedor: '', fechaCompromiso: '', comentarios: '',
 };
 
 // ─── Subcomponents ────────────────────────────────────────────────────────────
@@ -184,6 +188,8 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
 
 export function PostventaDashboard() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const qc = useQueryClient();
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const [proyectoId, setProyectoId]   = useState<number | null>(null);
@@ -192,10 +198,20 @@ export function PostventaDashboard() {
   const [search, setSearch]                     = useState('');
 
   // ── Wizard ───────────────────────────────────────────────────────────────
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0);
-  const [form, setForm]             = useState<WizardForm>(EMPTY_FORM);
+  const [wizardOpen, setWizardOpen]         = useState(false);
+  const [configOpen, setConfigOpen]         = useState(false);
+  const [wizardStep, setWizardStep]         = useState(0);
+  const [form, setForm]                     = useState<WizardForm>(EMPTY_FORM);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  // Búsqueda de unidad y proyecto (estado local, no en form)
+  const [wizardProyectoId, setWizardProyectoId] = useState<number | null>(null);
+  const [unidadSearch, setUnidadSearch]         = useState('');
+  const [unidadDropOpen, setUnidadDropOpen]     = useState(false);
+  // Combobox personal de mantenimiento
+  const [personalSearch, setPersonalSearch]     = useState('');
+  const [personalDropOpen, setPersonalDropOpen] = useState(false);
+  // Intentó avanzar (para mostrar errores inline)
+  const [step1Tried, setStep1Tried]             = useState(false);
 
   // ── Check if pv_tickets exists ────────────────────────────────────────────
   useEffect(() => {
@@ -233,42 +249,96 @@ export function PostventaDashboard() {
   }, [proyectos, proyectoId]);
 
   // ── Query de unidades entregadas (para el wizard) ─────────────────────────
+  // Usa los mismos criterios que EntregasDashboard:
+  //   id_estatus_disponibilidad IN (5,7,8,9) = Vendido/Escrituración/Entregado/Pagado
+  // NO requiere acta en tabla documentos (el acta puede estar en entregas.acta_estatus)
+  // IMPORTANTE: usa wizardProyectoId (selección del wizard), NO proyectoId (filtro del dashboard)
   const proyectoIds = proyectoId ? [proyectoId] : proyectos.map(p => p.id);
+  const ESTATUS_ENTREGADA = [5, 7, 8, 9]; // mismo que EntregasDashboard
 
   const { data: unidadesEntregadas = [] } = useQuery({
-    queryKey: ['pv-unidades', proyectoIds.join(',')],
-    queryFn: async (): Promise<{ id: string; label: string; cliente: string; proyecto: string; fechaEntrega: string; cuentaId: number; precioFinal: number }[]> => {
-      if (!proyectoIds.length) return [];
-      const { data: edificios } = await supabase.from('edificios').select('id, nombre, id_proyecto').in('id_proyecto', proyectoIds).eq('activo', true);
+    queryKey: ['pv-unidades-wizard', wizardProyectoId],
+    queryFn: async (): Promise<{ id: string; label: string; cliente: string; proyecto: string; fechaEntrega: string; cuentaId: number; precioFinal: number; proyectoId: number }[]> => {
+      if (!wizardProyectoId) return [];
+
+      // 1. Edificios del proyecto seleccionado en el wizard
+      const { data: edificios } = await supabase
+        .from('edificios').select('id, nombre, id_proyecto')
+        .eq('id_proyecto', wizardProyectoId).eq('activo', true);
       const edificioIds = (edificios ?? []).map((e: any) => e.id);
       if (!edificioIds.length) return [];
-      const edificioMap: Record<number, { nombre: string; proyectoId: number }> = Object.fromEntries((edificios ?? []).map((e: any) => [e.id, { nombre: e.nombre, proyectoId: e.id_proyecto }]));
-      const { data: modelos } = await supabase.from('edificios_modelos').select('id, id_edificio').in('id_edificio', edificioIds);
+      const edificioMap: Record<number, { nombre: string; proyectoId: number }> =
+        Object.fromEntries((edificios ?? []).map((e: any) => [e.id, { nombre: e.nombre, proyectoId: e.id_proyecto }]));
+
+      // 2. Modelos de esos edificios
+      const { data: modelos } = await supabase
+        .from('edificios_modelos').select('id, id_edificio')
+        .in('id_edificio', edificioIds);
       const modeloIds = (modelos ?? []).map((m: any) => m.id);
       if (!modeloIds.length) return [];
-      const modeloEdificioMap: Record<number, number> = Object.fromEntries((modelos ?? []).map((m: any) => [m.id, m.id_edificio]));
-      const { data: propiedades } = await supabase.from('propiedades').select('id, numero_propiedad, id_edificio_modelo').in('id_edificio_modelo', modeloIds).eq('activo', true);
+      const modeloEdificioMap: Record<number, number> =
+        Object.fromEntries((modelos ?? []).map((m: any) => [m.id, m.id_edificio]));
+
+      // 3. Propiedades con estatus de entrega (igual que EntregasDashboard)
+      //    id_estatus_disponibilidad IN (5,7,8,9) — NO requiere acta en documentos
+      const { data: propiedades } = await supabase
+        .from('propiedades')
+        .select('id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad')
+        .in('id_edificio_modelo', modeloIds)
+        .in('id_estatus_disponibilidad', ESTATUS_ENTREGADA)
+        .eq('activo', true)
+        .order('numero_propiedad');
       if (!propiedades?.length) return [];
       const propIds = propiedades.map((p: any) => p.id);
-      const { data: cuentas } = await supabase.from('cuentas_cobranza').select('id, id_propiedad, precio_final').in('id_propiedad', propIds).eq('activo', true);
-      if (!cuentas?.length) return [];
-      const cuentaIds = cuentas.map((c: any) => c.id);
-      const cuentaByPropId: Record<number, any> = Object.fromEntries(cuentas.map((c: any) => [c.id_propiedad, c]));
-      const { data: compradores } = await supabase.from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+
+      // 4. Cuentas de cobranza
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza').select('id, id_propiedad, precio_final')
+        .in('id_propiedad', propIds).eq('activo', true);
+      const cuentaByPropId: Record<number, any> =
+        Object.fromEntries((cuentas ?? []).map((c: any) => [c.id_propiedad, c]));
+      const cuentaIds = (cuentas ?? []).map((c: any) => c.id);
+
+      // 5. Compradores → nombre del cliente
+      const { data: compradores } = await supabase
+        .from('compradores').select('id_cuenta_cobranza, id_persona')
+        .in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
       const personaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))];
       let personaMap: Record<number, string> = {};
       if (personaIds.length) {
-        const { data: personas } = await supabase.from('personas').select('id, nombre_legal').in('id', personaIds as number[]);
+        const { data: personas } = await supabase
+          .from('personas').select('id, nombre_legal').in('id', personaIds as number[]);
         personaMap = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p.nombre_legal ?? '—']));
       }
       const cuentaToPersona: Record<number, string> = {};
-      (compradores ?? []).forEach((c: any) => { if (!cuentaToPersona[c.id_cuenta_cobranza]) cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona] ?? '—'; });
-      const { data: actaDocs } = await supabase.from('documentos').select('id_propiedad, fecha_creacion').in('id_propiedad', propIds).eq('id_tipo_documento', ID_TIPO_ACTA_ENTREGA).eq('activo', true);
-      const actaSet = new Set((actaDocs ?? []).map((d: any) => d.id_propiedad));
-      const actaFechaMap: Record<number, string> = Object.fromEntries((actaDocs ?? []).map((d: any) => [d.id_propiedad, d.fecha_creacion]));
+      (compradores ?? []).forEach((c: any) => {
+        if (!cuentaToPersona[c.id_cuenta_cobranza]) cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona] ?? '—';
+      });
+
+      // 6. Fecha de entrega (opcional — desde acta en documentos o entregas)
+      const actaFechaMap: Record<number, string> = {};
+      const { data: actaDocs } = await supabase
+        .from('documentos').select('id_propiedad, fecha_creacion')
+        .in('id_propiedad', propIds)
+        .eq('id_tipo_documento', ID_TIPO_ACTA_ENTREGA)
+        .eq('activo', true).eq('es_draft', false);
+      (actaDocs ?? []).forEach((d: any) => { actaFechaMap[d.id_propiedad] = d.fecha_creacion; });
+
+      // También intentar fecha desde tabla entregas (si existe)
+      const entregasProbe = await (supabase as any)
+        .from('entregas').select('id_propiedad, fecha_entrega')
+        .in('id_propiedad', propIds).eq('activo', true);
+      if (!entregasProbe.error) {
+        (entregasProbe.data ?? []).forEach((e: any) => {
+          if (e.fecha_entrega && !actaFechaMap[e.id_propiedad]) actaFechaMap[e.id_propiedad] = e.fecha_entrega;
+        });
+      }
+
       const proyectoNombreMap: Record<number, string> = Object.fromEntries(proyectos.map(p => [p.id, p.nombre]));
+
+      // Solo incluir propiedades que tengan cuenta (vendidas) — sin requerir acta
       return propiedades
-        .filter((p: any) => cuentaByPropId[p.id] && actaSet.has(p.id))
+        .filter((p: any) => cuentaByPropId[p.id])
         .map((p: any) => {
           const cuenta = cuentaByPropId[p.id];
           const edificioId = modeloEdificioMap[p.id_edificio_modelo];
@@ -283,11 +353,56 @@ export function PostventaDashboard() {
             fechaEntrega: fechaRaw ? new Date(fechaRaw).toLocaleDateString('es-MX') : '—',
             cuentaId: cuenta.id,
             precioFinal: Number(cuenta.precio_final ?? 0),
+            proyectoId: pId,
           };
         });
     },
-    enabled: proyectoIds.length > 0,
+    enabled: wizardOpen && wizardProyectoId !== null,
   });
+
+  // ── Query de categorías de garantía (para wizard) ─────────────────────────
+  const { data: categoriasDB = [] } = useQuery({
+    queryKey: ['pv-categorias'],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('postventa_categorias_garantia')
+        .select('id, nombre, sla_critico_horas, sla_media_horas, sla_baja_dias')
+        .eq('activo', true)
+        .order('nombre');
+      return (data ?? []) as { id: number; nombre: string; sla_critico_horas: number; sla_media_horas: number; sla_baja_dias: number }[];
+    },
+    enabled: pvTablesExist === true,
+  });
+
+  // ── tipos_entidad (para detectar id de "Personal de mantenimiento") ─────────
+  const { data: tiposEntidadWiz = [] } = useQuery<{ id: number; nombre: string }[]>({
+    queryKey: ['tipos-entidad-wiz'],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from('tipos_entidad').select('id, nombre').order('id');
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const idMantenimientoWiz = tiposEntidadWiz.find(t => t.nombre.toLowerCase().includes('mantenimiento'))?.id ?? null;
+
+  // ── Personal de mantenimiento asignado a la categoría elegida en el wizard ──
+  const { data: catPersonalWiz = [] } = useQuery<{ id_persona: number; id_tipo_entidad: number; personas: { id: number; nombre: string | null; apellido_paterno: string | null; apellido_materno: string | null; email: string | null } }[]>({
+    queryKey: ['pv-cat-personal-wiz', form.categoriaId],
+    queryFn: async () => {
+      if (!form.categoriaId) return [];
+      const probe = await (supabase as any).from('postventa_categorias_personal').select('id').limit(0);
+      if (probe.error) return [];
+      const { data } = await (supabase as any)
+        .from('postventa_categorias_personal')
+        .select('id_persona, id_tipo_entidad, personas(id, nombre, apellido_paterno, apellido_materno, email)')
+        .eq('id_categoria', form.categoriaId)
+        .eq('activo', true);
+      return (data ?? []) as any[];
+    },
+    enabled: !!form.categoriaId && wizardOpen,
+  });
+
+  // Solo mantenimiento (excluye proveedores tipo 8)
+  const mantWiz = catPersonalWiz.filter(p => p.id_tipo_entidad !== 8);
 
   // ── Query de tickets reales ────────────────────────────────────────────────
   const { data: tickets = [], isLoading: ticketsLoading, refetch: refetchTickets } = useQuery<TicketRow[]>({
@@ -309,7 +424,7 @@ export function PostventaDashboard() {
       // Tickets — el join de proveedor va directo a personas (no existe pv_proveedores)
       const { data: rawTickets } = await (supabase as any)
         .from('postventa_tickets')
-        .select('id, folio, id_propiedad, id_cuenta_cobranza, id_proveedor, subcategoria, prioridad, estatus, garantia_estatus, fecha_limite_sla, sla_cumplido, responsable, fecha_creacion, postventa_categorias_garantia(nombre)')
+        .select('id, id_propiedad, id_cuenta_cobranza, id_postventa_categoria_garantia, subcategoria, prioridad, estatus, fecha_limite_sla, sla_cumplido, fecha_creacion, postventa_categorias_garantia(id, nombre)')
         .in('id_propiedad', propIds)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -318,27 +433,22 @@ export function PostventaDashboard() {
       // Clientes (compradores de cada cuenta)
       const cuentaIds = [...new Set((rawTickets as any[]).map((t: any) => t.id_cuenta_cobranza).filter(Boolean))];
       const { data: compradores } = await supabase.from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
-      const clientePersonaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))];
+      const clientePersonaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))] as number[];
 
-      // Proveedores asignados (personas con id_tipo_entidad IN (8,13))
-      const proveedorIds = [...new Set((rawTickets as any[]).map((t: any) => t.id_proveedor).filter(Boolean))];
-
-      // Una sola query a personas para clientes + proveedores
-      const allPersonaIds = [...new Set([...clientePersonaIds, ...proveedorIds])] as number[];
-      let personaMap: Record<number, { nombre: string; comercial: string | null }> = {};
-      if (allPersonaIds.length) {
+      let personaMap: Record<number, string> = {};
+      if (clientePersonaIds.length) {
         const { data: personas } = await supabase
           .from('personas')
-          .select('id, nombre_legal, nombre_comercial')
-          .in('id', allPersonaIds);
+          .select('id, nombre_legal')
+          .in('id', clientePersonaIds);
         personaMap = Object.fromEntries(
-          (personas ?? []).map((p: any) => [p.id, { nombre: p.nombre_legal ?? '—', comercial: p.nombre_comercial }])
+          (personas ?? []).map((p: any) => [p.id, p.nombre_legal ?? '—'])
         );
       }
       const cuentaToPersona: Record<number, string> = {};
       (compradores ?? []).forEach((c: any) => {
         if (!cuentaToPersona[c.id_cuenta_cobranza])
-          cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona]?.nombre ?? '—';
+          cuentaToPersona[c.id_cuenta_cobranza] = personaMap[c.id_persona] ?? '—';
       });
 
       return (rawTickets as any[]).map((t: any): TicketRow => {
@@ -350,12 +460,8 @@ export function PostventaDashboard() {
         const slaLabel = limiteSla
           ? (slaVencido ? `⚠ Vencido` : `✓ ${limiteSla.toLocaleDateString('es-MX')}`)
           : '—';
-        const pvPersona = t.id_proveedor ? personaMap[t.id_proveedor] : null;
-        const proveedorLabel = pvPersona
-          ? (pvPersona.comercial ?? pvPersona.nombre)
-          : 'Sin proveedor';
         return {
-          id: t.folio ?? `PV-${t.id}`,
+          id: `PV-${t.id}`,
           unidad: prop?.numero_propiedad ?? '—',
           torre: '—',
           proyecto: '—',
@@ -364,13 +470,13 @@ export function PostventaDashboard() {
           subcategoria: t.subcategoria ?? '—',
           prioridad: t.prioridad as PrioridadTicket,
           estatus: t.estatus as EstatusTicket,
-          garantiaEstatus: t.garantia_estatus as GarantiaEstatus,
+          garantiaEstatus: 'VIGENTE' as GarantiaEstatus,
           fechaEntrega: '—',
           fechaCreacion: t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString('es-MX') : '—',
           slaLabel,
           slaVencido,
-          responsable: t.responsable ?? 'Sin asignar',
-          proveedor: proveedorLabel,
+          responsable: 'Sin asignar',
+          proveedor: 'Sin proveedor',
           evidenciaInicial: 0,
           evidenciaReparacion: 0,
           cuentaId: cuenta?.id ?? 0,
@@ -447,24 +553,113 @@ export function PostventaDashboard() {
   const selectedUnidad = unidadesEntregadas.find((u) => u.id === form.unidadId);
   const subcats        = form.categoria ? (SUBCATEGORIAS[form.categoria] ?? []) : [];
 
+  // Filtrado de unidades por búsqueda de texto
+  // (La query ya está scoped al wizardProyectoId — no necesitamos re-filtrar por proyecto)
+  const unidadesFiltradas = useMemo(() => {
+    const q = unidadSearch.toLowerCase().trim();
+    if (!q) return unidadesEntregadas.slice(0, 15);
+    return unidadesEntregadas
+      .filter(u => u.label.toLowerCase().includes(q) || u.cliente.toLowerCase().includes(q))
+      .slice(0, 15);
+  }, [unidadSearch, unidadesEntregadas]);
+
+  // Filtrado de personal para el combobox
+  const personalFiltrado = useMemo(() => {
+    const q = personalSearch.toLowerCase().trim();
+    return mantWiz.filter(rel => {
+      const p = rel.personas;
+      const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno].filter(Boolean).join(' ');
+      return !q || nombre.toLowerCase().includes(q) || (p.email ?? '').toLowerCase().includes(q);
+    });
+  }, [personalSearch, mantWiz]);
+
   const step1Valid = Boolean(form.unidadId && form.categoria && form.subcategoria && form.descripcion && form.canal);
   const step2Valid = form.files.length > 0;
-  const step3Valid = Boolean(form.prioridad && form.responsable && form.fechaCompromiso);
+  const step3Valid = Boolean(form.prioridad && form.fechaCompromiso);
 
   function handleNextStep() {
-    if (wizardStep === 0 && !step1Valid) { toast.error('Completa todos los campos requeridos'); return; }
+    if (wizardStep === 0) {
+      setStep1Tried(true);
+
+      // Resolver unidad: auto-seleccionar si hay exactamente 1 resultado
+      let resolvedUnidadId = form.unidadId;
+      if (!resolvedUnidadId && unidadesFiltradas.length === 1) {
+        const u = unidadesFiltradas[0];
+        resolvedUnidadId = u.id;
+        setForm(f => ({ ...f, unidadId: u.id }));
+        setUnidadSearch(u.label);
+        setUnidadDropOpen(false);
+      }
+
+      if (!resolvedUnidadId) { toast.error('Busca y selecciona una unidad de la lista'); return; }
+      if (!form.categoria)    { toast.error('Selecciona una categoría'); return; }
+      if (!form.subcategoria) { toast.error('Selecciona una subcategoría'); return; }
+      if (!form.descripcion.trim()) { toast.error('Escribe la descripción del problema'); return; }
+      if (!form.canal)        { toast.error('Selecciona el canal de recepción'); return; }
+    }
     if (wizardStep === 1 && !step2Valid) { toast.error('Sube al menos una evidencia'); return; }
     setCompletedSteps((prev) => new Set([...prev, wizardStep]));
+    setStep1Tried(false);
     setWizardStep((s) => Math.min(s + 1, 3));
   }
 
-  function handleCreateTicket() {
-    toast.success('Ticket creado exitosamente', { description: `Se generó el ticket para la unidad ${selectedUnidad?.label ?? ''}` });
+  async function handleCreateTicket() {
+    const propIdRaw = parseInt(form.unidadId.replace('prop-', ''));
+    const cat = categoriasDB.find(c => c.nombre === form.categoria);
+    const canalMap: Record<string, string> = {
+      'Portal cliente': 'PORTAL_CLIENTE',
+      'WhatsApp': 'WHATSAPP',
+      'Teléfono': 'TELEFONO',
+      'Interno': 'INTERNO',
+      'Observación de entrega': 'OBSERVACION_ENTREGA',
+    };
+    let slaHoras = cat?.sla_media_horas ?? 24;
+    if (form.prioridad === 'CRITICA') slaHoras = cat?.sla_critico_horas ?? 4;
+    else if (form.prioridad === 'BAJA') slaHoras = (cat?.sla_baja_dias ?? 5) * 24;
+    const fechaLimiteSla = new Date(Date.now() + slaHoras * 3600000).toISOString();
+
+    const { data: ticket, error } = await (supabase as any)
+      .from('postventa_tickets')
+      .insert({
+        id_propiedad: propIdRaw,
+        id_cuenta_cobranza: selectedUnidad?.cuentaId,
+        id_postventa_categoria_garantia: cat?.id ?? null,
+        subcategoria: form.subcategoria,
+        descripcion: form.descripcion,
+        canal_recepcion: canalMap[form.canal] ?? 'INTERNO',
+        prioridad: form.prioridad,
+        estatus: form.responsable ? 'ASIGNADO' : 'NUEVO',
+        responsable: form.responsable || null,
+        sla_horas: slaHoras,
+        fecha_limite_sla: fechaLimiteSla,
+        activo: true,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    await (supabase as any).from('postventa_log_actividades').insert({
+      id_postventa_ticket: ticket.id,
+      tipo_evento: 'CREACION',
+      descripcion: `Ticket creado. Canal: ${form.canal}`,
+      creado_por: profile?.email ?? 'admin',
+    });
+
+    toast.success(`Ticket PV-${ticket.id} creado`, { description: `Unidad: ${selectedUnidad?.label ?? ''}` });
     setWizardOpen(false);
     setWizardStep(0);
     setForm(EMPTY_FORM);
     setCompletedSteps(new Set());
-    refetchTickets();
+    setWizardProyectoId(null);
+    setUnidadSearch('');
+    setUnidadDropOpen(false);
+    setPersonalSearch('');
+    setPersonalDropOpen(false);
+    qc.invalidateQueries({ queryKey: ['pv-tickets-rows'] });
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -481,6 +676,12 @@ export function PostventaDashboard() {
     setWizardStep(0);
     setForm(EMPTY_FORM);
     setCompletedSteps(new Set());
+    setWizardProyectoId(null);
+    setUnidadSearch('');
+    setUnidadDropOpen(false);
+    setPersonalSearch('');
+    setPersonalDropOpen(false);
+    setStep1Tried(false);
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -1117,7 +1318,10 @@ export function PostventaDashboard() {
                   <BarChart2 className="w-3.5 h-3.5" />
                   Reportes
                 </button>
-                <button className="flex items-center gap-2 justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium px-3 py-2.5 rounded-lg border border-slate-200 transition-colors">
+                <button
+                  onClick={() => setConfigOpen(true)}
+                  className="flex items-center gap-2 justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium px-3 py-2.5 rounded-lg border border-slate-200 transition-colors"
+                >
                   <Settings className="w-3.5 h-3.5" />
                   Configurar SLA
                 </button>
@@ -1126,6 +1330,9 @@ export function PostventaDashboard() {
           </div>
         </div>
       </main>
+
+      {/* ── Configuración SLA ────────────────────────────────────────────── */}
+      <PostventaConfiguracion open={configOpen} onClose={() => setConfigOpen(false)} />
 
       {/* ── Nuevo Ticket Wizard ───────────────────────────────────────────── */}
       {wizardOpen && (
@@ -1190,26 +1397,132 @@ export function PostventaDashboard() {
               {/* Step 1 — Información */}
               {wizardStep === 0 && (
                 <div className="flex flex-col gap-4">
+                  {/* ── Proyecto ─────────────────────────────────── */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Unidad *</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Proyecto</label>
                     <select
-                      value={form.unidadId}
-                      onChange={(e) => setForm((f) => ({ ...f, unidadId: e.target.value, subcategoria: '' }))}
+                      value={wizardProyectoId ?? ''}
+                      onChange={(e) => {
+                        const pid = e.target.value ? Number(e.target.value) : null;
+                        setWizardProyectoId(pid);
+                        // Limpiar unidad seleccionada si cambia el proyecto
+                        setForm(f => ({ ...f, unidadId: '', subcategoria: '' }));
+                        setUnidadSearch('');
+                        setUnidadDropOpen(false);
+                      }}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     >
-                      <option value="">Seleccionar unidad…</option>
-                      {unidadesEntregadas.map((u) => (
-                        <option key={u.id} value={u.id}>{u.label}</option>
+                      <option value="">Todos los proyectos</option>
+                      {proyectos.map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* ── Unidad ───────────────────────────────────── */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Unidad *</label>
+                    {/* Input */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder={wizardProyectoId ? "Escribe el número de unidad o nombre del cliente…" : "Selecciona un proyecto primero…"}
+                        disabled={!wizardProyectoId}
+                        value={form.unidadId ? (selectedUnidad?.label ?? '') : unidadSearch}
+                        onChange={(e) => {
+                          setUnidadSearch(e.target.value);
+                          setUnidadDropOpen(true);
+                          if (!e.target.value) setForm(f => ({ ...f, unidadId: '', subcategoria: '' }));
+                        }}
+                        onFocus={() => { if (!form.unidadId) setUnidadDropOpen(true); }}
+                        onBlur={() => setTimeout(() => {
+                          // Auto-seleccionar si hay exactamente 1 resultado
+                          if (!form.unidadId && unidadesFiltradas.length === 1) {
+                            const u = unidadesFiltradas[0];
+                            setForm(f => ({ ...f, unidadId: u.id, subcategoria: '' }));
+                            setUnidadSearch(u.label);
+                          }
+                          setUnidadDropOpen(false);
+                        }, 150)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && unidadesFiltradas.length > 0) {
+                            const u = unidadesFiltradas[0];
+                            setForm(f => ({ ...f, unidadId: u.id, subcategoria: '' }));
+                            setUnidadSearch(u.label);
+                            setUnidadDropOpen(false);
+                            e.preventDefault();
+                          }
+                          if (e.key === 'Escape') setUnidadDropOpen(false);
+                        }}
+                        readOnly={!!form.unidadId}
+                        className={`w-full pl-8 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                          !wizardProyectoId
+                            ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                            : form.unidadId
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-default'
+                            : step1Tried && !form.unidadId
+                            ? 'border-red-400 bg-red-50'
+                            : 'border-slate-200'
+                        }`}
+                      />
+                      {form.unidadId && (
+                        <button
+                          type="button"
+                          onClick={() => { setForm(f => ({ ...f, unidadId: '', subcategoria: '' })); setUnidadSearch(''); setUnidadDropOpen(false); }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Error de validación */}
+                    {step1Tried && !form.unidadId && !unidadSearch && (
+                      <p className="text-xs text-red-500 mt-1">Escribe el número de unidad y selecciona de la lista</p>
+                    )}
+                    {step1Tried && !form.unidadId && unidadSearch && unidadesFiltradas.length !== 1 && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {unidadesFiltradas.length === 0 ? 'No se encontró esa unidad' : 'Selecciona una unidad de los resultados'}
+                      </p>
+                    )}
+
+                    {/* Resultados inline (no absolute — evita clipping por overflow-y-auto) */}
+                    {unidadDropOpen && !form.unidadId && (
+                      <div className="mt-1 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                        {unidadesFiltradas.length === 0 ? (
+                          <p className="px-4 py-3 text-xs text-slate-400 text-center">
+                            {unidadSearch ? 'Sin resultados para esa búsqueda' : 'Escribe para buscar…'}
+                          </p>
+                        ) : (
+                          <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+                            {unidadesFiltradas.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setForm(f => ({ ...f, unidadId: u.id, subcategoria: '' }));
+                                  setUnidadSearch(u.label);
+                                  setUnidadDropOpen(false);
+                                }}
+                                className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 flex flex-col gap-0.5 transition-colors"
+                              >
+                                <span className="text-xs font-semibold text-slate-800">{u.label}</span>
+                                <span className="text-xs text-slate-400">{u.cliente} · {u.proyecto.split(' · ')[0]}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {selectedUnidad && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex flex-col gap-1">
-                      <p className="text-xs font-semibold text-blue-800">Información de la unidad</p>
-                      <p className="text-xs text-blue-700"><span className="font-medium">Cliente:</span> {selectedUnidad.cliente}</p>
-                      <p className="text-xs text-blue-700"><span className="font-medium">Proyecto · Torre:</span> {selectedUnidad.proyecto}</p>
-                      <p className="text-xs text-blue-700"><span className="font-medium">Fecha entrega:</span> {selectedUnidad.fechaEntrega}</p>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 flex flex-col gap-1">
+                      <p className="text-xs font-semibold text-emerald-800">✓ Unidad identificada</p>
+                      <p className="text-xs text-emerald-700"><span className="font-medium">Cliente:</span> {selectedUnidad.cliente}</p>
+                      <p className="text-xs text-emerald-700"><span className="font-medium">Proyecto · Torre:</span> {selectedUnidad.proyecto}</p>
+                      <p className="text-xs text-emerald-700"><span className="font-medium">Fecha entrega:</span> {selectedUnidad.fechaEntrega}</p>
                     </div>
                   )}
 
@@ -1217,11 +1530,14 @@ export function PostventaDashboard() {
                     <label className="block text-xs font-semibold text-slate-700 mb-1.5">Categoría *</label>
                     <select
                       value={form.categoria}
-                      onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value, subcategoria: '' }))}
+                      onChange={(e) => {
+                        const cat = categoriasDB.find(c => c.nombre === e.target.value);
+                        setForm((f) => ({ ...f, categoria: e.target.value, categoriaId: cat?.id ?? null, subcategoria: '' }));
+                      }}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     >
                       <option value="">Seleccionar categoría…</option>
-                      {Object.keys(SUBCATEGORIAS).map((c) => (
+                      {(categoriasDB.length > 0 ? categoriasDB.map(c => c.nombre) : Object.keys(SUBCATEGORIAS)).map((c) => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
@@ -1249,8 +1565,15 @@ export function PostventaDashboard() {
                       placeholder="Describe el problema con detalle…"
                       value={form.descripcion}
                       onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none ${
+                        step1Tried && !form.descripcion.trim()
+                          ? 'border-red-400 bg-red-50'
+                          : 'border-slate-200'
+                      }`}
                     />
+                    {step1Tried && !form.descripcion.trim() && (
+                      <p className="text-xs text-red-500 mt-1">Este campo es obligatorio</p>
+                    )}
                   </div>
 
                   <div>
@@ -1266,6 +1589,7 @@ export function PostventaDashboard() {
                       ))}
                     </select>
                   </div>
+
                 </div>
               )}
 
@@ -1349,18 +1673,101 @@ export function PostventaDashboard() {
                     </div>
                   </div>
 
+                  {/* ── Personal de mantenimiento ─────────────────── */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Responsable *</label>
-                    <select
-                      value={form.responsable}
-                      onChange={(e) => setForm((f) => ({ ...f, responsable: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                    >
-                      <option value="">Seleccionar responsable…</option>
-                      {DEMO_RESPONSABLES.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Personal de mantenimiento
+                      <span className="ml-1 text-slate-400 font-normal">(opcional)</span>
+                    </label>
+                    <div className="relative">
+                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder={
+                          !form.categoriaId
+                            ? 'Selecciona primero una categoría…'
+                            : mantWiz.length === 0
+                            ? 'Sin personal asignado a esta categoría'
+                            : 'Buscar personal de mantenimiento…'
+                        }
+                        value={form.personalId ? form.responsable : personalSearch}
+                        onChange={(e) => {
+                          setPersonalSearch(e.target.value);
+                          setPersonalDropOpen(true);
+                          if (!e.target.value) setForm(f => ({ ...f, responsable: '', personalId: null }));
+                        }}
+                        onFocus={() => { if (!form.personalId && mantWiz.length > 0) setPersonalDropOpen(true); }}
+                        onBlur={() => setTimeout(() => setPersonalDropOpen(false), 150)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && personalFiltrado.length > 0) {
+                            const rel = personalFiltrado[0];
+                            const p = rel.personas;
+                            const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno].filter(Boolean).join(' ') || p.email || 'Sin nombre';
+                            setForm(f => ({ ...f, responsable: nombre, personalId: p.id }));
+                            setPersonalSearch(nombre);
+                            setPersonalDropOpen(false);
+                            e.preventDefault();
+                          }
+                          if (e.key === 'Escape') setPersonalDropOpen(false);
+                        }}
+                        readOnly={!!form.personalId}
+                        disabled={!form.categoriaId || mantWiz.length === 0}
+                        className={`w-full pl-8 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                          form.personalId
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-default'
+                            : 'border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed'
+                        }`}
+                      />
+                      {form.personalId && (
+                        <button
+                          type="button"
+                          onClick={() => { setForm(f => ({ ...f, responsable: '', personalId: null })); setPersonalSearch(''); }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {personalDropOpen && !form.personalId && mantWiz.length > 0 && (
+                      <div className="mt-1 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                        {personalFiltrado.length === 0 ? (
+                          <p className="px-4 py-3 text-xs text-slate-400 text-center">Sin resultados</p>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto divide-y divide-slate-50">
+                            {personalFiltrado.map(rel => {
+                              const p = rel.personas;
+                              const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno].filter(Boolean).join(' ') || p.email || 'Sin nombre';
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setForm(f => ({ ...f, responsable: nombre, personalId: p.id }));
+                                    setPersonalSearch(nombre);
+                                    setPersonalDropOpen(false);
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 flex items-center gap-3 transition-colors"
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                                    <Users className="w-3.5 h-3.5 text-slate-500" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-800 truncate">{nombre}</p>
+                                    {p.email && <p className="text-xs text-slate-400 truncate">{p.email}</p>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {form.categoriaId && mantWiz.length === 0 && (
+                      <p className="text-xs text-slate-400 mt-1">
+                        Asigna personal desde <strong>Configurar SLA</strong> para poder elegir aquí.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -1442,8 +1849,8 @@ export function PostventaDashboard() {
                         ) : <p className="text-slate-800">—</p>}
                       </div>
                       <div>
-                        <p className="text-slate-400">Responsable</p>
-                        <p className="text-slate-800 font-medium">{form.responsable || '—'}</p>
+                        <p className="text-slate-400">Personal asignado</p>
+                        <p className="text-slate-800 font-medium">{form.responsable || 'Sin asignar'}</p>
                       </div>
                       <div>
                         <p className="text-slate-400">Proveedor</p>
@@ -1480,12 +1887,7 @@ export function PostventaDashboard() {
               {wizardStep < 3 ? (
                 <button
                   onClick={handleNextStep}
-                  disabled={
-                    (wizardStep === 0 && !step1Valid) ||
-                    (wizardStep === 1 && !step2Valid) ||
-                    (wizardStep === 2 && !step3Valid)
-                  }
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors"
                 >
                   Siguiente
                 </button>
