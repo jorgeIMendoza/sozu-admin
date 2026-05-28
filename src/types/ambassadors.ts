@@ -116,6 +116,7 @@ export interface Ambassador {
   idPersona?: number;
   fullName: string;
   phone: string;
+  clavePaisTelefono?: string;
   email: string;
   company?: string;
   type: AmbassadorType;

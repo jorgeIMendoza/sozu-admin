@@ -21,7 +21,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import NuevoEmbajadorDialog from './NuevoEmbajadorDialog';
 
@@ -67,19 +70,89 @@ const REFERRAL_STATUSES: ReferralStatus[] = [
   'apartado','promesa_firmada','venta_cerrada','comision_generada','comision_pagada','descartado','duplicado',
 ];
 
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+
 // =============== Ambassador edit sheet (solo edición) ===============
 function AmbassadorEditSheet({
   open, onOpenChange, ambassador,
 }: { open: boolean; onOpenChange: (b: boolean) => void; ambassador: Ambassador }) {
-  const { updateAmbassador } = useAmbassadors();
+  const { updateAmbassador, refresh } = useAmbassadors();
   const [form, setForm] = useState<Partial<Ambassador>>(ambassador);
+  const [saving, setSaving] = useState(false);
 
   const set = (k: keyof Ambassador, v: any) => setForm(p => ({ ...p, [k]: v }));
 
-  const submit = () => {
-    updateAmbassador(ambassador.id, form);
-    toast.success('Embajador actualizado');
-    onOpenChange(false);
+  const emailInvalid = (form.email ?? '').trim().length > 0 && !EMAIL_REGEX.test((form.email ?? '').trim());
+  const phoneInvalid = (form.phone ?? '').length > 0 && (form.phone ?? '').length !== 10;
+
+  const submit = async () => {
+    const newEmail = (form.email ?? '').trim().toLowerCase();
+    const newPhone = (form.phone ?? '').trim();
+    const newName = (form.fullName ?? '').trim();
+
+    if (!newName || !newEmail || !newPhone) {
+      toast.error('Nombre, teléfono y email son obligatorios');
+      return;
+    }
+    if (!EMAIL_REGEX.test(newEmail)) {
+      toast.error('El correo no tiene un formato válido');
+      return;
+    }
+    if (newPhone.length !== 10) {
+      toast.error('El teléfono debe tener exactamente 10 dígitos');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 1. Actualizar embajadores_config (estatus, tipo, comisión, etc.)
+      updateAmbassador(ambassador.id, form);
+
+      // 2. Actualizar persona (nombre, teléfono, clave_pais)
+      if (ambassador.idPersona) {
+        const { error: personaError } = await supabase
+          .from('personas')
+          .update({
+            nombre_legal: newName,
+            telefono: newPhone,
+            clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
+          })
+          .eq('id', ambassador.idPersona);
+        if (personaError) throw personaError;
+      }
+
+      // 3. Actualizar usuarios (nombre, telefono, clave_pais) por email actual
+      await supabase
+        .from('usuarios')
+        .update({
+          nombre: newName,
+          telefono: newPhone,
+          clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
+        })
+        .eq('email', ambassador.email.toLowerCase());
+
+      // 4. Si cambió el email → edge function update-user-email + personas.email
+      if (newEmail !== ambassador.email.toLowerCase()) {
+        const { data: updateResult, error: emailErr } = await supabase.functions.invoke('update-user-email', {
+          body: { oldEmail: ambassador.email.toLowerCase(), newEmail },
+        });
+        if (emailErr || (updateResult && updateResult.success === false)) {
+          throw new Error(emailErr?.message ?? updateResult?.message ?? 'Error al cambiar el correo');
+        }
+        if (ambassador.idPersona) {
+          await supabase.from('personas').update({ email: newEmail }).eq('id', ambassador.idPersona);
+        }
+      }
+
+      toast.success('Embajador actualizado');
+      await refresh();
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error('Error al actualizar embajador:', err);
+      toast.error(err?.message ?? 'Error al actualizar embajador');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -87,9 +160,45 @@ function AmbassadorEditSheet({
       <SheetContent className="sm:max-w-xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Editar embajador</SheetTitle>
-          <SheetDescription>{ambassador.code} · {ambassador.fullName}</SheetDescription>
+          <SheetDescription>{ambassador.code}</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 mt-4">
+          <div><Label>Nombre completo *</Label>
+            <Input value={form.fullName ?? ''} onChange={e => set('fullName', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Teléfono *</Label>
+              <div className="flex gap-2">
+                <Select value={form.clavePaisTelefono ?? 'MX'} onValueChange={v => set('clavePaisTelefono', v)}>
+                  <SelectTrigger className="w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MX">🇲🇽 +52</SelectItem>
+                    <SelectItem value="US">🇺🇸 +1</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.phone ?? ''}
+                  onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10 dígitos"
+                  className={phoneInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
+              </div>
+              {phoneInvalid && <p className="text-xs text-destructive mt-1">Debe tener 10 dígitos</p>}
+            </div>
+            <div>
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={form.email ?? ''}
+                onChange={e => set('email', e.target.value)}
+                className={emailInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {emailInvalid && <p className="text-xs text-destructive mt-1">Formato de correo no válido</p>}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Tipo</Label>
               <Select value={form.type} onValueChange={v => set('type', v)}>
@@ -129,8 +238,10 @@ function AmbassadorEditSheet({
           <div><Label>Días de protección</Label><Input type="number" value={form.protectionDays ?? 90} onChange={e => set('protectionDays', Number(e.target.value))} /></div>
           <div><Label>Notas internas</Label><Textarea value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} /></div>
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={submit}>Guardar cambios</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={submit} disabled={saving || emailInvalid || phoneInvalid}>
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </Button>
           </div>
         </div>
       </SheetContent>
@@ -138,23 +249,107 @@ function AmbassadorEditSheet({
   );
 }
 
+// =============== Combobox de asesor con búsqueda y top-10 ===============
+function AdvisorCombobox({
+  value, onChange, advisors,
+}: { value: string; onChange: (v: string) => void; advisors: Advisor[] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selected = advisors.find(a => a.id === value);
+  const sorted = [...advisors].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const filtered = query.trim()
+    ? sorted.filter(a => a.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : sorted;
+  const visible = filtered.slice(0, 10);
+  const hiddenCount = filtered.length - visible.length;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {selected
+            ? <span className="truncate">{selected.name}</span>
+            : <span className="text-muted-foreground">Sin asignar (se puede asignar después)</span>}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Buscar asesor..."
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            <CommandEmpty>No se encontraron asesores.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                onSelect={() => { onChange(''); setOpen(false); }}
+                className="text-muted-foreground"
+              >
+                <Check className={cn('mr-2 h-4 w-4', !value ? 'opacity-100' : 'opacity-0')} />
+                — Sin asignar —
+              </CommandItem>
+              {visible.map(a => (
+                <CommandItem
+                  key={a.id}
+                  value={a.name}
+                  onSelect={() => { onChange(a.id); setOpen(false); }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === a.id ? 'opacity-100' : 'opacity-0')} />
+                  <div className="flex flex-col">
+                    <span className="text-sm">{a.name}</span>
+                    <span className="text-xs text-muted-foreground">{a.email}</span>
+                  </div>
+                </CommandItem>
+              ))}
+              {hiddenCount > 0 && (
+                <div className="px-2 py-1.5 text-[11px] text-muted-foreground italic">
+                  +{hiddenCount} más. Escribe para filtrar.
+                </div>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // =============== Referral form dialog (Supabase) ===============
 export function ReferralFormDialog({
-  open, onOpenChange, defaultAmbassadorId,
-}: { open: boolean; onOpenChange: (b: boolean) => void; defaultAmbassadorId?: string }) {
+  open, onOpenChange, defaultAmbassadorId, hideAdvisor,
+}: { open: boolean; onOpenChange: (b: boolean) => void; defaultAmbassadorId?: string; hideAdvisor?: boolean }) {
   const { ambassadors, advisors, referrals, refresh } = useAmbassadors();
   const [form, setForm] = useState<any>({
     ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '',
     interestType: 'indefinido', consent: true, advisorId: '',
+    clavePaisTelefono: 'MX', phone: '',
   });
   const [duplicate, setDuplicate] = useState<Referral | null>(null);
   const [loading, setLoading] = useState(false);
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
+  const emailInvalid = (form.email ?? '').trim().length > 0 && !EMAIL_REGEX.test((form.email ?? '').trim());
+  const phoneInvalid = (form.phone ?? '').length > 0 && (form.phone ?? '').length !== 10;
+
   const submit = async (force = false) => {
     if (!form.ambassadorId || !form.clientName || !form.phone || !form.email) {
       toast.error('Completa nombre, teléfono y email'); return;
+    }
+    if (!EMAIL_REGEX.test((form.email ?? '').trim())) {
+      toast.error('El correo no tiene un formato válido'); return;
+    }
+    if ((form.phone ?? '').length !== 10) {
+      toast.error('El teléfono debe tener exactamente 10 dígitos'); return;
     }
 
     if (!force) {
@@ -184,6 +379,7 @@ export function ReferralFormDialog({
           nombre_legal: form.clientName.trim(),
           email: form.email.trim().toLowerCase(),
           telefono: form.phone.trim(),
+          clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
           tipo_persona: 'pf',
           activo: true,
         })
@@ -227,7 +423,7 @@ export function ReferralFormDialog({
       if (refError) throw refError;
 
       toast.success('Referido registrado');
-      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '' });
+      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '', clavePaisTelefono: 'MX', phone: '' });
       setDuplicate(null);
       await refresh();
       onOpenChange(false);
@@ -257,8 +453,37 @@ export function ReferralFormDialog({
           )}
           <div><Label>Nombre del cliente *</Label><Input value={form.clientName ?? ''} onChange={e => set('clientName', e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Teléfono *</Label><Input value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} /></div>
-            <div><Label>Email *</Label><Input type="email" value={form.email ?? ''} onChange={e => set('email', e.target.value)} /></div>
+            <div>
+              <Label>Teléfono *</Label>
+              <div className="flex gap-2">
+                <Select value={form.clavePaisTelefono ?? 'MX'} onValueChange={v => set('clavePaisTelefono', v)}>
+                  <SelectTrigger className="w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MX">🇲🇽 +52</SelectItem>
+                    <SelectItem value="US">🇺🇸 +1</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.phone ?? ''}
+                  onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10 dígitos"
+                  className={phoneInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
+              </div>
+              {phoneInvalid && <p className="text-xs text-destructive mt-1">Debe tener 10 dígitos</p>}
+            </div>
+            <div>
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={form.email ?? ''}
+                onChange={e => set('email', e.target.value)}
+                className={emailInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {emailInvalid && <p className="text-xs text-destructive mt-1">Formato de correo no válido</p>}
+            </div>
           </div>
           <div><Label>Relación con el embajador</Label><Input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
@@ -285,17 +510,15 @@ export function ReferralFormDialog({
               </Select>
             </div>
           </div>
-          <div><Label>Asesor SOZU asignado</Label>
-            <Select value={form.advisorId ?? 'none'} onValueChange={v => set('advisorId', v === 'none' ? '' : v)}>
-              <SelectTrigger><SelectValue placeholder="Sin asignar (se puede asignar después)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— Sin asignar —</SelectItem>
-                {advisors.filter(a => a.active).map(a => (
-                  <SelectItem key={a.id} value={a.id}>{a.name} · {a.role}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!hideAdvisor && (
+            <div><Label>Asesor SOZU asignado</Label>
+              <AdvisorCombobox
+                value={form.advisorId ?? ''}
+                onChange={v => set('advisorId', v)}
+                advisors={advisors.filter(a => a.active)}
+              />
+            </div>
+          )}
           <div><Label>Comentarios</Label><Textarea value={form.comments ?? ''} onChange={e => set('comments', e.target.value)} /></div>
 
           {duplicate && (
@@ -315,7 +538,7 @@ export function ReferralFormDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
-          <Button onClick={() => submit(false)} disabled={!!duplicate || loading}>
+          <Button onClick={() => submit(false)} disabled={!!duplicate || loading || emailInvalid || phoneInvalid}>
             {loading ? 'Registrando...' : 'Registrar referido'}
           </Button>
         </DialogFooter>

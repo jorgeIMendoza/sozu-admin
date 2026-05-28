@@ -24,6 +24,7 @@ function mapAmbassador(row: any): Ambassador {
     idPersona: row.id_persona ?? undefined,
     fullName: row.personas?.nombre_legal ?? '',
     phone: row.personas?.telefono ?? '',
+    clavePaisTelefono: row.personas?.clave_pais_telefono ?? 'MX',
     email: row.personas?.email ?? '',
     company: cfg?.empresa ?? undefined,
     type: (cfg?.tipo ?? 'otro') as AmbassadorType,
@@ -82,7 +83,7 @@ function mapReferral(row: any): Referral {
 
 function mapAdvisor(row: any): Advisor {
   return {
-    id: row.email ?? String(row.id),
+    id: row.email,
     idPersona: row.id_persona ?? undefined,
     name: row.personas?.nombre_legal ?? row.nombre ?? '',
     role: (row.roles as any)?.nombre ?? '',
@@ -172,7 +173,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       .from('entidades_relacionadas')
       .select(`
         id, id_persona, activo, fecha_creacion,
-        personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono),
+        personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono, clave_pais_telefono),
         embajadores_config(
           codigo, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
           dias_proteccion, notas, estatus, documentos_pago
@@ -208,18 +209,23 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const loadAdvisors = useCallback(async () => {
+    // rol_id 9 = "Agente Interno"
     const { data, error } = await supabase
       .from('usuarios')
       .select(`
-        id, nombre, email, telefono, activo, id_persona,
-        roles!rol_id(nombre, es_rol_interno),
+        nombre, email, telefono, activo, id_persona,
+        roles!rol_id(nombre),
         personas!id_persona(nombre_legal, telefono)
       `)
       .eq('activo', true)
+      .eq('rol_id', 9)
       .order('nombre');
-    if (!error && data) {
-      const internal = data.filter((u: any) => (u.roles as any)?.es_rol_interno === true);
-      setAdvisors(internal.map(mapAdvisor));
+    if (error) {
+      console.error('loadAdvisors error:', error);
+      return;
+    }
+    if (data) {
+      setAdvisors(data.map(mapAdvisor));
     }
   }, []);
 
