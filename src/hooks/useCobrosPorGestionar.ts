@@ -14,16 +14,17 @@ import { supabase } from "@/integrations/supabase/client";
  *   'Rechazado'         →  'Declinado'          (director rechazó, ver notas)
  *
  * Filtros base:
- *   1. cuentas_cobranza.activo = true
- *   2. cuentas_cobranza.id_cuenta_cobranza_padre IS NULL (excluye mantenimiento)
- *   3. cuentas_cobranza.precio_final > 0
- *   4. cuentas_cobranza.url_factura_comision IS NOT NULL
- *   5. cuentas_cobranza.es_draft_factura_comision = false  (ya timbrada, no draft)
- *   6. propiedades.id_estatus_disponibilidad = 5           (Vendida)
- *
- * Una vez que el cobro al desarrollador se ejecuta (es_pagada_comision_venta=true),
- * la fila debería salir del listado — pero ese flujo lo dispara otra mutación,
- * no se filtra aquí.
+ *   1.  cuentas_cobranza.activo = true
+ *   2.  cuentas_cobranza.id_cuenta_cobranza_padre IS NULL (excluye mantenimiento)
+ *   3.  cuentas_cobranza.precio_final > 0
+ *   4.  cuentas_cobranza.porcentaje_comision_venta > 0
+ *   5.  cuentas_cobranza.url_factura_comision IS NOT NULL
+ *   6.  cuentas_cobranza.es_draft_factura_comision = false  (ya timbrada, no draft)
+ *   7.  cuentas_cobranza.es_pagada_comision_venta = false   (aún no cobrada al desarrollador)
+ *   8.  propiedades.id_estatus_disponibilidad = 5           (Vendida)
+ *   9.  propiedades.id_entidad_relacionada_dueno IS NOT NULL (entidad dueña configurada)
+ *   10. entidades_relacionadas.facturar_comision_sozu = true (flag activado ← clave)
+ *   11. monto_comision (precio × pct, con IVA si aplica) > 0
  */
 
 export type EstatusCobroAutorizacion = "Por Autorizar" | "Autorizado" | "Declinado";
@@ -101,7 +102,9 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
       .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
       .gt("precio_final", 0)
+      .gt("porcentaje_comision_venta", 0)
       .eq("es_draft_factura_comision", false)
+      .eq("es_pagada_comision_venta", false)
       .not("url_factura_comision", "is", null)
       .order("id", { ascending: false })
       .range(offset, offset + PAGE - 1)) as any;
@@ -216,7 +219,7 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
     ? ((await (supabase as any)
         .from("entidades_relacionadas")
         .select(
-          "id, cuenta_stp_comisiones, personas!fk_entrel_persona(nombre_legal, nombre_comercial, rfc, regimen, uso_cfdi)",
+          "id, cuenta_stp_comisiones, facturar_comision_sozu, personas!fk_entrel_persona(nombre_legal, nombre_comercial, rfc, regimen, uso_cfdi)",
         )
         .in("id", entIds)) as any)
     : { data: [] };
@@ -273,21 +276,23 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
     : { data: [] };
   const persMap = new Map<number, any>((pers || []).map((p: any) => [p.id, p]));
 
-  // 9) Composición final + gate de propiedad Vendida.
+  // 9) Composición final + gates (Vendida, entidad dueña configurada con flag, monto > 0).
   const result: CobroPorGestionar[] = [];
   for (const c of cuentasBase) {
     const oferta = c.id_oferta ? ofMap.get(c.id_oferta) : null;
     const idPropEfectivo: number | null = c.id_propiedad ?? oferta?.id_propiedad ?? null;
     const propiedad = idPropEfectivo ? propMap.get(idPropEfectivo) : null;
     if (propiedad?.id_estatus_disponibilidad !== 5) continue;
+    // Entidad dueña configurada + flag de facturación activo (regla clave).
+    if (!propiedad?.id_entidad_relacionada_dueno) continue;
+    const entidad = entMap.get(propiedad.id_entidad_relacionada_dueno);
+    if (!entidad) continue;
+    if (!entidad.facturar_comision_sozu) continue;
 
     const em = propiedad?.id_edificio_modelo ? emMap.get(propiedad.id_edificio_modelo) : null;
     const edificio = em?.id_edificio ? edMap.get(em.id_edificio) : null;
     const proyectoNombre = edificio?.id_proyecto ? projMap.get(edificio.id_proyecto) : null;
     const producto = oferta?.id_producto ? prodMap.get(oferta.id_producto) : null;
-    const entidad = propiedad?.id_entidad_relacionada_dueno
-      ? entMap.get(propiedad.id_entidad_relacionada_dueno)
-      : null;
     const persona = oferta?.id_persona_lead ? persMap.get(oferta.id_persona_lead) : null;
 
     let tipo: CobroPorGestionar["tipo"] = "Propiedad";
@@ -300,6 +305,8 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
     const pct = Number(c.porcentaje_comision_venta ?? 0);
     const subtotal = (precio * pct) / 100;
     const montoFactura = c.iva_incluido ? subtotal * 1.16 : subtotal;
+    // Monto de comisión > 0 (defensa adicional al filtro de precio×pct en BD).
+    if (montoFactura <= 0) continue;
 
     const entidadDuena =
       entidad?.personas?.nombre_comercial || entidad?.personas?.nombre_legal || null;
