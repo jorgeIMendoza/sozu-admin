@@ -358,7 +358,7 @@ const Propiedades = () => {
   const currentUserPersonaId = profile?.id_persona;
   
   // Check if user can see advanced filters and deleted tab
-  const canSeeAdvancedFilters = profile?.ver_filtros_avanzados_eliminados ?? true;
+  const canSeeAdvancedFilters = isSuperAdmin || (profile?.ver_filtros_avanzados_eliminados ?? true);
   
   // Helper function to check if user can access an offer
   const canAccessOffer = (offer: any) => {

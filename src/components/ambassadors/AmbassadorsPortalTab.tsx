@@ -37,7 +37,7 @@ const dateShort = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('es-
 
 const commLabelForAmb = (s: string) => s === 'potencial' ? 'Sin comisión generada' : COMMISSION_STATUS_LABEL[s as keyof typeof COMMISSION_STATUS_LABEL];
 
-type Section = 'home' | 'referrals' | 'register' | 'commissions' | 'profile';
+type Section = 'home' | 'referrals' | 'commissions' | 'profile';
 
 function KpiCard({
   label, value, sub, help, accent,
@@ -118,13 +118,6 @@ export default function AmbassadorsPortalTab() {
       generated: sum('generada'), authorized: sum('autorizada'), paid: sum('pagada'),
     };
   }, [myRefs]);
-
-  // Trigger form when entering "register" section, then snap back
-  useEffect(() => {
-    if (section === 'register') {
-      setShowForm(true);
-    }
-  }, [section]);
 
   if (!active) {
     return (
@@ -320,6 +313,9 @@ export default function AmbassadorsPortalTab() {
             ))}
           </SelectContent>
         </Select>
+        <Button onClick={() => setShowForm(true)} className="sm:w-auto">
+          <Plus className="h-4 w-4 mr-1" /> Registrar referido
+        </Button>
       </div>
 
       {/* Mobile: cards */}
@@ -634,36 +630,42 @@ export default function AmbassadorsPortalTab() {
   const NAV: { id: Section; label: string; icon: typeof Home; center?: boolean }[] = [
     { id: 'home', label: 'Inicio', icon: Home },
     { id: 'referrals', label: 'Referidos', icon: Users },
-    { id: 'register', label: 'Registrar', icon: Plus, center: true },
     { id: 'commissions', label: 'Comisiones', icon: Wallet },
     { id: 'profile', label: 'Perfil', icon: UserCircle2 },
   ];
 
   return (
     <TooltipProvider>
-      {/* Desktop pill nav */}
-      <div className="hidden md:flex items-center gap-1 p-1 rounded-lg border border-border bg-card mb-5 w-fit">
-        {NAV.map((n) => {
-          const Icon = n.icon;
-          const isActive = section === n.id;
-          return (
-            <button
-              key={n.id}
-              onClick={() => (n.id === 'register' ? setShowForm(true) : setSection(n.id))}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                isActive && n.id !== 'register' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                n.id === 'register' && 'bg-primary text-primary-foreground hover:bg-primary-dark',
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {n.label}
-              {n.id === 'profile' && unread > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] w-4 h-4">{unread}</span>
-              )}
-            </button>
-          );
-        })}
+      {/* Desktop top nav */}
+      <div className="hidden md:flex items-center justify-center mb-6">
+        <div className="inline-flex items-center gap-1 p-1.5 rounded-full border border-border bg-card shadow-sm">
+          {NAV.map((n) => {
+            const Icon = n.icon;
+            const isActive = section === n.id;
+            return (
+              <button
+                key={n.id}
+                onClick={() => setSection(n.id)}
+                className={cn(
+                  'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                )}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <Icon className="h-4 w-4" />
+                {n.label}
+                {n.id === 'profile' && unread > 0 && (
+                  <span className={cn(
+                    'inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1',
+                    isActive ? 'bg-primary-foreground text-primary' : 'bg-destructive text-destructive-foreground',
+                  )}>{unread}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Content with bottom padding so mobile nav doesn't overlap */}
@@ -672,54 +674,39 @@ export default function AmbassadorsPortalTab() {
         {section === 'referrals' && ReferralsSection}
         {section === 'commissions' && CommissionsSection}
         {section === 'profile' && ProfileSection}
-        {section === 'register' && HomeSection /* fallback under the dialog */}
       </div>
 
-      {/* Mobile/tablet floating bottom nav */}
+      {/* Mobile floating bottom nav */}
       <nav
-        className="md:hidden fixed left-1/2 -translate-x-1/2 z-40 bg-card border border-border rounded-2xl shadow-lg"
-        style={{ bottom: 'max(12px, env(safe-area-inset-bottom))', width: 'min(94vw, 480px)' }}
+        className="md:hidden fixed left-1/2 -translate-x-1/2 z-40 bg-card/95 backdrop-blur border border-border rounded-full shadow-xl shadow-black/10"
+        style={{ bottom: 'max(12px, env(safe-area-inset-bottom))', width: 'min(94vw, 420px)' }}
         aria-label="Navegación principal del embajador"
       >
-        <ul className="flex items-end justify-around px-2 py-1.5">
+        <ul className="flex items-center justify-around p-1.5">
           {NAV.map((n) => {
             const Icon = n.icon;
             const isActive = section === n.id;
-            if (n.center) {
-              return (
-                <li key={n.id} className="-mt-6">
-                  <button
-                    onClick={() => setShowForm(true)}
-                    className="flex flex-col items-center gap-0.5"
-                    aria-label="Registrar nuevo referido"
-                  >
-                    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 ring-4 ring-card transition-transform active:scale-95">
-                      <Icon className="h-6 w-6" />
-                    </span>
-                    <span className="text-[10px] font-semibold text-primary mt-0.5">{n.label}</span>
-                  </button>
-                </li>
-              );
-            }
             return (
               <li key={n.id} className="flex-1">
                 <button
                   onClick={() => setSection(n.id)}
                   className={cn(
-                    'w-full flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors',
-                    isActive ? 'text-primary' : 'text-muted-foreground active:bg-muted',
+                    'w-full flex flex-col items-center gap-0.5 py-2 px-1 rounded-full transition-all',
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                      : 'text-muted-foreground active:bg-muted',
                   )}
                   aria-current={isActive ? 'page' : undefined}
                 >
                   <span className="relative">
-                    <Icon className={cn('h-5 w-5', isActive && 'animate-fade-in')} />
+                    <Icon className="h-5 w-5" />
                     {n.id === 'profile' && unread > 0 && (
-                      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] min-w-[14px] h-[14px] px-1">
+                      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold min-w-[14px] h-[14px] px-1">
                         {unread}
                       </span>
                     )}
                   </span>
-                  <span className={cn('text-[10px] font-medium', isActive && 'font-semibold')}>{n.label}</span>
+                  <span className={cn('text-[10px]', isActive ? 'font-semibold' : 'font-medium')}>{n.label}</span>
                 </button>
               </li>
             );
@@ -729,11 +716,9 @@ export default function AmbassadorsPortalTab() {
 
       <ReferralFormDialog
         open={showForm}
-        onOpenChange={(o) => {
-          setShowForm(o);
-          if (!o && section === 'register') setSection('home');
-        }}
+        onOpenChange={setShowForm}
         defaultAmbassadorId={activeId}
+        hideAdvisor
       />
       <ReferralPortalDrawer referralId={openRefId} onOpenChange={setOpenRefId} />
     </TooltipProvider>
