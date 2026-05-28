@@ -473,10 +473,12 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
           }
           
           const { data } = await supabase.rpc('execute_safe_query', { query_text: query });
-          let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || []).map((item) => ({
-            value: String(item.id),
-            label: String(item.nombre_legal || item.nombre),
-          }));
+          let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || [])
+            .filter((item) => item.id != null)
+            .map((item) => ({
+              value: String(item.id),
+              label: String(item.nombre_legal || item.nombre),
+            }));
           
           // For Representante de empresa dueña, handle project filter specially
           if (filtro.nombre === 'id_proyecto' && isRepresentanteEmpresaDuena && accessibleProjectIds.length > 0) {
@@ -1478,8 +1480,8 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     }
 
     let displayValue = String(value ?? '-');
-    // If the value is a plain integer (raw cc.id, not yet formatted), format it
-    if (/^\d+$/.test(displayValue) && displayValue !== '-') {
+    // Si el valor es un entero crudo (cc.id sin formatear), convertir a CC-XXXXXX o CCP-XXXXXX
+    if (/^\d+$/.test(displayValue)) {
       const tipo = String(row?.['tipo'] || '').toLowerCase();
       const prefix = tipo === 'producto' ? 'CCP' : 'CC';
       displayValue = `${prefix}-${displayValue.padStart(6, '0')}`;
@@ -1827,11 +1829,16 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
                     {/* Check if this is a simple report (products) or detailed (properties) */}
                     {(() => {
-                      const hasDetailedBreakdown = summaryData.numericColumns.includes('monto_durante_obra') || 
+                      const hasDetailedBreakdown = summaryData.numericColumns.includes('monto_durante_obra') ||
                                                    summaryData.numericColumns.includes('monto_a_la_entrega');
                       const hasSimplePagado = summaryData.numericColumns.includes('pagado');
                       const hasSimpleRestante = summaryData.numericColumns.includes('restante');
-                      
+
+                      // No KPI breakdown for reports without cobranza columns (e.g. cartera activa)
+                      if (!hasDetailedBreakdown && !hasSimplePagado && !hasSimpleRestante) {
+                        return null;
+                      }
+
                       // Simple view for products report (only pagado/restante without breakdown)
                       if (!hasDetailedBreakdown && (hasSimplePagado || hasSimpleRestante)) {
                         return (
