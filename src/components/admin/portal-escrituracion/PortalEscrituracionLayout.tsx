@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   Scale,
   HeartHandshake,
+  GitBranch,
+  Gavel,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,9 @@ const navGroups: NavGroup[] = [
       { label: "Demandas",              path: "/admin/portal-escrituracion/demandas",       icon: Scale },
       { label: "Entregas",              path: "/admin/portal-escrituracion/entregas",       icon: PackageCheck },
       { label: "Postventa",             path: "/admin/portal-escrituracion/postventa",      icon: HeartHandshake },
+      { label: "Workflow",              path: "/admin/portal-escrituracion/workflow",        icon: GitBranch },
+      { label: "App Notaría",           path: "/admin/portal-escrituracion/app-notaria",       icon: Stamp },
+      { label: "App Jurídico",          path: "/admin/portal-escrituracion/app-juridico",      icon: Gavel },
     ],
   },
 ];
