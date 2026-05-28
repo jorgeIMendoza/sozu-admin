@@ -6,8 +6,9 @@ import {
   Referral, ReferralStatus, REFERRAL_STATUS_LABEL, InterestType,
   ProtectionStatus, PROTECTION_STATUS_LABEL, DOCUMENT_STATUS_LABEL, DocumentStatus,
   DEFAULT_PAYMENT_DOCS, AssignmentStatus, ASSIGNMENT_STATUS_LABEL,
-  nextStepFor, protectionStatusFor,
+  nextStepFor, protectionStatusFor, detectDuplicate,
 } from '@/types/ambassadors';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,9 +20,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, Clock, UserPlus, Settings as SettingsIcon } from 'lucide-react';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import NuevoEmbajadorDialog from './NuevoEmbajadorDialog';
 
 const PROT_TONE: Record<ProtectionStatus, string> = {
   protegido: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
@@ -65,34 +67,18 @@ const REFERRAL_STATUSES: ReferralStatus[] = [
   'apartado','promesa_firmada','venta_cerrada','comision_generada','comision_pagada','descartado','duplicado',
 ];
 
-// =============== Ambassador form sheet ===============
-function AmbassadorFormSheet({
-  open, onOpenChange, editing,
-}: { open: boolean; onOpenChange: (b: boolean) => void; editing?: Ambassador | null }) {
-  const { createAmbassador, updateAmbassador } = useAmbassadors();
-  const [form, setForm] = useState<Partial<Ambassador>>(
-    editing ?? { type: 'cliente', status: 'activo', commissionPct: 0.5, commissionTrigger: 'enganche' },
-  );
+// =============== Ambassador edit sheet (solo edición) ===============
+function AmbassadorEditSheet({
+  open, onOpenChange, ambassador,
+}: { open: boolean; onOpenChange: (b: boolean) => void; ambassador: Ambassador }) {
+  const { updateAmbassador } = useAmbassadors();
+  const [form, setForm] = useState<Partial<Ambassador>>(ambassador);
 
-  const set = (k: keyof Ambassador, v: any) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k: keyof Ambassador, v: any) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = () => {
-    if (!form.fullName || !form.email || !form.phone) { toast.error('Completa los campos obligatorios'); return; }
-    if (editing) {
-      updateAmbassador(editing.id, form);
-      toast.success('Embajador actualizado');
-    } else {
-      const a = createAmbassador({
-        fullName: form.fullName!, phone: form.phone!, email: form.email!,
-        company: form.company, type: form.type as AmbassadorType,
-        status: form.status as AmbassadorStatus,
-        commissionPct: Number(form.commissionPct) || 0,
-        fixedAmount: form.fixedAmount ? Number(form.fixedAmount) : undefined,
-        commissionTrigger: form.commissionTrigger as CommissionTrigger,
-        notes: form.notes,
-      });
-      toast.success(`Embajador creado: ${a.code}`);
-    }
+    updateAmbassador(ambassador.id, form);
+    toast.success('Embajador actualizado');
     onOpenChange(false);
   };
 
@@ -100,19 +86,13 @@ function AmbassadorFormSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{editing ? 'Editar embajador' : 'Nuevo embajador'}</SheetTitle>
-          <SheetDescription>Los embajadores únicamente refieren clientes. No participan en el proceso comercial.</SheetDescription>
+          <SheetTitle>Editar embajador</SheetTitle>
+          <SheetDescription>{ambassador.code} · {ambassador.fullName}</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 mt-4">
-          <div><Label>Nombre completo *</Label><Input value={form.fullName ?? ''} onChange={(e) => set('fullName', e.target.value)} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>Teléfono *</Label><Input value={form.phone ?? ''} onChange={(e) => set('phone', e.target.value)} /></div>
-            <div><Label>Email *</Label><Input type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} /></div>
-          </div>
-          <div><Label>Empresa / origen</Label><Input value={form.company ?? ''} onChange={(e) => set('company', e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Tipo</Label>
-              <Select value={form.type} onValueChange={(v) => set('type', v)}>
+              <Select value={form.type} onValueChange={v => set('type', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(AMBASSADOR_TYPE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -120,7 +100,7 @@ function AmbassadorFormSheet({
               </Select>
             </div>
             <div><Label>Estatus</Label>
-              <Select value={form.status} onValueChange={(v) => set('status', v)}>
+              <Select value={form.status} onValueChange={v => set('status', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="activo">Activo</SelectItem>
@@ -130,11 +110,12 @@ function AmbassadorFormSheet({
               </Select>
             </div>
           </div>
+          <div><Label>Empresa / origen</Label><Input value={form.company ?? ''} onChange={e => set('company', e.target.value)} /></div>
           <div className="grid grid-cols-3 gap-3">
-            <div><Label>% Comisión</Label><Input type="number" step="0.1" value={form.commissionPct ?? 0} onChange={(e) => set('commissionPct', Number(e.target.value))} /></div>
-            <div><Label>Monto fijo (opcional)</Label><Input type="number" value={form.fixedAmount ?? ''} onChange={(e) => set('fixedAmount', e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><Label>% Comisión</Label><Input type="number" step="0.1" value={form.commissionPct ?? 0} onChange={e => set('commissionPct', Number(e.target.value))} /></div>
+            <div><Label>Monto fijo</Label><Input type="number" value={form.fixedAmount ?? ''} onChange={e => set('fixedAmount', e.target.value ? Number(e.target.value) : undefined)} /></div>
             <div><Label>Trigger</Label>
-              <Select value={form.commissionTrigger} onValueChange={(v) => set('commissionTrigger', v)}>
+              <Select value={form.commissionTrigger} onValueChange={v => set('commissionTrigger', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="apartado">Al apartado</SelectItem>
@@ -145,10 +126,11 @@ function AmbassadorFormSheet({
               </Select>
             </div>
           </div>
-          <div><Label>Notas internas</Label><Textarea value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></div>
+          <div><Label>Días de protección</Label><Input type="number" value={form.protectionDays ?? 90} onChange={e => set('protectionDays', Number(e.target.value))} /></div>
+          <div><Label>Notas internas</Label><Textarea value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} /></div>
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={submit}>{editing ? 'Guardar' : 'Crear embajador'}</Button>
+            <Button onClick={submit}>Guardar cambios</Button>
           </div>
         </div>
       </SheetContent>
@@ -156,29 +138,105 @@ function AmbassadorFormSheet({
   );
 }
 
-// =============== Referral form (admin) ===============
+// =============== Referral form dialog (Supabase) ===============
 export function ReferralFormDialog({
   open, onOpenChange, defaultAmbassadorId,
 }: { open: boolean; onOpenChange: (b: boolean) => void; defaultAmbassadorId?: string }) {
-  const { ambassadors, createReferral } = useAmbassadors();
+  const { ambassadors, advisors, referrals, refresh } = useAmbassadors();
   const [form, setForm] = useState<any>({
-    ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id,
-    interestType: 'indefinido', consent: true,
+    ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '',
+    interestType: 'indefinido', consent: true, advisorId: '',
   });
   const [duplicate, setDuplicate] = useState<Referral | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
-  const submit = (force = false) => {
+  const submit = async (force = false) => {
     if (!form.ambassadorId || !form.clientName || !form.phone || !form.email) {
       toast.error('Completa nombre, teléfono y email'); return;
     }
-    const { referral, duplicate: dup } = createReferral(form, { force });
-    if (!referral && dup) { setDuplicate(dup); return; }
-    toast.success('Referido registrado');
-    setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id, interestType: 'indefinido', consent: true });
-    setDuplicate(null);
-    onOpenChange(false);
+
+    if (!force) {
+      const dup = detectDuplicate(referrals, { clientName: form.clientName, phone: form.phone, email: form.email });
+      if (dup) { setDuplicate(dup); return; }
+    }
+
+    setLoading(true);
+    try {
+      // Obtener tipo_entidad "Prospecto"
+      const { data: tipoData } = await supabase
+        .from('tipos_entidad')
+        .select('id')
+        .eq('nombre', 'Prospecto')
+        .maybeSingle();
+
+      const tipoProspectoId = tipoData?.id ?? 7;
+
+      // Embajador y asesor seleccionados
+      const emb = ambassadors.find(a => a.id === form.ambassadorId);
+      const adv = form.advisorId ? advisors.find(a => a.id === form.advisorId) : null;
+
+      // Crear persona del cliente
+      const { data: persona, error: personaError } = await supabase
+        .from('personas')
+        .insert({
+          nombre_legal: form.clientName.trim(),
+          email: form.email.trim().toLowerCase(),
+          telefono: form.phone.trim(),
+          tipo_persona: 'pf',
+          activo: true,
+        })
+        .select('id')
+        .single();
+      if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
+
+      // Crear entidad_relacionada tipo Prospecto (id_persona_duena_lead = embajador)
+      const { data: erData, error: erError } = await supabase
+        .from('entidades_relacionadas')
+        .insert({
+          id_persona: persona.id,
+          id_tipo_entidad: tipoProspectoId,
+          id_persona_duena_lead: emb?.idPersona ?? null,
+          activo: true,
+        })
+        .select('id')
+        .single();
+      if (erError || !erData) throw erError ?? new Error('Error al crear entidad_relacionada');
+
+      // Crear referido en bridge table
+      const { error: refError } = await supabase.from('embajadores_referidos').insert({
+        id_entidad_relacionada: erData.id,
+        id_entidad_relacionada_emb: Number(form.ambassadorId),
+        id_persona_embajador: emb?.idPersona ?? 0,
+        tipo_interes: form.interestType,
+        producto_interes: form.productInterest || null,
+        relacion_embajador: form.relationship || null,
+        comentarios: form.comments || null,
+        consentimiento: form.consent ?? true,
+        id_asesor_asignado: adv?.id || null,
+        id_persona_asesor: adv?.idPersona ?? null,
+        nombre_asesor: adv?.name || null,
+        rol_asesor: adv?.role || null,
+        telefono_asesor: adv?.phone || null,
+        email_asesor: adv?.email || null,
+        estatus_asignacion: adv ? 'asignado' : 'sin_asignar',
+        fecha_asignacion: adv ? new Date().toISOString() : null,
+        audit_trail: [{ timestamp: new Date().toISOString(), actor: 'admin', type: 'creado' }],
+      });
+      if (refError) throw refError;
+
+      toast.success('Referido registrado');
+      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '' });
+      setDuplicate(null);
+      await refresh();
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message ?? 'Error al registrar referido');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -186,26 +244,26 @@ export function ReferralFormDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Registrar cliente referido</DialogTitle>
-          <DialogDescription>El registro garantiza la prioridad por fecha y hora. El equipo SOZU dará seguimiento comercial.</DialogDescription>
+          <DialogDescription>El equipo SOZU dará seguimiento comercial al referido.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {!defaultAmbassadorId && (
             <div><Label>Embajador</Label>
-              <Select value={form.ambassadorId} onValueChange={(v) => set('ambassadorId', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{ambassadors.map((a) => <SelectItem key={a.id} value={a.id}>{a.fullName} ({a.code})</SelectItem>)}</SelectContent>
+              <Select value={form.ambassadorId} onValueChange={v => set('ambassadorId', v)}>
+                <SelectTrigger><SelectValue placeholder="Selecciona embajador" /></SelectTrigger>
+                <SelectContent>{ambassadors.map(a => <SelectItem key={a.id} value={a.id}>{a.fullName} ({a.code})</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}
-          <div><Label>Nombre del cliente *</Label><Input value={form.clientName ?? ''} onChange={(e) => set('clientName', e.target.value)} /></div>
+          <div><Label>Nombre del cliente *</Label><Input value={form.clientName ?? ''} onChange={e => set('clientName', e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Teléfono *</Label><Input value={form.phone ?? ''} onChange={(e) => set('phone', e.target.value)} /></div>
-            <div><Label>Email *</Label><Input type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} /></div>
+            <div><Label>Teléfono *</Label><Input value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} /></div>
+            <div><Label>Email *</Label><Input type="email" value={form.email ?? ''} onChange={e => set('email', e.target.value)} /></div>
           </div>
-          <div><Label>Relación con el embajador</Label><Input value={form.relationship ?? ''} onChange={(e) => set('relationship', e.target.value)} /></div>
+          <div><Label>Relación con el embajador</Label><Input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Interés</Label>
-              <Select value={form.interestType} onValueChange={(v) => set('interestType', v)}>
+              <Select value={form.interestType} onValueChange={v => set('interestType', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="vivir">Vivir</SelectItem>
@@ -216,7 +274,7 @@ export function ReferralFormDialog({
               </Select>
             </div>
             <div><Label>Producto</Label>
-              <Select value={form.productInterest ?? ''} onValueChange={(v) => set('productInterest', v)}>
+              <Select value={form.productInterest ?? ''} onValueChange={v => set('productInterest', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="2 recámaras">2 recámaras</SelectItem>
@@ -227,7 +285,18 @@ export function ReferralFormDialog({
               </Select>
             </div>
           </div>
-          <div><Label>Comentarios</Label><Textarea value={form.comments ?? ''} onChange={(e) => set('comments', e.target.value)} /></div>
+          <div><Label>Asesor SOZU asignado</Label>
+            <Select value={form.advisorId ?? 'none'} onValueChange={v => set('advisorId', v === 'none' ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder="Sin asignar (se puede asignar después)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— Sin asignar —</SelectItem>
+                {advisors.filter(a => a.active).map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name} · {a.role}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div><Label>Comentarios</Label><Textarea value={form.comments ?? ''} onChange={e => set('comments', e.target.value)} /></div>
 
           {duplicate && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
@@ -245,26 +314,27 @@ export function ReferralFormDialog({
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={() => submit(false)} disabled={!!duplicate}>Registrar referido</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
+          <Button onClick={() => submit(false)} disabled={!!duplicate || loading}>
+            {loading ? 'Registrando...' : 'Registrar referido'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-// =============== Referral detail sheet (admin) ===============
+// =============== Referral detail sheet ===============
 function ReferralDetailSheet({
   referralId, onOpenChange,
 }: { referralId: string | null; onOpenChange: (id: string | null) => void }) {
   const {
     referrals, ambassadors, advisors, updateReferralStatus, validateReferral,
     markDuplicate, assignAdvisor, setAssignmentStatus, addInternalNote, setSaleAmount, setCommissionStatus,
-    setPublicComments, setNextStep, setProtectionStatus, setEstimatedPaymentDate,
-    setDocumentStatus,
+    setPublicComments, setNextStep, setProtectionStatus, setEstimatedPaymentDate, setDocumentStatus,
   } = useAmbassadors();
-  const ref = referrals.find((r) => r.id === referralId) ?? null;
-  const amb = ref ? ambassadors.find((a) => a.id === ref.ambassadorId) : null;
+  const ref = referrals.find(r => r.id === referralId) ?? null;
+  const amb = ref ? ambassadors.find(a => a.id === ref.ambassadorId) : null;
   const [note, setNote] = useState('');
   const [sale, setSale] = useState('');
   const [nextStepDraft, setNextStepDraft] = useState('');
@@ -273,14 +343,13 @@ function ReferralDetailSheet({
 
   if (!ref) return <Sheet open={false} onOpenChange={() => onOpenChange(null)}><SheetContent /></Sheet>;
 
-  const activeAdvisors = advisors.filter((a) => a.active);
-  const assignmentHistory = ref.auditTrail.filter((e) =>
-    ['asesor_asignado','asesor_reasignado','asesor_removido'].includes(e.type) ||
-    e.type.startsWith('assignment:'),
+  const activeAdvisors = advisors.filter(a => a.active);
+  const assignmentHistory = ref.auditTrail.filter(e =>
+    ['asesor_asignado','asesor_reasignado','asesor_removido'].includes(e.type) || e.type.startsWith('assignment:'),
   );
 
   return (
-    <Sheet open={!!ref} onOpenChange={(o) => !o && onOpenChange(null)}>
+    <Sheet open={!!ref} onOpenChange={o => !o && onOpenChange(null)}>
       <SheetContent className="sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{ref.clientName}</SheetTitle>
@@ -298,10 +367,10 @@ function ReferralDetailSheet({
 
           <div>
             <Label>Estatus interno</Label>
-            <Select value={ref.status} onValueChange={(v) => updateReferralStatus(ref.id, v as ReferralStatus)}>
+            <Select value={ref.status} onValueChange={v => updateReferralStatus(ref.id, v as ReferralStatus)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {REFERRAL_STATUSES.map((s) => <SelectItem key={s} value={s}>{REFERRAL_STATUS_LABEL[s]}</SelectItem>)}
+                {REFERRAL_STATUSES.map(s => <SelectItem key={s} value={s}>{REFERRAL_STATUS_LABEL[s]}</SelectItem>)}
               </SelectContent>
             </Select>
             <div className="flex gap-2 mt-2">
@@ -310,7 +379,6 @@ function ReferralDetailSheet({
             </div>
           </div>
 
-          {/* Asignación de asesor */}
           <div className="rounded-md border border-border p-3 space-y-3">
             <div className="flex items-center justify-between">
               <Label className="flex items-center gap-2"><UserPlus className="h-4 w-4" /> Asignación de asesor</Label>
@@ -321,29 +389,24 @@ function ReferralDetailSheet({
                 <Label className="text-xs">Asesor asignado</Label>
                 <Select
                   value={ref.assignedAdvisorId ?? 'none'}
-                  onValueChange={(v) => {
+                  onValueChange={v => {
                     assignAdvisor(ref.id, v === 'none' ? null : v);
-                    toast.success(v === 'none' ? 'Asignación removida' : 'Asesor asignado · notificación enviada');
+                    toast.success(v === 'none' ? 'Asignación removida' : 'Asesor asignado');
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecciona asesor" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— Quitar asignación —</SelectItem>
-                    {activeAdvisors.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>{a.name} · {a.role}</SelectItem>
-                    ))}
+                    {activeAdvisors.map(a => <SelectItem key={a.id} value={a.id}>{a.name} · {a.role}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Estatus de seguimiento</Label>
-                <Select
-                  value={ref.assignmentStatus ?? 'sin_asignar'}
-                  onValueChange={(v) => setAssignmentStatus(ref.id, v as AssignmentStatus)}
-                >
+                <Select value={ref.assignmentStatus ?? 'sin_asignar'} onValueChange={v => setAssignmentStatus(ref.id, v as AssignmentStatus)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(ASSIGNMENT_STATUS_LABEL) as AssignmentStatus[]).map((k) => (
+                    {(Object.keys(ASSIGNMENT_STATUS_LABEL) as AssignmentStatus[]).map(k => (
                       <SelectItem key={k} value={k}>{ASSIGNMENT_STATUS_LABEL[k]}</SelectItem>
                     ))}
                   </SelectContent>
@@ -358,7 +421,7 @@ function ReferralDetailSheet({
             )}
             {assignmentHistory.length > 0 && (
               <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Historial de asignaciones</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Historial</div>
                 <ul className="text-xs space-y-0.5 max-h-32 overflow-auto">
                   {assignmentHistory.slice().reverse().map((e, i) => (
                     <li key={i} className="text-muted-foreground">
@@ -373,7 +436,7 @@ function ReferralDetailSheet({
           <div>
             <Label>Monto de venta</Label>
             <div className="flex gap-2">
-              <Input type="number" value={sale || ref.saleAmount || ''} onChange={(e) => setSale(e.target.value)} />
+              <Input type="number" value={sale || ref.saleAmount || ''} onChange={e => setSale(e.target.value)} />
               <Button size="sm" onClick={() => { if (sale) { setSaleAmount(ref.id, Number(sale)); toast.success('Monto actualizado'); setSale(''); } }}>Guardar</Button>
             </div>
           </div>
@@ -394,26 +457,24 @@ function ReferralDetailSheet({
             </div>
           </div>
 
-          {/* Próximo paso + Protección + Fecha estimada de pago */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Próximo paso (visible al embajador)</Label>
               <div className="flex gap-2">
                 <Input
                   value={nextStepDraft || ref.nextStepOverride || nextStepFor(ref.status)}
-                  onChange={(e) => setNextStepDraft(e.target.value)}
+                  onChange={e => setNextStepDraft(e.target.value)}
                   placeholder={nextStepFor(ref.status)}
                 />
-                <Button size="sm" onClick={() => { if (nextStepDraft) { setNextStep(ref.id, nextStepDraft); toast.success('Próximo paso actualizado'); setNextStepDraft(''); } }}>Guardar</Button>
+                <Button size="sm" onClick={() => { if (nextStepDraft) { setNextStep(ref.id, nextStepDraft); toast.success('Guardado'); setNextStepDraft(''); } }}>Guardar</Button>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">Si no se define, se usa el sugerido por el estatus.</p>
             </div>
             <div>
               <Label>Protección del referido</Label>
-              <Select value={protectionStatusFor(ref)} onValueChange={(v) => { setProtectionStatus(ref.id, v as ProtectionStatus); toast.success('Protección actualizada'); }}>
+              <Select value={protectionStatusFor(ref)} onValueChange={v => { setProtectionStatus(ref.id, v as ProtectionStatus); toast.success('Actualizado'); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(PROTECTION_STATUS_LABEL) as ProtectionStatus[]).map((k) => (
+                  {(Object.keys(PROTECTION_STATUS_LABEL) as ProtectionStatus[]).map(k => (
                     <SelectItem key={k} value={k}>{PROTECTION_STATUS_LABEL[k]}</SelectItem>
                   ))}
                 </SelectContent>
@@ -430,9 +491,9 @@ function ReferralDetailSheet({
                 <Input
                   type="date"
                   value={estPayDraft || (ref.estimatedPaymentDate ? ref.estimatedPaymentDate.slice(0, 10) : '')}
-                  onChange={(e) => setEstPayDraft(e.target.value)}
+                  onChange={e => setEstPayDraft(e.target.value)}
                 />
-                <Button size="sm" onClick={() => { if (estPayDraft) { setEstimatedPaymentDate(ref.id, new Date(estPayDraft).toISOString()); toast.success('Fecha estimada guardada'); setEstPayDraft(''); } }}>Guardar</Button>
+                <Button size="sm" onClick={() => { if (estPayDraft) { setEstimatedPaymentDate(ref.id, new Date(estPayDraft).toISOString()); toast.success('Guardado'); setEstPayDraft(''); } }}>Guardar</Button>
               </div>
             </div>
             <div>
@@ -441,29 +502,28 @@ function ReferralDetailSheet({
                 <Textarea
                   className="min-h-16"
                   value={publicDraft || ref.publicComments || ''}
-                  onChange={(e) => setPublicDraft(e.target.value)}
+                  onChange={e => setPublicDraft(e.target.value)}
                 />
-                <Button size="sm" onClick={() => { setPublicComments(ref.id, publicDraft); toast.success('Comentario actualizado'); setPublicDraft(''); }}>Guardar</Button>
+                <Button size="sm" onClick={() => { setPublicComments(ref.id, publicDraft); toast.success('Actualizado'); setPublicDraft(''); }}>Guardar</Button>
               </div>
             </div>
           </div>
 
-          {/* Documentos del embajador */}
           {amb && (
             <div>
               <Label className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> Documentación del embajador</Label>
               <div className="mt-2 space-y-2">
-                {(amb.paymentDocs ?? DEFAULT_PAYMENT_DOCS).map((d) => (
+                {(amb.paymentDocs ?? DEFAULT_PAYMENT_DOCS).map(d => (
                   <div key={d.key} className="flex items-center justify-between gap-2 rounded border border-border p-2 text-sm">
                     <div className="flex-1">
                       <div>{d.label}</div>
                       {d.fileName && <div className="text-[10px] text-muted-foreground font-mono">{d.fileName}</div>}
                     </div>
                     <Badge variant="outline" className={DOC_TONE[d.status]}>{DOCUMENT_STATUS_LABEL[d.status]}</Badge>
-                    <Select value={d.status} onValueChange={(v) => setDocumentStatus(amb.id, d.key, v as DocumentStatus)}>
+                    <Select value={d.status} onValueChange={v => setDocumentStatus(amb.id, d.key, v as DocumentStatus)}>
                       <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {(Object.keys(DOCUMENT_STATUS_LABEL) as DocumentStatus[]).map((k) => (
+                        {(Object.keys(DOCUMENT_STATUS_LABEL) as DocumentStatus[]).map(k => (
                           <SelectItem key={k} value={k}>{DOCUMENT_STATUS_LABEL[k]}</SelectItem>
                         ))}
                       </SelectContent>
@@ -474,11 +534,10 @@ function ReferralDetailSheet({
             </div>
           )}
 
-
           <div>
-            <Label>Notas internas (no visibles al embajador)</Label>
+            <Label>Notas internas</Label>
             <div className="flex gap-2">
-              <Textarea value={note} onChange={(e) => setNote(e.target.value)} className="min-h-16" />
+              <Textarea value={note} onChange={e => setNote(e.target.value)} className="min-h-16" />
               <Button size="sm" onClick={() => { if (note) { addInternalNote(ref.id, note); setNote(''); toast.success('Nota agregada'); } }}>Agregar</Button>
             </div>
             <ul className="mt-2 space-y-1 text-sm">
@@ -513,27 +572,31 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
   );
 }
 
-// =============== Main admin tab ===============
+// =============== Advisors manager ===============
 function AdvisorsManager() {
-  const { advisors, createAdvisor, updateAdvisor } = useAmbassadors();
-  const [form, setForm] = useState({ name: '', role: '', phone: '', email: '' });
-  const submit = () => {
-    if (!form.name || !form.role) { toast.error('Nombre y rol son requeridos'); return; }
-    createAdvisor({ ...form, active: true });
-    setForm({ name: '', role: '', phone: '', email: '' });
-    toast.success('Asesor agregado');
-  };
+  const { advisors, updateAdvisor } = useAmbassadors();
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <h3 className="font-medium mb-3">Asesores internos</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium">Asesores internos SOZU</h3>
+          <span className="text-xs text-muted-foreground">Los asesores se gestionan desde Gestión de Usuarios.</span>
+        </div>
         <Table>
           <TableHeader><TableRow>
             <TableHead>Nombre</TableHead><TableHead>Rol</TableHead><TableHead>Teléfono</TableHead>
-            <TableHead>Email</TableHead><TableHead>Estatus</TableHead><TableHead></TableHead>
+            <TableHead>Email</TableHead><TableHead>Disponible</TableHead><TableHead></TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {advisors.map((a) => (
+            {advisors.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  No hay asesores con roles internos activos.
+                </TableCell>
+              </TableRow>
+            )}
+            {advisors.map(a => (
               <TableRow key={a.id}>
                 <TableCell>{a.name}</TableCell>
                 <TableCell className="text-xs">{a.role}</TableCell>
@@ -541,7 +604,7 @@ function AdvisorsManager() {
                 <TableCell className="text-xs">{a.email ?? '—'}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={a.active ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' : 'bg-muted'}>
-                    {a.active ? 'Activo' : 'Inactivo'}
+                    {a.active ? 'Disponible' : 'No disponible'}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -554,46 +617,41 @@ function AdvisorsManager() {
           </TableBody>
         </Table>
       </Card>
-      <Card className="p-4 max-w-xl">
-        <h3 className="font-medium mb-3">Agregar asesor</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div><Label>Nombre *</Label><Input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} /></div>
-          <div><Label>Rol *</Label><Input value={form.role} onChange={(e)=>setForm({...form,role:e.target.value})} placeholder="Ej. Asesor Senior" /></div>
-          <div><Label>Teléfono</Label><Input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} /></div>
-          <div><Label>Email</Label><Input value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} /></div>
-        </div>
-        <Button className="mt-3" onClick={submit}><Plus className="h-4 w-4 mr-1" />Agregar asesor</Button>
-      </Card>
     </div>
   );
 }
 
 // =============== Main admin tab ===============
 export default function AmbassadorsAdminTab() {
-  const { ambassadors, referrals, advisors, advisorNotifications, settings, updateSettings, createAdvisor, updateAdvisor, assignAdvisor, markAdvisorNotifRead } = useAmbassadors();
-  const [showAmbForm, setShowAmbForm] = useState(false);
-  const [editing, setEditing] = useState<Ambassador | null>(null);
+  const {
+    ambassadors, referrals, advisors, advisorNotifications, settings,
+    assignAdvisor, markAdvisorNotifRead, loading, refresh,
+  } = useAmbassadors();
+
+  const [showNuevoEmb, setShowNuevoEmb] = useState(false);
+  const [showEditEmb, setShowEditEmb] = useState(false);
+  const [editingAmb, setEditingAmb] = useState<Ambassador | null>(null);
   const [showRefForm, setShowRefForm] = useState(false);
   const [openRefId, setOpenRefId] = useState<string | null>(null);
 
   const stats = useMemo(() => {
-    const active = ambassadors.filter((a) => a.status === 'activo').length;
-    const sales = referrals.filter((r) => r.status === 'venta_cerrada' || r.status === 'comision_generada' || r.status === 'comision_pagada').length;
+    const active = ambassadors.filter(a => a.status === 'activo').length;
+    const sales = referrals.filter(r => ['venta_cerrada','comision_generada','comision_pagada'].includes(r.status)).length;
     const conv = referrals.length ? (sales / referrals.length) * 100 : 0;
-    const potential = referrals.filter((r) => r.commissionStatus === 'potencial' || r.commissionStatus === 'generada').reduce((s, r) => s + r.commissionAmount, 0);
-    const authorized = referrals.filter((r) => r.commissionStatus === 'autorizada').reduce((s, r) => s + r.commissionAmount, 0);
-    const paid = referrals.filter((r) => r.commissionStatus === 'pagada').reduce((s, r) => s + r.commissionAmount, 0);
+    const potential = referrals.filter(r => r.commissionStatus === 'potencial' || r.commissionStatus === 'generada').reduce((s, r) => s + r.commissionAmount, 0);
+    const authorized = referrals.filter(r => r.commissionStatus === 'autorizada').reduce((s, r) => s + r.commissionAmount, 0);
+    const paid = referrals.filter(r => r.commissionStatus === 'pagada').reduce((s, r) => s + r.commissionAmount, 0);
     return { active, total: referrals.length, sales, conv, potential, authorized, paid };
   }, [ambassadors, referrals]);
 
   const ranking = useMemo(() => {
-    return ambassadors.map((a) => {
-      const refs = referrals.filter((r) => r.ambassadorId === a.id);
-      const valid = refs.filter((r) => r.status !== 'duplicado' && r.status !== 'descartado').length;
-      const sales = refs.filter((r) => ['venta_cerrada','comision_generada','comision_pagada'].includes(r.status)).length;
+    return ambassadors.map(a => {
+      const refs = referrals.filter(r => r.ambassadorId === a.id);
+      const valid = refs.filter(r => r.status !== 'duplicado' && r.status !== 'descartado').length;
+      const sales = refs.filter(r => ['venta_cerrada','comision_generada','comision_pagada'].includes(r.status)).length;
       const amount = refs.reduce((s, r) => s + (r.saleAmount ?? 0), 0);
-      const commGen = refs.filter((r) => r.commissionStatus !== 'potencial' && r.commissionStatus !== 'cancelada').reduce((s, r) => s + r.commissionAmount, 0);
-      const commPaid = refs.filter((r) => r.commissionStatus === 'pagada').reduce((s, r) => s + r.commissionAmount, 0);
+      const commGen = refs.filter(r => r.commissionStatus !== 'potencial' && r.commissionStatus !== 'cancelada').reduce((s, r) => s + r.commissionAmount, 0);
+      const commPaid = refs.filter(r => r.commissionStatus === 'pagada').reduce((s, r) => s + r.commissionAmount, 0);
       const conv = refs.length ? (sales / refs.length) * 100 : 0;
       return { a, refs: refs.length, valid, sales, amount, commGen, commPaid, conv };
     }).sort((x, y) => y.commGen - x.commGen);
@@ -602,9 +660,9 @@ export default function AmbassadorsAdminTab() {
   const exportCsv = () => {
     const rows = [
       ['Embajador','Código','Referidos','Válidos','Ventas','Monto','Comisión generada','Comisión pagada','Conversión %'],
-      ...ranking.map((r) => [r.a.fullName, r.a.code, r.refs, r.valid, r.sales, r.amount, r.commGen, r.commPaid, r.conv.toFixed(1)]),
+      ...ranking.map(r => [r.a.fullName, r.a.code, r.refs, r.valid, r.sales, r.amount, r.commGen, r.commPaid, r.conv.toFixed(1)]),
     ];
-    const csv = rows.map((r) => r.join(',')).join('\n');
+    const csv = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -619,11 +677,11 @@ export default function AmbassadorsAdminTab() {
             <h1 className="text-2xl font-semibold">Embajadores</h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              Los embajadores únicamente refieren clientes. No participan en negociación, presentación de inventario ni cierre. El seguimiento comercial es del equipo interno SOZU.
+              Los embajadores únicamente refieren clientes. No participan en negociación ni cierre. El seguimiento comercial es del equipo interno SOZU.
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setEditing(null); setShowAmbForm(true); }}>
+            <Button variant="outline" onClick={() => setShowNuevoEmb(true)}>
               <Users className="h-4 w-4 mr-1" /> Nuevo embajador
             </Button>
             <Button onClick={() => setShowRefForm(true)}>
@@ -632,21 +690,25 @@ export default function AmbassadorsAdminTab() {
           </div>
         </div>
 
+        {loading && (
+          <div className="text-sm text-muted-foreground">Cargando datos...</div>
+        )}
+
         {/* Alertas operativas */}
-        {(() => {
+        {!loading && (() => {
           const now = Date.now();
-          const unassigned = referrals.filter((r) =>
+          const unassigned = referrals.filter(r =>
             !r.assignedAdvisorId &&
             !['descartado','duplicado'].includes(r.status) &&
             (now - new Date(r.registeredAt).getTime()) / 3600000 > settings.unassignedAlertHours,
           );
-          const stale = referrals.filter((r) => {
+          const stale = referrals.filter(r => {
             if (!r.assignedAdvisorId) return false;
-            const ref = r.lastAdvisorUpdate ?? r.assignedAt;
-            if (!ref) return false;
-            return (now - new Date(ref).getTime()) / 86400000 > settings.noUpdateAlertDays;
+            const last = r.lastAdvisorUpdate ?? r.assignedAt;
+            if (!last) return false;
+            return (now - new Date(last).getTime()) / 86400000 > settings.noUpdateAlertDays;
           });
-          const reassigned = referrals.filter((r) => r.assignmentStatus === 'reasignado');
+          const reassigned = referrals.filter(r => r.assignmentStatus === 'reasignado');
           if (!unassigned.length && !stale.length && !reassigned.length) return null;
           return (
             <Card className="p-4 border-amber-500/30 bg-amber-500/5">
@@ -658,14 +720,14 @@ export default function AmbassadorsAdminTab() {
                   <div className="rounded border border-border bg-card p-3">
                     <div className="font-semibold">{unassigned.length} referido(s) sin asesor</div>
                     <div className="text-muted-foreground">Más de {settings.unassignedAlertHours}h sin asignación.</div>
-                    <ul className="mt-1">{unassigned.slice(0,3).map((r)=>(<li key={r.id}><button className="underline" onClick={()=>setOpenRefId(r.id)}>{r.clientName}</button></li>))}</ul>
+                    <ul className="mt-1">{unassigned.slice(0,3).map(r => <li key={r.id}><button className="underline" onClick={() => setOpenRefId(r.id)}>{r.clientName}</button></li>)}</ul>
                   </div>
                 )}
                 {stale.length > 0 && (
                   <div className="rounded border border-border bg-card p-3">
                     <div className="font-semibold">{stale.length} referido(s) sin seguimiento</div>
-                    <div className="text-muted-foreground">Sin actualización del asesor en {settings.noUpdateAlertDays}+ días.</div>
-                    <ul className="mt-1">{stale.slice(0,3).map((r)=>(<li key={r.id}><button className="underline" onClick={()=>setOpenRefId(r.id)}>{r.clientName}</button></li>))}</ul>
+                    <div className="text-muted-foreground">Sin actualización en {settings.noUpdateAlertDays}+ días.</div>
+                    <ul className="mt-1">{stale.slice(0,3).map(r => <li key={r.id}><button className="underline" onClick={() => setOpenRefId(r.id)}>{r.clientName}</button></li>)}</ul>
                   </div>
                 )}
                 {reassigned.length > 0 && (
@@ -689,7 +751,6 @@ export default function AmbassadorsAdminTab() {
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="commissions">Comisiones</TabsTrigger>
             <TabsTrigger value="reports">Reportes</TabsTrigger>
-            <TabsTrigger value="settings">Ajustes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-4">
@@ -697,7 +758,7 @@ export default function AmbassadorsAdminTab() {
               <Kpi label="Embajadores activos" value={String(stats.active)} sub={`${ambassadors.length} totales`} />
               <Kpi label="Referidos totales" value={String(stats.total)} sub={`${stats.sales} con venta`} />
               <Kpi label="Conversión" value={`${stats.conv.toFixed(1)}%`} />
-              <Kpi label="Comisión en curso (interno)" value={fmt(stats.potential)} sub="No visible al embajador" />
+              <Kpi label="Comisión en curso" value={fmt(stats.potential)} sub="No visible al embajador" />
               <Kpi label="Comisión autorizada" value={fmt(stats.authorized)} />
               <Kpi label="Comisión pagada" value={fmt(stats.paid)} />
             </div>
@@ -709,7 +770,8 @@ export default function AmbassadorsAdminTab() {
                   <TableHead>Monto</TableHead><TableHead>Comisión</TableHead><TableHead>Conv.</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {ranking.map((r) => (
+                  {ranking.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Sin datos</TableCell></TableRow>}
+                  {ranking.map(r => (
                     <TableRow key={r.a.id}>
                       <TableCell>{r.a.fullName} <span className="text-muted-foreground text-xs">({r.a.code})</span></TableCell>
                       <TableCell>{r.refs}</TableCell>
@@ -733,7 +795,8 @@ export default function AmbassadorsAdminTab() {
                   <TableHead>Link</TableHead><TableHead></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {ambassadors.map((a) => (
+                  {ambassadors.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Sin embajadores registrados</TableCell></TableRow>}
+                  {ambassadors.map(a => (
                     <TableRow key={a.id}>
                       <TableCell className="font-mono text-xs">{a.code}</TableCell>
                       <TableCell>
@@ -751,7 +814,9 @@ export default function AmbassadorsAdminTab() {
                       <TableCell>{a.commissionPct}%{a.fixedAmount ? ` + ${fmt(a.fixedAmount)}` : ''}</TableCell>
                       <TableCell className="text-xs">{a.commissionTrigger}</TableCell>
                       <TableCell className="text-xs"><code>{a.referralLink}</code></TableCell>
-                      <TableCell><Button size="sm" variant="ghost" onClick={() => { setEditing(a); setShowAmbForm(true); }}>Editar</Button></TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" onClick={() => { setEditingAmb(a); setShowEditEmb(true); }}>Editar</Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -768,8 +833,9 @@ export default function AmbassadorsAdminTab() {
                   <TableHead></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {referrals.map((r) => {
-                    const amb = ambassadors.find((a) => a.id === r.ambassadorId);
+                  {referrals.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin referidos registrados</TableCell></TableRow>}
+                  {referrals.map(r => {
+                    const amb = ambassadors.find(a => a.id === r.ambassadorId);
                     return (
                       <TableRow key={r.id} className="cursor-pointer" onClick={() => setOpenRefId(r.id)}>
                         <TableCell>
@@ -796,25 +862,21 @@ export default function AmbassadorsAdminTab() {
           <TabsContent value="pipeline">
             <Card className="p-4">
               <div className="text-sm text-muted-foreground mb-3">
-                Pipeline interno completo. Haz click en cualquier referido para abrir el detalle.
+                Pipeline interno completo. Haz clic en cualquier referido para ver el detalle.
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {REFERRAL_STATUSES.map((st) => {
-                  const items = referrals.filter((r) => r.status === st);
+                {REFERRAL_STATUSES.map(st => {
+                  const items = referrals.filter(r => r.status === st);
                   return (
                     <div key={st} className="rounded-md border border-border bg-muted/20 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold uppercase tracking-wide">
-                          {REFERRAL_STATUS_LABEL[st]}
-                        </span>
+                        <span className="text-xs font-semibold uppercase tracking-wide">{REFERRAL_STATUS_LABEL[st]}</span>
                         <Badge variant="outline">{items.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {items.length === 0 && (
-                          <p className="text-[11px] text-muted-foreground italic">Vacío</p>
-                        )}
-                        {items.map((r) => {
-                          const amb = ambassadors.find((a) => a.id === r.ambassadorId);
+                        {items.length === 0 && <p className="text-[11px] text-muted-foreground italic">Vacío</p>}
+                        {items.map(r => {
+                          const amb = ambassadors.find(a => a.id === r.ambassadorId);
                           return (
                             <button
                               key={r.id}
@@ -837,8 +899,6 @@ export default function AmbassadorsAdminTab() {
             </Card>
           </TabsContent>
 
-
-
           <TabsContent value="commissions">
             <Card className="p-4">
               <Table>
@@ -848,8 +908,11 @@ export default function AmbassadorsAdminTab() {
                   <TableHead>Estatus</TableHead><TableHead>Pago</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {referrals.filter((r) => r.commissionStatus !== 'cancelada').map((r) => {
-                    const amb = ambassadors.find((a) => a.id === r.ambassadorId);
+                  {referrals.filter(r => r.commissionStatus !== 'cancelada').length === 0 && (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Sin comisiones</TableCell></TableRow>
+                  )}
+                  {referrals.filter(r => r.commissionStatus !== 'cancelada').map(r => {
+                    const amb = ambassadors.find(a => a.id === r.ambassadorId);
                     return (
                       <TableRow key={r.id} className="cursor-pointer" onClick={() => setOpenRefId(r.id)}>
                         <TableCell>{r.clientName}</TableCell>
@@ -879,7 +942,8 @@ export default function AmbassadorsAdminTab() {
                   <TableHead>Comisión generada</TableHead><TableHead>Pagada</TableHead><TableHead>Conv.</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {ranking.map((r) => (
+                  {ranking.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Sin datos</TableCell></TableRow>}
+                  {ranking.map(r => (
                     <TableRow key={r.a.id}>
                       <TableCell>{r.a.fullName}</TableCell>
                       <TableCell>{r.refs}</TableCell>
@@ -899,15 +963,18 @@ export default function AmbassadorsAdminTab() {
           <TabsContent value="assignments">
             <div className="space-y-4">
               <Card className="p-4">
-                <h3 className="font-medium mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4" /> Asignación de referidos a asesores</h3>
+                <h3 className="font-medium mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4" /> Asignación de referidos</h3>
                 <Table>
                   <TableHeader><TableRow>
                     <TableHead>Cliente</TableHead><TableHead>Embajador</TableHead><TableHead>Registro</TableHead>
                     <TableHead>Estatus</TableHead><TableHead>Asesor</TableHead><TableHead>Seguimiento</TableHead><TableHead></TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {referrals.filter((r) => !['descartado','duplicado'].includes(r.status)).map((r) => {
-                      const amb = ambassadors.find((a) => a.id === r.ambassadorId);
+                    {referrals.filter(r => !['descartado','duplicado'].includes(r.status)).length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin referidos activos</TableCell></TableRow>
+                    )}
+                    {referrals.filter(r => !['descartado','duplicado'].includes(r.status)).map(r => {
+                      const amb = ambassadors.find(a => a.id === r.ambassadorId);
                       const aStatus: AssignmentStatus = r.assignmentStatus ?? 'sin_asignar';
                       return (
                         <TableRow key={r.id}>
@@ -918,15 +985,15 @@ export default function AmbassadorsAdminTab() {
                           <TableCell>
                             <Select
                               value={r.assignedAdvisorId ?? 'none'}
-                              onValueChange={(v) => {
+                              onValueChange={v => {
                                 assignAdvisor(r.id, v === 'none' ? null : v);
-                                toast.success(v === 'none' ? 'Asignación removida' : 'Asesor asignado · notificación enviada');
+                                toast.success(v === 'none' ? 'Asignación removida' : 'Asesor asignado');
                               }}
                             >
                               <SelectTrigger className="h-8 w-48"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">— Sin asignar —</SelectItem>
-                                {advisors.filter((a)=>a.active).map((a) => (
+                                {advisors.filter(a => a.active).map(a => (
                                   <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -947,8 +1014,8 @@ export default function AmbassadorsAdminTab() {
                   <p className="text-sm text-muted-foreground">Sin notificaciones registradas.</p>
                 ) : (
                   <ul className="space-y-2 max-h-96 overflow-auto">
-                    {advisorNotifications.slice(0,30).map((n) => {
-                      const adv = advisors.find((a)=>a.id===n.advisorId);
+                    {advisorNotifications.slice(0,30).map(n => {
+                      const adv = advisors.find(a => a.id === n.advisorId);
                       return (
                         <li key={n.id} className={`p-3 rounded border ${n.read ? 'border-border' : 'border-primary/30 bg-primary/5'}`}>
                           <div className="flex justify-between gap-3">
@@ -959,7 +1026,7 @@ export default function AmbassadorsAdminTab() {
                             </div>
                             <div className="flex gap-2 shrink-0">
                               <Button size="sm" variant="ghost" onClick={() => setOpenRefId(n.referralId)}>Abrir referido</Button>
-                              {!n.read && <Button size="sm" variant="ghost" onClick={() => markAdvisorNotifRead(n.id)}>Marcar leída</Button>}
+                              {!n.read && <Button size="sm" variant="ghost" onClick={() => markAdvisorNotifRead(n.id)}>Leída</Button>}
                             </div>
                           </div>
                         </li>
@@ -974,31 +1041,23 @@ export default function AmbassadorsAdminTab() {
           <TabsContent value="advisors">
             <AdvisorsManager />
           </TabsContent>
-
-          <TabsContent value="settings">
-            <Card className="p-5 max-w-xl space-y-4">
-              <div className="flex items-center gap-2 font-medium"><SettingsIcon className="h-4 w-4" /> Reglas de alertas</div>
-              <div>
-                <Label>Alerta de referido sin asesor (horas)</Label>
-                <Input type="number" min={1}
-                  value={settings.unassignedAlertHours}
-                  onChange={(e) => updateSettings({ unassignedAlertHours: Number(e.target.value) || 24 })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">Mostrar alerta si un referido lleva más de N horas sin asesor asignado.</p>
-              </div>
-              <div>
-                <Label>Alerta de seguimiento (días)</Label>
-                <Input type="number" min={1}
-                  value={settings.noUpdateAlertDays}
-                  onChange={(e) => updateSettings({ noUpdateAlertDays: Number(e.target.value) || 5 })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">Mostrar alerta si el asesor no actualiza el estatus después de N días.</p>
-              </div>
-            </Card>
-          </TabsContent>
         </Tabs>
 
-        <AmbassadorFormSheet open={showAmbForm} onOpenChange={setShowAmbForm} editing={editing} />
+        {/* Dialogs / Sheets */}
+        <NuevoEmbajadorDialog
+          open={showNuevoEmb}
+          onOpenChange={setShowNuevoEmb}
+          onCreated={refresh}
+        />
+
+        {editingAmb && (
+          <AmbassadorEditSheet
+            open={showEditEmb}
+            onOpenChange={setShowEditEmb}
+            ambassador={editingAmb}
+          />
+        )}
+
         <ReferralFormDialog open={showRefForm} onOpenChange={setShowRefForm} />
         <ReferralDetailSheet referralId={openRefId} onOpenChange={setOpenRefId} />
       </div>

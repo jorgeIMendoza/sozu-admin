@@ -1,78 +1,98 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import {
-  Ambassador,
-  AmbassadorAuditEvent,
-  AmbassadorNotification,
-  AdvisorNotification,
-  Advisor,
-  AmbassadorsSettings,
-  AssignmentStatus,
-  CommissionStatus,
-  DEFAULT_PAYMENT_DOCS,
-  DEFAULT_SETTINGS,
-  DocumentStatus,
-  Referral,
-  ReferralStatus,
-  ProtectionStatus,
-  detectDuplicate,
-  nextStepFor,
+  Ambassador, AmbassadorAuditEvent, AmbassadorNotification, AdvisorNotification,
+  Advisor, AmbassadorsSettings, AssignmentStatus, CommissionStatus,
+  DEFAULT_PAYMENT_DOCS, DEFAULT_SETTINGS, DocumentStatus, Referral,
+  ReferralStatus, ProtectionStatus, InterestType,
+  AmbassadorType, AmbassadorStatus, CommissionTrigger, nextStepFor,
 } from '@/types/ambassadors';
+import { toast } from 'sonner';
 
-const LS_KEY = 'sozu.ambassadors.v3';
+const LS_SETTINGS_KEY = 'sozu.ambassadors.settings.v1';
+const LS_NOTIFS_KEY = 'sozu.ambassadors.notifs.v1';
+const LS_ADVISOR_NOTIFS_KEY = 'sozu.ambassadors.advisorNotifs.v1';
 
-interface PersistShape {
-  ambassadors: Ambassador[];
-  referrals: Referral[];
-  notifications: AmbassadorNotification[];
-  advisors: Advisor[];
-  advisorNotifications: AdvisorNotification[];
-  settings: AmbassadorsSettings;
+// ─── Mappers ────────────────────────────────────────────────────────────────
+
+function mapAmbassador(row: any): Ambassador {
+  const cfg = Array.isArray(row.embajadores_config)
+    ? row.embajadores_config[0]
+    : row.embajadores_config;
+  return {
+    id: String(row.id),
+    idPersona: row.id_persona ?? undefined,
+    fullName: row.personas?.nombre_legal ?? '',
+    phone: row.personas?.telefono ?? '',
+    email: row.personas?.email ?? '',
+    company: cfg?.empresa ?? undefined,
+    type: (cfg?.tipo ?? 'otro') as AmbassadorType,
+    status: (cfg?.estatus ?? 'pendiente') as AmbassadorStatus,
+    createdAt: row.fecha_creacion ?? new Date().toISOString(),
+    code: cfg?.codigo ?? `EMB-${String(row.id).padStart(4, '0')}`,
+    referralLink: `https://sozu.app/ref/${cfg?.codigo ?? row.id}`,
+    commissionPct: Number(cfg?.pct_comision) || 0,
+    fixedAmount: cfg?.monto_fijo != null ? Number(cfg.monto_fijo) : undefined,
+    commissionTrigger: (cfg?.trigger_comision ?? 'escrituracion') as CommissionTrigger,
+    notes: cfg?.notas ?? undefined,
+    paymentDocs: Array.isArray(cfg?.documentos_pago) && cfg.documentos_pago.length
+      ? cfg.documentos_pago
+      : DEFAULT_PAYMENT_DOCS.map(d => ({ ...d })),
+    protectionDays: cfg?.dias_proteccion ?? 90,
+  };
 }
 
-const seedAmbassadors: Ambassador[] = [
-  {
-    id: 'amb-1', fullName: 'María Fernanda López', phone: '5512345678',
-    email: 'mafer@example.com', company: 'Cliente premium', type: 'cliente',
-    status: 'activo', createdAt: new Date().toISOString(), code: 'EMB-0001',
-    referralLink: 'https://sozu.app/ref/EMB-0001', commissionPct: 0.5,
-    commissionTrigger: 'enganche',
-    paymentDocs: DEFAULT_PAYMENT_DOCS.map((d) => ({ ...d })),
-    protectionDays: 90,
-  },
-  {
-    id: 'amb-2', fullName: 'Carlos Reyes', phone: '5598765432',
-    email: 'carlos@aliados.mx', company: 'Despacho aliado', type: 'aliado',
-    status: 'activo', createdAt: new Date().toISOString(), code: 'EMB-0002',
-    referralLink: 'https://sozu.app/ref/EMB-0002', commissionPct: 1.0,
-    commissionTrigger: 'apartado',
-    paymentDocs: DEFAULT_PAYMENT_DOCS.map((d) => ({ ...d })),
-    protectionDays: 90,
-  },
-];
+function mapReferral(row: any): Referral {
+  // Client info comes through entidades_relacionadas → personas
+  const er = row.entidades_relacionadas;
+  const clientPersona = er?.personas;
+  return {
+    id: String(row.id),
+    ambassadorId: String(row.id_entidad_relacionada_emb),
+    clientName: clientPersona?.nombre_legal ?? '',
+    phone: clientPersona?.telefono ?? '',
+    email: clientPersona?.email ?? '',
+    relationship: row.relacion_embajador ?? undefined,
+    comments: row.comentarios ?? undefined,
+    interestType: (row.tipo_interes ?? 'indefinido') as InterestType,
+    productInterest: row.producto_interes ?? undefined,
+    consent: row.consentimiento ?? false,
+    registeredAt: row.fecha_creacion ?? new Date().toISOString(),
+    status: (row.estatus ?? 'registrado') as ReferralStatus,
+    assignedAdvisorId: row.id_asesor_asignado ?? undefined,
+    assignedAdvisorName: row.nombre_asesor ?? undefined,
+    assignedAdvisorRole: row.rol_asesor ?? undefined,
+    assignedAdvisorPhone: row.telefono_asesor ?? undefined,
+    assignedAdvisorEmail: row.email_asesor ?? undefined,
+    assignedAt: row.fecha_asignacion ?? undefined,
+    assignmentStatus: (row.estatus_asignacion ?? 'sin_asignar') as AssignmentStatus,
+    lastAdvisorUpdate: row.ultima_actualizacion_asesor ?? undefined,
+    internalNotes: Array.isArray(row.notas_internas) ? row.notas_internas : [],
+    publicComments: row.comentarios_publicos ?? undefined,
+    nextStepOverride: row.proximo_paso ?? undefined,
+    protectionStatus: (row.estatus_proteccion ?? 'pendiente') as ProtectionStatus,
+    saleAmount: row.monto_venta != null ? Number(row.monto_venta) : undefined,
+    commissionAmount: Number(row.monto_comision) || 0,
+    commissionStatus: (row.estatus_comision ?? 'potencial') as CommissionStatus,
+    estimatedPaymentDate: row.fecha_pago_estimada ?? undefined,
+    paymentDate: row.fecha_pago ?? undefined,
+    auditTrail: Array.isArray(row.audit_trail) ? row.audit_trail : [],
+  };
+}
 
-const seedAdvisors: Advisor[] = [
-  { id: 'adv-1', name: 'Laura Méndez', role: 'Asesor Senior', phone: '5511223344', email: 'laura.mendez@sozu.com', active: true },
-  { id: 'adv-2', name: 'Roberto Salazar', role: 'Asesor Comercial', phone: '5599887766', email: 'roberto.salazar@sozu.com', active: true },
-  { id: 'adv-3', name: 'Diana Vargas', role: 'Gerente Comercial', phone: '5544332211', email: 'diana.vargas@sozu.com', active: true },
-];
+function mapAdvisor(row: any): Advisor {
+  return {
+    id: row.email ?? String(row.id),
+    idPersona: row.id_persona ?? undefined,
+    name: row.personas?.nombre_legal ?? row.nombre ?? '',
+    role: (row.roles as any)?.nombre ?? '',
+    phone: row.telefono ?? row.personas?.telefono ?? undefined,
+    email: row.email ?? undefined,
+    active: row.activo ?? true,
+  };
+}
 
-const seedReferrals: Referral[] = [
-  {
-    id: 'ref-1', ambassadorId: 'amb-1', clientName: 'Andrés Pérez',
-    phone: '5544556677', email: 'andres@correo.com', interestType: 'inversion',
-    productInterest: '2 recámaras', consent: true,
-    registeredAt: new Date().toISOString(), status: 'en_seguimiento',
-    internalNotes: ['Cliente interesado en piso medio.'],
-    publicComments: 'Tu cliente ya fue contactado por nuestro equipo. Esperamos su decisión.',
-    saleAmount: 4500000, commissionAmount: 22500, commissionStatus: 'potencial',
-    assignedAdvisorId: 'adv-1', assignedAdvisorName: 'Laura Méndez',
-    assignedAdvisorRole: 'Asesor Senior', assignedAdvisorPhone: '5511223344',
-    assignedAdvisorEmail: 'laura.mendez@sozu.com',
-    assignedAt: new Date().toISOString(), assignmentStatus: 'en_seguimiento',
-    lastAdvisorUpdate: new Date().toISOString(),
-    auditTrail: [{ timestamp: new Date().toISOString(), actor: 'embajador', type: 'creado' }],
-  },
-];
+// ─── Ctx interface ───────────────────────────────────────────────────────────
 
 interface Ctx {
   ambassadors: Ambassador[];
@@ -81,17 +101,13 @@ interface Ctx {
   advisors: Advisor[];
   advisorNotifications: AdvisorNotification[];
   settings: AmbassadorsSettings;
+  loading: boolean;
+  refresh: () => Promise<void>;
   updateSettings: (patch: Partial<AmbassadorsSettings>) => void;
-  createAdvisor: (a: Omit<Advisor, 'id'>) => Advisor;
   updateAdvisor: (id: string, patch: Partial<Advisor>) => void;
-  createAmbassador: (a: Omit<Ambassador, 'id' | 'code' | 'referralLink' | 'createdAt'>) => Ambassador;
   updateAmbassador: (id: string, patch: Partial<Ambassador>) => void;
   deleteAmbassador: (id: string) => void;
   setDocumentStatus: (ambassadorId: string, key: string, status: DocumentStatus, fileName?: string) => void;
-  createReferral: (
-    r: Omit<Referral, 'id' | 'registeredAt' | 'status' | 'commissionAmount' | 'commissionStatus' | 'auditTrail' | 'internalNotes'>,
-    opts?: { force?: boolean },
-  ) => { referral: Referral | null; duplicate: Referral | null };
   updateReferralStatus: (id: string, status: ReferralStatus, actor?: 'admin' | 'embajador') => void;
   validateReferral: (id: string) => void;
   markDuplicate: (id: string) => void;
@@ -111,84 +127,145 @@ interface Ctx {
 
 const AmbassadorsContext = createContext<Ctx | null>(null);
 
+// ─── Provider ────────────────────────────────────────────────────────────────
+
 export function AmbassadorsProvider({ children }: { children: React.ReactNode }) {
-  const initial = useMemo<PersistShape>(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        const p = JSON.parse(raw);
-        return {
-          ambassadors: p.ambassadors ?? seedAmbassadors,
-          referrals: p.referrals ?? seedReferrals,
-          notifications: p.notifications ?? [],
-          advisors: p.advisors ?? seedAdvisors,
-          advisorNotifications: p.advisorNotifications ?? [],
-          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
-        };
-      }
-    } catch {}
-    return {
-      ambassadors: seedAmbassadors, referrals: seedReferrals,
-      notifications: [], advisors: seedAdvisors,
-      advisorNotifications: [], settings: DEFAULT_SETTINGS,
-    };
+  const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [notifications, setNotifications] = useState<AmbassadorNotification[]>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_NOTIFS_KEY) ?? '[]'); } catch { return []; }
+  });
+  const [advisorNotifications, setAdvisorNotifications] = useState<AdvisorNotification[]>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_ADVISOR_NOTIFS_KEY) ?? '[]'); } catch { return []; }
+  });
+  const [settings, setSettings] = useState<AmbassadorsSettings>(() => {
+    try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(LS_SETTINGS_KEY) ?? '{}') }; } catch { return DEFAULT_SETTINGS; }
+  });
+
+  useEffect(() => { localStorage.setItem(LS_NOTIFS_KEY, JSON.stringify(notifications)); }, [notifications]);
+  useEffect(() => { localStorage.setItem(LS_ADVISOR_NOTIFS_KEY, JSON.stringify(advisorNotifications)); }, [advisorNotifications]);
+  useEffect(() => { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
+
+  const referralsRef = useRef(referrals);
+  const ambassadorsRef = useRef(ambassadors);
+  const advisorsRef = useRef(advisors);
+  useEffect(() => { referralsRef.current = referrals; }, [referrals]);
+  useEffect(() => { ambassadorsRef.current = ambassadors; }, [ambassadors]);
+  useEffect(() => { advisorsRef.current = advisors; }, [advisors]);
+
+  // ── Data loading ──────────────────────────────────────────────────────────
+
+  const loadAmbassadors = useCallback(async () => {
+    // Resolve tipo_entidad id for "Embajador"
+    const { data: tipoData } = await supabase
+      .from('tipos_entidad')
+      .select('id')
+      .eq('nombre', 'Embajador')
+      .maybeSingle();
+
+    if (!tipoData) return;
+
+    const { data, error } = await supabase
+      .from('entidades_relacionadas')
+      .select(`
+        id, id_persona, activo, fecha_creacion,
+        personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono),
+        embajadores_config(
+          codigo, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
+          dias_proteccion, notas, estatus, documentos_pago
+        )
+      `)
+      .eq('id_tipo_entidad', tipoData.id)
+      .eq('activo', true)
+      .order('fecha_creacion', { ascending: false });
+
+    if (!error && data) setAmbassadors(data.map(mapAmbassador));
   }, []);
 
-  const [ambassadors, setAmbassadors] = useState<Ambassador[]>(initial.ambassadors);
-  const [referrals, setReferrals] = useState<Referral[]>(initial.referrals);
-  const [notifications, setNotifications] = useState<AmbassadorNotification[]>(initial.notifications);
-  const [advisors, setAdvisors] = useState<Advisor[]>(initial.advisors);
-  const [advisorNotifications, setAdvisorNotifications] = useState<AdvisorNotification[]>(initial.advisorNotifications);
-  const [settings, setSettings] = useState<AmbassadorsSettings>(initial.settings);
+  const loadReferrals = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('embajadores_referidos')
+      .select(`
+        id, id_persona_embajador, id_entidad_relacionada, id_entidad_relacionada_emb,
+        tipo_interes, producto_interes, relacion_embajador, comentarios, consentimiento,
+        estatus, id_asesor_asignado, nombre_asesor, rol_asesor, telefono_asesor, email_asesor,
+        estatus_asignacion, fecha_asignacion, ultima_actualizacion_asesor,
+        notas_internas, comentarios_publicos, proximo_paso, estatus_proteccion,
+        monto_venta, monto_comision, estatus_comision, fecha_pago_estimada, fecha_pago,
+        audit_trail, fecha_creacion, activo,
+        entidades_relacionadas(
+          id_persona,
+          personas(nombre_legal, email, telefono)
+        )
+      `)
+      .eq('activo', true)
+      .order('fecha_creacion', { ascending: false });
+
+    if (!error && data) setReferrals(data.map(mapReferral));
+  }, []);
+
+  const loadAdvisors = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select(`
+        id, nombre, email, telefono, activo, id_persona,
+        roles!rol_id(nombre, es_rol_interno),
+        personas!id_persona(nombre_legal, telefono)
+      `)
+      .eq('activo', true)
+      .order('nombre');
+    if (!error && data) {
+      const internal = data.filter((u: any) => (u.roles as any)?.es_rol_interno === true);
+      setAdvisors(internal.map(mapAdvisor));
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await Promise.all([loadAmbassadors(), loadReferrals(), loadAdvisors()]);
+  }, [loadAmbassadors, loadReferrals, loadAdvisors]);
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      ambassadors, referrals, notifications, advisors, advisorNotifications, settings,
-    }));
-  }, [ambassadors, referrals, notifications, advisors, advisorNotifications, settings]);
+    setLoading(true);
+    refresh().finally(() => setLoading(false));
+  }, [refresh]);
 
-  const nextCode = () => {
-    const max = ambassadors.reduce((m, a) => {
-      const n = parseInt(a.code.replace(/\D/g, ''), 10);
-      return Number.isFinite(n) && n > m ? n : m;
-    }, 0);
-    return `EMB-${String(max + 1).padStart(4, '0')}`;
-  };
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   const pushNotification = (ambassadorId: string, type: string, message: string, referralId?: string) => {
-    setNotifications((p) => [
+    setNotifications(p => [
       { id: `ntf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        ambassadorId, referralId, type, message,
-        createdAt: new Date().toISOString(), read: false },
+        ambassadorId, referralId, type, message, createdAt: new Date().toISOString(), read: false },
       ...p,
     ]);
   };
 
   const pushAdvisorNotif = (n: Omit<AdvisorNotification, 'id' | 'createdAt' | 'read'>) => {
-    setAdvisorNotifications((p) => [
+    setAdvisorNotifications(p => [
       { id: `advn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         createdAt: new Date().toISOString(), read: false, ...n },
       ...p,
     ]);
   };
 
-  const audit = (referral: Referral, type: string, actor: AmbassadorAuditEvent['actor'] = 'admin', details?: string): Referral => ({
-    ...referral,
-    auditTrail: [...referral.auditTrail, { timestamp: new Date().toISOString(), actor, type, details }],
-  });
+  const dbUpdateReferral = (id: string, patch: Record<string, any>) => {
+    supabase.from('embajadores_referidos').update(patch).eq('id', Number(id))
+      .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
+  };
 
-  const computeCommission = (r: Referral, amb?: Ambassador): number => {
-    const a = amb ?? ambassadors.find((x) => x.id === r.ambassadorId);
-    if (!a) return r.commissionAmount;
-    const pctPart = (r.saleAmount ?? 0) * (a.commissionPct / 100);
-    return Math.round(pctPart + (a.fixedAmount ?? 0));
+  // Updates fields in embajadores_config (keyed by id_entidad_relacionada = Ambassador.id)
+  const dbUpdateAmbassadorConfig = (id: string, patch: Record<string, any>) => {
+    supabase.from('embajadores_config').update(patch).eq('id_entidad_relacionada', Number(id))
+      .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
   };
 
   const STATUS_NOTIF: Partial<Record<ReferralStatus, string>> = {
     validado: 'Tu referido fue validado correctamente.',
     contactado: 'Nuestro equipo ya contactó a tu referido.',
     cita_agendada: 'Tu referido tiene cita agendada.',
-    apartado: 'Tu referido apartó. El proceso avanza a la siguiente etapa.',
+    apartado: 'Tu referido apartó. El proceso avanza.',
     promesa_firmada: 'Tu referido firmó promesa.',
     venta_cerrada: 'Tu referido cerró venta.',
     comision_generada: 'Se generó tu comisión.',
@@ -197,212 +274,247 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
     descartado: 'Tu referido fue descartado.',
   };
 
+  // ── Ctx value ─────────────────────────────────────────────────────────────
+
   const ctx: Ctx = {
-    ambassadors, referrals, notifications, advisors, advisorNotifications, settings,
+    ambassadors, referrals, notifications, advisors, advisorNotifications, settings, loading, refresh,
 
-    updateSettings: (patch) => setSettings((s) => ({ ...s, ...patch })),
+    updateSettings: (patch) => setSettings(s => ({ ...s, ...patch })),
 
-    createAdvisor: (a) => {
-      const adv: Advisor = { ...a, id: `adv-${Date.now()}` };
-      setAdvisors((p) => [...p, adv]);
-      return adv;
-    },
-    updateAdvisor: (id, patch) =>
-      setAdvisors((p) => p.map((a) => (a.id === id ? { ...a, ...patch } : a))),
-
-    createAmbassador: (a) => {
-      const code = nextCode();
-      const newAmb: Ambassador = {
-        ...a, id: `amb-${Date.now()}`, code,
-        referralLink: `https://sozu.app/ref/${code}`,
-        createdAt: new Date().toISOString(),
-        paymentDocs: a.paymentDocs ?? DEFAULT_PAYMENT_DOCS.map((d) => ({ ...d })),
-        protectionDays: a.protectionDays ?? 90,
-      };
-      setAmbassadors((p) => [...p, newAmb]);
-      return newAmb;
-    },
-    updateAmbassador: (id, patch) =>
-      setAmbassadors((p) => p.map((a) => (a.id === id ? { ...a, ...patch } : a))),
-    deleteAmbassador: (id) => setAmbassadors((p) => p.filter((a) => a.id !== id)),
-
-    setDocumentStatus: (ambassadorId, key, status, fileName) =>
-      setAmbassadors((p) =>
-        p.map((a) => {
-          if (a.id !== ambassadorId) return a;
-          const docs = (a.paymentDocs ?? DEFAULT_PAYMENT_DOCS.map((d) => ({ ...d }))).map((d) =>
-            d.key === key
-              ? { ...d, status, fileName: fileName ?? d.fileName, uploadedAt: fileName ? new Date().toISOString() : d.uploadedAt }
-              : d,
-          );
-          return { ...a, paymentDocs: docs };
-        }),
-      ),
-
-    createReferral: (r, opts) => {
-      const dup = detectDuplicate(referrals, r);
-      if (dup && !opts?.force) return { referral: null, duplicate: dup };
-      const amb = ambassadors.find((a) => a.id === r.ambassadorId);
-      const newRef: Referral = {
-        ...r, id: `ref-${Date.now()}`,
-        registeredAt: new Date().toISOString(), status: 'registrado',
-        commissionAmount: 0, commissionStatus: 'potencial',
-        internalNotes: [], assignmentStatus: 'sin_asignar',
-        auditTrail: [{ timestamp: new Date().toISOString(), actor: 'embajador', type: 'creado' }],
-      };
-      newRef.commissionAmount = computeCommission(newRef, amb);
-      setReferrals((p) => [...p, newRef]);
-      pushNotification(newRef.ambassadorId, 'referido_registrado', `Registraste a ${newRef.clientName}.`, newRef.id);
-      return { referral: newRef, duplicate: dup };
+    updateAdvisor: (id, patch) => {
+      setAdvisors(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
+      if (patch.active !== undefined) {
+        supabase.from('usuarios').update({ activo: patch.active }).eq('email', id)
+          .then(({ error }) => { if (error) console.error(error); });
+      }
     },
 
-    updateReferralStatus: (id, status, actor = 'admin') =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== id) return r;
-          let next = audit({ ...r, status, lastAdvisorUpdate: actor === 'admin' ? new Date().toISOString() : r.lastAdvisorUpdate }, `status:${status}`, actor);
-          if (status === 'venta_cerrada' && next.commissionStatus === 'potencial') {
-            next = { ...next, commissionStatus: 'generada' };
-          }
-          if (status === 'comision_pagada') {
-            next = { ...next, commissionStatus: 'pagada', paymentDate: new Date().toISOString() };
-          }
-          const msg = STATUS_NOTIF[status];
-          if (msg) pushNotification(next.ambassadorId, `status:${status}`, msg, next.id);
-          return next;
-        }),
-      ),
+    updateAmbassador: (id, patch) => {
+      setAmbassadors(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
+      const dbPatch: Record<string, any> = {};
+      if (patch.company !== undefined) dbPatch.empresa = patch.company;
+      if (patch.type !== undefined) dbPatch.tipo = patch.type;
+      if (patch.status !== undefined) dbPatch.estatus = patch.status;
+      if (patch.commissionPct !== undefined) dbPatch.pct_comision = patch.commissionPct;
+      if (patch.fixedAmount !== undefined) dbPatch.monto_fijo = patch.fixedAmount;
+      if (patch.commissionTrigger !== undefined) dbPatch.trigger_comision = patch.commissionTrigger;
+      if (patch.protectionDays !== undefined) dbPatch.dias_proteccion = patch.protectionDays;
+      if (patch.notes !== undefined) dbPatch.notas = patch.notes;
+      if (patch.paymentDocs !== undefined) dbPatch.documentos_pago = patch.paymentDocs;
+      if (Object.keys(dbPatch).length) dbUpdateAmbassadorConfig(id, dbPatch);
+    },
 
-    validateReferral: (id) =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== id) return r;
-          const next = audit({ ...r, status: 'validado', protectionStatus: 'protegido' }, 'validado');
-          pushNotification(next.ambassadorId, 'validado', 'Tu referido fue validado correctamente.', next.id);
-          return next;
-        }),
-      ),
+    deleteAmbassador: (id) => {
+      setAmbassadors(p => p.filter(a => a.id !== id));
+      supabase.from('entidades_relacionadas').update({ activo: false }).eq('id', Number(id))
+        .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
+    },
 
-    markDuplicate: (id) =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== id) return r;
-          const next = audit({ ...r, status: 'duplicado', commissionStatus: 'cancelada', protectionStatus: 'duplicado_revision' }, 'duplicado');
-          pushNotification(next.ambassadorId, 'duplicado', 'Tu referido fue marcado como duplicado en revisión.', next.id);
-          return next;
-        }),
-      ),
+    setDocumentStatus: (ambassadorId, key, status, fileName) => {
+      setAmbassadors(p => p.map(a => {
+        if (a.id !== ambassadorId) return a;
+        const docs = (a.paymentDocs ?? DEFAULT_PAYMENT_DOCS.map(d => ({ ...d }))).map(d =>
+          d.key === key
+            ? { ...d, status, fileName: fileName ?? d.fileName, uploadedAt: fileName ? new Date().toISOString() : d.uploadedAt }
+            : d,
+        );
+        dbUpdateAmbassadorConfig(ambassadorId, { documentos_pago: docs });
+        return { ...a, paymentDocs: docs };
+      }));
+    },
 
-    assignAdvisor: (referralId, advisorId) =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== referralId) return r;
-          const wasAssigned = !!r.assignedAdvisorId;
-          if (!advisorId) {
-            const next = audit(
-              { ...r, assignedAdvisorId: undefined, assignedAdvisorName: undefined,
-                assignedAdvisorRole: undefined, assignedAdvisorPhone: undefined,
-                assignedAdvisorEmail: undefined, assignedAt: undefined,
-                assignmentStatus: 'sin_asignar' },
-              'asesor_removido', 'admin', r.assignedAdvisorName,
-            );
-            pushNotification(next.ambassadorId, 'asesor_removido',
-              'La asignación de asesor a tu referido fue actualizada.', next.id);
-            return next;
-          }
-          const adv = advisors.find((a) => a.id === advisorId);
-          if (!adv) return r;
-          const newStatus: AssignmentStatus = wasAssigned && r.assignedAdvisorId !== advisorId ? 'reasignado' : 'asignado';
-          const next = audit(
-            { ...r, assignedAdvisorId: adv.id, assignedAdvisorName: adv.name,
-              assignedAdvisorRole: adv.role, assignedAdvisorPhone: adv.phone,
-              assignedAdvisorEmail: adv.email, assignedAt: new Date().toISOString(),
-              assignmentStatus: newStatus },
-            wasAssigned ? 'asesor_reasignado' : 'asesor_asignado', 'admin',
-            `${adv.name} (${adv.role})`,
-          );
-          const amb = ambassadors.find((x) => x.id === next.ambassadorId);
-          pushAdvisorNotif({
-            advisorId: adv.id, referralId: next.id, type: 'lead_asignado',
-            title: 'Nuevo referido asignado',
-            message: `Se te asignó un referido de ${amb?.fullName ?? 'Embajador'}: ${next.clientName} · Tel ${next.phone} · ${next.email}. Próximo paso: ${nextStepFor(next.status)}.`,
-          });
-          pushNotification(next.ambassadorId, 'asesor_asignado',
-            'Tu referido ya fue asignado a un asesor de ventas. Puedes consultar sus datos de contacto en el detalle del referido.',
-            next.id);
-          return next;
-        }),
-      ),
+    updateReferralStatus: (id, status, actor = 'admin') => {
+      const now = new Date().toISOString();
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail: AmbassadorAuditEvent[] = [
+          ...r.auditTrail,
+          { timestamp: now, actor, type: `status:${status}` },
+        ];
+        let updated: Referral = { ...r, status, auditTrail: newTrail };
+        const dbPatch: Record<string, any> = { estatus: status, audit_trail: newTrail };
+        if (status === 'venta_cerrada' && updated.commissionStatus === 'potencial') {
+          updated = { ...updated, commissionStatus: 'generada' };
+          dbPatch.estatus_comision = 'generada';
+        }
+        if (status === 'comision_pagada') {
+          updated = { ...updated, commissionStatus: 'pagada', paymentDate: now };
+          dbPatch.estatus_comision = 'pagada';
+          dbPatch.fecha_pago = now;
+        }
+        dbUpdateReferral(id, dbPatch);
+        const msg = STATUS_NOTIF[status];
+        if (msg) pushNotification(updated.ambassadorId, `status:${status}`, msg, updated.id);
+        return updated;
+      }));
+    },
 
-    setAssignmentStatus: (referralId, status) =>
-      setReferrals((p) =>
-        p.map((r) =>
-          r.id === referralId
-            ? audit({ ...r, assignmentStatus: status, lastAdvisorUpdate: new Date().toISOString() },
-                `assignment:${status}`, 'admin')
-            : r,
-        ),
-      ),
+    validateReferral: (id) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const now = new Date().toISOString();
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: 'validado' }];
+        const updated = { ...r, status: 'validado' as ReferralStatus, protectionStatus: 'protegido' as ProtectionStatus, auditTrail: newTrail };
+        dbUpdateReferral(id, { estatus: 'validado', estatus_proteccion: 'protegido', audit_trail: newTrail });
+        pushNotification(updated.ambassadorId, 'validado', 'Tu referido fue validado correctamente.', updated.id);
+        return updated;
+      }));
+    },
 
-    addInternalNote: (id, note) =>
-      setReferrals((p) =>
-        p.map((r) =>
-          r.id === id
-            ? audit({ ...r, internalNotes: [...r.internalNotes, note], lastAdvisorUpdate: new Date().toISOString() }, 'nota_interna')
-            : r,
-        ),
-      ),
+    markDuplicate: (id) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const now = new Date().toISOString();
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: 'duplicado' }];
+        const updated = { ...r, status: 'duplicado' as ReferralStatus, commissionStatus: 'cancelada' as CommissionStatus, protectionStatus: 'duplicado_revision' as ProtectionStatus, auditTrail: newTrail };
+        dbUpdateReferral(id, { estatus: 'duplicado', estatus_comision: 'cancelada', estatus_proteccion: 'duplicado_revision', audit_trail: newTrail });
+        pushNotification(updated.ambassadorId, 'duplicado', 'Tu referido fue marcado como duplicado en revisión.', updated.id);
+        return updated;
+      }));
+    },
 
-    setPublicComments: (id, text) =>
-      setReferrals((p) => p.map((r) => (r.id === id ? audit({ ...r, publicComments: text }, 'comentario_publico') : r))),
+    assignAdvisor: (referralId, advisorId) => {
+      const now = new Date().toISOString();
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== referralId) return r;
+        const wasAssigned = !!r.assignedAdvisorId;
 
-    setNextStep: (id, text) =>
-      setReferrals((p) => p.map((r) => (r.id === id ? audit({ ...r, nextStepOverride: text }, 'proximo_paso', 'admin', text) : r))),
+        if (!advisorId) {
+          const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: 'asesor_removido', details: r.assignedAdvisorName }];
+          const updated = { ...r, assignedAdvisorId: undefined, assignedAdvisorName: undefined, assignedAdvisorRole: undefined, assignedAdvisorPhone: undefined, assignedAdvisorEmail: undefined, assignedAt: undefined, assignmentStatus: 'sin_asignar' as AssignmentStatus, auditTrail: newTrail };
+          dbUpdateReferral(referralId, { id_asesor_asignado: null, nombre_asesor: null, rol_asesor: null, telefono_asesor: null, email_asesor: null, id_persona_asesor: null, fecha_asignacion: null, estatus_asignacion: 'sin_asignar', audit_trail: newTrail });
+          pushNotification(updated.ambassadorId, 'asesor_removido', 'La asignación de asesor fue actualizada.', updated.id);
+          return updated;
+        }
 
-    setProtectionStatus: (id, status) =>
-      setReferrals((p) => p.map((r) => (r.id === id ? audit({ ...r, protectionStatus: status }, `proteccion:${status}`) : r))),
+        const adv = advisorsRef.current.find(a => a.id === advisorId);
+        if (!adv) return r;
 
-    setSaleAmount: (id, amount) =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== id) return r;
-          const updated = { ...r, saleAmount: amount };
-          updated.commissionAmount = computeCommission(updated);
-          return audit(updated, 'venta_actualizada', 'admin', `$${amount}`);
-        }),
-      ),
+        const newStatus: AssignmentStatus = wasAssigned && r.assignedAdvisorId !== advisorId ? 'reasignado' : 'asignado';
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: wasAssigned ? 'asesor_reasignado' : 'asesor_asignado', details: `${adv.name} (${adv.role})` }];
+        const updated = { ...r, assignedAdvisorId: adv.id, assignedAdvisorName: adv.name, assignedAdvisorRole: adv.role, assignedAdvisorPhone: adv.phone, assignedAdvisorEmail: adv.email, assignedAt: now, assignmentStatus: newStatus, auditTrail: newTrail };
 
-    setCommissionStatus: (id, status) =>
-      setReferrals((p) =>
-        p.map((r) => {
-          if (r.id !== id) return r;
-          const next: Referral = {
-            ...r, commissionStatus: status,
-            paymentDate: status === 'pagada' ? new Date().toISOString() : r.paymentDate,
-          };
-          const msg =
-            status === 'generada' ? 'Se generó tu comisión.' :
-            status === 'autorizada' ? 'Tu comisión fue autorizada para pago.' :
-            status === 'pagada' ? 'Tu comisión fue pagada.' :
-            status === 'cancelada' ? 'Tu comisión fue cancelada.' : '';
-          if (msg) pushNotification(next.ambassadorId, `comision:${status}`, msg, next.id);
-          return audit(next, `comision:${status}`, 'admin');
-        }),
-      ),
+        dbUpdateReferral(referralId, {
+          id_asesor_asignado: adv.id,       // email
+          id_persona_asesor: adv.idPersona ?? null,
+          nombre_asesor: adv.name,
+          rol_asesor: adv.role,
+          telefono_asesor: adv.phone ?? null,
+          email_asesor: adv.email ?? null,
+          fecha_asignacion: now,
+          estatus_asignacion: newStatus,
+          ultima_actualizacion_asesor: now,
+          audit_trail: newTrail,
+        });
 
-    setEstimatedPaymentDate: (id, dateISO) =>
-      setReferrals((p) =>
-        p.map((r) => (r.id === id ? audit({ ...r, estimatedPaymentDate: dateISO }, 'fecha_estimada_pago', 'admin', dateISO) : r)),
-      ),
+        const amb = ambassadorsRef.current.find(x => x.id === updated.ambassadorId);
+        pushAdvisorNotif({
+          advisorId: adv.id, referralId: updated.id, type: 'lead_asignado',
+          title: 'Nuevo referido asignado',
+          message: `Se te asignó un referido de ${amb?.fullName ?? 'Embajador'}: ${updated.clientName} · ${updated.phone} · ${updated.email}. Próximo paso: ${nextStepFor(updated.status)}.`,
+        });
+        pushNotification(updated.ambassadorId, 'asesor_asignado', 'Tu referido ya fue asignado a un asesor de ventas.', updated.id);
+        return updated;
+      }));
+    },
+
+    setAssignmentStatus: (referralId, status) => {
+      const now = new Date().toISOString();
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== referralId) return r;
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: `assignment:${status}` }];
+        dbUpdateReferral(referralId, { estatus_asignacion: status, ultima_actualizacion_asesor: now, audit_trail: newTrail });
+        return { ...r, assignmentStatus: status, lastAdvisorUpdate: now, auditTrail: newTrail };
+      }));
+    },
+
+    addInternalNote: (id, note) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const now = new Date().toISOString();
+        const newNotes = [...r.internalNotes, note];
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: 'nota_interna' }];
+        dbUpdateReferral(id, { notas_internas: newNotes, ultima_actualizacion_asesor: now, audit_trail: newTrail });
+        return { ...r, internalNotes: newNotes, lastAdvisorUpdate: now, auditTrail: newTrail };
+      }));
+    },
+
+    setPublicComments: (id, text) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: 'comentario_publico' }];
+        dbUpdateReferral(id, { comentarios_publicos: text, audit_trail: newTrail });
+        return { ...r, publicComments: text, auditTrail: newTrail };
+      }));
+    },
+
+    setNextStep: (id, text) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: 'proximo_paso', details: text }];
+        dbUpdateReferral(id, { proximo_paso: text, audit_trail: newTrail });
+        return { ...r, nextStepOverride: text, auditTrail: newTrail };
+      }));
+    },
+
+    setProtectionStatus: (id, status) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: `proteccion:${status}` }];
+        dbUpdateReferral(id, { estatus_proteccion: status, audit_trail: newTrail });
+        return { ...r, protectionStatus: status, auditTrail: newTrail };
+      }));
+    },
+
+    setSaleAmount: (id, amount) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: 'venta_actualizada', details: `$${amount}` }];
+        const amb = ambassadorsRef.current.find(a => a.id === r.ambassadorId);
+        const commission = Math.round((amount * ((amb?.commissionPct ?? 0) / 100)) + (amb?.fixedAmount ?? 0));
+        dbUpdateReferral(id, { monto_venta: amount, monto_comision: commission, audit_trail: newTrail });
+        return { ...r, saleAmount: amount, commissionAmount: commission, auditTrail: newTrail };
+      }));
+    },
+
+    setCommissionStatus: (id, status) => {
+      const now = new Date().toISOString();
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: `comision:${status}` }];
+        const paymentDate = status === 'pagada' ? now : r.paymentDate;
+        const dbPatch: Record<string, any> = { estatus_comision: status, audit_trail: newTrail };
+        if (paymentDate) dbPatch.fecha_pago = paymentDate;
+        dbUpdateReferral(id, dbPatch);
+        const msgs: Partial<Record<CommissionStatus, string>> = {
+          generada: 'Se generó tu comisión.',
+          autorizada: 'Tu comisión fue autorizada para pago.',
+          pagada: 'Tu comisión fue pagada.',
+          cancelada: 'Tu comisión fue cancelada.',
+        };
+        const msg = msgs[status];
+        if (msg) pushNotification(r.ambassadorId, `comision:${status}`, msg, r.id);
+        return { ...r, commissionStatus: status, paymentDate, auditTrail: newTrail };
+      }));
+    },
+
+    setEstimatedPaymentDate: (id, dateISO) => {
+      setReferrals(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: 'fecha_estimada_pago', details: dateISO }];
+        dbUpdateReferral(id, { fecha_pago_estimada: dateISO, audit_trail: newTrail });
+        return { ...r, estimatedPaymentDate: dateISO, auditTrail: newTrail };
+      }));
+    },
 
     markNotificationRead: (id) =>
-      setNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n))),
+      setNotifications(p => p.map(n => n.id === id ? { ...n, read: true } : n)),
 
     markAllRead: (ambassadorId) =>
-      setNotifications((p) => p.map((n) => (n.ambassadorId === ambassadorId ? { ...n, read: true } : n))),
+      setNotifications(p => p.map(n => n.ambassadorId === ambassadorId ? { ...n, read: true } : n)),
 
     markAdvisorNotifRead: (id) =>
-      setAdvisorNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n))),
+      setAdvisorNotifications(p => p.map(n => n.id === id ? { ...n, read: true } : n)),
   };
 
   return <AmbassadorsContext.Provider value={ctx}>{children}</AmbassadorsContext.Provider>;
