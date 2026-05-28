@@ -257,12 +257,57 @@ function SignatureCanvas({ onChange }: { onChange: (data: string | null) => void
   );
 }
 
+// ─── Paquete Muebles Checklist ────────────────────────────────────────────────
+
+const MUEBLES_CHECKLIST = [
+  { zona: 'Sala', color: 'bg-blue-50 text-blue-700', items: [
+    { nombre: 'Sofá principal (3 plazas)',    incluido: true },
+    { nombre: 'Sillones laterales (2 pzas)', incluido: true },
+    { nombre: 'Mesa de centro',               incluido: true },
+    { nombre: 'Mesa auxiliar / consola',      incluido: false },
+    { nombre: 'Lámpara de piso',              incluido: false },
+  ]},
+  { zona: 'Comedor', color: 'bg-violet-50 text-violet-700', items: [
+    { nombre: 'Mesa de comedor',              incluido: true },
+    { nombre: 'Sillas (6 pzas)',              incluido: true },
+    { nombre: 'Mueble auxiliar / trinchador', incluido: false },
+  ]},
+  { zona: 'Recámara Principal', color: 'bg-emerald-50 text-emerald-700', items: [
+    { nombre: 'Base de cama king / queen',    incluido: true },
+    { nombre: 'Colchón',                      incluido: true },
+    { nombre: 'Buró (2 pzas)',                incluido: true },
+    { nombre: 'Cómoda / tocador',             incluido: true },
+    { nombre: 'Espejo de cuerpo completo',    incluido: false },
+  ]},
+  { zona: 'Recámara 2', color: 'bg-teal-50 text-teal-700', items: [
+    { nombre: 'Base de cama individual / matrimonial', incluido: true },
+    { nombre: 'Colchón',                               incluido: true },
+    { nombre: 'Buró (1 pza)',                          incluido: true },
+  ]},
+  { zona: 'Cocina / Electrodomésticos', color: 'bg-amber-50 text-amber-700', items: [
+    { nombre: 'Refrigerador',           incluido: true },
+    { nombre: 'Estufa / Horno',         incluido: true },
+    { nombre: 'Campana de extracción',  incluido: true },
+    { nombre: 'Lavavajillas',           incluido: false },
+    { nombre: 'Horno de microondas',    incluido: true },
+  ]},
+  { zona: 'General', color: 'bg-slate-100 text-slate-700', items: [
+    { nombre: 'Lavadora',                             incluido: true },
+    { nombre: 'Secadora',                             incluido: false },
+    { nombre: 'Cortinas / persianas',                 incluido: true },
+    { nombre: 'Escritorio / silla (si aplica)',       incluido: false },
+  ]},
+] as const;
+
+const MUEBLES_TOTAL    = MUEBLES_CHECKLIST.flatMap(z => z.items).length;
+const MUEBLES_INCLUIDOS = MUEBLES_CHECKLIST.flatMap(z => z.items).filter(i => i.incluido).length;
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function EntregaDetalle() {
   const { id = '1' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'resumen' | 'checklist' | 'daiku' | 'programacion' | 'acta' | 'observaciones' | 'documentos' | 'historial'>('resumen');
+  const [activeTab, setActiveTab] = useState<'resumen' | 'checklist' | 'muebles' | 'programacion' | 'acta' | 'observaciones' | 'documentos' | 'historial'>('resumen');
   const [expandedCats, setExpandedCats] = useState<string[]>([]);
   const [selectedCat, setSelectedCat] = useState<ChecklistCategoria | null>(DEMO_CHECKLIST[1]);
   const [actaStep, setActaStep] = useState(1);
@@ -280,7 +325,7 @@ export function EntregaDetalle() {
   const TABS = [
     { id: 'resumen',       label: 'Resumen' },
     { id: 'checklist',     label: 'Checklist' },
-    { id: 'daiku',         label: 'DAIKU' },
+    { id: 'muebles',       label: 'Paquete Muebles' },
     { id: 'programacion',  label: 'Programación' },
     { id: 'acta',          label: 'Acta de entrega' },
     { id: 'observaciones', label: `Observaciones${DEMO_OBSERVACIONES.length > 0 ? ` (${DEMO_OBSERVACIONES.length})` : ''}` },
@@ -383,13 +428,18 @@ export function EntregaDetalle() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Checklist técnico', value: `${checklistGlobal}%`, sub: `${completosItems}/${totalItems} ítems`, ok: checklistGlobal === 100, icon: ListChecks },
-                { label: 'DAIKU', value: unidad.daikuEstatus === 'COMPLETADO' ? 'Completado' : unidad.daikuEstatus === 'NO_APLICA' ? 'No aplica' : 'Pendiente', sub: '', ok: unidad.daikuEstatus !== 'PENDIENTE', icon: Package },
+                { label: 'Paquete Muebles', value: unidad.daikuEstatus === 'COMPLETADO' ? 'Completado' : unidad.daikuEstatus === 'NO_APLICA' ? 'No aplica' : 'Pendiente', sub: '', ok: unidad.daikuEstatus !== 'PENDIENTE', icon: Package, tab: 'muebles' as const },
                 { label: 'Observaciones', value: `${DEMO_OBSERVACIONES.length} abiertas`, sub: 'Sin obs. críticas', ok: !DEMO_OBSERVACIONES.some(o => o.prioridad === 'CRITICA'), icon: AlertTriangle },
                 { label: 'Firmas', value: unidad.actaEstatus === 'FIRMADA' ? 'Firmado' : 'Pendiente', sub: '', ok: unidad.actaEstatus === 'FIRMADA', icon: ClipboardCheck },
               ].map(s => {
                 const Icon = s.icon;
+                const hasTab = 'tab' in s && s.tab;
                 return (
-                  <div key={s.label} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <div
+                    key={s.label}
+                    onClick={hasTab ? () => setActiveTab((s as any).tab) : undefined}
+                    className={`bg-white border border-slate-200 rounded-2xl p-5 shadow-sm ${hasTab ? 'cursor-pointer hover:border-blue-300 hover:shadow-md transition-all' : ''}`}
+                  >
                     <div className="flex items-start justify-between mb-3">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.ok ? 'bg-emerald-50' : 'bg-amber-50'}`}>
                         <Icon className={`w-4 h-4 ${s.ok ? 'text-emerald-600' : 'text-amber-600'}`} />
@@ -399,6 +449,7 @@ export function EntregaDetalle() {
                     <p className="text-lg font-bold text-slate-900">{s.value}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
                     {s.sub && <p className="text-[11px] text-slate-400 mt-1">{s.sub}</p>}
+                    {hasTab && <p className="text-[11px] text-blue-500 mt-1.5 flex items-center gap-0.5">Ver checklist <ChevronRight className="w-3 h-3" /></p>}
                   </div>
                 );
               })}
@@ -610,9 +661,11 @@ export function EntregaDetalle() {
           </div>
         )}
 
-        {/* ── DAIKU ── */}
-        {activeTab === 'daiku' && (
-          <div className="max-w-2xl space-y-4">
+        {/* ── PAQUETE MUEBLES ── */}
+        {activeTab === 'muebles' && (
+          <div className="max-w-3xl space-y-4">
+
+            {/* Estado general */}
             <div className={`flex items-center gap-3 p-4 rounded-2xl border ${
               unidad.daikuEstatus === 'COMPLETADO' ? 'bg-emerald-50 border-emerald-200' :
               unidad.daikuEstatus === 'NO_APLICA'  ? 'bg-slate-50 border-slate-200' :
@@ -623,29 +676,84 @@ export function EntregaDetalle() {
                 unidad.daikuEstatus === 'NO_APLICA'  ? 'text-slate-400' : 'text-amber-600'
               }`} />
               <div>
-                <p className="text-sm font-bold text-slate-900">
-                  DAIKU: {DAIKU_META[unidad.daikuEstatus as keyof typeof DAIKU_META]?.label ?? unidad.daikuEstatus}
-                </p>
+                <p className="text-sm font-bold text-slate-900">Paquete Muebles</p>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  {unidad.daikuEstatus === 'COMPLETADO' && 'La instalación de DAIKU ha sido verificada y completada.'}
-                  {unidad.daikuEstatus === 'NO_APLICA' && 'Esta unidad no requiere instalación de DAIKU.'}
-                  {unidad.daikuEstatus === 'PENDIENTE' && 'La instalación de DAIKU está pendiente. No se puede finalizar la entrega.'}
-                  {unidad.daikuEstatus === 'EN_INSTALACION' && 'DAIKU está en proceso de instalación.'}
+                  {unidad.daikuEstatus === 'COMPLETADO'     && 'Entregado e instalado correctamente.'}
+                  {unidad.daikuEstatus === 'NO_APLICA'      && 'Esta unidad no incluye paquete de muebles.'}
+                  {unidad.daikuEstatus === 'PENDIENTE'      && 'Pendiente de entrega.'}
+                  {unidad.daikuEstatus === 'EN_INSTALACION' && 'En proceso de instalación.'}
                 </p>
               </div>
             </div>
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <p className="text-sm font-bold text-slate-900 mb-4">Detalles de instalación</p>
-              <div className="space-y-3 text-sm">
-                {[['Técnico asignado', 'Soporte DAIKU S.A.'], ['Fecha instalación', '17/05/2024'], ['Número de serie', 'DKU-2024-B305'],
-                  ['Tipo', 'Smart Lock + Hub'], ['Estatus verificación', 'Verificado por coordinador']].map(([l, v]) => (
-                  <div key={l} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                    <span className="text-slate-500 text-xs">{l}</span>
-                    <span className="text-slate-900 text-xs font-medium">{v}</span>
-                  </div>
-                ))}
+
+            {/* Barra de progreso */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-slate-900">Progreso del paquete</p>
+                <span className="text-sm font-bold text-emerald-600">
+                  {Math.round((MUEBLES_INCLUIDOS / MUEBLES_TOTAL) * 100)}%
+                </span>
               </div>
+              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${Math.round((MUEBLES_INCLUIDOS / MUEBLES_TOTAL) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1.5">{MUEBLES_INCLUIDOS} de {MUEBLES_TOTAL} ítems incluidos</p>
             </div>
+
+            {/* Checklist por zona */}
+            <div className="space-y-3">
+              {MUEBLES_CHECKLIST.map(zona => {
+                const incluidos = zona.items.filter(i => i.incluido).length;
+                return (
+                  <div key={zona.zona} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className={`flex items-center justify-between px-4 py-3 border-b border-slate-100 ${zona.color}`}>
+                      <p className="text-sm font-bold">{zona.zona}</p>
+                      <span className="text-xs font-medium">{incluidos}/{zona.items.length}</span>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {zona.items.map(item => (
+                        <div key={item.nombre} className="flex items-center justify-between px-4 py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            {item.incluido
+                              ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                              : <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />
+                            }
+                            <span className={`text-sm ${item.incluido ? 'text-slate-800' : 'text-slate-400'}`}>
+                              {item.nombre}
+                            </span>
+                          </div>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            item.incluido ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                          }`}>
+                            {item.incluido ? 'Incluido' : 'No incluido'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Observaciones */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Observaciones del paquete</p>
+              <textarea
+                rows={3}
+                placeholder="Agregar observaciones sobre el paquete de muebles entregado…"
+                className="w-full text-sm text-slate-700 bg-white border border-slate-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              <button
+                onClick={() => toast.info('Observaciones guardadas')}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                Guardar observación
+              </button>
+            </div>
+
           </div>
         )}
 
@@ -761,7 +869,7 @@ export function EntregaDetalle() {
                   <div className="space-y-2">
                     {[
                       { label: 'Checklist técnico', ok: checklistGlobal === 100, value: `${checklistGlobal}%` },
-                      { label: 'DAIKU', ok: unidad.daikuEstatus !== 'PENDIENTE', value: unidad.daikuEstatus === 'NO_APLICA' ? 'No aplica' : 'Completado' },
+                      { label: 'Paquete Muebles', ok: unidad.daikuEstatus !== 'PENDIENTE', value: unidad.daikuEstatus === 'NO_APLICA' ? 'No aplica' : 'Completado' },
                       { label: 'Observaciones', ok: true, value: `${DEMO_OBSERVACIONES.length} abiertas (no críticas)` },
                       { label: 'Firma del cliente', ok: !!firmaData && !!firmaNombre, value: firmaData && firmaNombre ? firmaNombre : 'Pendiente' },
                     ].map(s => (
@@ -900,7 +1008,7 @@ export function EntregaDetalle() {
                 { icon: CheckCheck, color: 'text-emerald-600 bg-emerald-50', label: 'Entrega finalizada', desc: 'Acta firmada por Jorge Acosta', fecha: '21/05/2024 · 11:15 AM', user: 'Luis García' },
                 { icon: FileText, color: 'text-blue-600 bg-blue-50', label: 'Acta generada', desc: 'Acta de entrega digital generada', fecha: '21/05/2024 · 11:00 AM', user: 'Sistema' },
                 { icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50', label: 'Checklist completado', desc: 'Todos los conceptos verificados — 100%', fecha: '18/05/2024 · 05:42 PM', user: 'Luis García' },
-                { icon: Package, color: 'text-teal-600 bg-teal-50', label: 'DAIKU verificado', desc: 'Instalación DAIKU completada y verificada', fecha: '17/05/2024 · 03:30 PM', user: 'Soporte DAIKU' },
+                { icon: Package, color: 'text-teal-600 bg-teal-50', label: 'Paquete Muebles verificado', desc: 'Entrega e instalación de muebles completada y verificada', fecha: '17/05/2024 · 03:30 PM', user: 'Coordinador de Entregas' },
                 { icon: Calendar, color: 'text-violet-600 bg-violet-50', label: 'Entrega programada', desc: `Cita agendada para ${unidad.fechaProgramada}`, fecha: '15/05/2024 · 09:00 AM', user: 'Luis García' },
                 { icon: Home, color: 'text-slate-600 bg-slate-100', label: 'Unidad lista para entrega', desc: 'Estatus actualizado a Listo para entrega', fecha: '14/05/2024 · 04:00 PM', user: 'Sistema' },
               ].map((e, i) => {

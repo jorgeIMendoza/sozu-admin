@@ -778,16 +778,32 @@ export function WorkflowDashboard() {
   const navigate = useNavigate();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [proyectoId, setProyectoId]         = useState<number | null>(null);
-  const [search, setSearch]                 = useState('');
+  // Clave de sesión para persistir la unidad seleccionada al navegar y regresar
+  const WF_SESSION_KEY = 'workflow-selected-unit';
+
+  const [proyectoId, setProyectoId]         = useState<number | null>(() => {
+    try { return JSON.parse(sessionStorage.getItem(WF_SESSION_KEY) ?? 'null')?.proyectoId ?? null; } catch { return null; }
+  });
+  const [search, setSearch]                 = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(WF_SESSION_KEY) ?? 'null')?.search ?? ''; } catch { return ''; }
+  });
   const [showDropdown, setShowDropdown]     = useState(false);
-  const [selectedUnit, setSelectedUnit]     = useState<UnitSearchResult | null>(null);
+  const [selectedUnit, setSelectedUnit]     = useState<UnitSearchResult | null>(() => {
+    try { return JSON.parse(sessionStorage.getItem(WF_SESSION_KEY) ?? 'null')?.selectedUnit ?? null; } catch { return null; }
+  });
   const [evaluation, setEvaluation]         = useState<WorkflowEvaluation | null>(null);
   const [paymentMethod, setPaymentMethod]   = useState<PaymentMethod>(null);
   const [evaluating, setEvaluating]         = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Guardar estado en sessionStorage cada vez que cambia la unidad seleccionada
+  useEffect(() => {
+    if (selectedUnit) {
+      sessionStorage.setItem(WF_SESSION_KEY, JSON.stringify({ proyectoId, search, selectedUnit }));
+    }
+  }, [selectedUnit, proyectoId, search]);
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const { data: proyectos = [] } = useQuery({
@@ -807,6 +823,14 @@ export function WorkflowDashboard() {
     if (proyectos.length > 0 && proyectoId === null) setProyectoId(proyectos[0].id);
   }, [proyectos, proyectoId]);
 
+  // Re-evaluar workflow cuando se restaura la unidad desde sessionStorage
+  useEffect(() => {
+    if (selectedUnit && !evaluation && !evaluating) {
+      evaluate(selectedUnit, paymentMethod);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit]);
+
   // ── Unit search ───────────────────────────────────────────────────────────
   const { data: searchResults = [], isFetching: searching } = useQuery({
     queryKey: ['workflow-search', proyectoId, search],
@@ -824,8 +848,37 @@ export function WorkflowDashboard() {
       if (!props?.length) return [];
       const propIds = props.map((p: any) => p.id);
       const propMap: Record<number, any> = Object.fromEntries(props.map((p: any) => [p.id, p]));
-      const { data: cuentas } = await supabase.from('cuentas_cobranza').select('id, id_propiedad').in('id_propiedad', propIds).eq('activo', true);
-      if (!cuentas?.length) return [];
+      // Cuentas de cobranza — incluye id_oferta para filtrar solo cuentas de PROPIEDAD
+      const { data: todasCuentas } = await supabase
+        .from('cuentas_cobranza').select('id, id_propiedad, id_oferta')
+        .in('id_propiedad', propIds).eq('activo', true);
+      if (!todasCuentas?.length) return [];
+
+      // Filtrar solo la cuenta PRINCIPAL de cada propiedad:
+      // La oferta de la propiedad tiene id_producto = null (sin producto)
+      // Las bodegas/estacionamientos tienen id_producto != null → excluirlas
+      const ofertaIds = [...new Set(todasCuentas.map((c: any) => c.id_oferta).filter(Boolean))];
+      const cuentasPropiedad = await (async () => {
+        if (!ofertaIds.length) return todasCuentas;
+        const { data: ofertas } = await supabase
+          .from('ofertas').select('id, id_producto').in('id', ofertaIds as any);
+        const ofertaEsProp = new Set(
+          (ofertas ?? []).filter((o: any) => !o.id_producto).map((o: any) => o.id)
+        );
+        // Solo la cuenta cuya oferta es de propiedad (sin producto)
+        // Si no se puede determinar (sin oferta), quedarse con la cuenta de menor id por prop
+        const byCuenta = todasCuentas.filter((c: any) => ofertaEsProp.has(c.id_oferta));
+        if (byCuenta.length) return byCuenta;
+        // Fallback: si no hay ofertas, tomar la cuenta de menor id por propiedad
+        const min: Record<number, any> = {};
+        for (const c of todasCuentas as any[]) {
+          if (!min[c.id_propiedad] || c.id < min[c.id_propiedad].id) min[c.id_propiedad] = c;
+        }
+        return Object.values(min);
+      })();
+
+      if (!cuentasPropiedad.length) return [];
+      const cuentas = cuentasPropiedad;
       const cuentaIds = cuentas.map((c: any) => c.id);
       const { data: compradores } = await supabase.from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
       const personaIds = [...new Set((compradores ?? []).map((c: any) => c.id_persona).filter(Boolean))];
@@ -866,6 +919,16 @@ export function WorkflowDashboard() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // ── Navegar con contexto de cuenta (deep-link) ────────────────────────────
+  const navigateWithContext = (baseUrl: string) => {
+    if (!selectedUnit) { navigate(baseUrl); return; }
+    const params = new URLSearchParams({
+      wf_num:    selectedUnit.unitCode,
+      wf_cuenta: String(selectedUnit.cuentaId),
+    });
+    navigate(`${baseUrl}?${params.toString()}`);
+  };
 
   // ── Evaluate workflow ─────────────────────────────────────────────────────
   const evaluate = useCallback(async (unit: UnitSearchResult, pm: PaymentMethod) => {
@@ -1207,7 +1270,7 @@ export function WorkflowDashboard() {
 
                             {step.actionUrl && (
                               <button
-                                onClick={e => { e.stopPropagation(); navigate(step.actionUrl!); }}
+                                onClick={e => { e.stopPropagation(); navigateWithContext(step.actionUrl!); }}
                                 className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-100 transition-colors shrink-0"
                               >
                                 {step.actionLabel}
@@ -1323,7 +1386,7 @@ export function WorkflowDashboard() {
                       <div>
                         <p className="text-xs font-semibold text-slate-700 mb-2">Acciones rápidas</p>
                         <button
-                          onClick={() => navigate(selectedStep.actionUrl!)}
+                          onClick={() => navigateWithContext(selectedStep.actionUrl!)}
                           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
                         >
                           {selectedStep.actionLabel}

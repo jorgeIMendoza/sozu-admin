@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Download, ExternalLink, X, FileText,
   Loader2, ChevronDown, DollarSign, AlertTriangle,
-  FolderOpen,
+  FolderOpen, ArrowLeft,
 } from 'lucide-react';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useExportToExcel } from '@/hooks/useExportToExcel';
@@ -293,9 +294,16 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante }: PaymentsTablePro
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function RelacionPagos() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // Parámetros de deep-link desde Workflow (wf_num = número de unidad, wf_cuenta = id cuenta)
+  const wfNum    = searchParams.get('wf_num')    ?? '';
+  const wfCuenta = searchParams.get('wf_cuenta') ?? '';
+  const fromWorkflow = !!(wfNum || wfCuenta);
+
   const [proyectoId, setProyectoId] = useState<number | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState(''); // debounced
+  const [searchInput, setSearchInput] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
+  const [search, setSearch] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
   const [page, setPage] = useState(1);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const { exportToExcel, isExporting } = useExportToExcel();
@@ -364,114 +372,112 @@ export function RelacionPagos() {
   const totalMonto = useMemo(() => filteredPagos.reduce((s, p) => s + (p.monto ?? 0), 0), [filteredPagos]);
   const totalConCep = useMemo(() => filteredPagos.filter((p) => p.tiene_cep).length, [filteredPagos]);
 
-  // Detect single-account view.
-  // Filter out null/undefined before building the Set — some RPC rows may have
-  // id_cuenta_cobranza = null even though the type says number.
-  const singleCuentaId = useMemo(() => {
-    if (!filteredPagos.length) return null;
-    const ids = new Set(
-      filteredPagos
-        .map((p) => p.id_cuenta_cobranza)
-        .filter((id): id is number => id != null),
-    );
-    // Show detail cards whenever all non-null rows point to the same account
-    return ids.size === 1 ? [...ids][0] : null;
+  // Todas las cuentas visibles en los pagos filtrados
+  const visibleCuentaIds = useMemo(() => {
+    return [...new Set(
+      filteredPagos.map((p) => p.id_cuenta_cobranza).filter((id): id is number => id != null),
+    )];
   }, [filteredPagos]);
 
-  // Full account summary — only for single-account view
+  // Single-account: solo para mostrar el breakdown de acuerdos
+  const singleCuentaId = useMemo(() =>
+    visibleCuentaIds.length === 1 ? visibleCuentaIds[0] : null,
+  [visibleCuentaIds]);
+
+  // Resumen de cuentas — funciona para cualquier cantidad de cuentas visibles
   const { data: cuentaResumen, isLoading: isLoadingResumen } = useQuery({
-    queryKey: ['cuenta-resumen-rp', singleCuentaId],
-    enabled: !!singleCuentaId,
+    queryKey: ['cuenta-resumen-rp', visibleCuentaIds.join(',')],
+    enabled: visibleCuentaIds.length > 0 && filteredPagos.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
-      const { data: cuenta } = await supabase
+      // 1. Precio final y valor_uma de TODAS las cuentas visibles
+      const { data: cuentas } = await supabase
         .from('cuentas_cobranza')
-        .select('precio_final, valor_uma, id_propiedad')
-        .eq('id', singleCuentaId)
-        .maybeSingle();
-      if (!cuenta) return null;
+        .select('id, precio_final, valor_uma, id_propiedad')
+        .in('id', visibleCuentaIds);
+      if (!cuentas?.length) return null;
 
-      // Acuerdos + conceptos + aplicaciones
-      const { data: acuerdosRaw } = await supabase
-        .from('acuerdos_pago')
-        .select('id, monto, pago_completado, id_concepto')
-        .eq('id_cuenta_cobranza', singleCuentaId)
-        .eq('activo', true);
+      const precioFinalTotal = cuentas.reduce((s, c) => s + Number(c.precio_final ?? 0), 0);
+      const valorUma = cuentas[0]?.valor_uma ?? 0;
 
-      let totalPagadoCuenta = 0;
+      // 2. Breakdown de acuerdos — solo para cuenta única (performance)
+      let totalPagadoCuenta = 0; // se setea si es cuenta única; si no, se usa totalMonto
       let breakdown: { duranteObra: number; aLaEntrega: number; parcialidadesRestantes: number } | null = null;
 
-      if (acuerdosRaw?.length) {
-        const conceptoIds = [...new Set(acuerdosRaw.map((a) => a.id_concepto).filter(Boolean))];
-        const { data: conceptos } = await supabase
-          .from('conceptos_pago').select('id, nombre').in('id', conceptoIds);
-        const conceptoMap: Record<number, string> = {};
-        (conceptos ?? []).forEach((c) => { conceptoMap[c.id] = c.nombre; });
+      if (visibleCuentaIds.length === 1) {
+        const cuentaId = visibleCuentaIds[0];
+        const { data: acuerdosRaw } = await supabase
+          .from('acuerdos_pago').select('id, monto, pago_completado, id_concepto')
+          .eq('id_cuenta_cobranza', cuentaId).eq('activo', true);
 
-        const acuerdoIds = acuerdosRaw.map((a) => a.id);
-        const { data: aplicaciones } = await supabase
-          .from('aplicaciones_pago')
-          .select('id_acuerdo_pago, monto, es_multa')
-          .in('id_acuerdo_pago', acuerdoIds)
-          .eq('activo', true);
+        if (acuerdosRaw?.length) {
+          const conceptoIds = [...new Set(acuerdosRaw.map((a) => a.id_concepto).filter(Boolean))];
+          const { data: conceptos } = await supabase
+            .from('conceptos_pago').select('id, nombre').in('id', conceptoIds);
+          const conceptoMap: Record<number, string> = {};
+          (conceptos ?? []).forEach((c) => { conceptoMap[c.id] = c.nombre; });
 
-        totalPagadoCuenta = (aplicaciones ?? [])
-          .filter((ap) => !ap.es_multa)
-          .reduce((s, ap) => s + ap.monto, 0);
+          const { data: aplicaciones } = await supabase
+            .from('aplicaciones_pago').select('id_acuerdo_pago, monto, es_multa')
+            .in('id_acuerdo_pago', acuerdosRaw.map((a) => a.id)).eq('activo', true);
 
-        const aplicadoById: Record<number, number> = {};
-        (aplicaciones ?? []).forEach((ap) => {
-          if (!ap.es_multa) aplicadoById[ap.id_acuerdo_pago] = (aplicadoById[ap.id_acuerdo_pago] || 0) + ap.monto;
-        });
+          totalPagadoCuenta = (aplicaciones ?? [])
+            .filter((ap) => !ap.es_multa).reduce((s, ap) => s + ap.monto, 0);
 
-        const acuerdos = acuerdosRaw.map((a) => ({
-          ...a, concepto: (conceptoMap[a.id_concepto] ?? '').toLowerCase(),
-          aplicado: aplicadoById[a.id] ?? 0,
-        }));
+          const aplicadoById: Record<number, number> = {};
+          (aplicaciones ?? []).forEach((ap) => {
+            if (!ap.es_multa) aplicadoById[ap.id_acuerdo_pago] = (aplicadoById[ap.id_acuerdo_pago] || 0) + ap.monto;
+          });
 
-        const contra = acuerdos.filter((a) => a.concepto === 'pago a contra entrega');
-        const noCon = acuerdos.filter((a) => a.concepto !== 'pago a contra entrega');
-
-        breakdown = {
-          aLaEntrega: contra.reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
-          duranteObra: noCon.filter((a) => !a.pago_completado).reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
-          parcialidadesRestantes: acuerdos.filter((a) => a.concepto === 'parcialidad' && !a.pago_completado).length,
-        };
+          const acuerdos = acuerdosRaw.map((a) => ({
+            ...a, concepto: (conceptoMap[a.id_concepto] ?? '').toLowerCase(),
+            aplicado: aplicadoById[a.id] ?? 0,
+          }));
+          const contra = acuerdos.filter((a) => a.concepto === 'pago a contra entrega');
+          const noCon   = acuerdos.filter((a) => a.concepto !== 'pago a contra entrega');
+          breakdown = {
+            aLaEntrega: contra.reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
+            duranteObra: noCon.filter((a) => !a.pago_completado).reduce((s, a) => s + Math.max(0, (a.monto ?? 0) - a.aplicado), 0),
+            parcialidadesRestantes: acuerdos.filter((a) => a.concepto === 'parcialidad' && !a.pago_completado).length,
+          };
+        }
       }
 
-      // Valor de escrituración — guard against null precio_final
-      const pf = cuenta.precio_final ?? 0;
-      let escrituracion = pf;
-      if (cuenta.id_propiedad) {
+      // 3. Valor de escrituración: precio de bodegas/estac no incluidas de TODAS las propiedades
+      const propIds = [...new Set(cuentas.map((c) => c.id_propiedad).filter(Boolean))] as number[];
+      let escrituracion = precioFinalTotal;
+      if (propIds.length) {
         const [{ data: bodegas }, { data: estac }] = await Promise.all([
-          supabase.from('bodegas').select('id_producto').eq('id_propiedad', cuenta.id_propiedad).eq('es_incluido', false).eq('activo', true),
-          supabase.from('estacionamientos').select('id_producto').eq('id_propiedad', cuenta.id_propiedad).eq('es_incluido', false).eq('activo', true),
+          supabase.from('bodegas').select('id_producto').in('id_propiedad', propIds).eq('es_incluido', false).eq('activo', true),
+          supabase.from('estacionamientos').select('id_producto').in('id_propiedad', propIds).eq('es_incluido', false).eq('activo', true),
         ]);
         const productIds = [...(bodegas ?? []), ...(estac ?? [])].map((r) => r.id_producto).filter(Boolean);
         if (productIds.length) {
           const { data: ofertas } = await supabase.from('ofertas').select('id').in('id_producto', productIds).eq('activo', true);
           if (ofertas?.length) {
-            const { data: ctas } = await supabase.from('cuentas_cobranza').select('precio_final').in('id_oferta', ofertas.map((o) => o.id)).eq('activo', true);
+            const { data: ctas } = await supabase.from('cuentas_cobranza').select('precio_final')
+              .in('id_oferta', ofertas.map((o) => o.id)).eq('activo', true);
             escrituracion += (ctas ?? []).reduce((s, c) => s + (c.precio_final ?? 0), 0);
           }
         }
       }
 
-      return { precioFinal: pf, valorUma: cuenta.valor_uma ?? 0, totalPagadoCuenta, breakdown, escrituracion };
+      return { precioFinal: precioFinalTotal, valorUma, totalPagadoCuenta, breakdown, escrituracion };
     },
   });
 
   // Derived account-level values
   const precioFinal = cuentaResumen?.precioFinal ?? 0;
-  const totalPagadoCuenta = cuentaResumen?.totalPagadoCuenta ?? 0;
-  // Use a 1-cent threshold to avoid false positives from floating-point arithmetic
-  const diferencia = precioFinal > 0 ? totalPagadoCuenta - precioFinal : 0;
-  const haySobrepago = diferencia > 0.01;
-  // Only mark as fully paid once cuentaResumen has actually loaded (avoids false green during fetch)
+  // Cuenta única: usar totalPagadoCuenta de aplicaciones_pago (fuente de verdad)
+  // Multi-cuenta: usar totalMonto de los pagos visibles
+  const totalPagadoCuenta = singleCuentaId && cuentaResumen?.totalPagadoCuenta
+    ? cuentaResumen.totalPagadoCuenta
+    : totalMonto;
+  const diferencia    = precioFinal > 0 ? totalPagadoCuenta - precioFinal : 0;
+  const haySobrepago  = diferencia > 0.01;
   const esPagadoCompleto = !!cuentaResumen && precioFinal > 0 && !haySobrepago && Math.abs(diferencia) <= 0.01;
   const totalPendiente = Math.max(0, precioFinal - totalPagadoCuenta);
   const montoSobrepago = haySobrepago ? diferencia : 0;
-  // Guard against null valor_uma → NaN
   const limiteEfectivo = ((cuentaResumen?.valorUma ?? 0) || 0) * 8025;
   const pagadoEfectivo = useMemo(
     () => filteredPagos.filter((p) => p.metodo_pago?.toLowerCase().includes('efectivo')).reduce((s, p) => s + p.monto, 0),
@@ -521,6 +527,18 @@ export function RelacionPagos() {
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8 font-sans bg-slate-50/50 min-h-screen">
 
+      {/* ── Breadcrumb de vuelta a Workflow ─────────────────────────────────── */}
+      {fromWorkflow && (
+        <button
+          onClick={() => navigate('/admin/portal-escrituracion/workflow')}
+          className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-900 mb-4 group"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+          Volver a Workflow
+          {wfNum && <span className="ml-1 text-slate-400">· Unidad {wfNum}</span>}
+        </button>
+      )}
+
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
@@ -569,10 +587,9 @@ export function RelacionPagos() {
           ) : (
             <>
               <KpiCard label="Total pagos" value={total.toLocaleString('es-MX')} />
-              {/* En vista de cuenta única usar totalPagadoCuenta (aplicaciones_pago) como fuente de verdad */}
               <KpiCard
                 label="Total pagado"
-                value={fmtMxn(singleCuentaId && cuentaResumen ? totalPagadoCuenta : totalMonto)}
+                value={fmtMxn(totalPagadoCuenta)}
                 valueClass="text-emerald-600"
               />
               <KpiCard label="Con comprobante" value={totalConCep.toLocaleString('es-MX')} colSpan />
@@ -581,8 +598,8 @@ export function RelacionPagos() {
         </div>
       )}
 
-      {/* ── Cards detallados de cuenta (single-account view) ─────────────── */}
-      {hasResults && singleCuentaId && (isLoadingResumen || !!cuentaResumen) && (
+      {/* ── Cards financieros — siempre visibles cuando hay resultados ─────── */}
+      {hasResults && (isLoadingResumen || !!cuentaResumen) && (
         <div className="space-y-4 mb-6">
           {/* Fila 1: 4 cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
