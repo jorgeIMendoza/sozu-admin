@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Bell,
   Inbox,
   Workflow,
   FileOutput,
@@ -51,13 +49,6 @@ interface NavGroup {
 // Por eso la taxonomía agrupa por fase del flujo operativo (Ejecución,
 // Pagos y Cobranza, Historial) en lugar de calcar el sidebar de Alta Dirección.
 const navGroups: NavGroup[] = [
-  {
-    label: "Visión",
-    items: [
-      { label: "Dashboard",      path: "/admin/portal-administracion/dashboard",      icon: LayoutDashboard },
-      { label: "Notificaciones", path: "/admin/portal-administracion/notificaciones", icon: Bell },
-    ],
-  },
   {
     label: "Ejecución",
     items: [
