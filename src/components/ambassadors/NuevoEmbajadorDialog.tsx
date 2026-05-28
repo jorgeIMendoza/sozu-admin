@@ -36,6 +36,8 @@ const DEFAULT_FORM: FormState = {
   commissionTrigger: 'enganche', protectionDays: '90', notes: '',
 };
 
+const ROLE_EMBAJADOR_ID = 25;
+
 export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: Props) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
@@ -58,15 +60,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .single();
       if (tipoError || !tipoData) throw new Error('Tipo de entidad "Embajador" no encontrado. Ejecuta la migración 20260527000002.');
 
-      // 2. Obtener rol "Embajador"
-      const { data: rolData, error: rolError } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('nombre', 'Embajador')
-        .single();
-      if (rolError || !rolData) throw new Error('Rol "Embajador" no encontrado. Ejecuta la migración 20260527000002.');
-
-      // 3. Crear persona
+      // 2. Crear persona
       const { data: persona, error: personaError } = await supabase
         .from('personas')
         .insert({
@@ -80,21 +74,23 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .single();
       if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
 
-      // 4. Crear entidad_relacionada tipo Embajador
-      const { error: erError } = await supabase
+      // 3. Crear fila en entidades_relacionadas tipo "Embajador"
+      const { data: erData, error: erError } = await supabase
         .from('entidades_relacionadas')
         .insert({
           id_persona: persona.id,
           id_tipo_entidad: tipoData.id,
           activo: true,
-        });
-      if (erError) throw erError;
+        })
+        .select('id')
+        .single();
+      if (erError || !erData) throw erError ?? new Error('Error al crear entidades_relacionadas');
 
-      // 5. Crear registro en embajadores
-      const { error: embError } = await supabase
-        .from('embajadores')
+      // 4. Crear embajadores_config (extensión 1:1 con campos específicos)
+      const { error: cfgError } = await supabase
+        .from('embajadores_config')
         .insert({
-          id_persona: persona.id,
+          id_entidad_relacionada: erData.id,
           empresa: form.company.trim() || null,
           tipo: form.type,
           pct_comision: Number(form.commissionPct) || 0,
@@ -105,14 +101,14 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           estatus: form.status,
           documentos_pago: DEFAULT_PAYMENT_DOCS.map(d => ({ ...d })),
         });
-      if (embError) throw embError;
+      if (cfgError) throw cfgError;
 
-      // 6. Crear usuario con rol Embajador (envía correo de confirmación)
+      // 5. Crear usuario con rol Embajador (envía correo de activación)
       const { error: createUserError } = await supabase.functions.invoke('create-user', {
         body: {
           email: form.email.trim().toLowerCase(),
           nombre: form.fullName.trim(),
-          rol_id: rolData.id,
+          rol_id: ROLE_EMBAJADOR_ID,
           id_persona: persona.id,
           telefono: form.phone.trim(),
         },

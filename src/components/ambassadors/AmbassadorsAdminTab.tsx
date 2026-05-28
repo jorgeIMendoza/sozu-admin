@@ -173,7 +173,8 @@ export function ReferralFormDialog({
 
       const tipoProspectoId = tipoData?.id ?? 7;
 
-      // Obtener persona del asesor seleccionado (si aplica)
+      // Embajador y asesor seleccionados
+      const emb = ambassadors.find(a => a.id === form.ambassadorId);
       const adv = form.advisorId ? advisors.find(a => a.id === form.advisorId) : null;
 
       // Crear persona del cliente
@@ -190,24 +191,31 @@ export function ReferralFormDialog({
         .single();
       if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
 
-      // Crear entidad_relacionada tipo Prospecto
-      await supabase.from('entidades_relacionadas').insert({
-        id_persona: persona.id,
-        id_tipo_entidad: tipoProspectoId,
-        id_persona_duena_lead: adv?.idPersona ?? null,
-        activo: true,
-      });
+      // Crear entidad_relacionada tipo Prospecto (id_persona_duena_lead = embajador)
+      const { data: erData, error: erError } = await supabase
+        .from('entidades_relacionadas')
+        .insert({
+          id_persona: persona.id,
+          id_tipo_entidad: tipoProspectoId,
+          id_persona_duena_lead: emb?.idPersona ?? null,
+          activo: true,
+        })
+        .select('id')
+        .single();
+      if (erError || !erData) throw erError ?? new Error('Error al crear entidad_relacionada');
 
-      // Crear referido
+      // Crear referido en bridge table
       const { error: refError } = await supabase.from('embajadores_referidos').insert({
-        id_embajador: Number(form.ambassadorId),
-        id_persona_cliente: persona.id,
+        id_entidad_relacionada: erData.id,
+        id_entidad_relacionada_emb: Number(form.ambassadorId),
+        id_persona_embajador: emb?.idPersona ?? 0,
         tipo_interes: form.interestType,
         producto_interes: form.productInterest || null,
         relacion_embajador: form.relationship || null,
         comentarios: form.comments || null,
         consentimiento: form.consent ?? true,
         id_asesor_asignado: adv?.id || null,
+        id_persona_asesor: adv?.idPersona ?? null,
         nombre_asesor: adv?.name || null,
         rol_asesor: adv?.role || null,
         telefono_asesor: adv?.phone || null,

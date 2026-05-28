@@ -113,6 +113,7 @@ export const DEFAULT_PAYMENT_DOCS: PaymentDocument[] = [
 
 export interface Ambassador {
   id: string;
+  idPersona?: number;
   fullName: string;
   phone: string;
   email: string;

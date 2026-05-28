@@ -16,35 +16,42 @@ const LS_ADVISOR_NOTIFS_KEY = 'sozu.ambassadors.advisorNotifs.v1';
 // ─── Mappers ────────────────────────────────────────────────────────────────
 
 function mapAmbassador(row: any): Ambassador {
+  const cfg = Array.isArray(row.embajadores_config)
+    ? row.embajadores_config[0]
+    : row.embajadores_config;
   return {
     id: String(row.id),
+    idPersona: row.id_persona ?? undefined,
     fullName: row.personas?.nombre_legal ?? '',
     phone: row.personas?.telefono ?? '',
     email: row.personas?.email ?? '',
-    company: row.empresa ?? undefined,
-    type: (row.tipo ?? 'otro') as AmbassadorType,
-    status: (row.estatus ?? 'pendiente') as AmbassadorStatus,
+    company: cfg?.empresa ?? undefined,
+    type: (cfg?.tipo ?? 'otro') as AmbassadorType,
+    status: (cfg?.estatus ?? 'pendiente') as AmbassadorStatus,
     createdAt: row.fecha_creacion ?? new Date().toISOString(),
-    code: row.codigo ?? '',
-    referralLink: `https://sozu.app/ref/${row.codigo ?? ''}`,
-    commissionPct: Number(row.pct_comision) || 0,
-    fixedAmount: row.monto_fijo != null ? Number(row.monto_fijo) : undefined,
-    commissionTrigger: (row.trigger_comision ?? 'escrituracion') as CommissionTrigger,
-    notes: row.notas ?? undefined,
-    paymentDocs: Array.isArray(row.documentos_pago) && row.documentos_pago.length
-      ? row.documentos_pago
+    code: cfg?.codigo ?? `EMB-${String(row.id).padStart(4, '0')}`,
+    referralLink: `https://sozu.app/ref/${cfg?.codigo ?? row.id}`,
+    commissionPct: Number(cfg?.pct_comision) || 0,
+    fixedAmount: cfg?.monto_fijo != null ? Number(cfg.monto_fijo) : undefined,
+    commissionTrigger: (cfg?.trigger_comision ?? 'escrituracion') as CommissionTrigger,
+    notes: cfg?.notas ?? undefined,
+    paymentDocs: Array.isArray(cfg?.documentos_pago) && cfg.documentos_pago.length
+      ? cfg.documentos_pago
       : DEFAULT_PAYMENT_DOCS.map(d => ({ ...d })),
-    protectionDays: row.dias_proteccion ?? 90,
+    protectionDays: cfg?.dias_proteccion ?? 90,
   };
 }
 
 function mapReferral(row: any): Referral {
+  // Client info comes through entidades_relacionadas → personas
+  const er = row.entidades_relacionadas;
+  const clientPersona = er?.personas;
   return {
     id: String(row.id),
-    ambassadorId: String(row.id_embajador),
-    clientName: row.personas?.nombre_legal ?? '',
-    phone: row.personas?.telefono ?? '',
-    email: row.personas?.email ?? '',
+    ambassadorId: String(row.id_entidad_relacionada_emb),
+    clientName: clientPersona?.nombre_legal ?? '',
+    phone: clientPersona?.telefono ?? '',
+    email: clientPersona?.email ?? '',
     relationship: row.relacion_embajador ?? undefined,
     comments: row.comentarios ?? undefined,
     interestType: (row.tipo_interes ?? 'indefinido') as InterestType,
@@ -142,7 +149,6 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
   useEffect(() => { localStorage.setItem(LS_ADVISOR_NOTIFS_KEY, JSON.stringify(advisorNotifications)); }, [advisorNotifications]);
   useEffect(() => { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
 
-  // Keep a ref so mutations can read latest state without stale closures
   const referralsRef = useRef(referrals);
   const ambassadorsRef = useRef(ambassadors);
   const advisorsRef = useRef(advisors);
@@ -153,15 +159,29 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
   // ── Data loading ──────────────────────────────────────────────────────────
 
   const loadAmbassadors = useCallback(async () => {
+    // Resolve tipo_entidad id for "Embajador"
+    const { data: tipoData } = await supabase
+      .from('tipos_entidad')
+      .select('id')
+      .eq('nombre', 'Embajador')
+      .maybeSingle();
+
+    if (!tipoData) return;
+
     const { data, error } = await supabase
-      .from('embajadores')
+      .from('entidades_relacionadas')
       .select(`
-        id, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
-        dias_proteccion, notas, estatus, documentos_pago, fecha_creacion, codigo, activo,
-        personas!embajadores_id_persona_fkey(nombre_legal, email, telefono)
+        id, id_persona, activo, fecha_creacion,
+        personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono),
+        embajadores_config(
+          codigo, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
+          dias_proteccion, notas, estatus, documentos_pago
+        )
       `)
+      .eq('id_tipo_entidad', tipoData.id)
       .eq('activo', true)
       .order('fecha_creacion', { ascending: false });
+
     if (!error && data) setAmbassadors(data.map(mapAmbassador));
   }, []);
 
@@ -169,16 +189,21 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
     const { data, error } = await supabase
       .from('embajadores_referidos')
       .select(`
-        id, id_embajador, tipo_interes, producto_interes, relacion_embajador,
-        comentarios, consentimiento, estatus, id_asesor_asignado, nombre_asesor,
-        rol_asesor, telefono_asesor, email_asesor, estatus_asignacion, fecha_asignacion,
-        ultima_actualizacion_asesor, notas_internas, comentarios_publicos, proximo_paso,
-        estatus_proteccion, monto_venta, monto_comision, estatus_comision,
-        fecha_pago_estimada, fecha_pago, audit_trail, fecha_creacion, activo,
-        personas!embajadores_referidos_id_persona_cliente_fkey(nombre_legal, email, telefono)
+        id, id_persona_embajador, id_entidad_relacionada, id_entidad_relacionada_emb,
+        tipo_interes, producto_interes, relacion_embajador, comentarios, consentimiento,
+        estatus, id_asesor_asignado, nombre_asesor, rol_asesor, telefono_asesor, email_asesor,
+        estatus_asignacion, fecha_asignacion, ultima_actualizacion_asesor,
+        notas_internas, comentarios_publicos, proximo_paso, estatus_proteccion,
+        monto_venta, monto_comision, estatus_comision, fecha_pago_estimada, fecha_pago,
+        audit_trail, fecha_creacion, activo,
+        entidades_relacionadas(
+          id_persona,
+          personas(nombre_legal, email, telefono)
+        )
       `)
       .eq('activo', true)
       .order('fecha_creacion', { ascending: false });
+
     if (!error && data) setReferrals(data.map(mapReferral));
   }, []);
 
@@ -230,8 +255,9 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
   };
 
-  const dbUpdateAmbassador = (id: string, patch: Record<string, any>) => {
-    supabase.from('embajadores').update(patch).eq('id', Number(id))
+  // Updates fields in embajadores_config (keyed by id_entidad_relacionada = Ambassador.id)
+  const dbUpdateAmbassadorConfig = (id: string, patch: Record<string, any>) => {
+    supabase.from('embajadores_config').update(patch).eq('id_entidad_relacionada', Number(id))
       .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
   };
 
@@ -258,11 +284,8 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
     updateAdvisor: (id, patch) => {
       setAdvisors(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
       if (patch.active !== undefined) {
-        const adv = advisorsRef.current.find(a => a.id === id);
-        if (adv) {
-          supabase.from('usuarios').update({ activo: patch.active }).eq('email', id)
-            .then(({ error }) => { if (error) console.error(error); });
-        }
+        supabase.from('usuarios').update({ activo: patch.active }).eq('email', id)
+          .then(({ error }) => { if (error) console.error(error); });
       }
     },
 
@@ -278,12 +301,13 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       if (patch.protectionDays !== undefined) dbPatch.dias_proteccion = patch.protectionDays;
       if (patch.notes !== undefined) dbPatch.notas = patch.notes;
       if (patch.paymentDocs !== undefined) dbPatch.documentos_pago = patch.paymentDocs;
-      if (Object.keys(dbPatch).length) dbUpdateAmbassador(id, dbPatch);
+      if (Object.keys(dbPatch).length) dbUpdateAmbassadorConfig(id, dbPatch);
     },
 
     deleteAmbassador: (id) => {
       setAmbassadors(p => p.filter(a => a.id !== id));
-      dbUpdateAmbassador(id, { activo: false });
+      supabase.from('entidades_relacionadas').update({ activo: false }).eq('id', Number(id))
+        .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
     },
 
     setDocumentStatus: (ambassadorId, key, status, fileName) => {
@@ -294,7 +318,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
             ? { ...d, status, fileName: fileName ?? d.fileName, uploadedAt: fileName ? new Date().toISOString() : d.uploadedAt }
             : d,
         );
-        dbUpdateAmbassador(ambassadorId, { documentos_pago: docs });
+        dbUpdateAmbassadorConfig(ambassadorId, { documentos_pago: docs });
         return { ...a, paymentDocs: docs };
       }));
     },
@@ -358,7 +382,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         if (!advisorId) {
           const newTrail = [...r.auditTrail, { timestamp: now, actor: 'admin' as const, type: 'asesor_removido', details: r.assignedAdvisorName }];
           const updated = { ...r, assignedAdvisorId: undefined, assignedAdvisorName: undefined, assignedAdvisorRole: undefined, assignedAdvisorPhone: undefined, assignedAdvisorEmail: undefined, assignedAt: undefined, assignmentStatus: 'sin_asignar' as AssignmentStatus, auditTrail: newTrail };
-          dbUpdateReferral(referralId, { id_asesor_asignado: null, nombre_asesor: null, rol_asesor: null, telefono_asesor: null, email_asesor: null, fecha_asignacion: null, estatus_asignacion: 'sin_asignar', audit_trail: newTrail });
+          dbUpdateReferral(referralId, { id_asesor_asignado: null, nombre_asesor: null, rol_asesor: null, telefono_asesor: null, email_asesor: null, id_persona_asesor: null, fecha_asignacion: null, estatus_asignacion: 'sin_asignar', audit_trail: newTrail });
           pushNotification(updated.ambassadorId, 'asesor_removido', 'La asignación de asesor fue actualizada.', updated.id);
           return updated;
         }
@@ -371,7 +395,8 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         const updated = { ...r, assignedAdvisorId: adv.id, assignedAdvisorName: adv.name, assignedAdvisorRole: adv.role, assignedAdvisorPhone: adv.phone, assignedAdvisorEmail: adv.email, assignedAt: now, assignmentStatus: newStatus, auditTrail: newTrail };
 
         dbUpdateReferral(referralId, {
-          id_asesor_asignado: adv.id,
+          id_asesor_asignado: adv.id,       // email
+          id_persona_asesor: adv.idPersona ?? null,
           nombre_asesor: adv.name,
           rol_asesor: adv.role,
           telefono_asesor: adv.phone ?? null,
@@ -445,7 +470,6 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       setReferrals(prev => prev.map(r => {
         if (r.id !== id) return r;
         const newTrail = [...r.auditTrail, { timestamp: new Date().toISOString(), actor: 'admin' as const, type: 'venta_actualizada', details: `$${amount}` }];
-        // Compute commission from ambassador
         const amb = ambassadorsRef.current.find(a => a.id === r.ambassadorId);
         const commission = Math.round((amount * ((amb?.commissionPct ?? 0) / 100)) + (amb?.fixedAmount ?? 0));
         dbUpdateReferral(id, { monto_venta: amount, monto_comision: commission, audit_trail: newTrail });
