@@ -601,6 +601,15 @@ const App = () => (
                   <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
                   <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
                   <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  {/* Portal Notaría — independiente del Portal Escrituración */}
+                  <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
+                  {/* Portal Jurídico — independiente del Portal Escrituración */}
+                  <Route path="portal-juridico/inicio" element={<EscAppJuridico />} />
+                  {/* Administrar Notarios — menú admin principal */}
+                  <Route path="notarios/administrar" element={<EscNotarios />} />
+                  {/* Administrar Jurídico — menú admin principal */}
+                  <Route path="juridico/administrar" element={<ComingSoon title="Administrar Jurídico" hideBack />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />

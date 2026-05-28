@@ -666,7 +666,7 @@ export function AppNotariaDashboard() {
     return (
       <div className="flex items-center justify-center py-24 gap-2">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Cargando App Notaría...</span>
+        <span className="text-sm text-muted-foreground">Cargando Portal Notaría...</span>
       </div>
     );
   }
@@ -680,7 +680,7 @@ export function AppNotariaDashboard() {
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Stamp className="h-5 w-5 text-primary" />
-            App Notaría
+            Portal Notaría
             {notariaNombre && <span className="text-sm font-normal text-muted-foreground">· {notariaNombre}</span>}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Gestión de unidades asignadas a la notaría</p>

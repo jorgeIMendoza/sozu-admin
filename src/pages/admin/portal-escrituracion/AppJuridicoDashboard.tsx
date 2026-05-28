@@ -182,7 +182,7 @@ class AppJuridicoErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="m-6 rounded-xl border border-red-200 bg-red-50 p-6">
-          <p className="text-sm font-semibold text-red-700">App Jurídico — Error de renderizado</p>
+          <p className="text-sm font-semibold text-red-700">Portal Jurídico — Error de renderizado</p>
           <p className="mt-1 text-xs text-red-600">{this.state.error.message}</p>
           <button
             className="mt-3 text-xs text-primary underline"
@@ -888,7 +888,7 @@ function AppJuridicoDashboardInner() {
     return (
       <div className="flex items-center justify-center py-24 gap-2">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Cargando App Jurídico...</span>
+        <span className="text-sm text-muted-foreground">Cargando Portal Jurídico...</span>
       </div>
     );
   }
@@ -911,7 +911,7 @@ function AppJuridicoDashboardInner() {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3">
         <AlertCircle className="h-8 w-8 text-red-400" />
-        <p className="text-sm font-semibold text-red-600">Error al cargar App Jurídico</p>
+        <p className="text-sm font-semibold text-red-600">Error al cargar Portal Jurídico</p>
         <p className="text-xs text-muted-foreground max-w-sm text-center">
           {(demandasQueryError as any)?.message ?? 'Error desconocido'}
         </p>
@@ -941,7 +941,7 @@ function AppJuridicoDashboardInner() {
       {/* Dev debug box — remove when dashboard confirmed working */}
       {import.meta.env.DEV && (
         <div className="mb-2 rounded border border-blue-200 bg-blue-50 p-3 text-xs font-mono text-blue-800">
-          App Jurídico debug: mounted | authLoading={String(authLoading)} | isAdmin={String(isAdmin)} | canView={String(canView)} | rows={rawDemandas?.length ?? 0} | loading={String(isLoading)}
+          Portal Jurídico debug: mounted | authLoading={String(authLoading)} | isAdmin={String(isAdmin)} | canView={String(canView)} | rows={rawDemandas?.length ?? 0} | loading={String(isLoading)}
         </div>
       )}
 
@@ -950,7 +950,7 @@ function AppJuridicoDashboardInner() {
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Scale className="h-5 w-5 text-primary" />
-            App Jurídico
+            Portal Jurídico
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Visualiza y gestiona los casos de demandas asignados a tu perfil.</p>
         </div>
@@ -977,7 +977,7 @@ function AppJuridicoDashboardInner() {
         <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold text-amber-800">App Jurídico requiere ejecutar el DDL pendiente</p>
+            <p className="text-xs font-semibold text-amber-800">Portal Jurídico requiere ejecutar el DDL pendiente</p>
             <p className="text-xs text-amber-700 mt-0.5">
               Las tablas <span className="font-mono">app_juridico_perfiles</span>, <span className="font-mono">app_juridico_asignaciones</span> y relacionadas no existen aún.
               Ejecuta los pasos AJ-2 a AJ-11 en{' '}
