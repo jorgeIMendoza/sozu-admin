@@ -282,7 +282,7 @@ function AppJuridicoDashboardInner() {
     queryFn: async () => {
       try {
         const { data } = await (supabase as any)
-          .from('app_juridico_perfiles')
+          .from('perfiles_juridicos')
           .select('id, nombre_completo, email, tipo_abogado')
           .eq('estatus', 'ACTIVO')
           .order('nombre_completo');
@@ -315,7 +315,7 @@ function AppJuridicoDashboardInner() {
     queryFn: async () => {
       try {
         const { data } = await (supabase as any)
-          .from('app_juridico_asignaciones')
+          .from('asignaciones_juridico')
           .select('id_demanda')
           .eq('id_perfil_juridico', perfilId)
           .eq('estatus', 'ACTIVA');
@@ -340,7 +340,7 @@ function AppJuridicoDashboardInner() {
       // DDL probes (parallel) — determines available columns and tables
       const [aj1Probe, perfilesProbe, procesoProbe] = await Promise.allSettled([
         (supabase as any).from('demandas').select('porcentaje_penalizacion').limit(0),
-        (supabase as any).from('app_juridico_perfiles').select('id').limit(0),
+        (supabase as any).from('perfiles_juridicos').select('id').limit(0),
         (supabase as any).from('demandas').select('tipo_notificacion').limit(0),
       ]);
 
@@ -371,7 +371,7 @@ function AppJuridicoDashboardInner() {
       } else if (adminAbogadoId) {
         try {
           const { data: aIds } = await (supabase as any)
-            .from('app_juridico_asignaciones')
+            .from('asignaciones_juridico')
             .select('id_demanda')
             .eq('id_perfil_juridico', adminAbogadoId)
             .eq('estatus', 'ACTIVA');
@@ -938,12 +938,6 @@ function AppJuridicoDashboardInner() {
   return (
     <div className="space-y-5">
 
-      {/* Dev debug box — remove when dashboard confirmed working */}
-      {import.meta.env.DEV && (
-        <div className="mb-2 rounded border border-blue-200 bg-blue-50 p-3 text-xs font-mono text-blue-800">
-          Portal Jurídico debug: mounted | authLoading={String(authLoading)} | isAdmin={String(isAdmin)} | canView={String(canView)} | rows={rawDemandas?.length ?? 0} | loading={String(isLoading)}
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -979,7 +973,7 @@ function AppJuridicoDashboardInner() {
           <div>
             <p className="text-xs font-semibold text-amber-800">Portal Jurídico requiere ejecutar el DDL pendiente</p>
             <p className="text-xs text-amber-700 mt-0.5">
-              Las tablas <span className="font-mono">app_juridico_perfiles</span>, <span className="font-mono">app_juridico_asignaciones</span> y relacionadas no existen aún.
+              Las tablas <span className="font-mono">perfiles_juridicos</span>, <span className="font-mono">asignaciones_juridico</span> y relacionadas no existen aún.
               Ejecuta los pasos AJ-2 a AJ-11 en{' '}
               <span className="font-mono">Ejecuciones_manuales/resultado_ejecucion_app_notaria_app_juridico.md</span>.
             </p>
