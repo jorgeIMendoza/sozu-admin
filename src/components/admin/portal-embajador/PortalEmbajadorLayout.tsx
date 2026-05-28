@@ -1,129 +1,85 @@
-import { useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import {
-  Home, Users, UserPlus, DollarSign, User, ArrowLeft, LogOut, Menu,
-} from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
+import { Outlet, useNavigate } from "react-router-dom";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmbajadorImpersonation } from "@/contexts/EmbajadorImpersonationContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { EmbajadorImpersonationSelector } from "./EmbajadorImpersonationSelector";
 
-const NAV = [
-  { label: "Inicio",             path: "/admin/portal-embajador/inicio",            icon: Home },
-  { label: "Mis Referidos",      path: "/admin/portal-embajador/mis-referidos",     icon: Users },
-  { label: "Registrar Referido", path: "/admin/portal-embajador/registrar-referido",icon: UserPlus },
-  { label: "Comisiones",         path: "/admin/portal-embajador/comisiones",        icon: DollarSign },
-  { label: "Perfil",             path: "/admin/portal-embajador/perfil",            icon: User },
-];
-
 export const PortalEmbajadorLayout = () => {
-  const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { impersonatedEmbajadorName, isImpersonating } = useEmbajadorImpersonation();
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-
-  const isActive = (path: string) =>
-    location.pathname === path || location.pathname.startsWith(path + "/");
-
-  const go = (p: string) => { navigate(p); setMobileOpen(false); };
 
   const displayName = isImpersonating
     ? impersonatedEmbajadorName
     : profile?.nombre || "Embajador";
 
-  const SidebarBody = () => (
-    <div className="flex h-full flex-col bg-card text-card-foreground">
-      <div className="px-6 py-5 border-b">
-        <div className="text-xs text-muted-foreground">Portal</div>
-        <div className="text-lg font-semibold tracking-tight">Embajadores SOZU</div>
-      </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {NAV.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.path);
-          return (
-            <button
-              key={item.path}
-              onClick={() => go(item.path)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
-      <div className="border-t p-4 space-y-2">
-        {isSuperAdmin && (
-          <button
-            onClick={() => navigate("/admin")}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" /> Volver al admin
-          </button>
-        )}
-        <button
-          onClick={() => signOut()}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" /> Cerrar sesión
-        </button>
-      </div>
-    </div>
-  );
-
-  const initials = (displayName || "EM").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (displayName || "EM")
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-background">
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 border-r">
-        <SidebarBody />
-      </aside>
-
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0 w-64">
-          <SidebarBody />
-        </SheetContent>
-      </Sheet>
-
-      <div className="lg:ml-64 flex flex-col min-h-screen">
-        <header className="sticky top-0 z-30 h-14 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 lg:px-6">
-          <button className="lg:hidden p-2 -ml-2" onClick={() => setMobileOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </button>
-          <div className="flex-1 flex items-center">
-            {isSuperAdmin && (
-              <div className="hidden sm:flex">
-                <EmbajadorImpersonationSelector />
-              </div>
-            )}
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="sticky top-0 z-30 h-14 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 lg:px-6 gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="hidden sm:block">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">Portal</div>
+            <div className="text-sm font-semibold leading-tight">Embajadores SOZU</div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-medium">{displayName}</div>
-              <div className="text-xs text-muted-foreground">
-                {isImpersonating ? "Vista embajador" : profile?.rol_nombre}
-              </div>
+          {isSuperAdmin && (
+            <div className="hidden sm:flex">
+              <EmbajadorImpersonationSelector />
             </div>
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/admin")}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Volver al admin</span>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => signOut()}
+            className="gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Cerrar sesión</span>
+          </Button>
+          <div className="text-right hidden md:block pl-2 border-l">
+            <div className="text-sm font-medium leading-tight">{displayName}</div>
+            <div className="text-xs text-muted-foreground leading-tight">
+              {isImpersonating ? "Vista embajador" : profile?.rol_nombre}
+            </div>
           </div>
-        </header>
-        <main className="flex-1 p-4 lg:p-8">
-          <Outlet />
-        </main>
-      </div>
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+        </div>
+      </header>
+
+      {isSuperAdmin && (
+        <div className="sm:hidden border-b bg-card/60 px-4 py-2">
+          <EmbajadorImpersonationSelector />
+        </div>
+      )}
+
+      <main className="flex-1 p-4 lg:p-8 max-w-6xl mx-auto w-full">
+        <Outlet />
+      </main>
     </div>
   );
 };

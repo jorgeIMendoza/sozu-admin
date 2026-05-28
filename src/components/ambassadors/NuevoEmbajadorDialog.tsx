@@ -18,6 +18,7 @@ interface Props {
 interface FormState {
   fullName: string;
   phone: string;
+  clavePaisTelefono: string;
   email: string;
   company: string;
   type: string;
@@ -30,13 +31,14 @@ interface FormState {
 }
 
 const DEFAULT_FORM: FormState = {
-  fullName: '', phone: '', email: '', company: '',
+  fullName: '', phone: '', clavePaisTelefono: 'MX', email: '', company: '',
   type: 'otro', status: 'pendiente',
   commissionPct: '0.5', fixedAmount: '',
   commissionTrigger: 'enganche', protectionDays: '90', notes: '',
 };
 
 const ROLE_EMBAJADOR_ID = 25;
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
 export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: Props) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
@@ -44,9 +46,20 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
 
   const set = (k: keyof FormState, v: string) => setForm(p => ({ ...p, [k]: v }));
 
+  const emailInvalid = form.email.trim().length > 0 && !EMAIL_REGEX.test(form.email.trim());
+  const phoneInvalid = form.phone.length > 0 && form.phone.length !== 10;
+
   const handleSubmit = async () => {
     if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error('Nombre, teléfono y email son obligatorios');
+      return;
+    }
+    if (!EMAIL_REGEX.test(form.email.trim())) {
+      toast.error('El correo no tiene un formato válido');
+      return;
+    }
+    if (form.phone.length !== 10) {
+      toast.error('El teléfono debe tener exactamente 10 dígitos');
       return;
     }
 
@@ -67,6 +80,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           nombre_legal: form.fullName.trim(),
           email: form.email.trim().toLowerCase(),
           telefono: form.phone.trim(),
+          clave_pais_telefono: form.clavePaisTelefono,
           tipo_persona: 'pf',
           activo: true,
         })
@@ -111,6 +125,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           rol_id: ROLE_EMBAJADOR_ID,
           id_persona: persona.id,
           telefono: form.phone.trim(),
+          clave_pais_telefono: form.clavePaisTelefono,
         },
       });
       if (createUserError) throw createUserError;
@@ -145,11 +160,39 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Teléfono *</Label>
-              <Input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="55 1234 5678" />
+              <div className="flex gap-2">
+                <Select value={form.clavePaisTelefono} onValueChange={v => set('clavePaisTelefono', v)}>
+                  <SelectTrigger className="w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MX">🇲🇽 +52</SelectItem>
+                    <SelectItem value="US">🇺🇸 +1</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.phone}
+                  onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10 dígitos"
+                  className={phoneInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
+              </div>
+              {phoneInvalid && (
+                <p className="text-xs text-destructive mt-1">Debe tener 10 dígitos</p>
+              )}
             </div>
             <div>
               <Label>Email *</Label>
-              <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@ejemplo.com" />
+              <Input
+                type="email"
+                value={form.email}
+                onChange={e => set('email', e.target.value)}
+                placeholder="email@ejemplo.com"
+                className={emailInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {emailInvalid && (
+                <p className="text-xs text-destructive mt-1">Formato de correo no válido</p>
+              )}
             </div>
           </div>
           <div>
@@ -216,7 +259,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button onClick={handleSubmit} disabled={loading || emailInvalid || phoneInvalid}>
             {loading ? 'Creando...' : 'Crear embajador'}
           </Button>
         </DialogFooter>

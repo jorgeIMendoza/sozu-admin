@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmbajadorImpersonation } from "@/contexts/EmbajadorImpersonationContext";
-import { MOCK_EMBAJADORES } from "@/data/embajadores/mockData";
+import { useAmbassadors } from "@/store/AmbassadorsContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,13 @@ export function EmbajadorImpersonationSelector() {
     clearImpersonation,
     isImpersonating,
   } = useEmbajadorImpersonation();
+  const { ambassadors } = useAmbassadors();
   const [open, setOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   if (!isSuperAdmin) return null;
 
-  const embajadores = MOCK_EMBAJADORES.filter(e => e.status === "activo");
+  const embajadores = ambassadors.filter(e => e.status !== "inactivo");
 
   return (
     <div className="flex items-center gap-2">
@@ -63,10 +64,15 @@ export function EmbajadorImpersonationSelector() {
                         impersonatedEmbajadorId === emb.id ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="flex flex-col">
+                    <div className="flex flex-col flex-1">
                       <span className="text-sm">{emb.fullName}</span>
                       <span className="text-xs text-muted-foreground">{emb.code}</span>
                     </div>
+                    {emb.status === "pendiente" && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
+                        Pendiente
+                      </span>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>
