@@ -106,7 +106,7 @@ function AcquisitionCard({
     financials.initialPrice > 0
       ? Math.round((financials.totalPaid / financials.initialPrice) * 100)
       : 0;
-  const heroImage = property.image || getPropertyImage(property.id);
+  const heroImage = property.image || getPropertyImage(property.id, property.projectName);
   const activeStage = inv.stages.find((s) => s.status === "active");
   const currentIdx = activeStage ? STAGE_ORDER.indexOf(activeStage.id as typeof STAGE_ORDER[number]) : -1;
   const pendingDocs = inv.additionalProducts?.reduce(

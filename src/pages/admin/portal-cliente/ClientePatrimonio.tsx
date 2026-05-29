@@ -14,7 +14,7 @@ function PatrimonyCard({
   onClick: () => void;
 }) {
   const { property, financials, maintenance } = inv;
-  const heroImage = property.image || getPropertyImage(property.id);
+  const heroImage = property.image || getPropertyImage(property.id, property.projectName);
   const valueMXN = financials.currentEstimatedValue;
   const plusvaliaPct = financials.estimatedAppreciation;
   const plusvaliaAmount = financials.currentEstimatedValue - financials.initialPrice;

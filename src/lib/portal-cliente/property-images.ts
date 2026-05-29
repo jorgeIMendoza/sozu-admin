@@ -12,7 +12,22 @@ const propertyImages: Record<string, string> = {
   "daiku-712": daikuImg,
 };
 
-/** Get the hero image for a property by its ID */
-export function getPropertyImage(propertyId: string): string | undefined {
-  return propertyImages[propertyId];
+// Fallback by lowercase project name prefix
+const projectImages: Record<string, string> = {
+  bottura: botturaImg,
+  daiku: daikuImg,
+  margot: margotImg,
+};
+
+/**
+ * Get hero image for a property.
+ * First tries legacy slug ID, then project name prefix fallback.
+ */
+export function getPropertyImage(propertyId: string, projectName?: string): string | undefined {
+  if (propertyImages[propertyId]) return propertyImages[propertyId];
+  if (projectName) {
+    const key = projectName.toLowerCase().split(/[\s-_]/)[0];
+    return projectImages[key];
+  }
+  return undefined;
 }

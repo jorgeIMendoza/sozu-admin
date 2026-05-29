@@ -22,7 +22,7 @@ const PropertyCard = ({ investment, onSelect }: PropertyCardProps) => {
   const paidPct = financials.initialPrice > 0
     ? Math.round((financials.totalPaid / financials.initialPrice) * 100)
     : 0;
-  const heroImage = property.image || getPropertyImage(property.id);
+  const heroImage = property.image || getPropertyImage(property.id, property.projectName);
   const hasPendingPayment = status.label === "Pago Pendiente";
   const dot = dotByColor[status.color] ?? "bg-muted-foreground";
   const estimatedValue = financials.currentEstimatedValue ?? financials.initialPrice;

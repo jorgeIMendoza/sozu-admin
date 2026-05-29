@@ -16,7 +16,7 @@ const ResaleStepIntro = ({ property, onNext }: ResaleStepIntroProps) => {
       financials.initialPrice) *
     100;
   const pctDisplay = `+${appreciationPct.toFixed(1)}%`;
-  const image = prop.image ?? getPropertyImage(prop.id);
+  const image = prop.image ?? getPropertyImage(prop.id, prop.projectName);
 
   const benefits = [
     { icon: Sparkles, text: "Precio sugerido basado en datos reales del proyecto" },

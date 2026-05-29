@@ -104,12 +104,6 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
                       </span>
                     </div>
                     <Progress value={data.globalProgress} className="h-2" />
-                    {currentStage && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Etapa actual:{" "}
-                        <span className="font-semibold text-foreground">{currentStage}</span>
-                      </p>
-                    )}
                   </>
                 )}
 

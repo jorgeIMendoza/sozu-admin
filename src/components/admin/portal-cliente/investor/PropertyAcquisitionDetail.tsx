@@ -237,7 +237,7 @@ const Lightbox = ({ src, alt = "", open, onClose }: LightboxProps) => {
 
 const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
   const { property } = investment;
-  const heroImg = property.image || getPropertyImage(property.id);
+  const heroImg = property.image || getPropertyImage(property.id, property.projectName);
   const { data: projectPhotos } = useProjectPhotos(property.projectId);
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
