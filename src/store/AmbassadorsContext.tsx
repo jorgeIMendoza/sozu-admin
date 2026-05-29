@@ -257,13 +257,13 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
   };
 
   const dbUpdateReferral = (id: string, patch: Record<string, any>) => {
-    supabase.from('embajadores_referidos').update(patch).eq('id', Number(id))
+    supabase.from('embajadores_referidos').update(patch as any).eq('id', Number(id))
       .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
   };
 
   // Updates fields in embajadores_config (keyed by id_entidad_relacionada = Ambassador.id)
   const dbUpdateAmbassadorConfig = (id: string, patch: Record<string, any>) => {
-    supabase.from('embajadores_config').update(patch).eq('id_entidad_relacionada', Number(id))
+    supabase.from('embajadores_config').update(patch as any).eq('id_entidad_relacionada', Number(id))
       .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
   };
 
