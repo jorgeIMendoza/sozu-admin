@@ -22,7 +22,6 @@ export interface PortalNavItem {
 const ROUTE_ICON: Record<string, LucideIcon> = {
   "/admin/portal-cliente/inicio":          Home,
   "/admin/portal-cliente/en-adquisicion":  ShoppingBag,
-  "/admin/portal-cliente/propiedades":     ShoppingBag,
   "/admin/portal-cliente/patrimonio":      Wallet,
   "/admin/portal-cliente/documentos":      FileText,
   "/admin/portal-cliente/notificaciones":  Bell,

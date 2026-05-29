@@ -57,7 +57,7 @@ const ClienteInicio = () => {
     navigate(`/admin/portal-cliente/propiedad/${id}`);
 
   const handleQuickAction = (action: string) => {
-    if (action === "property") navigate("/admin/portal-cliente/propiedades");
+    if (action === "property") navigate("/admin/portal-cliente/en-adquisicion");
     else if (action === "balance") navigate("/admin/portal-cliente/estado-de-cuenta");
     else if (action === "payments") navigate("/admin/portal-cliente/pagos");
     else if (action === "documents") navigate("/admin/portal-cliente/documentos");
@@ -136,7 +136,7 @@ const ClienteInicio = () => {
             </div>
             {safePortfolio.length > 3 && (
               <button
-                onClick={() => navigate("/admin/portal-cliente/propiedades")}
+                onClick={() => navigate("/admin/portal-cliente/en-adquisicion")}
                 className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium text-primary hover:bg-primary/5 transition-colors border border-dashed border-primary/30"
               >
                 Ver todas ({safePortfolio.length} propiedades)

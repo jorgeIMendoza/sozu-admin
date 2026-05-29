@@ -140,7 +140,6 @@ const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/
 
 // Portal Cliente pages
 const ClienteInicio = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteInicio"));
-const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClientePerfil = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePerfil"));
 const ClienteHistorialPagos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteHistorialPagos"));
 const ClientePropiedadDetalle = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadDetalle"));
@@ -426,7 +425,6 @@ const App = () => (
                     <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
-                    <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
                     <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
                     <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
@@ -575,7 +573,6 @@ const App = () => (
                   <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
-                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
                   <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
                   <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />

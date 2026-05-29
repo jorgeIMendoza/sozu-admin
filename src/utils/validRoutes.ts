@@ -93,7 +93,6 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-inmobiliaria/agentes/:email',
   // Portal Cliente
   '/admin/portal-cliente/inicio',
-  '/admin/portal-cliente/propiedades',
   '/admin/portal-cliente/pagos',
   '/admin/portal-cliente/perfil',
   '/admin/notificaciones-config',
