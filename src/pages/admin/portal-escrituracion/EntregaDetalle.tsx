@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, CheckCircle2, AlertTriangle, Clock, X,
+  ChevronLeft, CheckCircle2, AlertTriangle, Clock, X, Calendar, Home,
   Camera, FileText, Download, Plus, RotateCcw, ChevronRight,
   User, Building2, CalendarDays, MapPin, Wrench, Star,
   ListChecks, ClipboardCheck, Package, Edit2, ChevronDown,
@@ -624,7 +624,7 @@ export function EntregaDetalle() {
               }`} />
               <div>
                 <p className="text-sm font-bold text-slate-900">
-                  DAIKU: {DAIKU_META[unidad.daikuEstatus as keyof typeof DAIKU_META]?.label ?? unidad.daikuEstatus}
+                  DAIKU: {unidad.daikuEstatus === 'COMPLETADO' ? 'Completado' : unidad.daikuEstatus === 'NO_APLICA' ? 'No aplica' : unidad.daikuEstatus === 'EN_INSTALACION' ? 'En instalación' : 'Pendiente'}
                 </p>
                 <p className="text-xs text-slate-600 mt-0.5">
                   {unidad.daikuEstatus === 'COMPLETADO' && 'La instalación de DAIKU ha sido verificada y completada.'}
