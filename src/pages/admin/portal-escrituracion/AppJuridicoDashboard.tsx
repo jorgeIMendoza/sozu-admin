@@ -914,14 +914,14 @@ function AppJuridicoDashboardInner() {
       toast.info('DDL pendiente', { description: 'Ejecuta AJ-5/AJ-6 en resultado_ejecucion_app_notaria_app_juridico.md para habilitar esta acción.' });
       return;
     }
-    const defaults: Record<ActionType, string> = {
+    const defaults: Partial<Record<ActionType, string>> = {
       status:     row.lawsuitStatus,
       observation: row.observations ?? '',
       penalty:    String(row.penaltyPct),
       audiencia:  '',
       acuerdo:    '',
     };
-    openAction(type, row, defaults[type]);
+    openAction(type, row, defaults[type] ?? '');
   };
 
   // ── Auth loading guard ─────────────────────────────────────────────────────

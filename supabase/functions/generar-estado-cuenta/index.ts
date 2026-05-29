@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
     y -= 14;
 
     // Column widths
-    const aCols = [25, 90, 75, 75, 75, 75, 55]; // #, Concepto, Fecha, Monto, Pagado, Pendiente, Estado
+    const aCols = [22, 75, 82, 72, 72, 72, 57]; // #, Concepto, Fecha, Monto, Pagado, Pendiente, Estado = 452
     const aHeaders = ['#', 'CONCEPTO', 'FECHA PROGRAMADA', 'MONTO', 'PAGADO', 'PENDIENTE', 'ESTADO'];
 
     // Header bg
@@ -406,7 +406,7 @@ Deno.serve(async (req) => {
     for (let i = 0; i < aHeaders.length; i++) {
       const align = i >= 3 && i <= 5 ? 'right' : (i === 0 || i === 6 ? 'center' : 'left');
       let tx = colX + 2;
-      if (align === 'right') tx = colX + aCols[i] - 2;
+      if (align === 'right') tx = colX + aCols[i] - 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 6);
       else if (align === 'center') tx = colX + aCols[i] / 2 - helveticaBold.widthOfTextAtSize(aHeaders[i], 6) / 2;
       page.drawText(aHeaders[i], { x: tx, y: y, size: 6, font: helveticaBold, color: grayColor });
       colX += aCols[i];
@@ -446,7 +446,7 @@ Deno.serve(async (req) => {
       for (let i = 0; i < rowData.length - 1; i++) {
         const align = i >= 3 && i <= 5 ? 'right' : (i === 0 ? 'center' : 'left');
         let tx = colX + 2;
-        if (align === 'right') tx = colX + aCols[i] - 2;
+        if (align === 'right') tx = colX + aCols[i] - 2 - helvetica.widthOfTextAtSize(rowData[i], 7);
         else if (align === 'center') tx = colX + aCols[i] / 2 - helvetica.widthOfTextAtSize(rowData[i], 7) / 2;
         page.drawText(rowData[i], { x: tx, y, size: 7, font: helvetica, color: primaryColor });
         colX += aCols[i];

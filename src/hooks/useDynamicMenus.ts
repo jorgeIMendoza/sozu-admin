@@ -216,6 +216,15 @@ const LOGS_MENU_ID = 13; // Menu de Configuraciones/Logs
 const INMOBILIARIAS_PORTAL_MENU_ID = 12; // Menu de Inmobiliarias (portal)
 const DASHBOARD_MENU_ID = 1;
 const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliaria, Cliente, Cobranza
+
+// Por defecto el sidebar manda al usuario al primer submenú (`orden` más
+// bajo) cuando hace click en un portal. Algunos portales operativos deben
+// aterrizar directo en su bandeja principal en lugar del primer submenú.
+// Cada entrada: regex contra el nombre del menú en BD → URL de destino.
+const PORTAL_LANDING_URL_OVERRIDES: Array<{ match: RegExp; href: string }> = [
+  { match: /^Portal\s+Alta\s+Direcci[oó]n$/i, href: '/admin/portal-alta-direccion/bandeja' },
+  { match: /^Portal\s+(de\s+)?Administraci[oó]n$/i, href: '/admin/portal-administracion/bandeja-ejecucion' },
+];
  
  export function useDynamicMenus() {
    const { profile, isLoading: isAuthLoading, user, permissionVersion } = useAuth();
@@ -380,9 +389,10 @@ const PORTAL_MENU_IDS = new Set([16, 17, 18, 19]); // Portal Agente, Inmobiliari
             // Verificar si TODOS los submenus originales del menú tienen solo_usuarioa=true
             const allSubmenusOfMenu = (submenusData as unknown as RawSubmenu[])?.filter(s => s.menu_id === menuId && s.vista_front_end) || [];
             const allSoloUsuarioA = allSubmenusOfMenu.length > 0 && allSubmenusOfMenu.every(s => s.solo_usuarioa === true);
+            const overrideHref = PORTAL_LANDING_URL_OVERRIDES.find(o => o.match.test(menuData.menuNombre))?.href;
             items.push({
               title: menuData.menuNombre,
-              href: menuData.children[0].href,
+              href: overrideHref ?? menuData.children[0].href,
               icon: menuIcon,
               menuId,
               isPortal: true,

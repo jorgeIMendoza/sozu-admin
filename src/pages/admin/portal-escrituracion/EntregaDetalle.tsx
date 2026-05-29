@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, CheckCircle2, AlertTriangle, Clock, X,
+  ChevronLeft, CheckCircle2, AlertTriangle, Clock, X, Calendar, Home,
   Camera, FileText, Download, Plus, RotateCcw, ChevronRight,
   User, Building2, CalendarDays, MapPin, Wrench, Star,
   ListChecks, ClipboardCheck, Package, Edit2, ChevronDown,
