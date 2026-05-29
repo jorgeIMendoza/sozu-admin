@@ -126,7 +126,7 @@ export default function TemplateCatalog() {
                   key={tpl.id}
                   className="border-t border-border/50 table-row-hover cursor-pointer group"
                   style={{ height: '52px' }}
-                  onClick={() => navigate(`/templates/${tpl.id}`)}
+                  onClick={() => navigate(`/admin/legal-flow/templates/${tpl.id}`)}
                 >
                   <td className="table-cell font-mono text-[12px] text-muted-foreground/60">{tpl.id}</td>
                   <td className="table-cell">
@@ -197,7 +197,7 @@ export default function TemplateCatalog() {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => navigate(`/templates/${tpl.id}`)}>Ver / Editar</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/admin/legal-flow/templates/${tpl.id}`)}>Ver / Editar</DropdownMenuItem>
                         <DropdownMenuItem>Duplicar</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {tpl.templateStatus === 'active' && <DropdownMenuItem>Desactivar</DropdownMenuItem>}

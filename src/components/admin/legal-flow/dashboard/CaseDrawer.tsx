@@ -79,7 +79,7 @@ export default function CaseDrawer({ open, onOpenChange, title, subtitle, cases 
               return (
                 <div key={c.id} className="py-4 group hover:bg-accent/30 -mx-6 px-6 transition-colors">
                   <Link
-                    to={`/cases/${c.id}`}
+                    to={`/admin/legal-flow/cases/${c.id}`}
                     onClick={() => onOpenChange(false)}
                     className="text-[13px] font-semibold text-foreground hover:text-primary transition-colors leading-snug inline-flex items-center gap-1"
                   >
@@ -102,7 +102,7 @@ export default function CaseDrawer({ open, onOpenChange, title, subtitle, cases 
                   </div>
                   {action && (
                     <Link
-                      to={`/cases/${c.id}`}
+                      to={`/admin/legal-flow/cases/${c.id}`}
                       onClick={() => onOpenChange(false)}
                       className="inline-flex items-center gap-1.5 mt-3 text-[11px] font-bold text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors"
                     >
@@ -118,7 +118,7 @@ export default function CaseDrawer({ open, onOpenChange, title, subtitle, cases 
         {cases.length > 0 && (
           <div className="pt-5 border-t mt-5">
             <Link
-              to="/requests"
+              to="/admin/legal-flow/requests"
               onClick={() => onOpenChange(false)}
               className="flex items-center justify-center gap-2 w-full py-3 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
             >

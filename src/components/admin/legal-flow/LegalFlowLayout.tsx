@@ -7,11 +7,11 @@ import sozuMark from '@/assets/sozu-logo-black.png';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Panel de Operaciones',
-  '/requests': 'Solicitudes Legales',
-  '/requests/new': 'Nueva Solicitud',
-  '/templates': 'Catálogo de Plantillas',
-  '/notifications': 'Notificaciones',
-  '/settings': 'Configuración',
+  '/admin/legal-flow/requests': 'Solicitudes Legales',
+  '/admin/legal-flow/requests/new': 'Nueva Solicitud',
+  '/admin/legal-flow/templates': 'Catálogo de Plantillas',
+  '/admin/legal-flow/notifications': 'Notificaciones',
+  '/admin/legal-flow/settings': 'Configuración',
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -36,7 +36,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center gap-2">
               <Link
-                to="/notifications"
+                to="/admin/legal-flow/notifications"
                 className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
               >
                 <Bell className="h-4 w-4 text-muted-foreground" />

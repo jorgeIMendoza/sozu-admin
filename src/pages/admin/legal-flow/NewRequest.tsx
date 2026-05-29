@@ -28,14 +28,14 @@ export default function NewRequest() {
         description: 'Tu solicitud ha sido recibida. Se creará un expediente automáticamente.',
       });
       setSubmitting(false);
-      navigate('/requests');
+      navigate('/admin/legal-flow/requests');
     }, 800);
   };
 
   return (
     <div className="px-10 py-8 max-w-2xl space-y-6">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <button onClick={() => navigate('/requests')} className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4 cursor-pointer">
+        <button onClick={() => navigate('/admin/legal-flow/requests')} className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4 cursor-pointer">
           <ArrowLeft className="h-3.5 w-3.5" /> Volver a solicitudes
         </button>
         <h1 className="text-[24px] font-bold tracking-tight">Nueva Solicitud Legal</h1>
@@ -185,7 +185,7 @@ export default function NewRequest() {
             type="button"
             variant="ghost"
             className="h-9 text-[13px] gap-1.5"
-            onClick={() => step > 0 ? setStep(step - 1) : navigate('/requests')}
+            onClick={() => step > 0 ? setStep(step - 1) : navigate('/admin/legal-flow/requests')}
           >
             <ArrowLeft className="h-3.5 w-3.5" /> {step > 0 ? 'Anterior' : 'Cancelar'}
           </Button>

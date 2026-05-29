@@ -62,7 +62,7 @@ export default function Notifications() {
                   <div className="flex items-center gap-3 mt-3 text-[12px] text-muted-foreground/60">
                     <span>{formatTime(notif.createdAt)}</span>
                     {notif.caseId && (
-                      <Link to={`/cases/${notif.caseId}`} className="font-mono hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
+                      <Link to={`/admin/legal-flow/cases/${notif.caseId}`} className="font-mono hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
                         {notif.caseId}
                       </Link>
                     )}

@@ -37,7 +37,7 @@ export default function RequestsList() {
           <p className="text-[13px] text-muted-foreground">{counts.active} activas · {counts.all} total</p>
         </div>
         <Button asChild className="h-9 text-[13px] gap-1.5 rounded-lg">
-          <Link to="/requests/new"><Plus className="h-4 w-4" /> Nueva Solicitud</Link>
+          <Link to="/admin/legal-flow/requests/new"><Plus className="h-4 w-4" /> Nueva Solicitud</Link>
         </Button>
       </motion.div>
 
@@ -97,7 +97,7 @@ export default function RequestsList() {
                 <tr key={req.id} className="border-t border-border/50 table-row-hover" style={{ height: '52px' }}>
                   <td className="table-cell font-mono text-[12px] text-muted-foreground/60">{req.id}</td>
                   <td className="table-cell">
-                    <Link to={`/cases/${req.id}`} className="font-medium text-[13px] hover:text-primary transition-colors">
+                    <Link to={`/admin/legal-flow/cases/${req.id}`} className="font-medium text-[13px] hover:text-primary transition-colors">
                       {req.title}
                     </Link>
                   </td>

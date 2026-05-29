@@ -40,7 +40,7 @@ export default function AttentionPanel() {
           <AlertTriangle className="h-4 w-4 text-[hsl(var(--status-warning))]" />
           Requieren atención hoy
         </h2>
-        <Link to="/requests" className="flex items-center gap-1 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors">
+        <Link to="/admin/legal-flow/requests" className="flex items-center gap-1 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors">
           Ver todos <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -69,7 +69,7 @@ export default function AttentionPanel() {
               {cases.slice(0, 6).map((r) => (
                 <tr key={r.id} className="border-t border-border/50 table-row-hover group">
                   <td className="table-cell">
-                    <Link to={`/cases/${r.id}`} className="font-medium text-[13px] text-foreground hover:text-primary transition-colors cursor-pointer">
+                    <Link to={`/admin/legal-flow/cases/${r.id}`} className="font-medium text-[13px] text-foreground hover:text-primary transition-colors cursor-pointer">
                       {r.title}
                     </Link>
                     <p className="text-[11px] text-muted-foreground/60 font-mono mt-0.5">{r.id}</p>
@@ -88,7 +88,7 @@ export default function AttentionPanel() {
                   <td className="table-cell text-[12px] text-muted-foreground">{r.assignedTo || '—'}</td>
                   <td className="table-cell">
                     <Link
-                      to={`/cases/${r.id}`}
+                      to={`/admin/legal-flow/cases/${r.id}`}
                       className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                     >
                       {NEXT_ACTION[r.status] || 'Ver detalle'}

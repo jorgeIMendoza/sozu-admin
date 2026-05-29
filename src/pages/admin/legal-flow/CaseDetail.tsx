@@ -1713,7 +1713,7 @@ export default function CaseDetail() {
           <FileText className="h-6 w-6 text-muted-foreground" />
         </div>
         <p className="text-sm font-medium">Expediente no encontrado</p>
-        <Link to="/requests" className="text-primary text-sm hover:underline mt-3 inline-block">Volver a solicitudes</Link>
+        <Link to="/admin/legal-flow/requests" className="text-primary text-sm hover:underline mt-3 inline-block">Volver a solicitudes</Link>
       </div>
     );
   }
@@ -1739,7 +1739,7 @@ export default function CaseDetail() {
     <div className="px-10 py-8 max-w-[1400px] space-y-6">
       {/* Header — concise: title, status, priority, one subtitle */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <Link to="/requests" className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4">
+        <Link to="/admin/legal-flow/requests" className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4">
           <ArrowLeft className="h-3.5 w-3.5" /> Todas las solicitudes
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">

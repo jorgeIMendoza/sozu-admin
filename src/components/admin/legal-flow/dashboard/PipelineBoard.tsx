@@ -191,7 +191,7 @@ function PipelineCard({ request: r, viewMode }: { request: LegalRequest; viewMod
 
   return (
     <Link
-      to={`/cases/${r.id}`}
+      to={`/admin/legal-flow/cases/${r.id}`}
       className={`block rounded-xl border bg-card transition-all duration-150 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:-translate-y-[1px] group cursor-pointer ${
         overdue ? 'border-destructive/30' : 'border-border hover:border-primary/30'
       } ${isCompact ? 'p-3.5' : 'p-5'}`}

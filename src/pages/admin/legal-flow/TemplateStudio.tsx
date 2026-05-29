@@ -36,7 +36,7 @@ export default function TemplateStudio() {
     return (
       <div className="px-10 py-20 text-center">
         <p className="text-lg font-medium">Plantilla no encontrada</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/templates')}>Volver al catálogo</Button>
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/legal-flow/templates')}>Volver al catálogo</Button>
       </div>
     );
   }
@@ -45,7 +45,7 @@ export default function TemplateStudio() {
     <div className="px-10 py-8 max-w-[1400px] space-y-6">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-        <button onClick={() => navigate('/templates')} className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4">
+        <button onClick={() => navigate('/admin/legal-flow/templates')} className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-4">
           <ArrowLeft className="h-4 w-4" /> Catálogo de Plantillas
         </button>
         <div className="flex items-start justify-between">
@@ -618,7 +618,7 @@ function UsageTab({ template }: { template: ContractTemplate }) {
             </thead>
             <tbody>
               {usage.map((u) => (
-                <tr key={u.caseId} className="border-t border-border/50 table-row-hover cursor-pointer" onClick={() => navigate(`/cases/${u.caseId}`)}>
+                <tr key={u.caseId} className="border-t border-border/50 table-row-hover cursor-pointer" onClick={() => navigate(`/admin/legal-flow/cases/${u.caseId}`)}>
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{u.caseId}</td>
                   <td className="table-cell text-[13px] font-medium">{u.caseTitle}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{u.project}</td>

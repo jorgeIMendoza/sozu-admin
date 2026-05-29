@@ -49,7 +49,7 @@ export default function RenewalsPanel() {
             return (
               <Link
                 key={r.id}
-                to={`/cases/${r.id}`}
+                to={`/admin/legal-flow/cases/${r.id}`}
                 className="flex items-center justify-between px-5 py-3.5 table-row-hover group cursor-pointer"
               >
                 <div className="min-w-0 flex-1">

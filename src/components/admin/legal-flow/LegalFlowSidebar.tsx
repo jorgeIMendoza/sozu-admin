@@ -26,18 +26,18 @@ import {
 
 const mainNav = [
   { title: 'Panel de Operaciones', url: '/', icon: LayoutDashboard },
-  { title: 'Solicitudes Legales', url: '/requests', icon: Inbox },
-  { title: 'Nueva Solicitud', url: '/requests/new', icon: FilePlus },
+  { title: 'Solicitudes Legales', url: '/admin/legal-flow/requests', icon: Inbox },
+  { title: 'Nueva Solicitud', url: '/admin/legal-flow/requests/new', icon: FilePlus },
 ];
 
 const catalogNav = [
-  { title: 'Catálogo de Plantillas', url: '/templates', icon: FileText },
-  { title: 'Expedientes Archivados', url: '/archived', icon: Archive },
+  { title: 'Catálogo de Plantillas', url: '/admin/legal-flow/templates', icon: FileText },
+  { title: 'Expedientes Archivados', url: '/admin/legal-flow/archived', icon: Archive },
 ];
 
 const systemNav = [
-  { title: 'Notificaciones', url: '/notifications', icon: Bell },
-  { title: 'Configuración', url: '/settings', icon: Settings },
+  { title: 'Notificaciones', url: '/admin/legal-flow/notifications', icon: Bell },
+  { title: 'Configuración', url: '/admin/legal-flow/settings', icon: Settings },
 ];
 
 export function AppSidebar() {

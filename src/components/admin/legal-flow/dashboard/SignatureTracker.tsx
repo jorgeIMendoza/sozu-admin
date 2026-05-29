@@ -56,7 +56,7 @@ export default function SignatureTracker({ openDrawer }: Props) {
                 {sec.items.slice(0, 3).map((r) => (
                   <Link
                     key={r.id}
-                    to={`/cases/${r.id}`}
+                    to={`/admin/legal-flow/cases/${r.id}`}
                     className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-accent transition-colors group border border-transparent hover:border-border"
                   >
                     <div className="min-w-0 flex-1">

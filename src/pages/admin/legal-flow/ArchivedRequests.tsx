@@ -256,7 +256,7 @@ function ArchivedRow({ request: r }: { request: LegalRequest }) {
             {integrityConfig.label}
           </span>
         </div>
-        <Link to={`/cases/${r.id}`} className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors line-clamp-1">
+        <Link to={`/admin/legal-flow/cases/${r.id}`} className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors line-clamp-1">
           {r.title}
         </Link>
         <div className="flex items-center gap-4 mt-1.5 text-[12px] text-muted-foreground">
@@ -311,7 +311,7 @@ function ArchivedRow({ request: r }: { request: LegalRequest }) {
       {/* Actions */}
       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg" asChild>
-          <Link to={`/cases/${r.id}`}>
+          <Link to={`/admin/legal-flow/cases/${r.id}`}>
             <Eye className="h-4 w-4 text-muted-foreground" />
           </Link>
         </Button>
