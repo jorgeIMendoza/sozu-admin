@@ -7,9 +7,9 @@ import {
   Settings,
   Archive,
 } from 'lucide-react';
-import { NavLink } from '@/components/NavLink';
-import sozuLogo from '@/assets/sozu-logo.png';
-import sozuMark from '@/assets/sozu-mark.png';
+import { NavLink } from '@/components/admin/legal-flow/NavLink';
+import sozuLogo from '@/assets/sozu-logo-black.png';
+import sozuMark from '@/assets/sozu-logo-black.png';
 import {
   Sidebar,
   SidebarContent,

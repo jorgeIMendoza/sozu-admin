@@ -1,9 +1,9 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/AppSidebar';
+import { AppSidebar } from '@/components/admin/legal-flow/LegalFlowSidebar';
 import { Bell } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { mockNotifications } from '@/data/mockData';
-import sozuMark from '@/assets/sozu-mark.png';
+import { mockNotifications } from '@/data/legalFlow/mockData';
+import sozuMark from '@/assets/sozu-logo-black.png';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Panel de Operaciones',

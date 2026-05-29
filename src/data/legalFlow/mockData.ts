@@ -1,7 +1,7 @@
 import type {
   LegalRequest, ContractTemplate, TimelineEvent, Notification, DashboardMetrics,
   CaseStatus, TemplateVariable, TemplateSigner, TemplateVersion, TemplateUsageRecord,
-} from '@/types/legal';
+} from '@/types/legal-flow';
 
 export const mockMetrics: DashboardMetrics = {
   totalActive: 14,

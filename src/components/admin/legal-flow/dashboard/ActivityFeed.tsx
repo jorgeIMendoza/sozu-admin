@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Activity, ArrowRight } from 'lucide-react';
-import { mockRequests, STATUS_CONFIG } from '@/data/mockData';
+import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 
 const NEXT_ACTION: Record<string, string> = {
   request_received: 'Revisar',

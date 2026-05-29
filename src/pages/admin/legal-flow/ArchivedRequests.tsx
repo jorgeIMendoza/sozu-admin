@@ -8,8 +8,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockRequests, REQUEST_TYPE_LABELS } from '@/data/mockData';
-import type { LegalRequest } from '@/types/legal';
+import { mockRequests, REQUEST_TYPE_LABELS } from '@/data/legalFlow/mockData';
+import type { LegalRequest } from '@/types/legal-flow';
 
 const archivedRequests = mockRequests.filter(r => r.status === 'archived');
 

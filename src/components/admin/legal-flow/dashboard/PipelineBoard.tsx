@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize2 } from 'lucide-react';
-import { mockRequests, STATUS_CONFIG } from '@/data/mockData';
-import type { CaseStatus, LegalRequest } from '@/types/legal';
+import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
+import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
 
 const PIPELINE_STAGES: { status: CaseStatus; label: string }[] = [
   { status: 'request_received', label: 'Solicitud recibida' },

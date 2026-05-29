@@ -16,8 +16,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { mockTemplates } from '@/data/mockData';
-import type { TemplateStatus } from '@/types/legal';
+import { mockTemplates } from '@/data/legalFlow/mockData';
+import type { TemplateStatus } from '@/types/legal-flow';
 
 export default function TemplateCatalog() {
   const navigate = useNavigate();

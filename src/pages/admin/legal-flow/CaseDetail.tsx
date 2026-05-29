@@ -20,8 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   mockRequests, mockTimeline, STATUS_CONFIG, REQUEST_TYPE_LABELS,
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
-} from '@/data/mockData';
-import type { CaseStatus, IntegrationStatus } from '@/types/legal';
+} from '@/data/legalFlow/mockData';
+import type { CaseStatus, IntegrationStatus } from '@/types/legal-flow';
 
 // ── Mock data for clickable detail drawers ──
 

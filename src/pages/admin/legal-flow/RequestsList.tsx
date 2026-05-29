@@ -5,7 +5,7 @@ import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockRequests, STATUS_CONFIG, REQUEST_TYPE_LABELS } from '@/data/mockData';
+import { mockRequests, STATUS_CONFIG, REQUEST_TYPE_LABELS } from '@/data/legalFlow/mockData';
 
 const PRIORITY_LABELS: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
 

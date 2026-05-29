@@ -1,18 +1,18 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, Kanban } from 'lucide-react';
-import KpiCards from '@/components/dashboard/KpiCards';
-import DashboardFilters from '@/components/dashboard/DashboardFilters';
-import PipelineBoard from '@/components/dashboard/PipelineBoard';
-import AttentionPanel from '@/components/dashboard/AttentionPanel';
-import RenewalsPanel from '@/components/dashboard/RenewalsPanel';
-import SignatureTracker from '@/components/dashboard/SignatureTracker';
-import ActivityFeed from '@/components/dashboard/ActivityFeed';
-import WorkloadPanel from '@/components/dashboard/WorkloadPanel';
-import StatusDistribution from '@/components/dashboard/StatusDistribution';
-import CaseDrawer from '@/components/dashboard/CaseDrawer';
-import { mockRequests } from '@/data/mockData';
-import type { LegalRequest, CaseStatus } from '@/types/legal';
+import KpiCards from '@/components/admin/legal-flow/dashboard/KpiCards';
+import DashboardFilters from '@/components/admin/legal-flow/dashboard/DashboardFilters';
+import PipelineBoard from '@/components/admin/legal-flow/dashboard/PipelineBoard';
+import AttentionPanel from '@/components/admin/legal-flow/dashboard/AttentionPanel';
+import RenewalsPanel from '@/components/admin/legal-flow/dashboard/RenewalsPanel';
+import SignatureTracker from '@/components/admin/legal-flow/dashboard/SignatureTracker';
+import ActivityFeed from '@/components/admin/legal-flow/dashboard/ActivityFeed';
+import WorkloadPanel from '@/components/admin/legal-flow/dashboard/WorkloadPanel';
+import StatusDistribution from '@/components/admin/legal-flow/dashboard/StatusDistribution';
+import CaseDrawer from '@/components/admin/legal-flow/dashboard/CaseDrawer';
+import { mockRequests } from '@/data/legalFlow/mockData';
+import type { LegalRequest, CaseStatus } from '@/types/legal-flow';
 
 type ViewMode = 'executive' | 'operative';
 

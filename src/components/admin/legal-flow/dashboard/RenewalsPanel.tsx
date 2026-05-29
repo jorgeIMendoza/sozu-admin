@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { CalendarClock, ArrowRight } from 'lucide-react';
-import { mockRequests, STATUS_CONFIG } from '@/data/mockData';
+import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 const daysUntil = (d: string) => Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24));

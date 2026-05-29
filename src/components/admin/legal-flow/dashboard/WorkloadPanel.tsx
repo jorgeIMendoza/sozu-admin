@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Users } from 'lucide-react';
-import { LAWYER_WORKLOAD, mockRequests } from '@/data/mockData';
-import type { LegalRequest } from '@/types/legal';
+import { LAWYER_WORKLOAD, mockRequests } from '@/data/legalFlow/mockData';
+import type { LegalRequest } from '@/types/legal-flow';
 
 interface Props {
   openDrawer?: (title: string, cases: LegalRequest[]) => void;

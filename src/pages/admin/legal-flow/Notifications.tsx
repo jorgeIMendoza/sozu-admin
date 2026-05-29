@@ -3,8 +3,8 @@ import { motion } from 'framer-motion';
 import { Bell, Check, Info, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { mockNotifications } from '@/data/mockData';
-import type { Notification } from '@/types/legal';
+import { mockNotifications } from '@/data/legalFlow/mockData';
+import type { Notification } from '@/types/legal-flow';
 
 const typeConfig: Record<Notification['type'], { icon: React.ReactNode; accent: string }> = {
   info:    { icon: <Info className="h-4 w-4" />,           accent: 'text-[hsl(var(--status-info))] bg-[hsl(217_91%_95%)]' },

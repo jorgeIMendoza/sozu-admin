@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { PenTool, ChevronRight, ShieldAlert, ArrowRight } from 'lucide-react';
-import { mockRequests } from '@/data/mockData';
-import type { LegalRequest } from '@/types/legal';
+import { mockRequests } from '@/data/legalFlow/mockData';
+import type { LegalRequest } from '@/types/legal-flow';
 
 interface Props {
   openDrawer?: (title: string, cases: LegalRequest[]) => void;

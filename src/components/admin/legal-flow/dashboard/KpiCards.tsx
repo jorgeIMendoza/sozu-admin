@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import {
   Briefcase, Clock, PenTool, CheckCircle2, AlertTriangle, FileSearch, ArrowRight,
 } from 'lucide-react';
-import { mockMetrics } from '@/data/mockData';
+import { mockMetrics } from '@/data/legalFlow/mockData';
 
 const fade = (i: number) => ({
   hidden: { opacity: 0, y: 8 },

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { mockRequests, STATUS_CONFIG } from '@/data/mockData';
+import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 
 const ATTENTION_REASONS: Record<string, string> = {
   missing_information: 'Información incompleta',

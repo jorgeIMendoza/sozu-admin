@@ -1,8 +1,8 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Building2, User, AlertTriangle, ExternalLink } from 'lucide-react';
-import { STATUS_CONFIG, REQUEST_TYPE_LABELS } from '@/data/mockData';
-import type { LegalRequest } from '@/types/legal';
+import { STATUS_CONFIG, REQUEST_TYPE_LABELS } from '@/data/legalFlow/mockData';
+import type { LegalRequest } from '@/types/legal-flow';
 
 const NEXT_ACTION: Record<string, string> = {
   request_received: 'Revisar solicitud',

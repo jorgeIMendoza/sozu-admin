@@ -16,8 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { mockTemplates } from '@/data/mockData';
-import type { ContractTemplate, TemplateVariable, TemplateSigner } from '@/types/legal';
+import { mockTemplates } from '@/data/legalFlow/mockData';
+import type { ContractTemplate, TemplateVariable, TemplateSigner } from '@/types/legal-flow';
 
 const DATA_TYPE_ICONS: Record<string, typeof Code> = {
   text: Code,

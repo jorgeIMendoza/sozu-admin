@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import type { CaseStatus } from '@/types/legal';
+import type { CaseStatus } from '@/types/legal-flow';
 
 const COLORS = ['hsl(145, 35%, 51%)', 'hsl(217, 91%, 60%)', 'hsl(38, 92%, 50%)', 'hsl(258, 56%, 52%)', 'hsl(220, 9%, 60%)'];
 
