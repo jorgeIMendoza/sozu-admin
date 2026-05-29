@@ -74,12 +74,10 @@ export type ManualCategory =
 
 export interface Manual {
   id: string;
-  propertyId: string;
   category: ManualCategory;
   name: string;
   description?: string;
-  fileExtension: "pdf";
-  fileSize: number;
+  tipoArchivo: string;
   url: string;
   lastUpdated: string;
 }
@@ -235,16 +233,24 @@ interface GarantiaRow {
   fecha_vencimiento: string;
 }
 
-interface ManualRow {
+interface EvidenciaManualRow {
   id: number;
-  id_propiedad: number | null;
-  categoria: ManualCategory;
-  nombre: string;
+  nombre: string | null;
   descripcion: string | null;
   url: string;
-  tamano_bytes: number;
+  tipo_archivo: string;
+  tipo_evidencia: string;
   fecha_creacion: string;
 }
+
+const TIPO_EVIDENCIA_TO_CATEGORY: Record<string, ManualCategory> = {
+  manual:   "electrodomesticos",
+  guia:     "mantenimiento",
+  plano:    "planos",
+  garantia: "garantia",
+};
+
+const MANUAL_TIPO_EVIDENCIA = Object.keys(TIPO_EVIDENCIA_TO_CATEGORY);
 
 // ── Internal mappers ──
 
@@ -358,25 +364,35 @@ export function useManualesForCuenta(cuentaId: string | undefined) {
   return useQuery({
     queryKey: ["manuales", cuentaId],
     queryFn: async (): Promise<Manual[]> => {
-      const { data, error } = await supabase
-        .from("postventa_manuales")
-        .select(
-          "id, id_propiedad, categoria, nombre, descripcion, url, tamano_bytes, fecha_creacion",
-        )
+      // Step 1: get ticket IDs for this cuenta
+      const { data: tickets, error: te } = await supabase
+        .from("postventa_tickets")
+        .select("id")
         .eq("id_cuenta_cobranza", Number(cuentaId))
+        .eq("activo", true);
+      if (te) throw te;
+
+      const ticketIds = (tickets ?? []).map((t) => t.id as number);
+      if (ticketIds.length === 0) return [];
+
+      // Step 2: get evidencias classified as manuales/guías/planos/garantías
+      const { data, error } = await supabase
+        .from("postventa_evidencias")
+        .select("id, nombre, descripcion, url, tipo_archivo, tipo_evidencia, fecha_creacion")
+        .in("id_postventa_ticket", ticketIds)
+        .in("tipo_evidencia", MANUAL_TIPO_EVIDENCIA)
         .eq("activo", true)
         .order("nombre");
       if (error) throw error;
-      return ((data ?? []) as ManualRow[]).map((m) => ({
-        id: String(m.id),
-        propertyId: String(m.id_propiedad ?? 0),
-        category: m.categoria,
-        name: m.nombre,
-        description: m.descripcion ?? undefined,
-        fileExtension: "pdf" as const,
-        fileSize: m.tamano_bytes,
-        url: m.url,
-        lastUpdated: m.fecha_creacion,
+
+      return ((data ?? []) as EvidenciaManualRow[]).map((e) => ({
+        id: String(e.id),
+        category: TIPO_EVIDENCIA_TO_CATEGORY[e.tipo_evidencia] ?? "electrodomesticos",
+        name: e.nombre ?? e.url.split("/").pop() ?? "Documento",
+        description: e.descripcion ?? undefined,
+        tipoArchivo: e.tipo_archivo,
+        url: e.url,
+        lastUpdated: e.fecha_creacion,
       }));
     },
     enabled: !!cuentaId,
