@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
 import {
-  Ambassador, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
+  Ambassador, Advisor, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
   CommissionTrigger, CommissionStatus, COMMISSION_STATUS_LABEL,
   Referral, ReferralStatus, REFERRAL_STATUS_LABEL, InterestType,
   ProtectionStatus, PROTECTION_STATUS_LABEL, DOCUMENT_STATUS_LABEL, DocumentStatus,
