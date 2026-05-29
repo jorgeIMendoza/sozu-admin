@@ -1,593 +1,160 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Receipt, Clock, TrendingUp, TrendingDown, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2, CreditCard, FileText, Home, Loader2, Calendar, Star } from "lucide-react";
-import { fmtMXN as fmt } from "@/lib/clienteMockData";
-import { type PropertyFinancialSummary } from "@/hooks/useClienteResumenFinanciero";
+import { Building2, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useClienteActividad, URGENCIA_BORDER, URGENCIA_DOT, URGENCIA_BADGE, type ActividadItem } from "@/hooks/useClienteActividad";
-import { useClienteResumenFinanciero } from "@/hooks/useClienteResumenFinanciero";
-import { estadoCuentaEdgeFunctionService } from "@/services/estadoCuentaEdgeFunctionService";
-import { toast } from "sonner";
+import { usePortfolioCliente } from "@/lib/portal-cliente/use-portfolio";
+import { getPortfolioTotals } from "@/lib/portal-cliente/mock-data";
+import WelcomeSection from "@/components/admin/portal-cliente/WelcomeSection";
+import HeroFinancialSummary from "@/components/admin/portal-cliente/HeroFinancialSummary";
+import ActivitySection from "@/components/admin/portal-cliente/ActivitySection";
+import QuickActionsGrid from "@/components/admin/portal-cliente/QuickActionsGrid";
+import CompactFinancialSummary from "@/components/admin/portal-cliente/CompactFinancialSummary";
+import PendingsByProperty from "@/components/admin/portal-cliente/PendingsByProperty";
+import PropertyCard from "@/components/admin/portal-cliente/PropertyCard";
 
-const getGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Buenos días";
-  if (hour < 19) return "Buenas tardes";
-  return "Buenas noches";
-};
+function EmptyPortfolio() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-6 text-center animate-fade-in">
+      <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-4">
+        <Building2 className="w-8 h-8 text-muted-foreground/50" />
+      </div>
+      <h3 className="text-[15px] font-semibold text-foreground mb-1">
+        Aún no tienes propiedades
+      </h3>
+      <p className="text-[13px] text-muted-foreground max-w-xs">
+        Cuando adquieras una propiedad con SOZU aparecerá aquí con toda su información.
+      </p>
+    </div>
+  );
+}
+
+function PortfolioSkeleton() {
+  return (
+    <div className="px-4 pt-3 md:px-0 md:pt-6 space-y-4 animate-pulse">
+      <div className="h-14 w-56 rounded-lg bg-muted" />
+      <div className="h-48 rounded-2xl bg-muted" />
+      <div className="h-32 rounded-xl bg-muted" />
+      <div className="h-32 rounded-xl bg-muted" />
+    </div>
+  );
+}
 
 const ClienteInicio = () => {
-  const { profile } = useAuth();
-  const { impersonatedClienteName, impersonatedClientePersonaId, isImpersonating } = useClienteImpersonation();
   const navigate = useNavigate();
-  const [generatingEdoCuenta, setGeneratingEdoCuenta] = useState(false);
-  const [showEdoCuentaPicker, setShowEdoCuentaPicker] = useState(false);
-  const [showInvestmentBreakdown, setShowInvestmentBreakdown] = useState(false);
-  const [showAppreciationBreakdown, setShowAppreciationBreakdown] = useState(false);
-  
-  const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
+  const { profile } = useAuth();
+  const { isImpersonating, impersonatedClienteName } = useClienteImpersonation();
 
-  const { data: personaData } = useQuery({
-    queryKey: ["portal-cliente-persona-greeting", effectivePersonaId],
-    queryFn: async () => {
-      if (!effectivePersonaId) return null;
-      const { data } = await supabase
-        .from("personas")
-        .select("nombre_legal")
-        .eq("id", effectivePersonaId)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!effectivePersonaId,
-  });
+  const { data: portfolio, isLoading } = usePortfolioCliente();
 
-  const displayName = isImpersonating
-    ? impersonatedClienteName || "Cliente"
-    : personaData?.nombre_legal || profile?.nombre || "Cliente";
+  const effectiveName = isImpersonating
+    ? (impersonatedClienteName ?? "Cliente")
+    : (profile?.nombre ?? "Usuario");
 
-  const { data: actividad, isLoading: actividadLoading } = useClienteActividad(effectivePersonaId);
-  const { data: resumen, isLoading: resumenLoading } = useClienteResumenFinanciero(effectivePersonaId);
+  const safePortfolio = portfolio ?? [];
+  const totals = getPortfolioTotals(safePortfolio);
 
-  // Count real active properties (non-product ofertas)
-  const { data: propiedadesActivasCount } = useQuery({
-    queryKey: ["portal-cliente-propiedades-count", effectivePersonaId],
-    queryFn: async () => {
-      if (!effectivePersonaId) return 0;
+  const handleSelectProperty = (id: string) =>
+    navigate(`/admin/portal-cliente/propiedad/${id}`);
 
-      // Direct ofertas (as lead)
-      const { data: ofertasDirectas } = await supabase
-        .from("ofertas")
-        .select("id, id_producto, id_propiedad")
-        .eq("id_persona_lead", effectivePersonaId)
-        .eq("activo", true);
-
-      // Co-owner ofertas (via compradores → cuentas_cobranza → ofertas)
-      const { data: compradorCuentas } = await supabase
-        .from("compradores")
-        .select("id_cuenta_cobranza")
-        .eq("id_persona", effectivePersonaId)
-        .eq("activo", true);
-
-      let ofertasCoprop: any[] = [];
-      if (compradorCuentas && compradorCuentas.length > 0) {
-        const cuentaIds = [...new Set(compradorCuentas.map((c) => c.id_cuenta_cobranza))];
-        const { data: cuentasData } = await supabase
-          .from("cuentas_cobranza")
-          .select("id_oferta")
-          .in("id", cuentaIds)
-          .eq("activo", true);
-
-        if (cuentasData && cuentasData.length > 0) {
-          const ofertaIdsFromCoprop = [...new Set(cuentasData.map((c) => c.id_oferta))];
-          const { data: copropOfertas } = await supabase
-            .from("ofertas")
-            .select("id, id_producto, id_propiedad")
-            .in("id", ofertaIdsFromCoprop)
-            .eq("activo", true);
-          ofertasCoprop = copropOfertas || [];
-        }
-      }
-
-      // Merge and deduplicate
-      const ofertasMap = new Map<number, any>();
-      (ofertasDirectas || []).forEach((o: any) => ofertasMap.set(o.id, o));
-      ofertasCoprop.forEach((o: any) => ofertasMap.set(o.id, o));
-      const allOfertas = Array.from(ofertasMap.values());
-
-      // Only count non-product ofertas (real properties)
-      return allOfertas.filter((o: any) => !o.id_producto).length;
-    },
-    enabled: !!effectivePersonaId,
-  });
-  const numPropiedades = propiedadesActivasCount ?? 0;
-
-  // Real financial data from hook
-  const totalInvested = resumen?.totalInvested ?? 0;
-  const totalPaid = resumen?.totalPaid ?? 0;
-  const totalPending = resumen?.totalPending ?? 0;
-  const progress = totalInvested > 0 ? (totalPaid / totalInvested) * 100 : 0;
-  const appreciationPercent = resumen?.appreciationPercent ?? 0;
-  const isAppreciation = resumen?.isAppreciation ?? true;
-
-  // Estado de cuenta handler
-  const handleEstadoCuenta = async (cuentaId?: number) => {
-    const properties = resumen?.properties || [];
-    if (properties.length === 0) {
-      toast.error("No se encontró cuenta para generar el estado de cuenta");
-      return;
-    }
-    // If multiple properties and no specific cuenta selected, show picker
-    if (properties.length > 1 && !cuentaId) {
-      setShowEdoCuentaPicker(true);
-      return;
-    }
-    const targetCuenta = cuentaId || properties[0].cuentaId;
-    setShowEdoCuentaPicker(false);
-    setGeneratingEdoCuenta(true);
-    try {
-      await estadoCuentaEdgeFunctionService.generateEstadoCuenta({ id_cuenta: targetCuenta });
-    } catch {
-      toast.error("Error al generar el estado de cuenta");
-    } finally {
-      setGeneratingEdoCuenta(false);
-    }
+  const handleQuickAction = (action: string) => {
+    if (action === "property") navigate("/admin/portal-cliente/propiedades");
+    else if (action === "balance") navigate("/admin/portal-cliente/estado-de-cuenta");
+    else if (action === "payments") navigate("/admin/portal-cliente/pagos");
+    else if (action === "documents") navigate("/admin/portal-cliente/documentos");
   };
 
+  if (isLoading) return <PortfolioSkeleton />;
+
+  // ── 1. Saludo (siempre arriba) ──────────────────────────────────────────
+  const greeting = (
+    <WelcomeSection name={effectiveName} activeProperties={safePortfolio.length} />
+  );
+
+  if (!safePortfolio.length) {
+    return (
+      <div className="px-4 pt-3 md:px-0 md:pt-6">
+        {greeting}
+        <EmptyPortfolio />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-lg mx-auto lg:max-w-none space-y-0">
-      {/* Welcome */}
-      <section className="px-5 pt-5 pb-2 lg:px-0">
-        <p className="text-sm text-muted-foreground">{getGreeting()},</p>
-        <h2 className="font-bold text-xl text-foreground tracking-tight mt-0.5">
-          {displayName}
-        </h2>
-        <div className="flex items-center gap-3 mt-1.5">
-          <span className="text-xs text-muted-foreground">Inversionista</span>
-          <span className="w-1 h-1 rounded-full bg-border" />
-          <span className="text-xs text-muted-foreground">
-            {numPropiedades} propiedad{numPropiedades !== 1 ? "es" : ""} activa{numPropiedades !== 1 ? "s" : ""}
-          </span>
-        </div>
-      </section>
+    <div className="px-4 pt-3 md:px-0 md:pt-6">
 
-      {/* Activity */}
-      <section className="px-5 pt-6 pb-2 lg:px-0">
-        <h2 className="font-bold text-lg text-foreground mb-4">Tu actividad</h2>
-        {actividadLoading ? (
-          <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Cargando actividad…</p>
-          </div>
-        ) : actividad && actividad.length > 0 ? (
-          <div className="space-y-3">
-            {/* Summary banner */}
-            <div className="flex items-center gap-3 bg-amber-500/10 rounded-2xl px-4 py-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-foreground">
-                  Tienes {actividad.length} pendiente{actividad.length > 1 ? "s" : ""}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Revisa tus próximos pagos y notificaciones</p>
-              </div>
-            </div>
+      {/* 1. Saludo — siempre visible */}
+      {greeting}
 
-            {/* Individual activity items */}
-            {actividad.map((item) => (
-              <ActividadCard key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm text-foreground">Estás al día</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Sin pagos pendientes ni notificaciones</p>
-            </div>
-          </div>
-        )}
-      </section>
+      {/* 2. Resumen financiero */}
+      <div className="hidden md:block">
+        <HeroFinancialSummary portfolio={safePortfolio} />
+      </div>
+      <div className="md:hidden">
+        <CompactFinancialSummary
+          totalInvested={totals.totalInvested}
+          totalPaid={totals.totalPaid}
+          totalPending={totals.totalPending}
+          appreciationPercent={totals.appreciationPercent}
+        />
+      </div>
 
-      {/* Quick Actions */}
-      <section className="px-5 py-5 lg:px-0">
-        <h2 className="font-semibold text-sm text-foreground mb-3">Accesos rápidos</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => handleEstadoCuenta()}
-            disabled={generatingEdoCuenta || !resumen?.properties?.length}
-            className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left disabled:opacity-50"
+      {/* 3. Accesos rápidos — mobile: inline aquí; desktop: sidebar derecho */}
+      <div className="md:hidden">
+        <QuickActionsGrid onAction={handleQuickAction} />
+      </div>
+
+      {/* Grid desktop (2 col) / mobile lineal */}
+      <div className="md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-6 md:mt-4">
+
+        {/* Columna principal */}
+        <div className="xl:col-span-2 space-y-2">
+
+          {/* 4. Tu actividad */}
+          <ActivitySection portfolio={safePortfolio} onPayNow={handleSelectProperty} />
+
+          {/* 5. Pendientes por propiedad — mobile: aquí; desktop: sidebar */}
+          <div className="md:hidden">
+            <PendingsByProperty portfolio={safePortfolio} onSelect={handleSelectProperty} />
+          </div>
+
+          {/* 6. Mis propiedades */}
+          <section
+            className="px-5 md:px-0 py-4 animate-fade-in"
+            style={{ animationDelay: "0.2s" }}
           >
-            <div className="w-9 h-9 rounded-xl bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center">
-              {generatingEdoCuenta ? <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--inmob-green))]" /> : <Receipt className="w-4 h-4 text-[hsl(var(--inmob-green))]" />}
+            <h2 className="font-semibold text-[15px] text-foreground mb-3">
+              Mis propiedades
+            </h2>
+            <div className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-4 xl:space-y-0">
+              {safePortfolio.slice(0, 3).map((inv) => (
+                <PropertyCard
+                  key={inv.property.id}
+                  investment={inv}
+                  onSelect={handleSelectProperty}
+                />
+              ))}
             </div>
-            <div>
-              <p className="font-semibold text-[13px] text-foreground leading-tight">Estado de cuenta</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Descargar PDF</p>
-            </div>
-          </button>
-          <button
-            onClick={() => navigate("/admin/portal-cliente/pagos")}
-            className="flex flex-col items-start gap-2.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.97] hover:border-[hsl(var(--inmob-green))]/30 text-left"
-          >
-            <div className="w-9 h-9 rounded-xl bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-[hsl(var(--inmob-green))]" />
-            </div>
-            <div>
-              <p className="font-semibold text-[13px] text-foreground leading-tight">Historial de pagos</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Pagos y aplicaciones</p>
-            </div>
-          </button>
-        </div>
-
-        {/* Property picker for estado de cuenta */}
-        {showEdoCuentaPicker && resumen?.properties && resumen.properties.length > 1 && (
-          <div className="mt-3 bg-card rounded-2xl border border-border p-4 space-y-2">
-            <p className="text-xs font-semibold text-foreground mb-2">Selecciona la propiedad:</p>
-            {resumen.properties.map((prop) => (
+            {safePortfolio.length > 3 && (
               <button
-                key={prop.cuentaId}
-                onClick={() => handleEstadoCuenta(prop.cuentaId)}
-                disabled={generatingEdoCuenta}
-                className="w-full flex items-center justify-between p-3 rounded-xl border border-border hover:border-[hsl(var(--inmob-green))]/30 hover:bg-muted/50 transition-all text-left disabled:opacity-50"
+                onClick={() => navigate("/admin/portal-cliente/propiedades")}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium text-primary hover:bg-primary/5 transition-colors border border-dashed border-primary/30"
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center">
-                    <Home className="w-4 h-4 text-[hsl(var(--inmob-green))]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{prop.proyecto} {prop.unidad}</p>
-                    <p className="text-[11px] text-muted-foreground">{prop.edificio}</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                Ver todas ({safePortfolio.length} propiedades)
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
-            ))}
-            <button
-              onClick={() => setShowEdoCuentaPicker(false)}
-              className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* Financial Summary */}
-      <section className="px-5 py-4 lg:px-0">
-        <h2 className="font-semibold text-sm text-foreground mb-3">Resumen financiero</h2>
-        {resumenLoading ? (
-          <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Cargando…</p>
-          </div>
-        ) : (
-        <div className="bg-card rounded-2xl border border-border p-4 space-y-4">
-          {/* Total invertido - clickable */}
-          <div>
-            <div
-              className="flex items-baseline justify-between cursor-pointer select-none"
-              onClick={() => setShowInvestmentBreakdown(!showInvestmentBreakdown)}
-            >
-              <div className="flex items-center gap-1.5">
-                <div>
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Total invertido</p>
-                  <p className="font-bold text-xl text-foreground tabular-nums mt-0.5">{fmt(totalInvested)}</p>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform mt-4 ${showInvestmentBreakdown ? "rotate-180" : ""}`} />
-              </div>
-              {appreciationPercent > 0 && (
-              <div
-                className={`flex items-center gap-1 ${isAppreciation ? "bg-[hsl(var(--inmob-green))]/10" : "bg-destructive/10"} px-2.5 py-1 rounded-full cursor-pointer`}
-                onClick={(e) => { e.stopPropagation(); setShowAppreciationBreakdown(!showAppreciationBreakdown); }}
-              >
-                {isAppreciation ? <TrendingUp className="w-3 h-3 text-[hsl(var(--inmob-green))]" /> : <TrendingDown className="w-3 h-3 text-destructive" />}
-                <span className={`text-xs font-semibold tabular-nums ${isAppreciation ? "text-[hsl(var(--inmob-green))]" : "text-destructive"}`}>{isAppreciation ? "+" : "-"}{appreciationPercent.toFixed(1)}%</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${isAppreciation ? "text-[hsl(var(--inmob-green))]" : "text-destructive"} ${showAppreciationBreakdown ? "rotate-180" : ""}`} />
-              </div>
-              )}
-            </div>
-
-            {/* Investment breakdown */}
-            {showInvestmentBreakdown && resumen?.properties && resumen.properties.length > 0 && (
-              <div className="mt-3 space-y-2 pl-1">
-                {resumen.properties.map((prop) => (
-                  <div key={prop.cuentaId} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center">
-                        <Home className="w-3 h-3 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-foreground">{prop.proyecto} {prop.unidad}</p>
-                        {prop.edificio && <p className="text-[10px] text-muted-foreground">{prop.edificio}</p>}
-                      </div>
-                    </div>
-                    <p className="text-xs font-semibold text-foreground tabular-nums">{fmt(prop.precioFinal)}</p>
-                  </div>
-                ))}
-              </div>
             )}
-
-            {/* Appreciation breakdown */}
-            {showAppreciationBreakdown && resumen?.properties && resumen.properties.length > 0 && (
-              <div className="mt-3 space-y-2 pl-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Plusvalía por propiedad</p>
-                {resumen.properties.map((prop) => {
-                  const currentValue = prop.precioM2Actual > 0 && prop.m2Total > 0 ? prop.precioM2Actual * prop.m2Total : prop.precioFinal;
-                  const diff = currentValue - prop.precioFinal;
-                  const isUp = diff >= 0;
-                  return (
-                    <div key={prop.cuentaId} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center">
-                          <Home className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-foreground">{prop.proyecto} {prop.unidad}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            Compra: {fmt(prop.precioM2Compra, 0)}/m² → Actual: {fmt(prop.precioM2Actual, 0)}/m²
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-xs font-semibold tabular-nums ${isUp ? "text-[hsl(var(--inmob-green))]" : "text-destructive"}`}>
-                          {isUp ? "+" : ""}{prop.appreciationPercent.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[11px] text-muted-foreground font-medium">Progreso de pago</span>
-              <span className="text-[11px] font-bold text-[hsl(var(--inmob-green))] tabular-nums">{progress.toFixed(0)}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full rounded-full bg-[hsl(var(--inmob-green))]" style={{ width: `${Math.min(progress, 100)}%` }} />
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pagado</p>
-              <p className="font-semibold text-sm text-[hsl(var(--inmob-green))] tabular-nums mt-0.5">{fmt(totalPaid)}</p>
-            </div>
-            <div className="w-px h-8 bg-border" />
-            <div className="text-right">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pendiente</p>
-              <p className="font-semibold text-sm text-foreground tabular-nums mt-0.5">{fmt(totalPending)}</p>
-            </div>
-          </div>
+          </section>
         </div>
-        )}
-      </section>
 
-      {/* Properties */}
-      <section className="px-5 py-4 lg:px-0">
-        <h2 className="font-semibold text-sm text-foreground mb-3">Mis propiedades</h2>
-        {resumenLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : resumen?.properties && resumen.properties.length > 0 ? (
-          <div className="space-y-4">
-            {resumen.properties.map((prop) => (
-              <RealPropertyCard key={prop.cuentaId} property={prop} />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border p-5 text-center text-sm text-muted-foreground">
-            No tienes propiedades registradas.
-          </div>
-        )}
-      </section>
+        {/* Sidebar derecho — solo desktop */}
+        <aside className="hidden md:block md:sticky md:top-28 md:self-start space-y-2">
+          <QuickActionsGrid onAction={handleQuickAction} />
+          <PendingsByProperty portfolio={safePortfolio} onSelect={handleSelectProperty} />
+        </aside>
+
+      </div>
     </div>
   );
 };
-
-/* ── Activity Card ── */
-function ActividadCard({ item }: { item: ActividadItem }) {
-  const navigate = useNavigate();
-  const isPago = item.tipo === "pago" || item.tipo === "mantenimiento";
-  const isAtraso = item.tipo === "atraso";
-  const isStatus = item.tipo === "escrituracion" || item.tipo === "entrega";
-  const isClickable = (isPago || isAtraso) && !!item.cuentaId;
-
-  const iconMap: Record<string, React.ReactNode> = {
-    pago: <CreditCard className="w-4 h-4" />,
-    mantenimiento: <Home className="w-4 h-4" />,
-    escrituracion: <FileText className="w-4 h-4" />,
-    entrega: <Home className="w-4 h-4" />,
-    atraso: <AlertTriangle className="w-4 h-4" />,
-  };
-
-  const handleClick = () => {
-    if (isClickable) {
-      navigate(`/admin/portal-cliente/propiedad-pago/${item.cuentaId}`);
-    }
-  };
-
-  return (
-    <div
-      onClick={handleClick}
-      className={`bg-card rounded-2xl border border-border border-l-[3px] ${URGENCIA_BORDER[item.urgencia]} p-4 ${isClickable ? "cursor-pointer active:scale-[0.98] transition-transform" : ""}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="font-semibold text-sm text-foreground">
-              {item.proyecto} {item.unidad && item.unidad}
-            </span>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${URGENCIA_BADGE[item.urgencia]}`}>
-              {isAtraso ? "Atraso" : item.concepto}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">{item.mensaje}</p>
-          {isAtraso && item.mensualidadesAtraso && (
-            <p className="text-xs font-semibold text-destructive mt-1">
-              {item.concepto}
-            </p>
-          )}
-        </div>
-        {(isPago || isAtraso) && item.monto != null && (
-          <div className="text-right shrink-0">
-            <p className="font-bold text-base text-foreground tabular-nums">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.monto)}</p>
-            {isPago && (
-              <div className="flex items-center gap-1 mt-1 text-[hsl(var(--inmob-green))]">
-                <CreditCard className="w-3 h-3" />
-                <span className="text-[11px] font-semibold">Pagar</span>
-              </div>
-            )}
-            {isAtraso && (
-              <div className="flex items-center gap-1 mt-1 text-destructive">
-                <CreditCard className="w-3 h-3" />
-                <span className="text-[11px] font-semibold">Pagar</span>
-              </div>
-            )}
-          </div>
-        )}
-        {isStatus && (
-          <div className="shrink-0">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center bg-[hsl(var(--inmob-green))]/10 text-[hsl(var(--inmob-green))]`}>
-              {iconMap[item.tipo]}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Real Property Card (matching reference design) ── */
-function RealPropertyCard({ property }: { property: PropertyFinancialSummary }) {
-  const navigate = useNavigate();
-  // 7 = Escrituración, 9 = Pagada completamente, 5 = Vendido
-  const statusBadge = (() => {
-    switch (property.estatusPropiedad) {
-      case 7: return { label: "Escrituración", color: "bg-blue-500/15 text-blue-600" };
-      case 9: return { label: "Pagada", color: "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" };
-      case 5: return { label: "Vendido", color: "bg-amber-500/15 text-amber-600" };
-      default: return null;
-    }
-  })();
-
-  // Delivery badge from project date (informational only)
-  const fechaEntregaLabel = property.fechaEntrega
-    ? new Date(property.fechaEntrega) <= new Date()
-      ? "Entregada"
-      : `Entrega: ${new Date(property.fechaEntrega).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}`
-    : null;
-
-  // Maintenance: overdue vs upcoming
-  const maintenanceOverdue = property.mantenimientosAtrasados > 0;
-  const maintenanceDate = property.proximoMantenimiento
-    ? new Date(property.proximoMantenimiento + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
-    : null;
-
-  return (
-    <div
-      onClick={() => navigate(`/admin/portal-cliente/propiedad/${property.cuentaId}`)}
-      className="w-full rounded-2xl overflow-hidden bg-card border border-border shadow-[0_2px_16px_-4px_hsl(var(--foreground)/0.08)] cursor-pointer active:scale-[0.98] transition-transform"
-    >
-      {/* Image header */}
-      <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
-        {property.imageUrl ? (
-          <img
-            src={property.imageUrl}
-            alt={property.proyecto}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center">
-            <Home className="w-10 h-10 text-muted-foreground/40" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-foreground/70 via-foreground/20 to-transparent" />
-        {/* Status badge */}
-        <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
-          {statusBadge && (
-            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${statusBadge.color}`}>
-              {statusBadge.label}
-            </span>
-          )}
-          {fechaEntregaLabel && (
-            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm ${fechaEntregaLabel === "Entregada" ? "bg-[hsl(var(--inmob-green))]/20 text-[hsl(var(--inmob-green))]" : "bg-white/20 text-white"}`}>
-              {fechaEntregaLabel}
-            </span>
-          )}
-        </div>
-        {/* Project name overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h3 className="font-bold text-base text-white leading-tight">{property.proyecto}</h3>
-          <p className="text-white/70 text-xs mt-0.5">
-            Unidad {property.unidad} · {property.direccion || property.edificio}
-          </p>
-        </div>
-      </div>
-      {/* Info section */}
-      <div className="p-4 space-y-3">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <p className="text-[11px] text-muted-foreground">Plusvalía actual</p>
-            <p className={`font-bold text-base tabular-nums ${property.appreciationPercent >= 0 ? "text-[hsl(var(--inmob-green))]" : "text-destructive"}`}>
-              {property.appreciationPercent >= 0 ? "+" : ""}{property.appreciationPercent.toFixed(1)}%
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[11px] text-muted-foreground">Valor estimado</p>
-            <p className="font-bold text-base text-foreground tabular-nums">{fmt(property.valorEstimado)}</p>
-          </div>
-        </div>
-
-        {/* Contextual quick messages */}
-        {maintenanceOverdue && maintenanceDate && (
-          <div className="flex items-center gap-2 text-xs text-destructive">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="font-semibold">
-              {property.mantenimientosAtrasados} cuota{property.mantenimientosAtrasados > 1 ? "s" : ""} de mantenimiento atrasada{property.mantenimientosAtrasados > 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
-        {!maintenanceOverdue && maintenanceDate && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Calendar className="w-3.5 h-3.5 text-amber-500" />
-            <span>
-              Próx. mantenimiento:{" "}
-              <span className="font-semibold text-amber-600">{maintenanceDate}</span>
-            </span>
-          </div>
-        )}
-        {property.estatusPropiedad === 7 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <FileText className="w-3.5 h-3.5 text-[hsl(var(--inmob-green))]" />
-            <span className="text-[hsl(var(--inmob-green))] font-semibold">En proceso de escrituración</span>
-          </div>
-        )}
-        {property.estatusPropiedad === 9 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Star className="w-3.5 h-3.5 text-amber-500" />
-            <span className="text-amber-600 font-semibold">✨ Lista para reventa</span>
-          </div>
-        )}
-
-        {/* Ver detalle */}
-        <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1 font-medium text-[hsl(var(--inmob-green))]">
-            Ver detalle
-            <ChevronRight className="w-3.5 h-3.5" />
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default ClienteInicio;
