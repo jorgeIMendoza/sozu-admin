@@ -29,14 +29,15 @@ export interface ConstructionUpdate {
 export interface ConstructionProgressData {
   projectId: string;
   projectName: string;
-  globalProgress: number;         // 0 until proyectos.porcentaje_avance column added
+  projectStatus?: string;
+  globalProgress: number;
   lastUpdated: string;
   estimatedDelivery: string;
-  milestones: ConstructionMilestone[];  // [] until proyectos.hitos_avance column added
+  milestones: ConstructionMilestone[];
   featuredVideoUrl?: string;
   featuredVideoTitle?: string;
-  updates: ConstructionUpdate[];  // one entry per videos_youtube row
-  photos: ConstructionPhoto[];    // project-level photos from multimedias_proyecto
+  updates: ConstructionUpdate[];
+  photos: ConstructionPhoto[];
 }
 
 // ── Helpers ──
@@ -76,9 +77,10 @@ interface FotoRow {
 interface ProyectoRow {
   id: number;
   nombre: string;
-  fecha_inicio_construccion: string | null;
+  fecha_lanzamiento: string | null;
   fecha_entrega: string | null;
-  // porcentaje_avance and hitos_avance added via DDL — optional until migrated
+  id_estatus_proyecto: number | null;
+  estatus_proyecto: { nombre: string } | null;
   porcentaje_avance?: number | null;
   hitos_avance?: ConstructionMilestone[] | null;
 }
@@ -154,7 +156,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       ] = await Promise.all([
         supabase
           .from("proyectos")
-          .select("id, nombre, fecha_inicio_construccion, fecha_entrega")
+          .select("id, nombre, fecha_lanzamiento, fecha_entrega, id_estatus_proyecto, estatus_proyecto(nombre)")
           .eq("id", idProy)
           .maybeSingle(),
         supabase
@@ -204,7 +206,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       }));
 
       const globalProgress = p.porcentaje_avance
-        ?? calcProgressFromDates(p.fecha_inicio_construccion, p.fecha_entrega);
+        ?? calcProgressFromDates(p.fecha_lanzamiento, p.fecha_entrega);
 
       const rawMilestones = (p.hitos_avance ?? DEFAULT_MILESTONES) as ConstructionMilestone[];
       const milestones = applyProgressToMilestones(rawMilestones, globalProgress);
@@ -212,6 +214,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       return {
         projectId: String(idProy),
         projectName: p.nombre,
+        projectStatus: p.estatus_proyecto?.nombre ?? undefined,
         globalProgress,
         lastUpdated: latest ? fmtDateFromTs(latest.fecha_creacion) : "—",
         estimatedDelivery: p.fecha_entrega ?? "",

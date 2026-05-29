@@ -29,6 +29,7 @@ import PropertyHumanContact from "./PropertyHumanContact";
 import PropertyTechnicalSheet from "./PropertyTechnicalSheet";
 import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { createPortal } from "react-dom";
+import ManualsBlock from "../post-delivery/ManualsBlock";
 
 interface Props {
   investment: InvestmentProperty;
@@ -61,7 +62,6 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
         <div className="space-y-6">
           <PatrimonyImage investment={investment} />
 
-          {/* Mobile-only agent card */}
           <div className="md:hidden">
             <PropertyHumanContact investment={investment} role="administrator" />
           </div>
@@ -76,16 +76,16 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
           <MaintenanceSection maintenance={maintenance} status={maintenanceStatus} />
           <UsageSection usage={usage} />
           <PropertyDocuments propertyId={property.id} />
+          <ManualsBlock cuentaId={property.id} />
 
-          {/* Mobile-only technical sheet */}
           <div className="md:hidden">
             <PropertyTechnicalSheet property={property} />
           </div>
         </div>
 
-        {/* ── Right column (desktop only — sticky) ── */}
+        {/* ── Right column (desktop only) ── */}
         <div className="hidden md:block">
-          <div className="sticky top-4 space-y-4">
+          <div className="space-y-4">
             <PatrimonyAgentSideCard investment={investment} />
             <DesktopPatrimonySidebar
               investment={investment}

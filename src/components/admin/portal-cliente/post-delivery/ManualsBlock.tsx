@@ -37,43 +37,39 @@ const ManualsBlock = ({ cuentaId }: Props) => {
   const isEmpty = manuals.length === 0;
 
   return (
-    <div className="px-4 mt-4 animate-fade-in">
-      <div className="rounded-2xl border border-border bg-card p-4">
+    <>
+      <section className="rounded-2xl bg-card border border-border overflow-hidden animate-fade-in">
         <button
           onClick={() => !isEmpty && setExpanded(!expanded)}
-          className={`w-full flex items-center justify-between gap-3 ${isEmpty ? "cursor-default" : ""}`}
+          className={`w-full flex items-center justify-between p-5 ${isEmpty ? "cursor-default" : ""}`}
         >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isEmpty ? "bg-muted" : "bg-primary/10"}`}>
-              <BookOpen className={`w-5 h-5 ${isEmpty ? "text-muted-foreground" : "text-primary"}`} />
-            </div>
-            <div className="min-w-0 text-left">
-              <p className="text-sm font-semibold text-foreground">
-                Manuales y guías
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {isEmpty
-                  ? "Aún no hay documentos disponibles"
-                  : `${manuals.length} documento${manuals.length === 1 ? "" : "s"} disponibles`}
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-muted-foreground" />
+            <h2 className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+              Manuales y guías
+            </h2>
+            {!isEmpty && (
+              <span className="text-[10px] text-muted-foreground">
+                ({manuals.length})
+              </span>
+            )}
           </div>
-          {!isEmpty && (expanded ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-          ))}
+          {!isEmpty && (
+            expanded
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
         </button>
 
         {isEmpty && (
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-2.5 text-muted-foreground">
+          <div className="border-t border-border px-5 py-4 flex items-center gap-2.5 text-muted-foreground">
             <FolderOpen className="w-4 h-4 shrink-0" />
             <p className="text-xs">Los manuales se publicarán conforme estén listos.</p>
           </div>
         )}
 
         {!isEmpty && expanded && (
-          <div className="mt-4 space-y-4 animate-fade-in">
+          <div className="border-t border-border p-5 space-y-4 animate-fade-in">
             {CATEGORY_ORDER.map((cat) => {
               const items = grouped[cat];
               if (items.length === 0) return null;
@@ -87,13 +83,13 @@ const ManualsBlock = ({ cuentaId }: Props) => {
                       <button
                         key={m.id}
                         onClick={() => setSelectedManual(m)}
-                        className="w-full text-left rounded-xl border border-border bg-card p-3 hover:bg-muted/30 transition-colors flex items-center gap-3"
+                        className="w-full text-left rounded-xl border border-border bg-background p-3 hover:bg-muted/30 transition-colors flex items-center gap-3"
                       >
-                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                          <FileText className="w-5 h-5 text-muted-foreground" />
+                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-foreground truncate">
+                          <p className="text-[13px] font-medium text-foreground truncate">
                             {m.name}
                           </p>
                           {m.description && (
@@ -113,7 +109,7 @@ const ManualsBlock = ({ cuentaId }: Props) => {
             })}
           </div>
         )}
-      </div>
+      </section>
 
       {selectedManual && (
         <PDFViewerSheet
@@ -123,7 +119,7 @@ const ManualsBlock = ({ cuentaId }: Props) => {
           url={selectedManual.url}
         />
       )}
-    </div>
+    </>
   );
 };
 

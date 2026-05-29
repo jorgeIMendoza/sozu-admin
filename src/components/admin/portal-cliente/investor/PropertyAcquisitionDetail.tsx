@@ -155,7 +155,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
             </div>
           </section>
 
-          {/* 3 · Precio de compra (mobile only — desktop shows in right col) */}
+          {/* Precio de compra (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
             <FinancialSideCard investment={investment} />
           </div>
@@ -166,7 +166,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
           {/* 6 · Documentos */}
           <PropertyDocuments propertyId={property.id} />
 
-          {/* 7 · Agente (mobile only — desktop shows first in right col) */}
+          {/* Agente (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
             <AgentSideCard investment={investment} />
           </div>

@@ -12,17 +12,8 @@ import { ClienteImpersonationSelector } from "./ClienteImpersonationSelector";
 import { PortalSearchInput } from "./PortalSearchInput";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
-import BottomNav, { type NavTab } from "./BottomNav";
+import BottomNav from "./BottomNav";
 import sozuLogo from "@/assets/sozu-logo.png";
-
-const TAB_TO_PATH: Record<NavTab, string> = {
-  home: "/admin/portal-cliente/inicio",
-  pre_reservation: "/admin/portal-cliente/propiedades",
-  acquisition: "/admin/portal-cliente/en-adquisicion",
-  patrimony: "/admin/portal-cliente/patrimonio",
-  documents: "/admin/portal-cliente/documentos",
-  profile: "/admin/portal-cliente/perfil",
-};
 
 function truncateName(full: string, max = 22): string {
   const parts = full.trim().split(/\s+/);
@@ -30,23 +21,12 @@ function truncateName(full: string, max = 22): string {
   return short.length > max ? short.slice(0, max - 1).trimEnd() + "…" : short;
 }
 
-function pathnameToTab(pathname: string): NavTab {
-  if (pathname.includes("/en-adquisicion")) return "acquisition";
-  if (pathname.includes("/patrimonio")) return "patrimony";
-  if (pathname.includes("/propiedad")) return "acquisition";
-  if (pathname.includes("/propiedades")) return "acquisition";
-  if (pathname.includes("/documentos")) return "documents";
-  if (pathname.includes("/perfil")) return "profile";
-  return "home";
-}
-
 export const PortalClienteLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const showBackToAdmin = profile?.rol_nombre !== "Cliente";
-  const { isImpersonating } = useClienteImpersonation();
-  const unreadCount = useUnreadCount();
+const unreadCount = useUnreadCount();
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
@@ -83,9 +63,6 @@ export const PortalClienteLayout = () => {
     .join("")
     .toUpperCase();
 
-  const activeTab = pathnameToTab(location.pathname);
-  const handleTabChange = (tab: NavTab) => navigate(TAB_TO_PATH[tab]);
-
   const isNarrow =
     /\/propiedad\/[^/]+/.test(location.pathname);
 
@@ -93,8 +70,6 @@ export const PortalClienteLayout = () => {
     <div className="inmob-portal min-h-screen bg-background [overflow-x:clip]">
       {/* ── Desktop sidebar ── */}
       <Sidebar
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
         appVersion={APP_VERSION}
         showBackToAdmin={showBackToAdmin}
         onBackToAdmin={() => navigate("/admin")}
@@ -218,7 +193,7 @@ export const PortalClienteLayout = () => {
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+      <BottomNav />
     </div>
   );
 };

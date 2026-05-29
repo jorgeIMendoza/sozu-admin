@@ -48,7 +48,7 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
           <div className="flex items-center gap-2">
             <HardHat className="w-4 h-4 text-muted-foreground" />
             <h2 className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-              {isCompleted ? "Proyecto entregado" : "Avance de obra"}
+              {data.projectStatus ?? (isCompleted ? "Proyecto entregado" : "Avance de obra")}
             </h2>
           </div>
           {expanded ? (
