@@ -376,7 +376,8 @@ const PatrimonyImage = ({ investment }: { investment: InvestmentProperty }) => {
             src={current}
             alt={`${property.projectName} U-${property.unitNumber}`}
             className="w-full h-full object-cover object-bottom"
-            loading="eager"
+            loading="lazy"
+            decoding="async"
           />
           <div className="absolute top-3 left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-success/95 text-success-foreground text-[10px] font-semibold backdrop-blur">
             <KeyRound className="w-3 h-3" />
@@ -434,7 +435,7 @@ const PatrimonyImage = ({ investment }: { investment: InvestmentProperty }) => {
       {lightboxOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center"
+            className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center"
             onClick={() => setLightboxOpen(false)}
           >
             <button

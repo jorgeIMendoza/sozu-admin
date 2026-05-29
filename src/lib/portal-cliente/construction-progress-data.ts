@@ -77,7 +77,7 @@ interface ProyectoRow {
   id: number;
   nombre: string;
   fecha_inicio_construccion: string | null;
-  fecha_entrega_proyecto: string | null;
+  fecha_entrega: string | null;
   // porcentaje_avance and hitos_avance added via DDL — optional until migrated
   porcentaje_avance?: number | null;
   hitos_avance?: ConstructionMilestone[] | null;
@@ -154,7 +154,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       ] = await Promise.all([
         supabase
           .from("proyectos")
-          .select("id, nombre, fecha_inicio_construccion, fecha_entrega_proyecto")
+          .select("id, nombre, fecha_inicio_construccion, fecha_entrega")
           .eq("id", idProy)
           .maybeSingle(),
         supabase
@@ -170,7 +170,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
           .eq("activo", true)
           .eq("es_imagen", true)
           .order("id", { ascending: false })
-          .limit(12),
+          .limit(6),
       ]);
       if (ep) throw ep;
       if (ev) throw ev;
@@ -204,7 +204,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       }));
 
       const globalProgress = p.porcentaje_avance
-        ?? calcProgressFromDates(p.fecha_inicio_construccion, p.fecha_entrega_proyecto);
+        ?? calcProgressFromDates(p.fecha_inicio_construccion, p.fecha_entrega);
 
       const rawMilestones = (p.hitos_avance ?? DEFAULT_MILESTONES) as ConstructionMilestone[];
       const milestones = applyProgressToMilestones(rawMilestones, globalProgress);
@@ -214,7 +214,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         projectName: p.nombre,
         globalProgress,
         lastUpdated: latest ? fmtDateFromTs(latest.fecha_creacion) : "—",
-        estimatedDelivery: p.fecha_entrega_proyecto ?? "",
+        estimatedDelivery: p.fecha_entrega ?? "",
         milestones,
         featuredVideoUrl,
         featuredVideoTitle,
@@ -223,7 +223,8 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       };
     },
     enabled: !!cuentaId,
-    staleTime: 120_000,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

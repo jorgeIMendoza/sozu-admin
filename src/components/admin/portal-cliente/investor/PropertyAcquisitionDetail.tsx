@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -204,32 +205,31 @@ const Lightbox = ({ src, alt = "", open, onClose }: LightboxProps) => {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[9999] bg-black flex items-center justify-center p-4"
       onClick={onClose}
     >
-      {/* X button */}
       <button
         onClick={(e) => { e.stopPropagation(); onClose(); }}
-        className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+        className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors"
         aria-label="Cerrar"
       >
         <X className="w-5 h-5" />
       </button>
 
-      {/* 16/9 image container */}
       <div
-        className="w-full max-w-4xl aspect-video rounded-xl overflow-hidden"
+        className="w-full max-w-4xl"
         onClick={(e) => e.stopPropagation()}
       >
         <img
           src={src}
           alt={alt}
-          className="w-full h-full object-cover object-bottom"
+          className="w-full max-h-[85vh] object-contain rounded-xl"
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -256,6 +256,8 @@ const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
               src={gallery[activeImage]}
               alt={`${property.projectName} U-${property.unitNumber}`}
               className="w-full h-full object-cover object-bottom"
+              loading="lazy"
+              decoding="async"
             />
             <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               <Maximize2 className="w-3.5 h-3.5" />

@@ -93,13 +93,14 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
           <div className="border-t border-border">
             {/* Video embed — active projects only, not post_entrega */}
             {!isCompleted && featuredVideoUrl && (
-              <div>
-                <div className="aspect-video w-full bg-black">
+              <div className="min-w-0">
+                <div className="aspect-video w-full max-w-full bg-black overflow-hidden">
                   <iframe
                     src={featuredVideoUrl}
                     className="w-full h-full"
                     allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                     title={featuredVideoTitle}
                   />
                 </div>
@@ -116,11 +117,11 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
 
             {/* Thumbnail strip */}
             {photos.length > 0 && (
-              <div className="px-4 py-3 border-b border-border">
+              <div className="px-4 py-3 border-b border-border min-w-0">
                 <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-muted-foreground mb-2">
                   Fotos del avance
                 </p>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none max-w-full">
                   {photos.map((photo, i) => (
                     <button
                       key={i}
@@ -168,25 +169,53 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
                   </>
                 )}
 
-                {data.milestones.length > 0 && (
-                  <ul className="space-y-2 pt-1">
-                    {data.milestones.map((m, i) => (
-                      <li key={i} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          {m.done ? (
-                            <CheckCircle2 className="w-4 h-4 text-success" />
-                          ) : (
-                            <Circle className="w-4 h-4 text-muted-foreground" />
-                          )}
-                          <span className={m.done ? "text-foreground" : "text-muted-foreground"}>
-                            {m.phase}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground tabular-nums">{m.pct}%</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {data.milestones.length > 0 && (() => {
+                  const currentIdx = data.milestones.findIndex((m) => !m.done);
+                  return (
+                    <ul className="space-y-1.5 pt-1">
+                      {data.milestones.map((m, i) => {
+                        const isCurrent = i === currentIdx;
+                        return (
+                          <li
+                            key={i}
+                            className={`flex items-center justify-between text-sm rounded-lg px-2 py-1.5 -mx-2 transition-colors ${
+                              isCurrent ? "bg-primary/8 ring-1 ring-primary/20" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {m.done ? (
+                                <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                              ) : isCurrent ? (
+                                <div className="w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center flex-shrink-0">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                </div>
+                              ) : (
+                                <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              )}
+                              <span className={
+                                m.done
+                                  ? "text-foreground"
+                                  : isCurrent
+                                  ? "text-primary font-semibold"
+                                  : "text-muted-foreground"
+                              }>
+                                {m.phase}
+                              </span>
+                              {isCurrent && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                                  actual
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-xs tabular-nums ${isCurrent ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                              {m.pct}%
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  );
+                })()}
 
                 {data.estimatedDelivery && (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border">
