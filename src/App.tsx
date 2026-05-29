@@ -249,6 +249,17 @@ const EmbajadorRegistrarReferido = lazyRetry(() => import("./pages/admin/portal-
 const EmbajadorComisiones      = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorComisiones })));
 const EmbajadorPerfil          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorPerfil })));
 
+// Portal Legal Flow
+const LegalFlowDashboard       = lazyRetry(() => import("./pages/admin/legal-flow/LegalFlowDashboard"));
+const LegalFlowRequests        = lazyRetry(() => import("./pages/admin/legal-flow/RequestsList"));
+const LegalFlowNewRequest      = lazyRetry(() => import("./pages/admin/legal-flow/NewRequest"));
+const LegalFlowCaseDetail      = lazyRetry(() => import("./pages/admin/legal-flow/CaseDetail"));
+const LegalFlowTemplateCatalog = lazyRetry(() => import("./pages/admin/legal-flow/TemplateCatalog"));
+const LegalFlowTemplateStudio  = lazyRetry(() => import("./pages/admin/legal-flow/TemplateStudio"));
+const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flow/ArchivedRequests"));
+const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
+const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -665,6 +676,17 @@ const App = () => (
                  <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
                  <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
                  <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
+
+                 {/* Portal Legal Flow */}
+                 <Route path="legal-flow"                       element={<LegalFlowDashboard />} />
+                 <Route path="legal-flow/requests"              element={<LegalFlowRequests />} />
+                 <Route path="legal-flow/requests/new"          element={<LegalFlowNewRequest />} />
+                 <Route path="legal-flow/cases/:id"             element={<LegalFlowCaseDetail />} />
+                 <Route path="legal-flow/templates"             element={<LegalFlowTemplateCatalog />} />
+                 <Route path="legal-flow/templates/:id"         element={<LegalFlowTemplateStudio />} />
+                 <Route path="legal-flow/archived"              element={<LegalFlowArchived />} />
+                 <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
+                 <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
