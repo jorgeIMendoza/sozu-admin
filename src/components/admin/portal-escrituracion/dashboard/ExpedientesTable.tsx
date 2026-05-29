@@ -540,7 +540,7 @@ export function ExpedientesTable() {
 
   return (
     <>
-    <div className="flex-1 min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col mb-6 lg:mb-0">
+    <div className="flex-1 min-w-0 sz-table-wrapper flex flex-col mb-6 lg:mb-0" style={{ borderRadius: 'var(--sz-radius-xl)' }}>
       {/* Toolbar */}
       <div className="p-4 border-b border-slate-200 flex flex-wrap lg:flex-nowrap items-center gap-3">
         <div className="relative flex-1 min-w-[280px]">
@@ -598,8 +598,8 @@ export function ExpedientesTable() {
             <option value="Todas">Notaría: Todas</option>
           </select>
 
-          <button className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ml-auto shadow-sm">
-            <Plus className="w-4 h-4" />
+          <button className="sz-btn-primary ml-auto">
+            <Plus size={16} strokeWidth={2} />
             Nuevo expediente
           </button>
         </div>
@@ -613,26 +613,27 @@ export function ExpedientesTable() {
             <span className="text-sm">Cargando unidades...</span>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="sz-table w-full text-left border-collapse min-w-[1000px]">
             <thead>
               {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id} className="border-b border-slate-200 bg-slate-50/50">
+                <tr key={headerGroup.id}>
                   {headerGroup.headers.map(header => (
-                    <th key={header.id} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    <th key={header.id}>
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                     </th>
                   ))}
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {table.getRowModel().rows.map(row => {
                 const isSelected = row.original.id === expedienteSeleccionado;
                 return (
                   <tr
                     key={row.id}
                     onClick={() => setExpedienteSeleccionado(isSelected ? null : row.original.id)}
-                    className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-emerald-50/30' : ''}`}
+                    className={`cursor-pointer ${isSelected ? 'bg-emerald-50/40' : ''}`}
+                    style={{ transition: 'var(--sz-transition)' }}
                   >
                     {row.getVisibleCells().map(cell => {
                       const isUnidadClickable = cell.column.id === 'unidad' && !!row.original.personaId;
@@ -641,7 +642,7 @@ export function ExpedientesTable() {
                       return (
                       <td
                         key={cell.id}
-                        className={`px-5 py-4 whitespace-nowrap text-sm align-middle ${isNotariaClickable || isIdClickable ? 'cursor-pointer' : ''}`}
+                        className={`whitespace-nowrap align-middle ${isNotariaClickable || isIdClickable ? 'cursor-pointer' : ''}`}
                         onClick={
                           isUnidadClickable
                             ? (e) => { e.stopPropagation(); setEditingPersonaId(row.original.personaId); setIsEditDialogOpen(true); }
