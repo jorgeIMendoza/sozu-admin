@@ -76,10 +76,33 @@ interface FotoRow {
 interface ProyectoRow {
   id: number;
   nombre: string;
+  fecha_inicio_construccion: string | null;
   fecha_entrega_proyecto: string | null;
   // porcentaje_avance and hitos_avance added via DDL — optional until migrated
   porcentaje_avance?: number | null;
   hitos_avance?: ConstructionMilestone[] | null;
+}
+
+const DEFAULT_MILESTONES: ConstructionMilestone[] = [
+  { phase: "Cimentación",   pct: 5,   done: false },
+  { phase: "Estructura",    pct: 28,  done: false },
+  { phase: "Albañilería",   pct: 55,  done: false },
+  { phase: "Instalaciones", pct: 75,  done: false },
+  { phase: "Acabados",      pct: 90,  done: false },
+  { phase: "Entrega",       pct: 100, done: false },
+];
+
+function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
+  if (!inicio || !entrega) return 0;
+  const start = new Date(inicio).getTime();
+  const end   = new Date(entrega).getTime();
+  const now   = Date.now();
+  if (end <= start) return 0;
+  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+function applyProgressToMilestones(milestones: ConstructionMilestone[], pct: number): ConstructionMilestone[] {
+  return milestones.map((m) => ({ ...m, done: pct >= m.pct }));
 }
 
 // ── Hook ──
@@ -131,7 +154,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       ] = await Promise.all([
         supabase
           .from("proyectos")
-          .select("id, nombre, fecha_entrega_proyecto")
+          .select("id, nombre, fecha_inicio_construccion, fecha_entrega_proyecto")
           .eq("id", idProy)
           .maybeSingle(),
         supabase
@@ -180,13 +203,19 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         videoTitle: v.nombre,
       }));
 
+      const globalProgress = p.porcentaje_avance
+        ?? calcProgressFromDates(p.fecha_inicio_construccion, p.fecha_entrega_proyecto);
+
+      const rawMilestones = (p.hitos_avance ?? DEFAULT_MILESTONES) as ConstructionMilestone[];
+      const milestones = applyProgressToMilestones(rawMilestones, globalProgress);
+
       return {
         projectId: String(idProy),
         projectName: p.nombre,
-        globalProgress: p.porcentaje_avance ?? 0,
+        globalProgress,
         lastUpdated: latest ? fmtDateFromTs(latest.fecha_creacion) : "—",
         estimatedDelivery: p.fecha_entrega_proyecto ?? "",
-        milestones: (p.hitos_avance ?? []) as ConstructionMilestone[],
+        milestones,
         featuredVideoUrl,
         featuredVideoTitle,
         updates,
