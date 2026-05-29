@@ -1,9 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
-  X,
   Calendar,
   CheckCircle2,
   Circle,
@@ -22,20 +18,6 @@ interface ConstructionProgressProps {
 const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressProps) => {
   const { data, isLoading } = useConstructionProgress(cuentaId);
   const [expanded, setExpanded] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const photosCountRef = useRef(0);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightboxOpen(false);
-      if (e.key === "ArrowLeft") setLightboxIndex((i) => Math.max(0, i - 1));
-      if (e.key === "ArrowRight")
-        setLightboxIndex((i) => Math.min(photosCountRef.current - 1, i + 1));
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
 
   if (isLoading) {
     return (
@@ -52,25 +34,12 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
   if (!data) return null;
 
   const isCompleted = activeStageId === "post_entrega";
-  const photos = data.photos;
-  photosCountRef.current = photos.length;
   const featuredVideoUrl = data.featuredVideoUrl;
   const featuredVideoTitle = data.featuredVideoTitle ?? data.updates[0]?.videoTitle ?? "Recorrido del avance";
   const featuredDate = data.updates[0]?.date;
 
-  const currentStage =
-    data.milestones.find((m) => !m.done)?.phase ??
-    [...data.milestones].reverse().find((m) => m.done)?.phase ??
-    "";
-
-  const openLightbox = (index: number) => {
-    setLightboxIndex(index);
-    setLightboxOpen(true);
-  };
-
   return (
-    <>
-      <section className="rounded-2xl bg-card border border-border overflow-hidden animate-fade-in">
+    <section className="rounded-2xl bg-card border border-border overflow-hidden animate-fade-in">
         {/* Header / toggle */}
         <button
           onClick={() => setExpanded(!expanded)}
@@ -115,31 +84,6 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
               </div>
             )}
 
-            {/* Thumbnail strip */}
-            {photos.length > 0 && (
-              <div className="px-4 py-3 border-b border-border min-w-0">
-                <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-muted-foreground mb-2">
-                  Fotos del avance
-                </p>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none max-w-full">
-                  {photos.map((photo, i) => (
-                    <button
-                      key={i}
-                      onClick={() => openLightbox(i)}
-                      className="flex-shrink-0 w-[72px] h-[72px] rounded-lg overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition-all"
-                    >
-                      <img
-                        src={photo.url}
-                        alt={photo.alt || `Foto ${i + 1}`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Progress bar + milestones */}
             <div className="p-4 space-y-3">
@@ -232,84 +176,6 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
           </div>
         )}
       </section>
-
-      {/* Lightbox — portalled to body to escape overflow:clip */}
-      {lightboxOpen &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center"
-            onClick={() => setLightboxOpen(false)}
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
-              className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors"
-              aria-label="Cerrar"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-
-            <div className="w-full max-w-4xl px-4" onClick={(e) => e.stopPropagation()}>
-              <img
-                src={photos[lightboxIndex]?.url}
-                alt={photos[lightboxIndex]?.alt || `Foto ${lightboxIndex + 1}`}
-                className="w-full max-h-[80vh] object-contain rounded-xl"
-              />
-            </div>
-
-            {photos.length > 1 && (
-              <>
-                <div className="flex gap-2 pt-4">
-                  {photos.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); }}
-                      className={`h-1.5 rounded-full transition-all ${
-                        i === lightboxIndex ? "w-6 bg-white" : "w-1.5 bg-white/40"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="absolute inset-y-0 left-4 flex items-center">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => Math.max(0, i - 1)); }}
-                    className="w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white disabled:opacity-30"
-                    disabled={lightboxIndex === 0}
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="absolute inset-y-0 right-4 flex items-center">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => Math.min(photos.length - 1, i + 1)); }}
-                    className="w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white disabled:opacity-30"
-                    disabled={lightboxIndex === photos.length - 1}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Thumbnail strip in lightbox */}
-            {photos.length > 1 && (
-              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-1.5 px-4 max-w-[90vw] overflow-x-auto">
-                {photos.map((p, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); }}
-                    className={`flex-shrink-0 w-10 h-10 rounded overflow-hidden border-2 transition-all ${
-                      i === lightboxIndex ? "border-white" : "border-transparent opacity-60"
-                    }`}
-                  >
-                    <img src={p.url} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>,
-          document.body,
-        )}
-    </>
   );
 };
 

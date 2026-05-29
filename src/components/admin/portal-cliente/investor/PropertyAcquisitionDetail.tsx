@@ -23,6 +23,7 @@ import {
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { fmtMXN } from "@/lib/utils";
 import { getPropertyImage } from "@/lib/portal-cliente/property-images";
+import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
@@ -237,67 +238,97 @@ const Lightbox = ({ src, alt = "", open, onClose }: LightboxProps) => {
 const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
   const { property } = investment;
   const heroImg = property.image || getPropertyImage(property.id);
-  const [activeImage, setActiveImage] = useState(0);
+  const { data: projectPhotos } = useProjectPhotos(property.projectId);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const gallery: string[] = heroImg ? [heroImg] : [];
+
+  const allUrls: string[] = projectPhotos?.length
+    ? projectPhotos.map((p) => p.url).filter(Boolean)
+    : heroImg
+    ? [heroImg]
+    : [];
+
+  const goTo = (idx: number) =>
+    setActiveIdx(Math.max(0, Math.min(allUrls.length - 1, idx)));
+
+  const current = allUrls[activeIdx] ?? null;
+
+  if (!current) {
+    return (
+      <div
+        className={`aspect-video rounded-2xl bg-gradient-to-br ${property.imageGradient} flex flex-col items-center justify-end p-5 pb-6`}
+      >
+        <p className="font-display font-bold text-foreground/50 text-xl text-center">{property.projectName}</p>
+        <p className="text-foreground/35 text-[13px] mt-1">U-{property.unitNumber}</p>
+      </div>
+    );
+  }
 
   return (
     <>
-      <div
-        className={`relative w-full aspect-video rounded-2xl overflow-hidden group ${
-          heroImg ? "bg-muted cursor-zoom-in" : `bg-gradient-to-br ${property.imageGradient} cursor-default`
-        }`}
-        onClick={() => heroImg && setLightboxOpen(true)}
-      >
-        {heroImg ? (
-          <>
-            <img
-              src={gallery[activeImage]}
-              alt={`${property.projectName} U-${property.unitNumber}`}
-              className="w-full h-full object-cover object-bottom"
-              loading="lazy"
-              decoding="async"
-            />
-            <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <Maximize2 className="w-3.5 h-3.5" />
-            </div>
-            {gallery.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setActiveImage((i) => (i === 0 ? gallery.length - 1 : i - 1)); }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60"
-                  aria-label="Anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setActiveImage((i) => (i === gallery.length - 1 ? 0 : i + 1)); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60"
-                  aria-label="Siguiente"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur text-white text-[10px]">
-                  {activeImage + 1} / {gallery.length}
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-end h-full p-5 pb-6">
-            <p className="font-display font-bold text-foreground/50 text-xl text-center leading-tight">
-              {property.projectName}
-            </p>
-            <p className="text-foreground/35 text-[13px] mt-1">U-{property.unitNumber}</p>
+      <div className="space-y-2">
+        <div
+          className="relative w-full aspect-video rounded-2xl overflow-hidden bg-muted cursor-zoom-in group"
+          onClick={() => setLightboxOpen(true)}
+        >
+          <img
+            src={current}
+            alt={`${property.projectName} U-${property.unitNumber}`}
+            className="w-full h-full object-cover object-bottom"
+            loading="lazy"
+            decoding="async"
+          />
+          <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <Maximize2 className="w-3.5 h-3.5" />
+          </div>
+          {allUrls.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); goTo(activeIdx - 1); }}
+                disabled={activeIdx === 0}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); goTo(activeIdx + 1); }}
+                disabled={activeIdx === allUrls.length - 1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
+                aria-label="Siguiente"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <div className="absolute bottom-2 right-3 px-1.5 py-0.5 rounded bg-black/50 text-white text-[10px] tabular-nums">
+                {activeIdx + 1} / {allUrls.length}
+              </div>
+            </>
+          )}
+        </div>
+
+        {allUrls.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+            {allUrls.map((url, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                  i === activeIdx
+                    ? "border-primary ring-1 ring-primary/30"
+                    : "border-transparent opacity-60 hover:opacity-90"
+                }`}
+              >
+                <img src={url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Lightbox — outside overflow-hidden parent so events don't bubble back */}
       <Lightbox
-        src={gallery[activeImage] ?? ""}
+        src={current}
         alt={`${property.projectName} U-${property.unitNumber}`}
-        open={lightboxOpen && !!heroImg}
+        open={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />
     </>
