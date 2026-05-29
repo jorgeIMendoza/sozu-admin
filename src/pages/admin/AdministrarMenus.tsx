@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Plus, Settings, Shield } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -182,17 +183,30 @@ export default function AdministrarMenus() {
                   {menus.map(menu => {
                     const menuSubmenus = submenus.filter(s => s.menu_id === menu.id);
                     const isExpanded = expandedMenus.has(menu.id);
-                    
+                    const isPortal = /^Portal\s/i.test(menu.nombre);
+                    const allSubsSoloA = menuSubmenus.length > 0 && menuSubmenus.every(s => s.solo_usuarioa);
+                    const isSpecial = isPortal || allSubsSoloA;
+
                     return (
-                      <div key={menu.id} className="border rounded-lg overflow-hidden">
+                      <div key={menu.id} className={`overflow-hidden ${isPortal ? 'border-2 border-blue-300 dark:border-blue-700 rounded-lg' : allSubsSoloA ? 'border border-l-4 border-l-indigo-400 dark:border-l-indigo-500 rounded-lg' : 'border rounded-lg'}`}>
                         {/* Menu Header - Sortable */}
-                        <div className="flex items-center gap-2 bg-card">
+                        <div className={`flex items-center gap-2 ${isPortal ? 'bg-blue-50 dark:bg-blue-950/40' : 'bg-card'}`}>
                           <div className="flex-1">
                             <SortableMenuCard
                               menu={menu}
                               onUpdate={refetch}
                             />
                           </div>
+                          {isPortal && (
+                            <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-600 dark:text-indigo-400 shrink-0">
+                              Portal
+                            </Badge>
+                          )}
+                          {!isPortal && allSubsSoloA && (
+                            <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-600 dark:text-indigo-400 shrink-0">
+                              Solo A
+                            </Badge>
+                          )}
                           <Collapsible open={isExpanded} onOpenChange={() => toggleMenu(menu.id)}>
                             <CollapsibleTrigger asChild>
                               <Button
@@ -232,7 +246,7 @@ export default function AdministrarMenus() {
                                     strategy={verticalListSortingStrategy}
                                   >
                                     {menuSubmenus.map(submenu => (
-                                      <div key={submenu.id} className="flex items-center gap-1">
+                                      <div key={submenu.id} className={`flex items-center gap-1 rounded ${submenu.solo_usuarioa ? 'bg-indigo-50/60 dark:bg-indigo-950/30 ring-1 ring-indigo-200 dark:ring-indigo-800' : ''}`}>
                                         <div className="flex-1">
                                           <SortableSubmenuRow
                                             submenu={submenu}

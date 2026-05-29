@@ -209,7 +209,10 @@ async function loadProyectosByPropiedades(propIds: number[]): Promise<{
    "Comisión SOZU" — paginado + ordenable
    Cuentas_cobranza que cumplen TODAS estas condiciones:
    - es_pagada_comision_venta = false (estatus Pendiente)
-   - url_factura_comision IS NOT NULL (factura SOZU Generada — draft o timbrada)
+   - url_factura_comision IS NOT NULL (factura SOZU emitida)
+   - es_draft_factura_comision = false (CFDI ya timbrado — no draft).
+     Los drafts pertenecen al Portal de Administración: hasta que el
+     admin timbra, Dirección no puede autorizar el cobro.
    - sin cuenta padre (excluye mantenimientos)
    - Si es Propiedad: estatus_disponibilidad = 5 (Vendido)
    - Si es Producto/Servicio: siempre se considera vendido
@@ -235,6 +238,7 @@ async function fetchVentasParaFacturar(
     .is("id_cuenta_cobranza_padre", null)
     .not("fecha_compra", "is", null)
     .not("url_factura_comision", "is", null)
+    .eq("es_draft_factura_comision", false)
     .order("fecha_compra", { ascending: sortDir === "asc" })
     .range(0, 49999);
   if (candErr) throw candErr;
@@ -1336,7 +1340,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
               </div>
             ) : VENTAS_FACTURAR.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay ventas pendientes de facturar al desarrollador.
+                No hay ventas pendientes a validar para que SOZU cobre su comisión.
               </div>
             ) : (
               <div className="overflow-x-auto">

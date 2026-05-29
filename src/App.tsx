@@ -12,6 +12,7 @@ import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationCon
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
 import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
+import { AmbassadorsProvider } from "@/store/AmbassadorsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { AdminLayout } from "./components/admin/AdminLayout";
@@ -183,10 +184,19 @@ const EscPlantillas = lazyRetry(() => import("./pages/admin/portal-escrituracion
 const EscFirmas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscFirmas })));
 const EscCitas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCitas })));
 const EscEntregas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregas })));
+const EscEntregaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscEntregaDetalle })));
 const EscRPP = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRPP })));
 const EscReportesPage = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscReportes })));
 const EscAuditoria = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAuditoria })));
 const EscConfiguracion = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscConfiguracion })));
+const EscDemandas = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDemandas })));
+const EscPostventa = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventa })));
+const EscPostventaDetalle = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPostventaDetalle })));
+const EscWorkflow     = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscWorkflow })));
+const EscAppNotaria         = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotaria })));
+const EscAppNotariaUsuarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotariaUsuarios })));
+const EscAppJuridico        = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppJuridico })));
+const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotariaLogin"));
 
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
@@ -244,6 +254,17 @@ const EmbajadorRegistrarReferido = lazyRetry(() => import("./pages/admin/portal-
 const EmbajadorComisiones      = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorComisiones })));
 const EmbajadorPerfil          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorPerfil })));
 
+// Portal Legal Flow
+const LegalFlowDashboard       = lazyRetry(() => import("./pages/admin/legal-flow/LegalFlowDashboard"));
+const LegalFlowRequests        = lazyRetry(() => import("./pages/admin/legal-flow/RequestsList"));
+const LegalFlowNewRequest      = lazyRetry(() => import("./pages/admin/legal-flow/NewRequest"));
+const LegalFlowCaseDetail      = lazyRetry(() => import("./pages/admin/legal-flow/CaseDetail"));
+const LegalFlowTemplateCatalog = lazyRetry(() => import("./pages/admin/legal-flow/TemplateCatalog"));
+const LegalFlowTemplateStudio  = lazyRetry(() => import("./pages/admin/legal-flow/TemplateStudio"));
+const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flow/ArchivedRequests"));
+const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
+const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -298,6 +319,7 @@ const App = () => (
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
             <EmbajadorImpersonationProvider>
+           <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
                 <Routes>
@@ -435,6 +457,7 @@ const App = () => (
                 <Route path="/registro" element={<Registro />} />
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
+                <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
                 
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
@@ -596,10 +619,27 @@ const App = () => (
                   <Route path="portal-escrituracion/firmas" element={<EscFirmas />} />
                   <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
+                  <Route path="portal-escrituracion/entregas/:id" element={<EscEntregaDetalle />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
                   <Route path="portal-escrituracion/configuracion" element={<EscConfiguracion />} />
+                  <Route path="portal-escrituracion/demandas" element={<EscDemandas />} />
+                  <Route path="portal-escrituracion/postventa" element={<EscPostventa />} />
+                  <Route path="portal-escrituracion/postventa/:id" element={<EscPostventaDetalle />} />
+                  <Route path="portal-escrituracion/workflow" element={<EscWorkflow />} />
+                  <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
+                  <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
+                  <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  {/* Portal Notaría — independiente del Portal Escrituración */}
+                  <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
+                  {/* Portal Jurídico — independiente del Portal Escrituración */}
+                  <Route path="portal-juridico/inicio" element={<EscAppJuridico />} />
+                  {/* Administrar Notarios — menú admin principal */}
+                  <Route path="notarios/administrar" element={<EscNotarios />} />
+                  {/* Administrar Jurídico — menú admin principal */}
+                  <Route path="juridico/administrar" element={<ComingSoon title="Administrar Jurídico" hideBack />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
@@ -655,6 +695,17 @@ const App = () => (
                  <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
                  <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
                  <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
+
+                 {/* Portal Legal Flow */}
+                 <Route path="legal-flow"                       element={<LegalFlowDashboard />} />
+                 <Route path="legal-flow/requests"              element={<LegalFlowRequests />} />
+                 <Route path="legal-flow/requests/new"          element={<LegalFlowNewRequest />} />
+                 <Route path="legal-flow/cases/:id"             element={<LegalFlowCaseDetail />} />
+                 <Route path="legal-flow/templates"             element={<LegalFlowTemplateCatalog />} />
+                 <Route path="legal-flow/templates/:id"         element={<LegalFlowTemplateStudio />} />
+                 <Route path="legal-flow/archived"              element={<LegalFlowArchived />} />
+                 <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
+                 <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
@@ -662,6 +713,7 @@ const App = () => (
               </Routes>
               )}
             </Suspense>
+            </AmbassadorsProvider>
             </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>

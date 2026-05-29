@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Bell,
   Inbox,
   Workflow,
   FileOutput,
@@ -52,13 +50,6 @@ interface NavGroup {
 // Pagos y Cobranza, Historial) en lugar de calcar el sidebar de Alta Dirección.
 const navGroups: NavGroup[] = [
   {
-    label: "Visión",
-    items: [
-      { label: "Dashboard",      path: "/admin/portal-administracion/dashboard",      icon: LayoutDashboard },
-      { label: "Notificaciones", path: "/admin/portal-administracion/notificaciones", icon: Bell },
-    ],
-  },
-  {
     label: "Ejecución",
     items: [
       { label: "Bandeja de Ejecución", path: "/admin/portal-administracion/bandeja-ejecucion", icon: Inbox },
@@ -99,6 +90,7 @@ export const PortalAdministracionLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isSuperAdmin = profile?.rol_nombre === "Super Administrador";
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -174,13 +166,15 @@ export const PortalAdministracionLayout = () => {
           <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleNavigate("/admin")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Menú principal
-          </button>
+          {isSuperAdmin && (
+            <button
+              onClick={() => handleNavigate("/admin")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Menú principal
+            </button>
+          )}
           <button
             onClick={signOut}
             className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"

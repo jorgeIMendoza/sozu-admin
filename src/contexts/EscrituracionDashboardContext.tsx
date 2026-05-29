@@ -12,10 +12,26 @@ interface EscrituracionDashboardState {
   setInventarioActivo: (count: number) => void;
   escrituradosActivo: number;
   setEscrituradosActivo: (count: number) => void;
+  expedientesDocumentosActivo: number;
+  setExpedientesDocumentosActivo: (count: number) => void;
+  relacionPagosActivo: number;
+  setRelacionPagosActivo: (count: number) => void;
+  alertasPldActivo: number;
+  setAlertasPldActivo: (count: number) => void;
+  enProcesoActivo: number;
+  setEnProcesoActivo: (count: number) => void;
+  recursosPropiosActivo: number;
+  setRecursosPropiosActivo: (count: number) => void;
+  creditoHipotecarioActivo: number;
+  setCreditoHipotecarioActivo: (count: number) => void;
+  citasActivo: number;
+  setCitasActivo: (count: number) => void;
   demandasActivo: number;
   setDemandasActivo: (count: number) => void;
   entregasActivo: number;
   setEntregasActivo: (count: number) => void;
+  postventaActivo: number;
+  setPostventaActivo: (count: number) => void;
   expedienteSeleccionado: string | null;
   setExpedienteSeleccionado: (id: string | null) => void;
   filtroEtapa: string;
@@ -36,8 +52,16 @@ export function EscrituracionDashboardProvider({ children }: { children: ReactNo
   const [proyectoActivo, setProyectoActivo] = useState<ProyectoActivo | null>(null);
   const [inventarioActivo, setInventarioActivo] = useState(0);
   const [escrituradosActivo, setEscrituradosActivo] = useState(0);
+  const [expedientesDocumentosActivo, setExpedientesDocumentosActivo] = useState(0);
+  const [relacionPagosActivo, setRelacionPagosActivo] = useState(0);
+  const [alertasPldActivo, setAlertasPldActivo] = useState(0);
+  const [enProcesoActivo, setEnProcesoActivo] = useState(0);
+  const [recursosPropiosActivo, setRecursosPropiosActivo] = useState(0);
+  const [creditoHipotecarioActivo, setCreditoHipotecarioActivo] = useState(0);
+  const [citasActivo, setCitasActivo] = useState(0);
   const [demandasActivo, setDemandasActivo] = useState(0);
   const [entregasActivo, setEntregasActivo] = useState(0);
+  const [postventaActivo, setPostventaActivo] = useState(0);
   const [expedienteSeleccionado, setExpedienteSeleccionado] = useState<string | null>(null);
   const [filtroEtapa, setFiltroEtapa] = useState('Todas');
   const [filtroSla, setFiltroSla] = useState('Todas');
@@ -54,10 +78,26 @@ export function EscrituracionDashboardProvider({ children }: { children: ReactNo
         setInventarioActivo,
         escrituradosActivo,
         setEscrituradosActivo,
+        expedientesDocumentosActivo,
+        setExpedientesDocumentosActivo,
+        relacionPagosActivo,
+        setRelacionPagosActivo,
+        alertasPldActivo,
+        setAlertasPldActivo,
+        enProcesoActivo,
+        setEnProcesoActivo,
+        recursosPropiosActivo,
+        setRecursosPropiosActivo,
+        creditoHipotecarioActivo,
+        setCreditoHipotecarioActivo,
+        citasActivo,
+        setCitasActivo,
         demandasActivo,
         setDemandasActivo,
         entregasActivo,
         setEntregasActivo,
+        postventaActivo,
+        setPostventaActivo,
         expedienteSeleccionado,
         setExpedienteSeleccionado,
         filtroEtapa,

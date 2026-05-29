@@ -703,6 +703,22 @@ export function PldDashboard() {
         </div>
       </div>
 
+      {/* ── Aviso: bloqueo PLD es visual únicamente ──────────────────────── */}
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl px-5 py-3.5">
+        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm font-bold text-amber-800">
+            Advertencia: el bloqueo PLD es informativo, no técnico
+          </p>
+          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+            El estatus <span className="font-semibold">BLOQUEADO</span> mostrado aquí es calculado en el frontend a partir de los pagos registrados.
+            <strong className="font-semibold"> No impide a nivel de base de datos</strong> que se registre un número de escritura o se avance el proceso notarial.
+            Para un bloqueo real se requiere ejecutar el trigger <code className="font-mono bg-amber-100 rounded px-1">trg_pld_check_before_escritura</code> en la BD
+            (ver <span className="font-mono">Ejecuciones_manuales/pld_enforcement_real.md</span>).
+          </p>
+        </div>
+      </div>
+
       {/* ── Block Banner ─────────────────────────────────────────────────── */}
       {!loadingRows && kpis.bloqueados > 0 && <BlockBanner count={kpis.bloqueados} />}
 

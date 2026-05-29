@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
   CalendarCheck,
   UserSearch,
   Briefcase,
@@ -12,7 +11,6 @@ import {
   Menu,
   Inbox,
   Workflow,
-  Bell,
   ChevronDown,
   ChevronRight,
   LucideIcon,
@@ -50,13 +48,6 @@ interface NavGroup {
 const isParent = (i: NavItem): i is NavParent => "children" in i;
 
 const navGroups: NavGroup[] = [
-  {
-    label: "Visión",
-    items: [
-      { label: "Dashboard",      path: "/admin/portal-alta-direccion/dashboard",       icon: LayoutDashboard },
-      { label: "Notificaciones", path: "/admin/portal-alta-direccion/notificaciones",  icon: Bell },
-    ],
-  },
   {
     label: "Comercial",
     items: [

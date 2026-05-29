@@ -369,6 +369,225 @@ export type Database = {
           },
         ]
       }
+      app_juridico_acuerdos: {
+        Row: {
+          activo: boolean
+          descripcion: string
+          fecha_actualizacion: string
+          fecha_acuerdo: string
+          fecha_creacion: string
+          fecha_vencimiento: string | null
+          firmado_por_cliente: boolean
+          firmado_por_sozu: boolean
+          id: number
+          id_demanda: number
+          monto_acordado: number | null
+          registrado_por: string
+          tipo_acuerdo: string
+          url_documento: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion: string
+          fecha_actualizacion?: string
+          fecha_acuerdo: string
+          fecha_creacion?: string
+          fecha_vencimiento?: string | null
+          firmado_por_cliente?: boolean
+          firmado_por_sozu?: boolean
+          id?: never
+          id_demanda: number
+          monto_acordado?: number | null
+          registrado_por: string
+          tipo_acuerdo?: string
+          url_documento?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string
+          fecha_actualizacion?: string
+          fecha_acuerdo?: string
+          fecha_creacion?: string
+          fecha_vencimiento?: string | null
+          firmado_por_cliente?: boolean
+          firmado_por_sozu?: boolean
+          id?: never
+          id_demanda?: number
+          monto_acordado?: number | null
+          registrado_por?: string
+          tipo_acuerdo?: string
+          url_documento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_juridico_acuerdos_id_demanda_fkey"
+            columns: ["id_demanda"]
+            isOneToOne: false
+            referencedRelation: "demandas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_juridico_audiencias: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          estatus: string
+          fecha: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          hora_fin: string | null
+          hora_inicio: string | null
+          id: number
+          id_demanda: number
+          lugar: string | null
+          registrado_por: string
+          resultado: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          estatus?: string
+          fecha: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          hora_fin?: string | null
+          hora_inicio?: string | null
+          id?: never
+          id_demanda: number
+          lugar?: string | null
+          registrado_por: string
+          resultado?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          estatus?: string
+          fecha?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          hora_fin?: string | null
+          hora_inicio?: string | null
+          id?: never
+          id_demanda?: number
+          lugar?: string | null
+          registrado_por?: string
+          resultado?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_juridico_audiencias_id_demanda_fkey"
+            columns: ["id_demanda"]
+            isOneToOne: false
+            referencedRelation: "demandas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_juridico_documentos: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          es_vigente: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_demanda: number
+          nombre_archivo: string
+          subido_por: string
+          tipo_documento: string
+          url_archivo: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          es_vigente?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_demanda: number
+          nombre_archivo: string
+          subido_por: string
+          tipo_documento?: string
+          url_archivo: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          es_vigente?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_demanda?: number
+          nombre_archivo?: string
+          subido_por?: string
+          tipo_documento?: string
+          url_archivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_juridico_documentos_id_demanda_fkey"
+            columns: ["id_demanda"]
+            isOneToOne: false
+            referencedRelation: "demandas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asignaciones_juridico: {
+        Row: {
+          activo: boolean
+          asignado_por: string
+          es_responsable: boolean
+          estatus: string
+          fecha_actualizacion: string
+          fecha_asignacion: string
+          id: number
+          id_demanda: number
+          id_perfil_juridico: number
+          notas: string | null
+        }
+        Insert: {
+          activo?: boolean
+          asignado_por: string
+          es_responsable?: boolean
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_asignacion?: string
+          id?: never
+          id_demanda: number
+          id_perfil_juridico: number
+          notas?: string | null
+        }
+        Update: {
+          activo?: boolean
+          asignado_por?: string
+          es_responsable?: boolean
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_asignacion?: string
+          id?: never
+          id_demanda?: number
+          id_perfil_juridico?: number
+          notas?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asignaciones_juridico_id_demanda_fkey"
+            columns: ["id_demanda"]
+            isOneToOne: false
+            referencedRelation: "demandas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asignaciones_juridico_id_perfil_juridico_fkey"
+            columns: ["id_perfil_juridico"]
+            isOneToOne: false
+            referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       aviso_triggers_fuentes: {
         Row: {
           activo: boolean
@@ -3968,41 +4187,74 @@ export type Database = {
         Row: {
           activo: boolean
           estatus_demanda: string
+          estrategia_legal: string | null
           fecha_actualizacion: string
           fecha_compromiso_entrega: string | null
           fecha_creacion: string
+          fecha_limite_respuesta: string | null
+          fecha_proxima_audiencia: string | null
           id: number
           id_cuenta_cobranza: number
+          id_perfil_juridico: number | null
           id_propiedad: number
           id_proyecto: number | null
+          monto_negociado: number | null
+          monto_penalizacion: number | null
+          monto_reclamado: number | null
           observaciones: string | null
+          porcentaje_penalizacion: number | null
+          proxima_accion: string | null
           responsable: string | null
+          resultado: string | null
+          resumen_juridico: string | null
         }
         Insert: {
           activo?: boolean
           estatus_demanda?: string
+          estrategia_legal?: string | null
           fecha_actualizacion?: string
           fecha_compromiso_entrega?: string | null
           fecha_creacion?: string
+          fecha_limite_respuesta?: string | null
+          fecha_proxima_audiencia?: string | null
           id?: never
           id_cuenta_cobranza: number
+          id_perfil_juridico?: number | null
           id_propiedad: number
           id_proyecto?: number | null
+          monto_negociado?: number | null
+          monto_penalizacion?: number | null
+          monto_reclamado?: number | null
           observaciones?: string | null
+          porcentaje_penalizacion?: number | null
+          proxima_accion?: string | null
           responsable?: string | null
+          resultado?: string | null
+          resumen_juridico?: string | null
         }
         Update: {
           activo?: boolean
           estatus_demanda?: string
+          estrategia_legal?: string | null
           fecha_actualizacion?: string
           fecha_compromiso_entrega?: string | null
           fecha_creacion?: string
+          fecha_limite_respuesta?: string | null
+          fecha_proxima_audiencia?: string | null
           id?: never
           id_cuenta_cobranza?: number
+          id_perfil_juridico?: number | null
           id_propiedad?: number
           id_proyecto?: number | null
+          monto_negociado?: number | null
+          monto_penalizacion?: number | null
+          monto_reclamado?: number | null
           observaciones?: string | null
+          porcentaje_penalizacion?: number | null
+          proxima_accion?: string | null
           responsable?: string | null
+          resultado?: string | null
+          resumen_juridico?: string | null
         }
         Relationships: [
           {
@@ -4018,6 +4270,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "demandas_id_perfil_juridico_fkey"
+            columns: ["id_perfil_juridico"]
+            isOneToOne: false
+            referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "demandas_id_propiedad_fkey"
@@ -4333,6 +4592,193 @@ export type Database = {
             columns: ["id_edificio"]
             isOneToOne: false
             referencedRelation: "edificios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      embajadores_config: {
+        Row: {
+          codigo: string | null
+          dias_proteccion: number
+          documentos_pago: Json
+          empresa: string | null
+          estatus: string
+          fecha_actualizacion: string
+          id_entidad_relacionada: number
+          monto_fijo: number | null
+          notas: string | null
+          pct_comision: number
+          tipo: string
+          trigger_comision: string
+        }
+        Insert: {
+          codigo?: string | null
+          dias_proteccion?: number
+          documentos_pago?: Json
+          empresa?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          id_entidad_relacionada: number
+          monto_fijo?: number | null
+          notas?: string | null
+          pct_comision?: number
+          tipo?: string
+          trigger_comision?: string
+        }
+        Update: {
+          codigo?: string | null
+          dias_proteccion?: number
+          documentos_pago?: Json
+          empresa?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          id_entidad_relacionada?: number
+          monto_fijo?: number | null
+          notas?: string | null
+          pct_comision?: number
+          tipo?: string
+          trigger_comision?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embajadores_config_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: true
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      embajadores_referidos: {
+        Row: {
+          activo: boolean
+          audit_trail: Json
+          comentarios: string | null
+          comentarios_publicos: string | null
+          consentimiento: boolean
+          email_asesor: string | null
+          estatus: string
+          estatus_asignacion: string
+          estatus_comision: string
+          estatus_proteccion: string
+          fecha_actualizacion: string
+          fecha_asignacion: string | null
+          fecha_creacion: string
+          fecha_pago: string | null
+          fecha_pago_estimada: string | null
+          id: number
+          id_asesor_asignado: string | null
+          id_entidad_relacionada: number
+          id_entidad_relacionada_emb: number
+          id_persona_asesor: number | null
+          id_persona_embajador: number
+          monto_comision: number
+          monto_venta: number | null
+          nombre_asesor: string | null
+          notas_internas: Json
+          producto_interes: string | null
+          proximo_paso: string | null
+          relacion_embajador: string | null
+          rol_asesor: string | null
+          telefono_asesor: string | null
+          tipo_interes: string
+          ultima_actualizacion_asesor: string | null
+        }
+        Insert: {
+          activo?: boolean
+          audit_trail?: Json
+          comentarios?: string | null
+          comentarios_publicos?: string | null
+          consentimiento?: boolean
+          email_asesor?: string | null
+          estatus?: string
+          estatus_asignacion?: string
+          estatus_comision?: string
+          estatus_proteccion?: string
+          fecha_actualizacion?: string
+          fecha_asignacion?: string | null
+          fecha_creacion?: string
+          fecha_pago?: string | null
+          fecha_pago_estimada?: string | null
+          id?: never
+          id_asesor_asignado?: string | null
+          id_entidad_relacionada: number
+          id_entidad_relacionada_emb: number
+          id_persona_asesor?: number | null
+          id_persona_embajador: number
+          monto_comision?: number
+          monto_venta?: number | null
+          nombre_asesor?: string | null
+          notas_internas?: Json
+          producto_interes?: string | null
+          proximo_paso?: string | null
+          relacion_embajador?: string | null
+          rol_asesor?: string | null
+          telefono_asesor?: string | null
+          tipo_interes?: string
+          ultima_actualizacion_asesor?: string | null
+        }
+        Update: {
+          activo?: boolean
+          audit_trail?: Json
+          comentarios?: string | null
+          comentarios_publicos?: string | null
+          consentimiento?: boolean
+          email_asesor?: string | null
+          estatus?: string
+          estatus_asignacion?: string
+          estatus_comision?: string
+          estatus_proteccion?: string
+          fecha_actualizacion?: string
+          fecha_asignacion?: string | null
+          fecha_creacion?: string
+          fecha_pago?: string | null
+          fecha_pago_estimada?: string | null
+          id?: never
+          id_asesor_asignado?: string | null
+          id_entidad_relacionada?: number
+          id_entidad_relacionada_emb?: number
+          id_persona_asesor?: number | null
+          id_persona_embajador?: number
+          monto_comision?: number
+          monto_venta?: number | null
+          nombre_asesor?: string | null
+          notas_internas?: Json
+          producto_interes?: string | null
+          proximo_paso?: string | null
+          relacion_embajador?: string | null
+          rol_asesor?: string | null
+          telefono_asesor?: string | null
+          tipo_interes?: string
+          ultima_actualizacion_asesor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embajadores_referidos_id_entidad_relacionada_emb_fkey"
+            columns: ["id_entidad_relacionada_emb"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "embajadores_referidos_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "embajadores_referidos_id_persona_asesor_fkey"
+            columns: ["id_persona_asesor"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "embajadores_referidos_id_persona_embajador_fkey"
+            columns: ["id_persona_embajador"]
+            isOneToOne: false
+            referencedRelation: "personas"
             referencedColumns: ["id"]
           },
         ]
@@ -6428,6 +6874,51 @@ export type Database = {
         }
         Relationships: []
       }
+      perfiles_juridicos: {
+        Row: {
+          activo: boolean
+          cedula_profesional: string | null
+          despacho: string | null
+          email: string
+          especialidad: string | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre_completo: string
+          telefono: string | null
+          tipo_abogado: string
+        }
+        Insert: {
+          activo?: boolean
+          cedula_profesional?: string | null
+          despacho?: string | null
+          email: string
+          especialidad?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre_completo: string
+          telefono?: string | null
+          tipo_abogado?: string
+        }
+        Update: {
+          activo?: boolean
+          cedula_profesional?: string | null
+          despacho?: string | null
+          email?: string
+          especialidad?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre_completo?: string
+          telefono?: string | null
+          tipo_abogado?: string
+        }
+        Relationships: []
+      }
       permisos: {
         Row: {
           activo: boolean | null
@@ -6728,6 +7219,422 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "uso_cfdi"
             referencedColumns: ["codigo"]
+          },
+        ]
+      }
+      postventa_categorias_garantia: {
+        Row: {
+          activo: boolean
+          aplica_a: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          sla_baja_dias: number
+          sla_critico_horas: number
+          sla_media_horas: number
+          vigencia_dias: number
+        }
+        Insert: {
+          activo?: boolean
+          aplica_a?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          sla_baja_dias?: number
+          sla_critico_horas?: number
+          sla_media_horas?: number
+          vigencia_dias?: number
+        }
+        Update: {
+          activo?: boolean
+          aplica_a?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          sla_baja_dias?: number
+          sla_critico_horas?: number
+          sla_media_horas?: number
+          vigencia_dias?: number
+        }
+        Relationships: []
+      }
+      postventa_categorias_personal: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_persona: number
+          id_postventa_categoria_garantia: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_persona: number
+          id_postventa_categoria_garantia: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_persona?: number
+          id_postventa_categoria_garantia?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_categorias_personal_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_categorias_personal_id_postventa_categoria_garan_fkey"
+            columns: ["id_postventa_categoria_garantia"]
+            isOneToOne: false
+            referencedRelation: "postventa_categorias_garantia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postventa_comentarios: {
+        Row: {
+          activo: boolean
+          comentario: string
+          creado_por: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_postventa_ticket: number
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          comentario: string
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket: number
+          tipo?: string
+        }
+        Update: {
+          activo?: boolean
+          comentario?: string
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket?: number
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_comentarios_id_postventa_ticket_fkey"
+            columns: ["id_postventa_ticket"]
+            isOneToOne: false
+            referencedRelation: "postventa_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postventa_evidencias: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_postventa_ticket: number
+          nombre: string | null
+          subido_por: string | null
+          tipo_archivo: string
+          tipo_evidencia: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket: number
+          nombre?: string | null
+          subido_por?: string | null
+          tipo_archivo?: string
+          tipo_evidencia: string
+          url: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket?: number
+          nombre?: string | null
+          subido_por?: string | null
+          tipo_archivo?: string
+          tipo_evidencia?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_evidencias_id_postventa_ticket_fkey"
+            columns: ["id_postventa_ticket"]
+            isOneToOne: false
+            referencedRelation: "postventa_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postventa_garantias_unidad: {
+        Row: {
+          activo: boolean
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_inicio: string
+          fecha_vencimiento: string
+          id: number
+          id_categoria: number
+          id_entrega: number | null
+          id_propiedad: number
+        }
+        Insert: {
+          activo?: boolean
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_inicio: string
+          fecha_vencimiento: string
+          id?: never
+          id_categoria: number
+          id_entrega?: number | null
+          id_propiedad: number
+        }
+        Update: {
+          activo?: boolean
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_inicio?: string
+          fecha_vencimiento?: string
+          id?: never
+          id_categoria?: number
+          id_entrega?: number | null
+          id_propiedad?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_garantias_unidad_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "postventa_categorias_garantia"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_garantias_unidad_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_garantias_unidad_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postventa_log_actividades: {
+        Row: {
+          activo: boolean
+          creado_por: string | null
+          descripcion: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_postventa_ticket: number
+          metadata: Json | null
+          tipo_evento: string
+        }
+        Insert: {
+          activo?: boolean
+          creado_por?: string | null
+          descripcion: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket: number
+          metadata?: Json | null
+          tipo_evento: string
+        }
+        Update: {
+          activo?: boolean
+          creado_por?: string | null
+          descripcion?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_postventa_ticket?: number
+          metadata?: Json | null
+          tipo_evento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_log_actividades_id_postventa_ticket_fkey"
+            columns: ["id_postventa_ticket"]
+            isOneToOne: false
+            referencedRelation: "postventa_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postventa_tickets: {
+        Row: {
+          activo: boolean
+          calificacion_cliente: number | null
+          canal_recepcion: string
+          causa_probable: string | null
+          comentario_cliente: string | null
+          comentario_tecnico: string | null
+          descripcion: string
+          descripcion_reparacion: string | null
+          diagnostico: string | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_confirmacion_cliente: string | null
+          fecha_creacion: string
+          fecha_limite_sla: string | null
+          fecha_reparacion: string | null
+          fecha_visita: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          id_entrega: number | null
+          id_postventa_categoria_garantia: number
+          id_propiedad: number
+          id_proyecto: number | null
+          id_ticket_entrega: number | null
+          piezas_reemplazadas: string | null
+          prioridad: string
+          sla_cumplido: boolean | null
+          sla_horas: number | null
+          solucion_propuesta: string | null
+          subcategoria: string
+        }
+        Insert: {
+          activo?: boolean
+          calificacion_cliente?: number | null
+          canal_recepcion?: string
+          causa_probable?: string | null
+          comentario_cliente?: string | null
+          comentario_tecnico?: string | null
+          descripcion: string
+          descripcion_reparacion?: string | null
+          diagnostico?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_confirmacion_cliente?: string | null
+          fecha_creacion?: string
+          fecha_limite_sla?: string | null
+          fecha_reparacion?: string | null
+          fecha_visita?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_entrega?: number | null
+          id_postventa_categoria_garantia: number
+          id_propiedad: number
+          id_proyecto?: number | null
+          id_ticket_entrega?: number | null
+          piezas_reemplazadas?: string | null
+          prioridad?: string
+          sla_cumplido?: boolean | null
+          sla_horas?: number | null
+          solucion_propuesta?: string | null
+          subcategoria: string
+        }
+        Update: {
+          activo?: boolean
+          calificacion_cliente?: number | null
+          canal_recepcion?: string
+          causa_probable?: string | null
+          comentario_cliente?: string | null
+          comentario_tecnico?: string | null
+          descripcion?: string
+          descripcion_reparacion?: string | null
+          diagnostico?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_confirmacion_cliente?: string | null
+          fecha_creacion?: string
+          fecha_limite_sla?: string | null
+          fecha_reparacion?: string | null
+          fecha_visita?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_entrega?: number | null
+          id_postventa_categoria_garantia?: number
+          id_propiedad?: number
+          id_proyecto?: number | null
+          id_ticket_entrega?: number | null
+          piezas_reemplazadas?: string | null
+          prioridad?: string
+          sla_cumplido?: boolean | null
+          sla_horas?: number | null
+          solucion_propuesta?: string | null
+          subcategoria?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postventa_tickets_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_postventa_categoria_garantia_fkey"
+            columns: ["id_postventa_categoria_garantia"]
+            isOneToOne: false
+            referencedRelation: "postventa_categorias_garantia"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -8530,11 +9437,14 @@ export type Database = {
           email_confirmado: boolean
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          id_notario: number | null
           id_persona: number | null
           nombre: string
           rol_id: number
           telefono: string | null
           ultimo_cambio_password: string | null
+          ver_filtros_avanzados_eliminados: boolean
+          ver_todos_prospectos_compradores: boolean
         }
         Insert: {
           activo?: boolean | null
@@ -8545,11 +9455,14 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          id_notario?: number | null
           id_persona?: number | null
           nombre: string
           rol_id: number
           telefono?: string | null
           ultimo_cambio_password?: string | null
+          ver_filtros_avanzados_eliminados?: boolean
+          ver_todos_prospectos_compradores?: boolean
         }
         Update: {
           activo?: boolean | null
@@ -8560,11 +9473,14 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          id_notario?: number | null
           id_persona?: number | null
           nombre?: string
           rol_id?: number
           telefono?: string | null
           ultimo_cambio_password?: string | null
+          ver_filtros_avanzados_eliminados?: boolean
+          ver_todos_prospectos_compradores?: boolean
         }
         Relationships: [
           {
@@ -8572,6 +9488,13 @@ export type Database = {
             columns: ["clave_pais_telefono"]
             isOneToOne: false
             referencedRelation: "paises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuarios_id_notario_fkey"
+            columns: ["id_notario"]
+            isOneToOne: false
+            referencedRelation: "notarios"
             referencedColumns: ["id"]
           },
           {
@@ -8589,6 +9512,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      v_esquema_id: {
+        Row: {
+          id: number | null
+        }
+        Insert: {
+          id?: number | null
+        }
+        Update: {
+          id?: number | null
+        }
+        Relationships: []
       }
       v_id_producto: {
         Row: {
@@ -9233,8 +10168,12 @@ export type Database = {
           activo: boolean
           debe_cambiar_password: boolean
           email: string
+          id_notario: number
+          id_perfil_juridico: number
           id_persona: number
           nombre: string
+          notaria_nombre: string
+          perfil_juridico_nombre: string
           rol_id: number
           rol_nombre: string
           ver_filtros_avanzados_eliminados: boolean
@@ -9314,6 +10253,18 @@ export type Database = {
           lead_email: string
           lead_name: string
           lead_telefono: string
+        }[]
+      }
+      get_pagos_pendientes_cep: {
+        Args: {
+          p_edificio: string
+          p_limite?: number
+          p_metodo_pago_like: string
+        }
+        Returns: {
+          clave_rastreo: string
+          id_pago_representativo: number
+          url_recibo: string
         }[]
       }
       get_pending_payments: {
@@ -9486,6 +10437,7 @@ export type Database = {
           nombre: string
         }[]
       }
+      get_workflow_evaluation: { Args: { p_cuenta_id: number }; Returns: Json }
       incrementar_precio_m2_mensual: { Args: never; Returns: undefined }
       insertar_pago_stp: {
         Args: {

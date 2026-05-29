@@ -13,6 +13,9 @@ import { PortalEscrituracionLayout } from "./portal-escrituracion/PortalEscritur
 import { PortalAltaDireccionLayout } from "./portal-alta-direccion/PortalAltaDireccionLayout";
 import { PortalAdministracionLayout } from "./portal-administracion/PortalAdministracionLayout";
 import { PortalEmbajadorLayout } from "./portal-embajador/PortalEmbajadorLayout";
+import { PortalNotariaLayout } from "./portal-notaria/PortalNotariaLayout";
+import { PortalJuridicoLayout } from "./portal-juridico/PortalJuridicoLayout";
+import { LegalFlowLayout } from "./legal-flow/LegalFlowLayout";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
 
@@ -64,6 +67,18 @@ export const AdminLayout = () => {
 
   if (location.pathname.startsWith("/admin/portal-embajador")) {
     return <PortalEmbajadorLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-notaria")) {
+    return <PortalNotariaLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-juridico")) {
+    return <PortalJuridicoLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/legal-flow")) {
+    return <LegalFlowLayout />;
   }
 
   return (

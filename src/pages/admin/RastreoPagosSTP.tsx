@@ -536,6 +536,8 @@ export default function RastreoPagosSTP() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                        ) : pago.id_tipo_pago === 5 ? (
+                          <span className="text-xs text-muted-foreground/50 italic">No se suben</span>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Aún sin CEP</span>
                         )}

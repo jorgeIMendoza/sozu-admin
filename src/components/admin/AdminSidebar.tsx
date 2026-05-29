@@ -250,7 +250,12 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
                      <div className="space-y-1">
                        <button
                          onClick={() => toggleGroup(item.title)}
-                         className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-all"
+                         className={cn(
+                           "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border",
+                           item.isSoloA
+                             ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-400 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                             : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                         )}
                        >
                          <div className="flex items-center space-x-3">
                            <item.icon className="h-5 w-5" />
