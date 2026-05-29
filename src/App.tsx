@@ -676,6 +676,17 @@ const App = () => (
                  <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
                  <Route path="portal-embajador/comisiones"         element={<EmbajadorComisiones />} />
                  <Route path="portal-embajador/perfil"             element={<EmbajadorPerfil />} />
+
+                 {/* Portal Legal Flow */}
+                 <Route path="legal-flow"                       element={<LegalFlowDashboard />} />
+                 <Route path="legal-flow/requests"              element={<LegalFlowRequests />} />
+                 <Route path="legal-flow/requests/new"          element={<LegalFlowNewRequest />} />
+                 <Route path="legal-flow/cases/:id"             element={<LegalFlowCaseDetail />} />
+                 <Route path="legal-flow/templates"             element={<LegalFlowTemplateCatalog />} />
+                 <Route path="legal-flow/templates/:id"         element={<LegalFlowTemplateStudio />} />
+                 <Route path="legal-flow/archived"              element={<LegalFlowArchived />} />
+                 <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
+                 <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
