@@ -132,6 +132,8 @@ export interface LegalRequest {
   compradoresDetalle?: CompradorDetalle[];
   titular?: string;
   cuentaCobranza?: string;
+  /** id numérico de cuentas_cobranza.id — usado para mutaciones (bitácora). */
+  idCuentaCobranza?: number;
   agenteVendedor?: string;
   fechaCompra?: string;
   estimatedValue: number;

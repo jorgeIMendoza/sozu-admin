@@ -24,7 +24,14 @@ import {
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
-import { Loader2 } from 'lucide-react';
+import {
+  useBitacoraCuentaCobranza,
+  useAppendBitacoraEntry,
+  getValidationState,
+  type ValidationStatus,
+} from '@/hooks/useBitacoraCuentaCobranza';
+import type { BitacoraEntry, BitacoraEntryInput, BitacoraScope } from '@/types/bitacora';
+import { Loader2, CheckCircle, ShieldAlert } from 'lucide-react';
 import type { CaseStatus, CompradorDetalle, IntegrationStatus, TipoPersona } from '@/types/legal-flow';
 
 // ── Mock data for clickable detail drawers ──
@@ -231,11 +238,13 @@ function CounterpartyDrawer({
   onClose,
   counterparties,
   realDetalle,
+  idCuentaCobranza,
 }: {
   open: boolean;
   onClose: () => void;
   counterparties: string[];
   realDetalle?: CompradorDetalle[];
+  idCuentaCobranza?: number;
 }) {
   // Si hay datos reales (cuentas de BD), renderizamos el drawer rico con
   // 5 tabs (Básica / Dirección / Fiscal / Documentos / Cuentas Bancarias).
@@ -247,6 +256,7 @@ function CounterpartyDrawer({
         open={open}
         onClose={onClose}
         compradores={realDetalle}
+        idCuentaCobranza={idCuentaCobranza}
       />
     );
   }
@@ -336,10 +346,12 @@ function CounterpartyRealDrawer({
   open,
   onClose,
   compradores,
+  idCuentaCobranza,
 }: {
   open: boolean;
   onClose: () => void;
   compradores: CompradorDetalle[];
+  idCuentaCobranza?: number;
 }) {
   const idPersonas = compradores.map((c) => c.idPersona);
   const { data: fullByPersona, isLoading } = useCompradoresFullDetail(idPersonas);
@@ -348,6 +360,49 @@ function CounterpartyRealDrawer({
   const safeSelectedId = idPersonas.includes(selectedId) ? selectedId : idPersonas[0] ?? 0;
   const summary = compradores.find((c) => c.idPersona === safeSelectedId);
   const full = fullByPersona?.[safeSelectedId];
+
+  // Bitácora — fuente única para el estado de validación de cada sección
+  // y documento. Las acciones (validar / rechazar) appendéan una entrada.
+  const { entries: bitacora, columnaFaltante } = useBitacoraCuentaCobranza(idCuentaCobranza);
+  const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
+
+  const [rejectFor, setRejectFor] = useState<{
+    scope: BitacoraScope;
+    idDocumento?: number;
+    label: string;
+  } | null>(null);
+  const [rejectJustification, setRejectJustification] = useState("");
+
+  const validate = (scope: BitacoraScope, label: string, refs: { idDocumento?: number } = {}) => {
+    if (columnaFaltante) {
+      alert("La columna bitácora aún no existe en BD. Aplica el DDL antes de validar.");
+      return;
+    }
+    appendMutation.mutate({
+      tipo: "validacion",
+      mensaje: `Validó: ${label}`,
+      referencia: {
+        scope,
+        idPersona: safeSelectedId,
+        idDocumento: refs.idDocumento,
+      },
+    });
+  };
+
+  const submitReject = () => {
+    if (!rejectFor || !rejectJustification.trim()) return;
+    appendMutation.mutate({
+      tipo: "rechazo",
+      mensaje: rejectJustification.trim(),
+      referencia: {
+        scope: rejectFor.scope,
+        idPersona: safeSelectedId,
+        idDocumento: rejectFor.idDocumento,
+      },
+    });
+    setRejectFor(null);
+    setRejectJustification("");
+  };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -426,7 +481,14 @@ function CounterpartyRealDrawer({
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="basica" className="pt-4">
+              <TabsContent value="basica" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_basica', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_basica', 'Información básica del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_basica', label: 'Información básica' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Tipo de persona" value={full.basica.tipoPersonaLabel} />
                   <DrawerKv label="Nombre" value={full.basica.nombreLegal || full.basica.nombreComercial} />
@@ -446,7 +508,14 @@ function CounterpartyRealDrawer({
                 </div>
               </TabsContent>
 
-              <TabsContent value="direccion" className="pt-4">
+              <TabsContent value="direccion" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_direccion', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_direccion', 'Dirección del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_direccion', label: 'Dirección' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Calle" value={full.direccion.calle} />
                   <DrawerKv label="Núm. exterior" value={full.direccion.numExterior} />
@@ -459,7 +528,14 @@ function CounterpartyRealDrawer({
                 </div>
               </TabsContent>
 
-              <TabsContent value="fiscal" className="pt-4">
+              <TabsContent value="fiscal" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_fiscal', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_fiscal', 'Información fiscal del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_fiscal', label: 'Información fiscal' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Régimen" value={full.fiscal.regimenNombre ?? full.fiscal.regimenCodigo} />
                   <DrawerKv label="Uso de CFDI" value={full.fiscal.usoCfdiNombre ?? full.fiscal.usoCfdiCodigo} />
@@ -486,24 +562,63 @@ function CounterpartyRealDrawer({
                 {full.documentos.length === 0 ? (
                   <p className="text-[13px] text-muted-foreground italic">Documentación pendiente de cargar.</p>
                 ) : (
-                  <div className="space-y-1.5">
-                    {full.documentos.map((doc) => (
-                      <a
-                        key={doc.id}
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                          <span className="text-[13px] truncate">{doc.tipoDocumentoNombre}</span>
+                  <div className="space-y-2">
+                    {full.documentos.map((doc) => {
+                      const docState = getValidationState(bitacora, 'documento', {
+                        idPersona: safeSelectedId,
+                        idDocumento: doc.id,
+                      });
+                      return (
+                        <div key={doc.id} className="rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <a
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 min-w-0 flex-1"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                              <span className="text-[13px] truncate">{doc.tipoDocumentoNombre}</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary shrink-0">
+                                <Eye className="h-3 w-3" /> Ver
+                              </span>
+                            </a>
+                            <ValidationStatusBadge status={docState.status} />
+                          </div>
+                          <div className="flex items-center justify-between mt-2 gap-2">
+                            {docState.lastEntry?.tipo === 'rechazo' && (
+                              <p className="text-[11px] text-destructive flex-1 min-w-0 truncate">
+                                Rechazo: {docState.lastEntry.mensaje}
+                              </p>
+                            )}
+                            <div className="flex gap-1.5 ml-auto">
+                              <Button
+                                size="sm"
+                                variant={docState.status === 'validado' ? 'outline' : 'default'}
+                                className="h-7 px-2 text-[11px] gap-1"
+                                disabled={appendMutation.isPending || columnaFaltante}
+                                onClick={() => validate('documento', doc.tipoDocumentoNombre, { idDocumento: doc.id })}
+                              >
+                                <CheckCircle className="h-3 w-3" /> Validar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
+                                disabled={appendMutation.isPending || columnaFaltante}
+                                onClick={() => setRejectFor({
+                                  scope: 'documento',
+                                  idDocumento: doc.id,
+                                  label: doc.tipoDocumentoNombre,
+                                })}
+                              >
+                                <XCircle className="h-3 w-3" /> Rechazar
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary">
-                          <Eye className="h-3 w-3" /> Ver
-                        </span>
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -543,9 +658,135 @@ function CounterpartyRealDrawer({
           ) : (
             <p className="text-[13px] text-muted-foreground">No se encontró información detallada del comprador.</p>
           )}
+          {columnaFaltante && (
+            <div className="rounded-lg border border-[hsl(var(--status-warning)/0.4)] bg-[hsl(var(--status-warning)/0.08)] px-3 py-2 text-[12px] text-[hsl(var(--status-warning))] flex items-center gap-2">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              La bitácora en BD aún no está habilitada. Aplica el DDL para activar validaciones.
+            </div>
+          )}
         </div>
       </SheetContent>
+
+      <Dialog
+        open={!!rejectFor}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRejectFor(null);
+            setRejectJustification("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-[16px]">Rechazar {rejectFor?.label}</DialogTitle>
+            <DialogDescription className="text-[13px]">
+              Esta nota se registrará en la bitácora de la cuenta de cobranza.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-[13px]">Justificación del rechazo</Label>
+            <Textarea
+              placeholder="Describe por qué se rechaza…"
+              value={rejectJustification}
+              onChange={(e) => setRejectJustification(e.target.value)}
+              className="min-h-[100px] text-[13px]"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectFor(null);
+                setRejectJustification("");
+              }}
+              className="h-9 text-[13px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitReject}
+              disabled={!rejectJustification.trim() || appendMutation.isPending}
+              className="h-9 text-[13px] gap-1"
+            >
+              <XCircle className="h-3.5 w-3.5" /> Confirmar rechazo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
+  );
+}
+
+function SectionValidationBar({
+  state,
+  busy,
+  disabledReason,
+  onValidate,
+  onReject,
+}: {
+  state: ReturnType<typeof getValidationState>;
+  busy: boolean;
+  disabledReason?: string;
+  onValidate: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 px-3 py-2 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <ValidationStatusBadge status={state.status} />
+        {state.lastEntry?.tipo === 'rechazo' && (
+          <p className="text-[11px] text-destructive truncate">
+            Rechazo: {state.lastEntry.mensaje}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-1.5 shrink-0">
+        <Button
+          size="sm"
+          variant={state.status === 'validado' ? 'outline' : 'default'}
+          className="h-7 px-2 text-[11px] gap-1"
+          disabled={busy || !!disabledReason}
+          title={disabledReason}
+          onClick={onValidate}
+        >
+          <CheckCircle className="h-3 w-3" /> Validar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
+          disabled={busy || !!disabledReason}
+          title={disabledReason}
+          onClick={onReject}
+        >
+          <XCircle className="h-3 w-3" /> Rechazar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ValidationStatusBadge({ status }: { status: ValidationStatus }) {
+  if (status === 'validado') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+        <CheckCircle className="h-3 w-3" /> Validado
+      </span>
+    );
+  }
+  if (status === 'rechazado') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+        <XCircle className="h-3 w-3" /> Rechazado
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+      <ShieldAlert className="h-3 w-3" /> Pendiente
+    </span>
   );
 }
 
@@ -2032,6 +2273,17 @@ export default function CaseDetail() {
   const [showContractType, setShowContractType] = useState(false);
   const [showCuentaCobranza, setShowCuentaCobranza] = useState(false);
 
+  // Bitácora + detalle de compradores — sólo para expedientes reales.
+  // Se invocan aquí para alimentar el banner de validaciones pendientes
+  // en la cabecera; el drawer reusa los mismos hooks con la misma query
+  // key, así que no hay double-fetch.
+  const idCuentaCobranzaForBitacora = realRequest?.idCuentaCobranza;
+  const { entries: bitacoraEntries } = useBitacoraCuentaCobranza(
+    idCuentaCobranzaForBitacora,
+  );
+  const compradorIdsForBanner = realRequest?.compradoresDetalle?.map((c) => c.idPersona) ?? [];
+  const { data: compradoresFull } = useCompradoresFullDetail(compradorIdsForBanner);
+
   if (!request && isLoadingReal) {
     return (
       <div className="px-10 py-8 text-center py-24">
@@ -2070,6 +2322,35 @@ export default function CaseDetail() {
   const isClientSignature = request.status === 'client_signature';
   const isFirmaTitular = request.status === 'in_validation';
   const isFirmado = request.status === 'fully_signed';
+
+  // Conteos de validación (sólo expedientes reales) — alimentan el banner
+  // y se derivan de la bitácora. Cada comprador aporta 3 secciones
+  // (básica, dirección, fiscal) + sus documentos.
+  let validacionPendienteCount = 0;
+  let validadoCount = 0;
+  let rechazadoCount = 0;
+  if (realRequest) {
+    for (const c of realRequest.compradoresDetalle ?? []) {
+      const sections: BitacoraScope[] = ['comprador_basica', 'comprador_direccion', 'comprador_fiscal'];
+      for (const scope of sections) {
+        const st = getValidationState(bitacoraEntries, scope, { idPersona: c.idPersona }).status;
+        if (st === 'validado') validadoCount += 1;
+        else if (st === 'rechazado') rechazadoCount += 1;
+        else validacionPendienteCount += 1;
+      }
+      const docs = compradoresFull?.[c.idPersona]?.documentos ?? [];
+      for (const d of docs) {
+        const st = getValidationState(bitacoraEntries, 'documento', {
+          idPersona: c.idPersona,
+          idDocumento: d.id,
+        }).status;
+        if (st === 'validado') validadoCount += 1;
+        else if (st === 'rechazado') rechazadoCount += 1;
+        else validacionPendienteCount += 1;
+      }
+    }
+  }
+  const showValidacionBanner = isRecibida && !!realRequest && (validacionPendienteCount + rechazadoCount + validadoCount) > 0;
   const lawyerName = assignedLawyer ? AVAILABLE_LAWYERS.find(l => l.id === assignedLawyer)?.name || 'Sin asignar' : 'Sin asignar';
 
   return (
@@ -2110,6 +2391,33 @@ export default function CaseDetail() {
 
       {/* Stepper */}
       <StatusStepper status={request.status} />
+
+      {/* Banner de validaciones — sólo expedientes reales en Solicitud recibida */}
+      {showValidacionBanner && (
+        <div className="panel">
+          <div className="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-border/60">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <ShieldAlert className="h-3.5 w-3.5" /> Validación de la solicitud
+            </h3>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+                <ShieldAlert className="h-3 w-3" /> {validacionPendienteCount} pendiente{validacionPendienteCount !== 1 ? 's' : ''}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                <CheckCircle className="h-3 w-3" /> {validadoCount} validado{validadoCount !== 1 ? 's' : ''}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full ${
+                rechazadoCount > 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
+              }`}>
+                <XCircle className="h-3 w-3" /> {rechazadoCount} rechazado{rechazadoCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+          <div className="px-5 py-3 text-[12px] text-muted-foreground">
+            Abre la contraparte para validar o rechazar la información básica, dirección, datos fiscales y documentos de cada comprador. Cada rechazo queda registrado en la bitácora con su justificación.
+          </div>
+        </div>
+      )}
 
       {/* Stage-specific actions */}
       {isRecibida && (
@@ -2517,7 +2825,13 @@ export default function CaseDetail() {
           </div>
 
           {/* Bitácora */}
-          <BitacoraPanel caseId={id!} timeline={timeline} formatTime={formatTime} />
+          <BitacoraPanel
+            caseId={id!}
+            timeline={timeline}
+            formatTime={formatTime}
+            idCuentaCobranza={realRequest?.idCuentaCobranza}
+            isReal={!!realRequest}
+          />
         </motion.div>
       </div>
 
@@ -2542,6 +2856,7 @@ export default function CaseDetail() {
         onClose={() => setShowCounterparty(false)}
         counterparties={request.counterparties || [request.counterparty]}
         realDetalle={realRequest?.compradoresDetalle}
+        idCuentaCobranza={realRequest?.idCuentaCobranza}
       />
       <ContractTypeDrawer open={showContractType} onClose={() => setShowContractType(false)} type={request.type} />
       <CuentaCobranzaDrawer open={showCuentaCobranza} onClose={() => setShowCuentaCobranza(false)} cuenta={request.cuentaCobranza || ''} />
@@ -2569,30 +2884,61 @@ const MOCK_MANUAL_NOTES: ManualNote[] = [
 
 type BitacoraFilter = 'todo' | 'sistema' | 'notas';
 
-function BitacoraPanel({ caseId, timeline, formatTime }: {
+function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal }: {
   caseId: string;
   timeline: { id: string; caseId: string; type: string; timestamp: string; actor: string; actorType: string; notes?: string }[];
   formatTime: (iso: string) => string;
+  idCuentaCobranza?: number;
+  isReal: boolean;
 }) {
   const [filter, setFilter] = useState<BitacoraFilter>('todo');
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteDesc, setNoteDesc] = useState('');
   const [noteType, setNoteType] = useState('nota_interna');
-  const [manualNotes, setManualNotes] = useState<ManualNote[]>(MOCK_MANUAL_NOTES);
+  // Mock data sólo para expedientes heredados EXP-2025-*. Para expedientes
+  // reales (cuentas de cobranza) leemos/escribimos contra el campo jsonb
+  // `cuentas_cobranza.bitacora`.
+  const [manualNotes, setManualNotes] = useState<ManualNote[]>(isReal ? [] : MOCK_MANUAL_NOTES);
 
-  type UnifiedEntry = { id: string; kind: 'system' | 'manual'; timestamp: string; data: any };
-  const systemEntries: UnifiedEntry[] = timeline.map(evt => ({ id: evt.id, kind: 'system', timestamp: evt.timestamp, data: evt }));
-  const manualEntries: UnifiedEntry[] = manualNotes.map(n => ({ id: n.id, kind: 'manual', timestamp: n.createdAt, data: n }));
+  const { entries: bitacoraDb, columnaFaltante } = useBitacoraCuentaCobranza(
+    isReal ? idCuentaCobranza : null,
+  );
+  const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
 
-  let allEntries = [...systemEntries, ...manualEntries].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  type UnifiedEntry = { id: string; kind: 'system' | 'manual' | 'bitacora'; timestamp: string; data: any };
+  const systemEntries: UnifiedEntry[] = isReal
+    ? []
+    : timeline.map(evt => ({ id: evt.id, kind: 'system', timestamp: evt.timestamp, data: evt }));
+  const manualEntries: UnifiedEntry[] = isReal
+    ? []
+    : manualNotes.map(n => ({ id: n.id, kind: 'manual', timestamp: n.createdAt, data: n }));
+  const bitacoraEntries: UnifiedEntry[] = bitacoraDb.map((e) => ({
+    id: e.id,
+    kind: 'bitacora',
+    timestamp: e.timestamp,
+    data: e,
+  }));
+
+  let allEntries = [...systemEntries, ...manualEntries, ...bitacoraEntries].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
   if (filter === 'sistema') allEntries = allEntries.filter(e => e.kind === 'system');
-  if (filter === 'notas') allEntries = allEntries.filter(e => e.kind === 'manual');
+  if (filter === 'notas') allEntries = allEntries.filter(e => e.kind === 'manual' || e.kind === 'bitacora');
 
   const handleSaveNote = () => {
     if (!noteTitle.trim()) return;
-    const newNote: ManualNote = { id: `note-${Date.now()}`, title: noteTitle, description: noteDesc, type: noteType, author: 'Carlos Mendoza', createdAt: new Date().toISOString() };
-    setManualNotes(prev => [newNote, ...prev]);
+    if (isReal) {
+      // Persistir en BD para expedientes reales.
+      appendMutation.mutate({
+        tipo: 'nota',
+        mensaje: noteDesc ? `${noteTitle}\n${noteDesc}` : noteTitle,
+        referencia: { scope: 'expediente' },
+      });
+    } else {
+      const newNote: ManualNote = { id: `note-${Date.now()}`, title: noteTitle, description: noteDesc, type: noteType, author: 'Carlos Mendoza', createdAt: new Date().toISOString() };
+      setManualNotes(prev => [newNote, ...prev]);
+    }
     setNoteTitle(''); setNoteDesc(''); setNoteType('nota_interna'); setShowAddNote(false);
   };
 
@@ -2600,10 +2946,54 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
   const getNoteTypeConfig = (type: string) => NOTE_TYPES.find(t => t.value === type) || NOTE_TYPES[0];
 
   const filterButtons: { key: BitacoraFilter; label: string; count: number }[] = [
-    { key: 'todo', label: 'Todo', count: systemEntries.length + manualNotes.length },
+    { key: 'todo', label: 'Todo', count: systemEntries.length + manualEntries.length + bitacoraEntries.length },
     { key: 'sistema', label: 'Sistema', count: systemEntries.length },
-    { key: 'notas', label: 'Notas', count: manualNotes.length },
+    { key: 'notas', label: 'Notas', count: manualEntries.length + bitacoraEntries.length },
   ];
+
+  const renderBitacoraEntry = (entry: UnifiedEntry) => {
+    const e = entry.data as BitacoraEntry;
+    const isRechazo = e.tipo === 'rechazo';
+    const isValidacion = e.tipo === 'validacion';
+    const dotColor = isRechazo
+      ? 'bg-destructive'
+      : isValidacion
+        ? 'bg-primary'
+        : 'bg-muted-foreground';
+    const Icon = isRechazo ? XCircle : isValidacion ? CheckCircle : MessageSquare;
+    const tipoLabel =
+      e.tipo === 'rechazo' ? 'Rechazo'
+      : e.tipo === 'validacion' ? 'Validación'
+      : e.tipo === 'sistema' ? 'Sistema'
+      : 'Nota';
+    return (
+      <div key={entry.id} className="relative pl-7 pb-5 last:pb-0">
+        <div className={`absolute left-0 top-1 flex h-[15px] w-[15px] items-center justify-center rounded-full ${dotColor}`}>
+          <Icon className="h-[8px] w-[8px] text-white" />
+        </div>
+        <div className={`rounded-lg border ${
+          isRechazo ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
+        } p-3 transition-colors hover:bg-muted/40`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[13px] font-semibold ${isRechazo ? 'text-destructive' : 'text-foreground'}`}>
+                {tipoLabel}
+                {e.referencia && (
+                  <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                    · {e.referencia.scope.replace('_', ' ')}
+                  </span>
+                )}
+              </p>
+              <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground/50 mt-2">
+            {e.autorNombre || e.autorEmail} · {formatTime(e.timestamp)}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -2619,6 +3009,18 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
           </Button>
         </div>
 
+        {isReal && columnaFaltante && (
+          <div className="mx-5 mt-3 rounded-lg border border-[hsl(var(--status-warning)/0.4)] bg-[hsl(var(--status-warning)/0.08)] px-3 py-2 text-[12px] text-[hsl(var(--status-warning))] flex items-start gap-2">
+            <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Bitácora en BD aún no habilitada. Aplica el DDL en
+              <code className="mx-1 px-1 py-0.5 rounded bg-background/60 font-mono text-[11px]">
+                Ejecuciones_manuales/bitacora_cuenta_cobranza.md
+              </code>
+              para registrar validaciones y rechazos.
+            </span>
+          </div>
+        )}
         <div className="px-5 pt-3 pb-1 flex gap-1">
           {filterButtons.map(fb => (
             <button
@@ -2646,6 +3048,9 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
             <div className="space-y-0 relative">
               <div className="absolute left-[7px] top-2.5 bottom-2.5 w-px bg-border/60" />
               {allEntries.map((entry) => {
+                if (entry.kind === 'bitacora') {
+                  return renderBitacoraEntry(entry);
+                }
                 if (entry.kind === 'system') {
                   const evt = entry.data;
                   const config = TIMELINE_EVENT_CONFIG[evt.type] || { label: evt.type, icon: '•', color: 'bg-muted-foreground' };

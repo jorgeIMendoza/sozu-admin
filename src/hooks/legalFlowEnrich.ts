@@ -400,6 +400,7 @@ export async function enrichLegalFlowCases({
       compradoresDetalle,
       titular: titular || undefined,
       cuentaCobranza: folio,
+      idCuentaCobranza: c.id as number,
       agenteVendedor: agenteNombre || undefined,
       fechaCompra: fechaCompra ?? undefined,
       estimatedValue: Number(c.precio_final ?? 0),
