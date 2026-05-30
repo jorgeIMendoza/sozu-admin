@@ -21,6 +21,9 @@ import {
   mockRequests, mockTimeline, STATUS_CONFIG, REQUEST_TYPE_LABELS,
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
 } from '@/data/legalFlow/mockData';
+import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
+import { Loader2 } from 'lucide-react';
 import type { CaseStatus, IntegrationStatus } from '@/types/legal-flow';
 
 // ── Mock data for clickable detail drawers ──
@@ -1675,7 +1678,21 @@ function FirmadoActions({
 
 export default function CaseDetail() {
   const { id } = useParams();
-  const request = mockRequests.find((r) => r.id === id);
+  // Buscar en datos reales primero (cuentas Apartado / Vendido) y caer al
+  // mock como fallback. Los expedientes con folio CC-XXXXXX / CCP-XXXXXX
+  // viven en BD; el mock conserva los EXP-2025-* heredados.
+  const {
+    data: solicitudesRecibidas = [],
+    isLoading: loadingSolicitudes,
+  } = useLegalFlowSolicitudesRecibidas();
+  const {
+    data: archivados = [],
+    isLoading: loadingArchivados,
+  } = useLegalFlowExpedientesArchivados();
+  const realRequest = [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
+  const mockRequest = mockRequests.find((r) => r.id === id);
+  const request = realRequest ?? mockRequest;
+  const isLoadingReal = loadingSolicitudes || loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -1705,6 +1722,17 @@ export default function CaseDetail() {
   const [showCounterparty, setShowCounterparty] = useState(false);
   const [showContractType, setShowContractType] = useState(false);
   const [showCuentaCobranza, setShowCuentaCobranza] = useState(false);
+
+  if (!request && isLoadingReal) {
+    return (
+      <div className="px-10 py-8 text-center py-24">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+          <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+        </div>
+        <p className="text-sm font-medium text-muted-foreground">Cargando expediente…</p>
+      </div>
+    );
+  }
 
   if (!request) {
     return (
