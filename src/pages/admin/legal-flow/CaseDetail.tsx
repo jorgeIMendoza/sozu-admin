@@ -23,6 +23,7 @@ import {
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
+import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
 import { Loader2 } from 'lucide-react';
 import type { CaseStatus, CompradorDetalle, IntegrationStatus, TipoPersona } from '@/types/legal-flow';
 
@@ -236,20 +237,21 @@ function CounterpartyDrawer({
   counterparties: string[];
   realDetalle?: CompradorDetalle[];
 }) {
-  // Si hay datos reales (cuentas de BD), los renderizamos en un shape
-  // compatible con la UI existente. Si no, caemos al mock heredado.
-  const realDetails = (realDetalle ?? []).map((cd) => ({
-    name: cd.name,
-    tipo: TIPO_PERSONA_LABEL[cd.tipoPersona] ?? 'Persona física',
-    phone: cd.phone ?? '—',
-    email: cd.email ?? '—',
-    rfc: cd.rfc ?? '—',
-    representante: undefined as string | undefined,
-    documents: [] as Array<{ name: string; status: 'cargado' | 'pendiente' | 'validado' }>,
-    porcentajeCopropiedad: cd.porcentajeCopropiedad,
-  }));
+  // Si hay datos reales (cuentas de BD), renderizamos el drawer rico con
+  // 5 tabs (Básica / Dirección / Fiscal / Documentos / Cuentas Bancarias).
+  // Si no, caemos al renderer mock heredado para compat con expedientes
+  // EXP-2025-*.
+  if (realDetalle && realDetalle.length > 0) {
+    return (
+      <CounterpartyRealDrawer
+        open={open}
+        onClose={onClose}
+        compradores={realDetalle}
+      />
+    );
+  }
+
   const mockDetails = counterparties.map(cp => COUNTERPARTY_DETAILS[cp]).filter(Boolean);
-  const details = realDetails.length > 0 ? realDetails : mockDetails;
   const docStatusStyle = (s: string) =>
     s === 'validado' ? 'bg-primary/10 text-primary' :
     s === 'cargado' ? 'bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]' :
@@ -262,9 +264,9 @@ function CounterpartyDrawer({
           <SheetTitle className="text-[16px]">Partes y documentación</SheetTitle>
         </SheetHeader>
         <div className="px-6 py-5 space-y-6">
-          {details.length === 0 ? (
+          {mockDetails.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">No se encontró información detallada de las contrapartes.</p>
-          ) : details.map((cp, idx) => (
+          ) : mockDetails.map((cp, idx) => (
             <div key={idx} className="space-y-4">
               {idx > 0 && <div className="border-t" />}
               <div className="flex items-start gap-3">
@@ -327,6 +329,242 @@ function CounterpartyDrawer({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CounterpartyRealDrawer({
+  open,
+  onClose,
+  compradores,
+}: {
+  open: boolean;
+  onClose: () => void;
+  compradores: CompradorDetalle[];
+}) {
+  const idPersonas = compradores.map((c) => c.idPersona);
+  const { data: fullByPersona, isLoading } = useCompradoresFullDetail(idPersonas);
+  const [selectedId, setSelectedId] = useState<number>(idPersonas[0] ?? 0);
+  // Si los compradores cambian (caso multi-buyer), apuntar al primero.
+  const safeSelectedId = idPersonas.includes(selectedId) ? selectedId : idPersonas[0] ?? 0;
+  const summary = compradores.find((c) => c.idPersona === safeSelectedId);
+  const full = fullByPersona?.[safeSelectedId];
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="sm:max-w-[680px] p-0 overflow-y-auto">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          <SheetTitle className="text-[16px]">Partes y documentación</SheetTitle>
+        </SheetHeader>
+        <div className="px-6 py-5 space-y-5">
+          {compradores.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {compradores.map((c) => {
+                const active = c.idPersona === safeSelectedId;
+                return (
+                  <button
+                    key={c.idPersona}
+                    onClick={() => setSelectedId(c.idPersona)}
+                    className={`text-[12px] font-medium px-3 py-1.5 rounded-full transition-colors ${
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    {c.name}
+                    {typeof c.porcentajeCopropiedad === 'number' && c.porcentajeCopropiedad > 0 && (
+                      <span className="ml-1.5 opacity-70">{c.porcentajeCopropiedad.toFixed(0)}%</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {summary && (
+            <div className="flex items-start gap-3">
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 ${
+                summary.tipoPersona === 'pm'
+                  ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {summary.tipoPersona === 'pm'
+                  ? <Building2 className="h-5 w-5" />
+                  : summary.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold leading-tight">{summary.name}</p>
+                <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full mt-1 ${
+                  summary.tipoPersona === 'pm'
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}>{TIPO_PERSONA_LABEL[summary.tipoPersona]}</span>
+              </div>
+            </div>
+          )}
+
+          {isLoading && !full ? (
+            <div className="py-12 text-center text-sm text-muted-foreground inline-flex w-full justify-center items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando información…
+            </div>
+          ) : full ? (
+            <Tabs defaultValue="basica" className="w-full">
+              <TabsList className="w-full justify-start flex-wrap h-auto">
+                <TabsTrigger value="basica">Básica</TabsTrigger>
+                <TabsTrigger value="direccion">Dirección</TabsTrigger>
+                <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+                <TabsTrigger value="documentos">
+                  Documentos
+                  {full.documentos.length > 0 && (
+                    <span className="ml-1.5 text-[10px] opacity-70">({full.documentos.length})</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="cuentas">
+                  Cuentas
+                  {full.cuentasBancarias.length > 0 && (
+                    <span className="ml-1.5 text-[10px] opacity-70">({full.cuentasBancarias.length})</span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basica" className="pt-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Tipo de persona" value={full.basica.tipoPersonaLabel} />
+                  <DrawerKv label="Nombre" value={full.basica.nombreLegal || full.basica.nombreComercial} />
+                  <DrawerKv label="Correo" value={full.basica.email} />
+                  <DrawerKv
+                    label="Teléfono"
+                    value={
+                      full.basica.telefono
+                        ? `${full.basica.clavePaisTelefono ? `(${full.basica.clavePaisTelefono}) ` : ''}${full.basica.telefono}`
+                        : null
+                    }
+                    mono
+                  />
+                  <DrawerKv label="RFC" value={full.basica.rfc} mono />
+                  <DrawerKv label="CURP" value={full.basica.curp} mono />
+                  <DrawerKv label="Sexo" value={full.basica.sexo === 'M' ? 'Masculino' : full.basica.sexo === 'F' ? 'Femenino' : full.basica.sexo} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="direccion" className="pt-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Calle" value={full.direccion.calle} />
+                  <DrawerKv label="Núm. exterior" value={full.direccion.numExterior} />
+                  <DrawerKv label="Núm. interior" value={full.direccion.numInterior} />
+                  <DrawerKv label="Código postal" value={full.direccion.codigoPostal} mono />
+                  <DrawerKv label="Colonia" value={full.direccion.colonia} />
+                  <DrawerKv label="País" value={full.direccion.paisNombre} />
+                  <DrawerKv label="Estado" value={full.direccion.estadoNombre} />
+                  <DrawerKv label="Municipio" value={full.direccion.municipioNombre} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="fiscal" className="pt-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Régimen" value={full.fiscal.regimenNombre ?? full.fiscal.regimenCodigo} />
+                  <DrawerKv label="Uso de CFDI" value={full.fiscal.usoCfdiNombre ?? full.fiscal.usoCfdiCodigo} />
+                  <DrawerKv label="Estado civil" value={full.fiscal.estadoCivilNombre} />
+                  <DrawerKv label="Tipo de identificación" value={full.fiscal.tipoIdentificacionNombre} />
+                  <DrawerKv
+                    label="Fecha de nacimiento"
+                    value={
+                      full.fiscal.fechaNacimiento
+                        ? new Date(full.fiscal.fechaNacimiento).toLocaleDateString('es-MX', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })
+                        : null
+                    }
+                  />
+                  <DrawerKv label="País nacimiento" value={full.fiscal.paisNacimientoNombre} />
+                  <DrawerKv label="Estado nacimiento" value={full.fiscal.estadoNacimientoNombre} />
+                  <DrawerKv label="Municipio nacimiento" value={full.fiscal.municipioNacimientoNombre} />
+                  <DrawerKv label="Ocupación" value={full.fiscal.ocupacion} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="documentos" className="pt-4">
+                {full.documentos.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground italic">Documentación pendiente de cargar.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {full.documentos.map((doc) => (
+                      <a
+                        key={doc.id}
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                          <span className="text-[13px] truncate">{doc.tipoDocumentoNombre}</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary">
+                          <Eye className="h-3 w-3" /> Ver
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="cuentas" className="pt-4">
+                {full.cuentasBancarias.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground italic">Sin cuentas bancarias registradas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {full.cuentasBancarias.map((c) => (
+                      <div key={c.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-semibold">{c.bancoNombre || 'Banco no especificado'}</span>
+                          {c.titular && <span className="text-[11px] text-muted-foreground">Titular: {c.titular}</span>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          <DrawerKv label="Cuenta" value={c.numeroCuenta} mono />
+                          <DrawerKv label="CLABE" value={c.cuentaClabe} mono />
+                          {c.cuentaSwift && <DrawerKv label="SWIFT" value={c.cuentaSwift} mono />}
+                        </div>
+                        {c.urlEvidencia && (
+                          <a
+                            href={c.urlEvidencia}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" /> Ver evidencia
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">No se encontró información detallada del comprador.</p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DrawerKv({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">{label}</p>
+      <p className={`text-[13px] ${mono ? 'font-mono' : ''} ${value ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+        {value || '—'}
+      </p>
+    </div>
   );
 }
 

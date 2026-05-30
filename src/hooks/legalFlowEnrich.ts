@@ -306,6 +306,7 @@ export async function enrichLegalFlowCases({
           const p = persMap.get(cr.id_persona);
           if (!p) return null;
           return {
+            idPersona: p.id as number,
             name: p.nombre_legal || p.nombre_comercial || "Sin nombre",
             tipoPersona: (p.tipo_persona as TipoPersona) ?? "pf",
             rfc: p.rfc ?? null,
@@ -320,6 +321,7 @@ export async function enrichLegalFlowCases({
       const p = persMap.get(oferta.id_persona_lead);
       if (p) {
         compradoresDetalle = [{
+          idPersona: p.id as number,
           name: p.nombre_legal || p.nombre_comercial || "Sin nombre",
           tipoPersona: (p.tipo_persona as TipoPersona) ?? "pf",
           rfc: p.rfc ?? null,

@@ -99,6 +99,8 @@ export interface IntegrationState {
 export type TipoPersona = 'pf' | 'pm' | 'pe';
 
 export interface CompradorDetalle {
+  /** id de `personas.id` — usado para cargar bajo demanda el detalle completo. */
+  idPersona: number;
   name: string;
   tipoPersona: TipoPersona;
   rfc?: string | null;
