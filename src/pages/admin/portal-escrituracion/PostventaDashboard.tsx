@@ -141,10 +141,19 @@ function DonutCenter({ children }: { children: React.ReactNode }) {
 
 function SectionCard({ title, children, action }: { title?: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
+    <div style={{
+      background: 'var(--sz-surface)',
+      border: '1px solid var(--sz-border)',
+      borderRadius: 'var(--sz-radius-xl)',
+      padding: '20px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
+      boxShadow: 'var(--sz-shadow-sm)',
+    }}>
       {(title || action) && (
         <div className="flex items-center justify-between">
-          {title && <span className="text-sm font-semibold text-slate-800">{title}</span>}
+          {title && <span style={{ fontSize: 'var(--sz-text-base)', fontWeight: 600, color: 'var(--sz-text-primary)' }}>{title}</span>}
           {action}
         </div>
       )}
@@ -157,7 +166,8 @@ function LinkBtn({ children, onClick }: { children: React.ReactNode; onClick?: (
   return (
     <button
       onClick={onClick}
-      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
+      className="flex items-center gap-0.5"
+      style={{ fontSize: 'var(--sz-text-xs)', fontWeight: 500, color: 'var(--sz-primary)', transition: 'var(--sz-transition)' }}
     >
       {children} <ChevronRight className="w-3 h-3" />
     </button>
@@ -177,9 +187,9 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
-    <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs shadow-lg">
-      <p className="font-semibold text-slate-800">{d.name}</p>
-      <p className="text-slate-600">{d.value} tickets · {d.payload.pct}%</p>
+    <div style={{ background: 'var(--sz-surface)', border: '1px solid var(--sz-border)', borderRadius: 'var(--sz-radius-md)', padding: '8px 12px', fontSize: 13, boxShadow: 'var(--sz-shadow-md)' }}>
+      <p style={{ fontWeight: 600, color: 'var(--sz-text-primary)' }}>{d.name}</p>
+      <p style={{ color: 'var(--sz-text-secondary)', marginTop: 2 }}>{d.value} tickets · {d.payload.pct}%</p>
     </div>
   );
 }
@@ -686,18 +696,26 @@ export function PostventaDashboard() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen" style={{ background: 'var(--sz-bg)' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm px-6 py-3 flex items-center gap-4">
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'var(--sz-surface)',
+        borderBottom: '1px solid var(--sz-border)',
+        boxShadow: 'var(--sz-shadow-sm)',
+        padding: '0 24px',
+        display: 'flex', alignItems: 'center', gap: 16,
+        height: 'var(--sz-topbar-h)',
+      }}>
         {/* Left */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
-            <HeartHandshake className="w-5 h-5 text-emerald-600" />
+          <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 'var(--sz-radius-md)', background: 'var(--sz-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <HeartHandshake size={18} strokeWidth={1.75} style={{ color: 'var(--sz-primary)' }} />
           </div>
           <div>
-            <p className="text-lg font-semibold text-slate-900 leading-none">Postventa</p>
-            <p className="text-xs text-slate-500 mt-0.5">Dashboard general</p>
+            <p style={{ fontSize: 'var(--sz-text-md)', fontWeight: 700, color: 'var(--sz-text-primary)', lineHeight: 1 }}>Postventa</p>
+            <p style={{ fontSize: 'var(--sz-text-xs)', color: 'var(--sz-text-muted)', marginTop: 2 }}>Dashboard general</p>
           </div>
         </div>
 
@@ -708,7 +726,7 @@ export function PostventaDashboard() {
           <select
             value={proyectoId ?? ''}
             onChange={(e) => setProyectoId(Number(e.target.value) || null)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            style={{ height: 'var(--sz-input-h)', padding: '0 12px', border: '1px solid var(--sz-border)', borderRadius: 'var(--sz-radius-md)', fontSize: 'var(--sz-text-base)', color: 'var(--sz-text-primary)', background: 'var(--sz-surface)', outline: 'none', cursor: 'pointer', transition: 'var(--sz-transition)' }}
           >
             <option value="">Todos los proyectos</option>
             {proyectos.map((p) => (
@@ -718,7 +736,7 @@ export function PostventaDashboard() {
           <select
             value={selectedTorre}
             onChange={(e) => setSelectedTorre(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            style={{ height: 'var(--sz-input-h)', padding: '0 12px', border: '1px solid var(--sz-border)', borderRadius: 'var(--sz-radius-md)', fontSize: 'var(--sz-text-base)', color: 'var(--sz-text-primary)', background: 'var(--sz-surface)', outline: 'none', cursor: 'pointer', transition: 'var(--sz-transition)' }}
           >
             {['Todas', 'Torre A', 'Torre B', 'Torre C'].map((t) => (
               <option key={t} value={t}>{t}</option>
@@ -730,22 +748,25 @@ export function PostventaDashboard() {
 
         {/* Right */}
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors">
-            <Bell className="w-5 h-5 text-slate-500" />
+          <button style={{ position: 'relative', padding: '8px', borderRadius: 'var(--sz-radius-md)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'var(--sz-transition)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--sz-border-light)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Bell size={18} strokeWidth={1.75} style={{ color: 'var(--sz-text-secondary)' }} />
             <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">4</span>
           </button>
           <button
             onClick={openWizard}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="sz-btn-primary"
           >
-            <Plus className="w-4 h-4" />
+            <Plus size={16} strokeWidth={2} />
             Nuevo ticket
           </button>
         </div>
       </header>
 
       {/* ── Page body ──────────────────────────────────────────────────────── */}
-      <main className="p-6 flex flex-col gap-6">
+      <main className="flex flex-col gap-6" style={{ padding: '32px 40px', background: 'var(--sz-bg)', minHeight: 'calc(100vh - var(--sz-topbar-h))' }}>
 
         {/* ── Banner: pv_tickets no existe ─────────────────────────────────── */}
         {pvTablesExist === false && (
@@ -761,87 +782,80 @@ export function PostventaDashboard() {
         {/* ── KPI Row ──────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-3">
           {/* 1 Tickets abiertos */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">Tickets abiertos</span>
-              <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Package2 className="w-4 h-4 text-blue-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#DBEAFE' }}>
+              <Package2 size={18} strokeWidth={1.75} style={{ color: '#3B82F6' }} />
             </div>
-            <p className="text-3xl font-bold text-slate-900">{kpis.abiertos}</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value">{kpis.abiertos}</div>
+              <div className="sz-kpi-card__label">Tickets abiertos</div>
+            </div>
           </div>
 
           {/* 2 Críticos */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">Críticos</span>
-              <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                <AlertCircle className="w-4 h-4 text-red-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#FEE2E2' }}>
+              <AlertCircle size={18} strokeWidth={1.75} style={{ color: '#EF4444' }} />
             </div>
-            <p className="text-3xl font-bold text-red-600">{kpis.criticos}</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#EF4444' }}>{kpis.criticos}</div>
+              <div className="sz-kpi-card__label">Críticos</div>
+            </div>
           </div>
 
           {/* 3 En proceso */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">En proceso</span>
-              <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center">
-                <Clock className="w-4 h-4 text-amber-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#FEF3C7' }}>
+              <Clock size={18} strokeWidth={1.75} style={{ color: '#F59E0B' }} />
             </div>
-            <p className="text-3xl font-bold text-amber-600">{kpis.enProceso}</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#F59E0B' }}>{kpis.enProceso}</div>
+              <div className="sz-kpi-card__label">En proceso</div>
+            </div>
           </div>
 
           {/* 4 SLA vencidos */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">SLA vencidos</span>
-              <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                <TimerOff className="w-4 h-4 text-red-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#FEE2E2' }}>
+              <TimerOff size={18} strokeWidth={1.75} style={{ color: '#EF4444' }} />
             </div>
-            <p className="text-3xl font-bold text-red-600">{kpis.slaVencidos}</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#EF4444' }}>{kpis.slaVencidos}</div>
+              <div className="sz-kpi-card__label">SLA vencidos</div>
+            </div>
           </div>
 
           {/* 5 Fuera de garantía */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">Fuera de garantía</span>
-              <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center">
-                <ShieldOff className="w-4 h-4 text-purple-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#F3E8FF' }}>
+              <ShieldOff size={18} strokeWidth={1.75} style={{ color: '#A855F7' }} />
             </div>
-            <p className="text-3xl font-bold text-purple-600">{kpis.fueraGarantia}</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#A855F7' }}>{kpis.fueraGarantia}</div>
+              <div className="sz-kpi-card__label">Fuera garantía</div>
+            </div>
           </div>
 
           {/* 6 Cumplimiento SLA */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">Cumplimiento SLA</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#DCFCE7' }}>
+              <ShieldCheck size={18} strokeWidth={1.75} style={{ color: '#22C55E' }} />
             </div>
-            <p className="text-3xl font-bold text-emerald-600">{kpis.cumplimientoSla}%</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#22C55E' }}>{kpis.cumplimientoSla}%</div>
+              <div className="sz-kpi-card__label">Cumplimiento SLA</div>
+            </div>
           </div>
 
           {/* 7 Satisfacción */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-medium">Satisfacción prom.</span>
-              <div className="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center">
-                <Star className="w-4 h-4 text-yellow-500" />
-              </div>
+          <div className="sz-kpi-card">
+            <div className="sz-kpi-card__icon" style={{ background: '#FEF9C3' }}>
+              <Star size={18} strokeWidth={1.75} style={{ color: '#EAB308' }} />
             </div>
-            <p className="text-3xl font-bold text-yellow-600">—</p>
-            <LinkBtn>Ver detalle</LinkBtn>
+            <div className="mt-auto">
+              <div className="sz-kpi-card__value" style={{ color: '#EAB308' }}>—</div>
+              <div className="sz-kpi-card__label">Satisfacción prom.</div>
+            </div>
           </div>
         </div>
 
@@ -1130,7 +1144,7 @@ export function PostventaDashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
 
           {/* Left — Recent tickets table (xl:col-span-2) */}
-          <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 flex flex-col">
+          <div className="xl:col-span-2 sz-table-wrapper flex flex-col" style={{ borderRadius: 'var(--sz-radius-xl)' }}>
             {/* Table header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <span className="text-sm font-semibold text-slate-800">Tickets recientes</span>
@@ -1162,11 +1176,11 @@ export function PostventaDashboard() {
                   <p className="text-sm">{pvTablesExist ? 'Sin tickets para este proyecto' : 'Ejecuta el DDL para habilitar tickets'}</p>
                 </div>
               ) : (
-                <table className="w-full text-xs">
+                <table className="sz-table w-full">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
+                    <tr>
                       {['Ticket','ID Cuenta','Unidad / Cliente','Precio Final','Categoría','Prioridad','Estatus','Garantía','SLA','Responsable','Creado',''].map((h) => (
-                        <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">{h}</th>
+                        <th key={h}>{h}</th>
                       ))}
                     </tr>
                   </thead>

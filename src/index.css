@@ -916,3 +916,213 @@ All colors MUST be HSL.
 .animate-slide-in-right {
   animation: slide-in-right 0.2s ease-out;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SOZU DESIGN SYSTEM — Portal Escrituración
+   Tokens visuales del panel inmobiliario sozu-inmobiliaria.lovable.app
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* COLORES PRIMARIOS */
+  --sz-primary:        #22C55E;
+  --sz-primary-dark:   #16A34A;
+  --sz-primary-hover:  #15803D;
+  --sz-primary-light:  #DCFCE7;
+  --sz-primary-muted:  #F0FDF4;
+
+  /* COLORES DE ESTADO */
+  --sz-success:        #22C55E;
+  --sz-success-bg:     #DCFCE7;
+  --sz-warning:        #F59E0B;
+  --sz-warning-bg:     #FEF9C3;
+  --sz-danger:         #EF4444;
+  --sz-danger-bg:      #FEE2E2;
+  --sz-info:           #3B82F6;
+  --sz-info-bg:        #DBEAFE;
+
+  /* NEUTROS */
+  --sz-bg:             #F9FAFB;
+  --sz-surface:        #FFFFFF;
+  --sz-border:         #E5E7EB;
+  --sz-border-light:   #F3F4F6;
+  --sz-text-primary:   #111827;
+  --sz-text-secondary: #6B7280;
+  --sz-text-muted:     #9CA3AF;
+
+  /* TIPOGRAFÍA */
+  --sz-font:           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --sz-text-xs:        0.75rem;
+  --sz-text-sm:        0.8125rem;
+  --sz-text-base:      0.875rem;
+  --sz-text-md:        1rem;
+  --sz-text-lg:        1.125rem;
+  --sz-text-xl:        1.25rem;
+  --sz-text-2xl:       1.5rem;
+  --sz-text-3xl:       1.875rem;
+
+  /* ESPACIADO */
+  --sz-space-4:  16px;
+  --sz-space-5:  20px;
+  --sz-space-6:  24px;
+  --sz-space-8:  32px;
+  --sz-space-10: 40px;
+
+  /* BORDER RADIUS */
+  --sz-radius-sm:   6px;
+  --sz-radius-md:   8px;
+  --sz-radius-lg:   10px;
+  --sz-radius-xl:   12px;
+  --sz-radius-full: 9999px;
+
+  /* SOMBRAS */
+  --sz-shadow-sm:  0 1px 2px rgba(0,0,0,0.04);
+  --sz-shadow-md:  0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --sz-shadow-lg:  0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04);
+
+  /* TRANSICIONES */
+  --sz-transition: all 0.15s ease;
+
+  /* COMPONENTES */
+  --sz-input-h:    38px;
+  --sz-btn-h:      36px;
+  --sz-btn-lg-h:   40px;
+  --sz-row-h:      52px;
+  --sz-topbar-h:   56px;
+}
+
+/* ── KPI Cards (Portal Escrituración Dashboard) ─────────────────── */
+.sz-kpi-card {
+  background: var(--sz-surface);
+  border: 1px solid var(--sz-border);
+  border-radius: var(--sz-radius-xl);
+  padding: var(--sz-space-5);
+  box-shadow: var(--sz-shadow-sm);
+  transition: var(--sz-transition);
+  min-width: 156px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.sz-kpi-card:hover {
+  box-shadow: var(--sz-shadow-md);
+}
+.sz-kpi-card--clickable {
+  cursor: pointer;
+}
+.sz-kpi-card--clickable:hover {
+  box-shadow: var(--sz-shadow-lg);
+  transform: translateY(-1px);
+}
+.sz-kpi-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--sz-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.sz-kpi-card__value {
+  font-size: var(--sz-text-3xl);
+  font-weight: 700;
+  color: var(--sz-text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.sz-kpi-card__label {
+  font-size: var(--sz-text-xs);
+  font-weight: 600;
+  color: var(--sz-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+/* ── Table (Portal Escrituración) ───────────────────────────────── */
+.sz-table-wrapper {
+  background: var(--sz-surface);
+  border: 1px solid var(--sz-border);
+  border-radius: var(--sz-radius-xl);
+  overflow: hidden;
+  box-shadow: var(--sz-shadow-sm);
+}
+.sz-table th {
+  padding: 10px 20px;
+  font-size: var(--sz-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sz-text-muted);
+  background: var(--sz-surface);
+  border-bottom: 1px solid var(--sz-border);
+  white-space: nowrap;
+}
+.sz-table td {
+  height: var(--sz-row-h);
+  padding: 0 20px;
+  border-bottom: 1px solid var(--sz-border-light);
+  font-size: var(--sz-text-base);
+  color: var(--sz-text-primary);
+  transition: var(--sz-transition);
+}
+.sz-table tr:last-child td { border-bottom: none; }
+.sz-table tr:hover td { background: #FAFAFA; }
+.sz-table--num { font-variant-numeric: tabular-nums; }
+.sz-table--money { font-weight: 600; }
+
+/* ── Botón primario SOZU ────────────────────────────────────────── */
+.sz-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--sz-btn-h);
+  padding: 0 16px;
+  background: var(--sz-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--sz-radius-md);
+  font-size: var(--sz-text-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--sz-transition);
+  white-space: nowrap;
+}
+.sz-btn-primary:hover { background: var(--sz-primary-dark); }
+
+/* ── Pipeline cards ─────────────────────────────────────────────── */
+.sz-pipeline-col {
+  min-width: 268px;
+  max-width: 268px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sz-pipeline-col__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: var(--sz-text-base);
+  font-weight: 600;
+  color: var(--sz-text-primary);
+}
+.sz-pipeline-col__count {
+  background: var(--sz-border-light);
+  color: #374151;
+  border-radius: var(--sz-radius-full);
+  padding: 1px 8px;
+  font-size: var(--sz-text-xs);
+  font-weight: 500;
+}
+.sz-pipeline-card {
+  background: var(--sz-surface);
+  border: 1px solid var(--sz-border);
+  border-radius: var(--sz-radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  transition: var(--sz-transition);
+}
+.sz-pipeline-card:hover {
+  box-shadow: var(--sz-shadow-md);
+  border-color: #D1D5DB;
+  transform: translateY(-1px);
+}

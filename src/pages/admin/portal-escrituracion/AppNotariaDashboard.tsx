@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PersonForm } from '@/components/admin/PersonForm';
 import { toast } from 'sonner';
 import {
   Search, Download, RefreshCw, X, CheckCircle2, Clock,
@@ -179,6 +181,41 @@ export function AppNotariaDashboard() {
 
   const isAdmin = (profile?.rol_id ?? 99) <= 2;
 
+  // ── Dialog "Editar Comprador" ──────────────────────────────────────────────
+  const [editPersonaId, setEditPersonaId]     = useState<number | null>(null);
+  const [editDialogOpen, setEditDialogOpen]   = useState(false);
+
+  const { data: editPersonaData } = useQuery({
+    queryKey: ['notaria-persona-edit', editPersonaId],
+    queryFn: async () => {
+      const { data } = await supabase.from('personas').select('*').eq('id', editPersonaId).single();
+      return data;
+    },
+    enabled: !!editPersonaId,
+  });
+
+  const updatePersonaMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId,
+              tempBankAccounts, tempBeneficiaries, pendingDocuments, porcentaje_comision,
+              ...cleanData } = personData;
+      const { error } = await supabase.from('personas').update(cleanData).eq('id', editPersonaId);
+      if (error) throw error;
+      if (representativeId !== undefined) {
+        await supabase.from('personas')
+          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .eq('id', editPersonaId);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+      setEditDialogOpen(false);
+      setEditPersonaId(null);
+      toast.success('Comprador actualizado correctamente.');
+    },
+    onError: () => toast.error('Error al actualizar el comprador.'),
+  });
+
   // ── Filters ────────────────────────────────────────────────────────────────
   const [proyectoId,      setProyectoId]      = useState('');
   const [search,          setSearch]          = useState('');
@@ -189,7 +226,7 @@ export function AppNotariaDashboard() {
   const [voboBankF,       setVoboBankF]       = useState('');
   const [kpiFilter,       setKpiFilter]       = useState('');
   const [selectedRow,     setSelectedRow]     = useState<NotaryRow | null>(null);
-  const [detailTab,       setDetailTab]       = useState<'resumen' | 'vobos' | 'documentos'>('resumen');
+  const [detailTab,       setDetailTab]       = useState<'resumen' | 'pipeline' | 'vobos' | 'documentos'>('resumen');
   const [adminNotarioId,  setAdminNotarioId]  = useState<number | null>(null);
   const [showRegInfo,     setShowRegInfo]     = useState(false);
 
@@ -352,7 +389,92 @@ export function AppNotariaDashboard() {
 
   const cuentaIds = useMemo(() => rawCuentas.map((c: any) => c.id as number), [rawCuentas]);
 
-  // ── Acuerdos de pago (plan de pagos pactado por cuenta) ───────────────────
+  // propIds extraídos de las cuentas del notario
+  const propIds = useMemo(
+    () => [...new Set(rawCuentas.map((c: any) => c.id_propiedad).filter(Boolean))] as number[],
+    [rawCuentas],
+  );
+
+  // ── Todas las cuentas de esas propiedades (incluye bodegas, estac., etc.) ──
+  // Necesario para sumar el monto pagado total por propiedad, no solo el
+  // de la cuenta asignada al notario.
+  const { data: allPropCuentasData = [] } = useQuery({
+    queryKey: ['app-notaria-all-prop-cuentas', propIds],
+    enabled: propIds.length > 0,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('cuentas_cobranza')
+        .select('id, id_propiedad, precio_final')
+        .in('id_propiedad', propIds as any)
+        .eq('activo', true);
+      return (data ?? []) as any[];
+    },
+  });
+
+  // IDs de TODAS las cuentas de esas propiedades
+  const allCuentaIds = useMemo(
+    () => allPropCuentasData.map((c: any) => c.id as number),
+    [allPropCuentasData],
+  );
+
+  // cuentaId → propId (para agrupar pagos por propiedad)
+  const cuentaPropMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const c of allPropCuentasData) map[c.id] = c.id_propiedad;
+    return map;
+  }, [allPropCuentasData]);
+
+  // precioFinal por propiedad = suma de precio_final de todas sus cuentas
+  const precioFinalByProp = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const c of allPropCuentasData) {
+      map[c.id_propiedad] = (map[c.id_propiedad] || 0) + Number(c.precio_final || 0);
+    }
+    return map;
+  }, [allPropCuentasData]);
+
+  // ── Pagos por propiedad en LOTES (evita límite 1000 filas de PostgREST) ──────
+  // Con 297 allCuentaIds → 3,619 pagos → una sola query devuelve solo 1,000.
+  // Con lotes de 30 cuentas (30 × ~12 pagos = ~360/lote) todos los pagos se obtienen.
+  const { data: pagosDirectos = [] } = useQuery({
+    queryKey: ['app-notaria-pagos-direct', allCuentaIds],
+    enabled: allCuentaIds.length > 0,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const BATCH = 30;
+      const results: any[] = [];
+      const batches: Promise<any>[] = [];
+      for (let i = 0; i < allCuentaIds.length; i += BATCH) {
+        const slice = (allCuentaIds as number[]).slice(i, i + BATCH);
+        batches.push(
+          supabase.from('pagos')
+            .select('id_cuenta_cobranza, monto')
+            .in('id_cuenta_cobranza', slice as any)
+            .eq('activo', true)
+        );
+      }
+      const settled = await Promise.allSettled(batches);
+      settled.forEach(r => {
+        if (r.status === 'fulfilled') results.push(...((r.value as any).data ?? []));
+      });
+      return results as any[];
+    },
+  });
+
+  // Suma de pagos por propiedad (agrupa principal + bodegas + estacionamientos)
+  const pagosSumByProp = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const p of pagosDirectos) {
+      const propId = cuentaPropMap[p.id_cuenta_cobranza];
+      if (propId !== undefined) {
+        map[propId] = (map[propId] || 0) + Number(p.monto);
+      }
+    }
+    return map;
+  }, [pagosDirectos, cuentaPropMap]);
+
+  // Mantener acuerdos/aplicaciones solo para otras funcionalidades (no para montoPagado)
   const { data: acuerdosData = [] } = useQuery({
     queryKey: ['app-notaria-acuerdos', cuentaIds],
     enabled: cuentaIds.length > 0,
@@ -372,42 +494,11 @@ export function AppNotariaDashboard() {
     [acuerdosData],
   );
 
-  // id_acuerdo_pago → id_cuenta_cobranza (reverse lookup)
   const acuerdoCuentaMap = useMemo(() => {
     const map: Record<number, number> = {};
     for (const a of acuerdosData) map[a.id] = a.id_cuenta_cobranza;
     return map;
   }, [acuerdosData]);
-
-  // ── Aplicaciones de pago — monto real pagado al precio (sin multas) ───────
-  // Fuente correcta: aplicaciones_pago.monto WHERE es_multa=false
-  // Consistente con RelacionPagos, EstadoCuenta y DetalleCuenta.
-  const { data: aplicacionesData = [] } = useQuery({
-    queryKey: ['app-notaria-aplicaciones', acuerdoIds],
-    enabled: acuerdoIds.length > 0,
-    staleTime: 2 * 60_000,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('aplicaciones_pago')
-        .select('id_acuerdo_pago, monto')
-        .in('id_acuerdo_pago', acuerdoIds as any)
-        .eq('activo', true)
-        .eq('es_multa', false);
-      return (data ?? []) as any[];
-    },
-  });
-
-  // Suma de aplicaciones por cuenta (monto efectivamente pagado al precio de venta)
-  const pagosSum = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const ap of aplicacionesData) {
-      const cuentaId = acuerdoCuentaMap[ap.id_acuerdo_pago];
-      if (cuentaId !== undefined) {
-        map[cuentaId] = (map[cuentaId] || 0) + Number(ap.monto);
-      }
-    }
-    return map;
-  }, [aplicacionesData, acuerdoCuentaMap]);
 
   // ── Creditos hipotecarios ──────────────────────────────────────────────────
   const { data: creditosData = [] } = useQuery({
@@ -503,8 +594,9 @@ export function AppNotariaDashboard() {
     const proceso = procesosMap[c.id];
     const cita    = citasMap[comp?.id_persona ?? -1];
 
-    const montoPagado  = pagosSum[c.id] || 0;
-    const precioFinal  = Number(c.precio_final || 0);
+    // Usa totales por propiedad: suma de TODAS las cuentas (bodega, estac., etc.)
+    const montoPagado  = pagosSumByProp[c.id_propiedad] || 0;
+    const precioFinal  = precioFinalByProp[c.id_propiedad] || Number(c.precio_final || 0);
     const montoAdeudo  = Math.max(0, precioFinal - montoPagado);
     const paymentMethod: PaymentMethod = credito ? 'CREDITO_HIPOTECARIO' : 'RECURSOS_PROPIOS';
 
@@ -551,7 +643,7 @@ export function AppNotariaDashboard() {
       creditoId:         credito?.id ?? null,
       lastUpdatedAt:     proceso?.fecha_actualizacion ?? c.fecha_actualizacion ?? null,
     } satisfies NotaryRow;
-  }), [rawCuentas, pagosSum, creditosMap, procesosMap, citasMap]);
+  }), [rawCuentas, pagosSumByProp, precioFinalByProp, creditosMap, procesosMap, citasMap]);
 
   // DEV debug
   if (import.meta.env.DEV) {
@@ -938,7 +1030,7 @@ export function AppNotariaDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Nombre de Proyecto', 'Unidad — Cliente / ID Cuenta', 'Forma de pago', 'Banco', 'Docs', 'Monto pagado', 'Adeudo', 'Fecha asignación', 'Estatus', 'Cita de firma', 'Acciones'].map(h => (
+                    {['Proyecto', 'Unidad — Cliente', 'Estatus', 'Fecha Asignación', 'Forma de Liquidación', 'Banco', 'Valor Escrituración', 'Total Pagado', 'Saldo Pendiente', 'Cita de Firma', 'Acciones'].map(h => (
                       <th key={h} className="px-3 py-3 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -956,43 +1048,39 @@ export function AppNotariaDashboard() {
                           : 'hover:bg-muted/20',
                       )}
                     >
+                      {/* Proyecto */}
                       <td className="px-3 py-3">
                         <p className="font-medium text-sm leading-tight">{row.proyectoNombre}</p>
                         {row.edificioNombre && <p className="text-xs text-muted-foreground">{row.edificioNombre}</p>}
                       </td>
+                      {/* Unidad — Cliente */}
                       <td className="px-3 py-3">
                         <p className="font-semibold text-sm">{row.unitCode}</p>
                         <p className="text-xs text-muted-foreground">{row.clienteName}</p>
                         <p className="text-[11px] text-muted-foreground/60 font-mono">{row.cuentaCode}</p>
                       </td>
+                      {/* Estatus */}
+                      <td className="px-3 py-3"><StatusBadge status={row.estatus} /></td>
+                      {/* Fecha Asignación */}
+                      <td className="px-3 py-3 whitespace-nowrap text-xs text-muted-foreground">{fmtDate(row.fechaAsignacion)}</td>
+                      {/* Forma de Liquidación */}
                       <td className="px-3 py-3"><PaymentBadge method={row.paymentMethod} /></td>
+                      {/* Banco */}
                       <td className="px-3 py-3"><BankBadge name={row.bankName} /></td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-0.5">
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDownloadExp(row); }}
-                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-primary transition-colors"
-                            title="Ver expediente"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); navigate(`/admin/portal-escrituracion/relacion-pagos?cuenta=${row.cuentaId}`); }}
-                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-primary transition-colors"
-                            title="Ver relación de pagos"
-                          >
-                            <Receipt className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                      {/* Valor Escrituración = suma de todas las cuentas de la propiedad */}
+                      <td className="px-3 py-3 text-right tabular-nums font-medium text-purple-700">
+                        {row.precioFinal > 0 ? fmtMxn(row.precioFinal) : '—'}
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums font-medium">{fmtMxn(row.montoPagado)}</td>
+                      {/* Total Pagado */}
+                      <td className="px-3 py-3 text-right tabular-nums font-semibold text-emerald-600">
+                        {fmtMxn(row.montoPagado)}
+                      </td>
+                      {/* Saldo Pendiente */}
                       <td className="px-3 py-3 text-right tabular-nums">
                         {row.montoAdeudo > 0
                           ? <span className="text-red-600 font-medium">{fmtMxn(row.montoAdeudo)}</span>
                           : <span className="text-emerald-600 font-medium">$0</span>}
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-xs text-muted-foreground">{fmtDate(row.fechaAsignacion)}</td>
-                      <td className="px-3 py-3"><StatusBadge status={row.estatus} /></td>
                       <td className="px-3 py-3">
                         {row.signingDate ? (
                           <div>
@@ -1001,13 +1089,31 @@ export function AppNotariaDashboard() {
                           </div>
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <button
-                          onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('resumen'); }}
-                          className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
+                      {/* Acciones */}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDownloadExp(row); }}
+                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-primary transition-colors"
+                            title="Descargar expediente"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); navigate(`/admin/portal-escrituracion/relacion-pagos?wf_num=${row.unitCode}&wf_cuenta=${row.cuentaId}`); }}
+                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-primary transition-colors"
+                            title="Ver relación de pagos"
+                          >
+                            <Receipt className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('pipeline'); }}
+                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors"
+                            title="Ver pipeline"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1036,7 +1142,7 @@ export function AppNotariaDashboard() {
 
             {/* Tabs */}
             <div className="flex border-b border-border shrink-0">
-              {(['resumen', 'vobos', 'documentos'] as const).map(tab => (
+              {(['resumen', 'pipeline', 'vobos', 'documentos'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setDetailTab(tab)}
@@ -1045,7 +1151,7 @@ export function AppNotariaDashboard() {
                     detailTab === tab ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {tab === 'resumen' ? 'Resumen' : tab === 'vobos' ? 'VoBos' : 'Documentos'}
+                  {tab === 'resumen' ? 'Resumen' : tab === 'pipeline' ? 'Pipeline' : tab === 'vobos' ? 'VoBos' : 'Documentos'}
                 </button>
               ))}
             </div>
@@ -1142,6 +1248,74 @@ export function AppNotariaDashboard() {
                 </>
               )}
 
+              {/* ── PIPELINE ── */}
+              {detailTab === 'pipeline' && (() => {
+                const row = selectedRow!;
+                const esCreditoHipotecario = row.paymentMethod === 'CREDITO_HIPOTECARIO';
+                const steps = [
+                  { id: 'asignacion',   label: 'Asignación',                             done: true,                                                          always: true },
+                  { id: 'elaboracion',  label: 'Desarrollo del proyecto de escritura',    done: !!row.urlProyectoEscrit,                                       always: true },
+                  { id: 'avaluo',       label: 'Avalúo',                                  done: row.estatus === 'VOBO_DESARROLLADOR_APROBADO' || row.voboDev !== 'NO_ENVIADO', always: true },
+                  { id: 'vobo_dev',     label: 'VoBo del proyecto — Desarrollador',       done: row.voboDev === 'APROBADO',                                    always: true },
+                  { id: 'vobo_banco',   label: 'VoBo del proyecto — Banco',               done: row.voboBank === 'APROBADO',                                   always: esCreditoHipotecario, skip: !esCreditoHipotecario },
+                  { id: 'clg',          label: 'CLG listo',                               done: row.cotizacionEstatus === 'ACEPTADA',                          always: true },
+                  { id: 'programacion', label: 'Programación de cita para firma',         done: !!row.signingDate,                                             always: true },
+                  { id: 'confirmacion', label: 'Confirmación de cita de firma',           done: row.estatus === 'CITA_PROGRAMADA' || row.estatus === 'FIRMADO' || row.estatus === 'EN_REGISTRO_RPP' || row.estatus === 'CONCLUIDO', always: true },
+                  { id: 'firmado',      label: 'Escritura firmada',                       done: row.estatus === 'FIRMADO' || row.estatus === 'EN_REGISTRO_RPP' || row.estatus === 'CONCLUIDO', always: true },
+                  { id: 'pago_banco',   label: 'Pago del banco confirmado',               done: row.estatus === 'EN_REGISTRO_RPP' || row.estatus === 'CONCLUIDO', always: esCreditoHipotecario, skip: !esCreditoHipotecario },
+                  { id: 'rpp',          label: 'Registro de escritura al RPP',            done: row.estatus === 'CONCLUIDO',                                   always: true },
+                ];
+                const visible = steps.filter(s => !s.skip);
+                const completed = visible.filter(s => s.done).length;
+                const pct = Math.round((completed / visible.length) * 100);
+
+                return (
+                  <section className="space-y-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Proceso de escrituración</h3>
+                      <span className="text-xs font-bold text-primary">{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="relative pl-4">
+                      <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
+                      <div className="space-y-3">
+                        {visible.map((step, idx) => {
+                          const prev = visible[idx - 1];
+                          const isActive = !step.done && (idx === 0 || (prev?.done ?? false));
+                          return (
+                            <div key={step.id} className="relative flex items-start gap-2.5">
+                              <div className={cn(
+                                'absolute -left-4 top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 bg-white z-10',
+                                step.done   ? 'border-emerald-500 bg-emerald-500'  :
+                                isActive    ? 'border-primary bg-white' :
+                                              'border-muted-foreground/30 bg-white',
+                              )}>
+                                {step.done
+                                  ? <CheckCircle2 className="h-2.5 w-2.5 text-white" />
+                                  : isActive
+                                    ? <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                    : null}
+                              </div>
+                              <div className="pl-1 pb-1">
+                                <p className={cn(
+                                  'text-xs font-medium leading-tight',
+                                  step.done ? 'text-slate-700' : isActive ? 'text-primary' : 'text-muted-foreground',
+                                )}>
+                                  {step.label}
+                                </p>
+                                {step.skip && <p className="text-[10px] text-muted-foreground/60 mt-0.5">No aplica (recursos propios)</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
               {detailTab === 'vobos' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Estado de VoBos</h3>
@@ -1224,25 +1398,90 @@ export function AppNotariaDashboard() {
               )}
 
               {detailTab === 'documentos' && (
-                <section className="space-y-3">
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Documentos del expediente</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Para ver y descargar el expediente completo, accede al módulo de Expedientes filtrado por esta cuenta.
-                  </p>
-                  <button
-                    onClick={() => handleDownloadExp(selectedRow)}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-primary/40 text-sm text-primary hover:bg-primary/5 transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                    Ver expediente de {selectedRow.cuentaCode}
-                  </button>
+                <section className="space-y-4">
+                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Documentos de la notaría</h3>
+
+                  {/* Proyecto de escritura */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-700">Proyecto de escritura</p>
+                    <p className="text-[11px] text-muted-foreground">Requerido para solicitar VoBo del Desarrollador{selectedRow.paymentMethod === 'CREDITO_HIPOTECARIO' ? ' y del Banco' : ''}.</p>
+                    {selectedRow.urlProyectoEscrit ? (
+                      <div className="flex items-center gap-2">
+                        <a href={selectedRow.urlProyectoEscrit} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1 text-xs text-primary hover:underline">
+                          <ExternalLink className="h-3 w-3" /> Ver documento cargado
+                        </a>
+                      </div>
+                    ) : null}
+                    <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-primary/40 text-xs text-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                      <Upload className="h-3.5 w-3.5" />
+                      {selectedRow.urlProyectoEscrit ? 'Reemplazar proyecto de escritura' : 'Subir proyecto de escritura'}
+                      <input type="file" accept=".pdf,.docx,.doc" className="hidden" onChange={async e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const path = `proyectos_escritura/${selectedRow.cuentaId}/${file.name}`;
+                        const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+                        if (error) { toast.error('Error al subir el archivo: ' + error.message); return; }
+                        const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(path);
+                        if (selectedRow.procesoId) {
+                          await (supabase as any).from('app_notaria_proceso')
+                            .update({ url_proyecto_escritura: urlData.publicUrl, vobo_desarrollador: 'NO_ENVIADO', fecha_actualizacion: new Date().toISOString() })
+                            .eq('id', selectedRow.procesoId);
+                        }
+                        toast.success('Proyecto de escritura subido correctamente');
+                        qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+                      }} />
+                    </label>
+                  </div>
+
+                  {/* Cotización */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-700">Cotización notarial</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Estatus: <span className="font-medium">{selectedRow.cotizacionEstatus === 'SIN_COTIZACION' ? 'Sin cotización' : selectedRow.cotizacionEstatus}</span>
+                      {selectedRow.cotizacionTotal ? ` · ${fmtMxn(selectedRow.cotizacionTotal)}` : ''}
+                    </p>
+                    <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-amber-400/60 text-xs text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer">
+                      <Upload className="h-3.5 w-3.5" />
+                      Subir cotización (PDF)
+                      <input type="file" accept=".pdf" className="hidden" onChange={async e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const path = `cotizaciones_notaria/${selectedRow.cuentaId}/${file.name}`;
+                        const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+                        if (error) { toast.error('Error al subir cotización: ' + error.message); return; }
+                        toast.success('Cotización subida correctamente');
+                        if (selectedRow.procesoId) {
+                          await (supabase as any).from('app_notaria_proceso')
+                            .update({ cotizacion_estatus: 'ENVIADA', fecha_actualizacion: new Date().toISOString() })
+                            .eq('id', selectedRow.procesoId);
+                          qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+                        }
+                      }} />
+                    </label>
+                  </div>
+
+                  {/* Expediente */}
+                  <div className="space-y-1.5 pt-2 border-t border-border">
+                    <p className="text-xs font-semibold text-slate-700">Expediente completo</p>
+                    <button
+                      onClick={() => handleDownloadExp(selectedRow)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar expediente de {selectedRow.cuentaCode}
+                    </button>
+                  </div>
                 </section>
               )}
             </div>
 
             {/* Panel CTA */}
             <div className="p-4 border-t border-border shrink-0">
-              <Button className="w-full gap-2" onClick={() => navigate('/admin/portal-escrituracion/workflow')}>
+              <Button
+                className="w-full gap-2"
+                onClick={() => navigate(`/admin/cuentas-cobranza/${selectedRow!.cuentaId}/detalle`)}
+              >
                 Ir a detalle del expediente <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -1251,6 +1490,30 @@ export function AppNotariaDashboard() {
       </div>
       </>
       )}
+
+      {/* ── Dialog Editar Comprador ─────────────────────────────────────────── */}
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={open => { setEditDialogOpen(open); if (!open) setEditPersonaId(null); }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Comprador</DialogTitle>
+          </DialogHeader>
+          {editPersonaData && (
+            <PersonForm
+              initialData={{
+                ...editPersonaData,
+                representativeId: editPersonaData.id_entidad_relacionada_rep_leg,
+              }}
+              onSubmit={data => updatePersonaMutation.mutate(data)}
+              isLoading={updatePersonaMutation.isPending}
+              onCancel={() => { setEditDialogOpen(false); setEditPersonaId(null); }}
+              entityType="comprador"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -228,15 +228,26 @@ export function EntregasDashboard() {
         (edificios ?? []).map((e: any) => [e.id, { nombre: e.nombre, proyectoId: e.id_proyecto }])
       );
 
-      // ── 2. Modelos ────────────────────────────────────────────────────────
-      const { data: modelos } = await supabase
+      // ── 2. Modelos (con nombre real) ──────────────────────────────────────
+      const { data: edificioModelos } = await supabase
         .from('edificios_modelos')
-        .select('id, id_edificio')
+        .select('id, id_edificio, id_modelo')
         .in('id_edificio', edificioIds);
-      const modeloIds = (modelos ?? []).map((m: any) => m.id);
+      const modeloIds = (edificioModelos ?? []).map((m: any) => m.id);
       if (!modeloIds.length) return [];
       const modeloEdificioMap: Record<number, number> = Object.fromEntries(
-        (modelos ?? []).map((m: any) => [m.id, m.id_edificio])
+        (edificioModelos ?? []).map((m: any) => [m.id, m.id_edificio])
+      );
+      // Fetch nombres de modelos
+      const idModeloSet = [...new Set((edificioModelos ?? []).map((m: any) => m.id_modelo).filter(Boolean))];
+      const modeloNombreMap: Record<number, string> = {};
+      if (idModeloSet.length) {
+        const { data: mods } = await supabase.from('modelos').select('id, nombre').in('id', idModeloSet as any);
+        (mods ?? []).forEach((m: any) => { modeloNombreMap[m.id] = m.nombre ?? '—'; });
+      }
+      // edificioModeloId → nombre del modelo
+      const emModeloNombre: Record<number, string> = Object.fromEntries(
+        (edificioModelos ?? []).map((m: any) => [m.id, modeloNombreMap[m.id_modelo] ?? '—'])
       );
 
       // ── 3. Propiedades — solo estatus de escrituración/entrega ────────────
@@ -251,19 +262,35 @@ export function EntregasDashboard() {
       if (!propiedades?.length) return [];
       const propIds = propiedades.map((p: any) => p.id);
 
-      // ── 4. Cuentas de cobranza — más reciente por propiedad ───────────────
-      const { data: cuentas } = await supabase
-        .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, fecha_actualizacion')
-        .in('id_propiedad', propIds)
-        .eq('activo', true);
+      // ── 4. Cuentas de cobranza — batches de 40 para evitar límite 1000 ───
+      // Una propiedad puede tener varias cuentas (principal + bodega + estac).
+      // Guardamos la más reciente como "cuenta principal" para datos de cliente/notario.
+      // Sumamos precio_final de TODAS las cuentas para el valor real de escrituración.
+      const BATCH_C = 40;
       const cuentaByPropId: Record<number, any> = {};
-      (cuentas ?? []).forEach((c: any) => {
-        const existing = cuentaByPropId[c.id_propiedad];
-        if (!existing || c.fecha_actualizacion > existing.fecha_actualizacion)
-          cuentaByPropId[c.id_propiedad] = c;
-      });
-      const cuentaIds = Object.values(cuentaByPropId).map((c: any) => c.id);
+      const precioTotalByProp: Record<number, number> = {};
+
+      await Promise.all(
+        Array.from({ length: Math.ceil(propIds.length / BATCH_C) }, (_, i) =>
+          propIds.slice(i * BATCH_C, (i + 1) * BATCH_C)
+        ).map(async slice => {
+          const { data: batch } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_propiedad, precio_final, fecha_actualizacion')
+            .in('id_propiedad', slice as any)
+            .eq('activo', true);
+          (batch ?? []).forEach((c: any) => {
+            // suma de precio de todas las cuentas de la prop
+            precioTotalByProp[c.id_propiedad] = (precioTotalByProp[c.id_propiedad] || 0) + Number(c.precio_final || 0);
+            // cuenta principal = la más reciente
+            const existing = cuentaByPropId[c.id_propiedad];
+            if (!existing || c.fecha_actualizacion > existing.fecha_actualizacion)
+              cuentaByPropId[c.id_propiedad] = c;
+          });
+        })
+      );
+
+      const cuentaIds = Object.values(cuentaByPropId).map((c: any) => c.id as number);
       if (!cuentaIds.length) return [];
 
       // ── 5. Compradores + Personas ─────────────────────────────────────────
@@ -347,9 +374,9 @@ export function EntregasDashboard() {
             proyecto: proyectoNombreMap[pId] ?? '—',
             proyectoId: pId,
             cliente: cuentaToPersona[cuenta.id] ?? '—',
-            modelo: '—',
+            modelo: emModeloNombre[p.id_edificio_modelo] ?? '—',
             cuentaId: cuenta.id,
-            precioFinal: Number(cuenta.precio_final ?? 0),
+            precioFinal: precioTotalByProp[p.id] ?? Number(cuenta.precio_final ?? 0),
             estatus,
             fechaProgramada: entrega?.fecha_programada ?? null,
             fechaEntrega: entrega?.fecha_entrega ?? acta?.fechaCreacion ?? null,

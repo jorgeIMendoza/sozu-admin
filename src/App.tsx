@@ -75,6 +75,7 @@ const Servicios = lazyRetry(() => import("./pages/admin/Servicios"));
 const CategoriasProductos = lazyRetry(() => import("./pages/admin/CategoriasProductos"));
 const CuentasMantenimiento = lazyRetry(() => import("./pages/admin/CuentasMantenimiento"));
 const ComingSoon = lazyRetry(() => import("./pages/admin/ComingSoon"));
+const JuridicoAdministrar = lazyRetry(() => import("./pages/admin/juridico/JuridicoAdministrar").then(m => ({ default: m.JuridicoAdministrar })));
 const RevisionDocumentacion = lazyRetry(() => import("./pages/admin/RevisionDocumentacion"));
 const ConsultasIA = lazyRetry(() => import("./pages/admin/ConsultasIA"));
 const Reservas = lazyRetry(() => import("./pages/admin/Reservas"));
@@ -635,7 +636,7 @@ const App = () => (
                   {/* Administrar Notarios — menú admin principal */}
                   <Route path="notarios/administrar" element={<EscNotarios />} />
                   {/* Administrar Jurídico — menú admin principal */}
-                  <Route path="juridico/administrar" element={<ComingSoon title="Administrar Jurídico" hideBack />} />
+                  <Route path="juridico/administrar" element={<JuridicoAdministrar />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />

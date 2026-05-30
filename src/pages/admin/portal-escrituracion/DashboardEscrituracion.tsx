@@ -233,13 +233,19 @@ function DashboardHeader() {
   }, [allKpis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Dashboard de Escrituración</h1>
+        {/* Título con tokens del design system */}
+        <h1 style={{ fontSize: 'var(--sz-text-2xl)', fontWeight: 700, color: 'var(--sz-text-primary)', margin: 0, lineHeight: 1.2 }}>
+          Dashboard de Escrituración
+        </h1>
+        <p style={{ fontSize: 'var(--sz-text-sm)', color: 'var(--sz-text-muted)', marginTop: 3 }}>
+          Seguimiento del proceso notarial y escrituración
+        </p>
 
         <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-500">Proyecto</span>
+            <span style={{ fontSize: 'var(--sz-text-sm)', fontWeight: 500, color: 'var(--sz-text-secondary)' }}>Proyecto</span>
             <div className="relative">
               {isLoadingProyectos ? (
                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-3 text-sm font-medium text-slate-500">
@@ -254,7 +260,21 @@ function DashboardHeader() {
                       const p = proyectos?.find(x => x.id === id);
                       if (p) setProyectoActivo(p);
                     }}
-                    className="appearance-none bg-white border border-slate-200 rounded-lg py-1.5 pl-3 pr-8 text-sm font-medium text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+                    style={{
+                      height: 'var(--sz-input-h)',
+                      padding: '0 32px 0 12px',
+                      border: '1px solid var(--sz-border)',
+                      borderRadius: 'var(--sz-radius-md)',
+                      fontSize: 'var(--sz-text-base)',
+                      fontWeight: 500,
+                      color: 'var(--sz-text-primary)',
+                      background: 'var(--sz-surface)',
+                      outline: 'none',
+                      appearance: 'none',
+                      cursor: 'pointer',
+                      boxShadow: 'var(--sz-shadow-sm)',
+                      transition: 'var(--sz-transition)',
+                    }}
                   >
                     {proyectos?.map(p => (
                       <option key={p.id} value={p.id}>{p.nombre}</option>

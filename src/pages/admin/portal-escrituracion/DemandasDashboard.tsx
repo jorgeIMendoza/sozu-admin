@@ -108,6 +108,22 @@ function parseStatus(raw: string | null | undefined): LawsuitStatus {
   return LEGACY_STATUS[raw] ?? 'EN_REVISION';
 }
 
+// Convierte el estatus UI a los valores que acepta el CHECK CONSTRAINT de la BD:
+// CHECK (estatus_demanda = ANY (ARRAY['SIN_DEMANDA','NOTIFICADO','EN_PROCESO','ACUERDO','LITIGIO','RESUELTO','CERRADO']))
+const UI_TO_DB_STATUS: Record<string, string> = {
+  SIN_DEMANDA:        'SIN_DEMANDA',
+  EN_REVISION:        'NOTIFICADO',
+  DEMANDA_PRESENTADA: 'EN_PROCESO',
+  EN_NEGOCIACION:     'EN_PROCESO',
+  ACUERDO:            'ACUERDO',
+  RESUELTA:           'RESUELTO',
+  CERRADA:            'CERRADO',
+  RIESGO_ALTO:        'EN_PROCESO',
+};
+function statusToDb(ui: string): string {
+  return UI_TO_DB_STATUS[ui] ?? 'NOTIFICADO';
+}
+
 const TIPO_LABELS: Record<string, string> = {
   INTERNO:  'Interno',
   EXTERNO:  'Externo',
@@ -359,11 +375,11 @@ function AbogadoModal({
       };
       if (isEdit && editData) {
         const { error } = await (supabase as any)
-          .from('app_juridico_perfiles').update(payload).eq('id', editData.id);
+          .from('perfiles_juridicos').update(payload).eq('id', editData.id);
         if (error) throw error;
       } else {
         const { error } = await (supabase as any)
-          .from('app_juridico_perfiles').insert({ ...payload, activo: true });
+          .from('perfiles_juridicos').insert({ ...payload, activo: true });
         if (error) throw error;
       }
       toast.success(isEdit ? 'Abogado actualizado' : 'Abogado registrado exitosamente');
@@ -383,7 +399,7 @@ function AbogadoModal({
           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800">
-              Tabla <span className="font-mono">app_juridico_perfiles</span> no encontrada.
+              Tabla <span className="font-mono">perfiles_juridicos</span> no encontrada.
               Ejecuta el <strong>PASO 2</strong> del archivo{' '}
               <span className="font-mono">Ejecuciones_manuales/modulo_app_juridico.md</span> primero.
             </p>
@@ -485,7 +501,7 @@ function VerAbogadosModal({
     try {
       const next = a.estatus === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
       const { error } = await (supabase as any)
-        .from('app_juridico_perfiles').update({ estatus: next }).eq('id', a.id);
+        .from('perfiles_juridicos').update({ estatus: next }).eq('id', a.id);
       if (error) throw error;
       toast.success(`Abogado ${next === 'ACTIVO' ? 'activado' : 'desactivado'}`);
       qc.invalidateQueries({ queryKey: ['app-juridico-perfiles'] });
@@ -629,7 +645,7 @@ function AsignarAbogadoModal({
           .insert({
             id_cuenta_cobranza: row.cuentaId,
             id_propiedad: row.propiedadId,
-            estatus_demanda: 'EN_REVISION',
+            estatus_demanda: 'NOTIFICADO',
             responsable: abogado.nombre_completo,
             activo: true,
           })
@@ -872,7 +888,7 @@ function DemandaDetailPanel({
       const payload: Record<string, any> = {
         id_cuenta_cobranza: row.cuentaId,
         id_propiedad: row.propiedadId,
-        estatus_demanda: data.estatusDemanda,
+        estatus_demanda: statusToDb(data.estatusDemanda),
         fecha_compromiso_entrega: data.fechaCompromiso || null,
         porcentaje_penalizacion: pct,
         responsable: data.responsable || null,
@@ -1321,7 +1337,7 @@ export function DemandasDashboard() {
     })();
     (async () => {
       try {
-        const { error } = await (supabase as any).from('app_juridico_perfiles').select('id').limit(1);
+        const { error } = await (supabase as any).from('perfiles_juridicos').select('id').limit(1);
         setTablesJuridicoExist(!error);
       } catch {
         setTablesJuridicoExist(false);
@@ -1336,7 +1352,7 @@ export function DemandasDashboard() {
     queryFn: async () => {
       try {
         const { data } = await (supabase as any)
-          .from('app_juridico_perfiles')
+          .from('perfiles_juridicos')
           .select('id, nombre_completo, email, telefono, tipo_abogado, despacho, cedula_profesional, especialidad, estatus')
           .eq('activo', true)
           .order('nombre_completo');
@@ -1385,11 +1401,32 @@ export function DemandasDashboard() {
         propStatusMap[p.id] = p.id_estatus_disponibilidad ?? 0;
       });
 
-      const { data: cuentas, error: e4 } = await supabase
-        .from('cuentas_cobranza').select('id, id_propiedad, precio_final, fecha_compra')
+      const { data: cuentasRaw, error: e4 } = await supabase
+        .from('cuentas_cobranza').select('id, id_propiedad, id_oferta, precio_final, fecha_compra')
         .in('id_propiedad', allProps.map((p: any) => p.id)).eq('activo', true);
       if (e4) { console.error('[DemandasDashboard] cuentas_cobranza:', e4); throw e4; }
-      const allCuentas = cuentas ?? [];
+      if (!cuentasRaw?.length) return [];
+
+      // Filtrar solo cuentas de PROPIEDAD: ofertas.id_producto IS NULL
+      // (excluye bodegas/estacionamientos que tienen su propia cuenta)
+      const ofertaIds = [...new Set(cuentasRaw.map((c: any) => c.id_oferta).filter(Boolean))];
+      const ofertaEsProp: Set<number> = new Set();
+      if (ofertaIds.length) {
+        const { data: ofertas } = await supabase
+          .from('ofertas').select('id, id_producto').in('id', ofertaIds as any);
+        (ofertas ?? []).forEach((o: any) => { if (!o.id_producto) ofertaEsProp.add(o.id); });
+      }
+      // Si no se puede determinar (sin oferta), usar la cuenta con mayor precio_final por propiedad
+      const propCuentaMap: Record<number, any> = {};
+      for (const c of cuentasRaw as any[]) {
+        const esProp = c.id_oferta ? ofertaEsProp.has(c.id_oferta) : false;
+        if (esProp) {
+          // Múltiples cuentas propiedad: quedarse con la de mayor precio
+          const ex = propCuentaMap[c.id_propiedad];
+          if (!ex || Number(c.precio_final) > Number(ex.precio_final)) propCuentaMap[c.id_propiedad] = c;
+        }
+      }
+      const allCuentas = Object.values(propCuentaMap);
       if (!allCuentas.length) return [];
       const allCuentaIds = allCuentas.map((c: any) => c.id);
 
@@ -1455,7 +1492,13 @@ export function DemandasDashboard() {
           porPagar:          precioFinal - pagado,
           fechaCompra:       cuenta.fecha_compra ?? null,
           demandaId:         d?.id ?? null,
-          estatusDemanda:    parseStatus(d?.estatus_demanda),
+          // Si hay registro en demandas: usar su estatus
+          // Si no hay registro pero propiedad está en estatus 11 (En demanda): derivar como EN_REVISION
+          estatusDemanda:    d?.estatus_demanda
+            ? parseStatus(d.estatus_demanda)
+            : propStatusMap[cuenta.id_propiedad] === 11
+              ? 'EN_REVISION'
+              : 'SIN_DEMANDA',
           fechaCompromiso:   d?.fecha_compromiso_entrega ?? null,
           pctPenalizacion:   pct,
           montoPenalizacion: d ? Number(d.monto_penalizacion ?? (precioFinal * pct / 100)) : 0,
