@@ -27,53 +27,60 @@ export function useLegalFlowSolicitudesRecibidas() {
 }
 
 async function fetchSolicitudesRecibidas(): Promise<LegalRequest[]> {
-  // 1) Cuentas base — activas, sin cuenta padre, aprobadas, con id_oferta.
-  const { data: cuentas, error: ccErr } = await (supabase as any)
-    .from("cuentas_cobranza")
+  // 1) Universo chico primero: propiedades Apartadas (id_estatus = 4).
+  //    Esto evita paginar miles de cuentas para luego filtrar — y garantiza
+  //    que cuentas viejas (id bajo) también aparezcan.
+  const { data: props, error: propErr } = await (supabase as any)
+    .from("propiedades")
     .select(
-      "id, id_oferta, id_propiedad, precio_final, fecha_compra, fecha_creacion",
+      "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
     )
     .eq("activo", true)
-    .is("id_cuenta_cobranza_padre", null)
-    .order("fecha_creacion", { ascending: false })
-    .limit(1000);
-  if (ccErr) throw ccErr;
-  const cuentasRows = (cuentas || []) as Array<any>;
+    .eq("id_estatus_disponibilidad", ESTATUS_APARTADO);
+  if (propErr) throw propErr;
+  const propRows = (props || []) as Array<any>;
+  if (!propRows.length) return [];
+  const propIds = propRows.map((p) => p.id as number);
+  const apartadosByProp = new Map<number, any>(propRows.map((p) => [p.id, p]));
+
+  // 2) Ofertas que apuntan a esas propiedades — para resolver cuentas cuyo
+  //    `id_propiedad` está NULL y la propiedad efectiva vive en la oferta.
+  const { data: ofs } = ((await (supabase as any)
+    .from("ofertas")
+    .select("id, id_propiedad, id_producto, id_persona_lead")
+    .in("id_propiedad", propIds)) as any);
+  const ofertaRows = (ofs || []) as Array<any>;
+  const ofMap = new Map<number, any>(ofertaRows.map((o: any) => [o.id, o]));
+  const ofertaIds = ofertaRows.map((o) => o.id as number);
+
+  // 3) Cuentas de cobranza: traemos las que enlazan vía id_propiedad O vía
+  //    id_oferta (fallback). Dos queries y union para evitar `.or()` con
+  //    listas largas. Filtros base: activa, sin cuenta padre.
+  const cuentasMap = new Map<number, any>();
+  const ccCols =
+    "id, id_oferta, id_propiedad, precio_final, fecha_compra, fecha_creacion";
+  if (propIds.length) {
+    const { data, error } = (await (supabase as any)
+      .from("cuentas_cobranza")
+      .select(ccCols)
+      .eq("activo", true)
+      .is("id_cuenta_cobranza_padre", null)
+      .in("id_propiedad", propIds)) as any;
+    if (error) throw error;
+    (data || []).forEach((c: any) => cuentasMap.set(c.id, c));
+  }
+  if (ofertaIds.length) {
+    const { data, error } = (await (supabase as any)
+      .from("cuentas_cobranza")
+      .select(ccCols)
+      .eq("activo", true)
+      .is("id_cuenta_cobranza_padre", null)
+      .in("id_oferta", ofertaIds)) as any;
+    if (error) throw error;
+    (data || []).forEach((c: any) => cuentasMap.set(c.id, c));
+  }
+  const cuentasRows = Array.from(cuentasMap.values());
   if (!cuentasRows.length) return [];
-
-  // 2) Ofertas → id_propiedad (fallback) + id_producto + id_persona_lead.
-  const ofertaIds = Array.from(
-    new Set(cuentasRows.map((c) => c.id_oferta).filter((v): v is number => !!v)),
-  );
-  const { data: ofs } = ofertaIds.length
-    ? ((await (supabase as any)
-        .from("ofertas")
-        .select("id, id_propiedad, id_producto, id_persona_lead")
-        .in("id", ofertaIds)) as any)
-    : { data: [] };
-  const ofMap = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
-
-  // 3) Resolver id_propiedad efectivo por cuenta y filtrar a Apartado.
-  const propIds = Array.from(
-    new Set(
-      cuentasRows
-        .map((c) => c.id_propiedad ?? ofMap.get(c.id_oferta)?.id_propiedad ?? null)
-        .filter((v): v is number => !!v),
-    ),
-  );
-  const { data: props } = propIds.length
-    ? ((await (supabase as any)
-        .from("propiedades")
-        .select(
-          "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
-        )
-        .in("id", propIds)
-        .eq("id_estatus_disponibilidad", ESTATUS_APARTADO)) as any)
-    : { data: [] };
-  const apartadosByProp = new Map<number, any>(
-    ((props || []) as Array<any>).map((p) => [p.id, p]),
-  );
-  if (apartadosByProp.size === 0) return [];
 
   // 4) edificios_modelos → id_edificio + modelo.
   const emIds = Array.from(
@@ -206,6 +213,9 @@ async function fetchSolicitudesRecibidas(): Promise<LegalRequest[]> {
       const cat = (producto.categorias_producto?.nombre || "").toLowerCase();
       tipo = cat === "servicios" ? "Servicio" : "Producto";
     }
+    // Solo cuentas tipo Propiedad: el estatus Apartado pertenece al bien
+    // inmueble, no aplica a Productos ni Servicios.
+    if (tipo !== "Propiedad") continue;
 
     const folio = formatCuentaCobranzaId(c.id, tipo);
     const proyecto = proyectoNombre || "Sin proyecto";
