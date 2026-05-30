@@ -24,7 +24,7 @@ import {
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { Loader2 } from 'lucide-react';
-import type { CaseStatus, IntegrationStatus } from '@/types/legal-flow';
+import type { CaseStatus, CompradorDetalle, IntegrationStatus, TipoPersona } from '@/types/legal-flow';
 
 // ── Mock data for clickable detail drawers ──
 
@@ -115,8 +115,38 @@ const CUENTA_COBRANZA_DETAILS: Record<string, CuentaCobranzaDetail> = {
 
 // ── Drawer components ──
 
-function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose: () => void; requester: string }) {
-  const profile = REQUESTER_PROFILES[requester];
+interface RequesterDrawerRealProfile {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  inmobiliariaName?: string | null;
+}
+
+function RequesterDrawer({
+  open,
+  onClose,
+  requester,
+  realProfile,
+}: {
+  open: boolean;
+  onClose: () => void;
+  requester: string;
+  realProfile?: RequesterDrawerRealProfile;
+}) {
+  // Cuando el expediente proviene de la BD (real) usamos realProfile;
+  // si no, caemos a los perfiles mock heredados por nombre.
+  const mock = REQUESTER_PROFILES[requester];
+  const profile: RequesterDrawerRealProfile & { type: 'inmobiliaria' | 'independiente'; inmobiliaria?: string } | null = realProfile
+    ? {
+        name: realProfile.name,
+        phone: realProfile.phone ?? null,
+        email: realProfile.email ?? null,
+        type: realProfile.inmobiliariaName ? 'inmobiliaria' : 'independiente',
+        inmobiliaria: realProfile.inmobiliariaName ?? undefined,
+      }
+    : mock
+      ? { ...mock }
+      : null;
   if (!profile) return null;
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
@@ -157,24 +187,28 @@ function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose:
                 <Phone className="h-4 w-4 text-muted-foreground/50" />
                 <div>
                   <p className="text-[11px] text-muted-foreground/60">Teléfono</p>
-                  <p className="text-[13px] font-medium font-mono">{profile.phone}</p>
+                  <p className="text-[13px] font-medium font-mono">{profile.phone || '—'}</p>
                 </div>
               </div>
-              <button onClick={() => copyToClipboard(profile.phone)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+              {profile.phone && (
+                <button onClick={() => copyToClipboard(profile.phone!)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3 group hover:bg-muted/20 transition-colors">
               <div className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 text-muted-foreground/50" />
                 <div>
                   <p className="text-[11px] text-muted-foreground/60">Correo electrónico</p>
-                  <p className="text-[13px] font-medium">{profile.email}</p>
+                  <p className="text-[13px] font-medium">{profile.email || '—'}</p>
                 </div>
               </div>
-              <button onClick={() => copyToClipboard(profile.email)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+              {profile.email && (
+                <button onClick={() => copyToClipboard(profile.email!)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -183,8 +217,37 @@ function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose:
   );
 }
 
-function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; onClose: () => void; counterparties: string[] }) {
-  const details = counterparties.map(cp => COUNTERPARTY_DETAILS[cp]).filter(Boolean);
+const TIPO_PERSONA_LABEL: Record<TipoPersona, 'Persona física' | 'Persona moral' | 'Persona extranjera'> = {
+  pf: 'Persona física',
+  pm: 'Persona moral',
+  pe: 'Persona extranjera',
+};
+
+function CounterpartyDrawer({
+  open,
+  onClose,
+  counterparties,
+  realDetalle,
+}: {
+  open: boolean;
+  onClose: () => void;
+  counterparties: string[];
+  realDetalle?: CompradorDetalle[];
+}) {
+  // Si hay datos reales (cuentas de BD), los renderizamos en un shape
+  // compatible con la UI existente. Si no, caemos al mock heredado.
+  const realDetails = (realDetalle ?? []).map((cd) => ({
+    name: cd.name,
+    tipo: TIPO_PERSONA_LABEL[cd.tipoPersona] ?? 'Persona física',
+    phone: cd.phone ?? '—',
+    email: cd.email ?? '—',
+    rfc: cd.rfc ?? '—',
+    representante: undefined as string | undefined,
+    documents: [] as Array<{ name: string; status: 'cargado' | 'pendiente' | 'validado' }>,
+    porcentajeCopropiedad: cd.porcentajeCopropiedad,
+  }));
+  const mockDetails = counterparties.map(cp => COUNTERPARTY_DETAILS[cp]).filter(Boolean);
+  const details = realDetails.length > 0 ? realDetails : mockDetails;
   const docStatusStyle = (s: string) =>
     s === 'validado' ? 'bg-primary/10 text-primary' :
     s === 'cargado' ? 'bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]' :
@@ -240,15 +303,21 @@ function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; 
               <div>
                 <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-2">Documentación de soporte</p>
                 <div className="space-y-1.5">
-                  {cp.documents.map((doc, di) => (
-                    <div key={di} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
-                        <span className="text-[13px]">{doc.name}</span>
+                  {cp.documents.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground italic">
+                      Documentación pendiente de cargar.
+                    </p>
+                  ) : (
+                    cp.documents.map((doc, di) => (
+                      <div key={di} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          <span className="text-[13px]">{doc.name}</span>
+                        </div>
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${docStatusStyle(doc.status)}`}>{doc.status}</span>
                       </div>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${docStatusStyle(doc.status)}`}>{doc.status}</span>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1970,10 +2039,33 @@ export default function CaseDetail() {
                 </div>
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-6">
-                    <DossierField icon={Building2} label="Empresa" value={request.company} />
-                    <DossierField icon={User} label="Solicitante" value={request.requester} sub={request.requesterDept} onClick={() => setShowRequester(true)} />
-                    <DossierField icon={Calendar} label="Solicitud" value={formatDate(request.createdAt)} />
-                    <DossierField icon={Clock} label="Fecha límite" value={formatDate(request.dueDate)} highlight={new Date(request.dueDate) < new Date()} />
+                    <DossierField
+                      icon={Building2}
+                      label="Empresa"
+                      value={
+                        realRequest
+                          ? realRequest.inmobiliariaName ?? 'Agente Independiente'
+                          : request.company
+                      }
+                    />
+                    <DossierField
+                      icon={User}
+                      label="Solicitante"
+                      value={request.requester}
+                      sub={request.requesterDept}
+                      onClick={() => setShowRequester(true)}
+                    />
+                    <DossierField
+                      icon={Calendar}
+                      label="Solicitud"
+                      value={formatDate(realRequest?.fechaCompra ?? request.createdAt)}
+                    />
+                    <DossierField
+                      icon={Clock}
+                      label="Fecha límite"
+                      value={formatDate(request.dueDate)}
+                      highlight={new Date(request.dueDate) < new Date()}
+                    />
                   </div>
                 </div>
               </div>
@@ -2190,11 +2282,26 @@ export default function CaseDetail() {
       </div>
 
       {/* Detail drawers */}
-      <RequesterDrawer open={showRequester} onClose={() => setShowRequester(false)} requester={request.requester} />
+      <RequesterDrawer
+        open={showRequester}
+        onClose={() => setShowRequester(false)}
+        requester={request.requester}
+        realProfile={
+          realRequest
+            ? {
+                name: realRequest.requester,
+                phone: realRequest.requesterPhone ?? null,
+                email: realRequest.requesterEmail ?? null,
+                inmobiliariaName: realRequest.inmobiliariaName ?? null,
+              }
+            : undefined
+        }
+      />
       <CounterpartyDrawer
         open={showCounterparty}
         onClose={() => setShowCounterparty(false)}
         counterparties={request.counterparties || [request.counterparty]}
+        realDetalle={realRequest?.compradoresDetalle}
       />
       <ContractTypeDrawer open={showContractType} onClose={() => setShowContractType(false)} type={request.type} />
       <CuentaCobranzaDrawer open={showCuentaCobranza} onClose={() => setShowCuentaCobranza(false)} cuenta={request.cuentaCobranza || ''} />

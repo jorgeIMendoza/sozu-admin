@@ -96,6 +96,17 @@ export interface IntegrationState {
   errorMessage?: string;
 }
 
+export type TipoPersona = 'pf' | 'pm' | 'pe';
+
+export interface CompradorDetalle {
+  name: string;
+  tipoPersona: TipoPersona;
+  rfc?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  porcentajeCopropiedad?: number;
+}
+
 export interface LegalRequest {
   id: string;
   title: string;
@@ -106,8 +117,13 @@ export interface LegalRequest {
   property?: string;
   requester: string;
   requesterDept: string;
+  requesterPhone?: string;
+  requesterEmail?: string;
+  /** Nombre de la inmobiliaria del agente. Null/undefined ⇒ "Agente Independiente". */
+  inmobiliariaName?: string;
   counterparty: string;
   counterparties?: string[];
+  compradoresDetalle?: CompradorDetalle[];
   titular?: string;
   cuentaCobranza?: string;
   agenteVendedor?: string;
