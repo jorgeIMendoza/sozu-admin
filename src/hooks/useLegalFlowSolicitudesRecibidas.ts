@@ -30,12 +30,15 @@ async function fetchSolicitudesRecibidas(): Promise<LegalRequest[]> {
   // 1) Universo chico primero: propiedades Apartadas (id_estatus = 4).
   //    Esto evita paginar miles de cuentas para luego filtrar — y garantiza
   //    que cuentas viejas (id bajo) también aparezcan.
+  //    NO se filtra por `activo` — el resto de hooks que leen propiedades
+  //    por estatus (useCobrosPorGestionar, useDispersionesInternasPendientes)
+  //    no lo hacen porque la propiedad puede quedar inactiva al cerrar el
+  //    ciclo y el estatus ya es suficiente.
   const { data: props, error: propErr } = await (supabase as any)
     .from("propiedades")
     .select(
       "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
     )
-    .eq("activo", true)
     .eq("id_estatus_disponibilidad", ESTATUS_APARTADO);
   if (propErr) throw propErr;
   const propRows = (props || []) as Array<any>;

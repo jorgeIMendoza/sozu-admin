@@ -25,12 +25,16 @@ export function useLegalFlowExpedientesArchivados() {
 
 async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
   // 1) Propiedades Vendidas (id_estatus = 5).
+  //    NO se filtra por `activo` — en esta BD las propiedades se marcan
+  //    `activo=false` al cerrar la venta (mismo patrón que usa el resto
+  //    de hooks que muestran Vendido: useCobrosPorGestionar,
+  //    useDispersionesInternasPendientes). El estatus ya es discriminante
+  //    suficiente.
   const { data: props, error: propErr } = await (supabase as any)
     .from("propiedades")
     .select(
       "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
     )
-    .eq("activo", true)
     .eq("id_estatus_disponibilidad", ESTATUS_VENDIDO);
   if (propErr) throw propErr;
   const propRows = (props || []) as Array<any>;
