@@ -1,95 +1,85 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import {
-  Archive, Search, Download, Eye, FileText, Calendar, Building2, User,
-  Filter, CheckCircle2, Zap, FileUp, ShieldCheck, X,
-} from 'lucide-react';
+import { Archive, Search, Eye, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockRequests, REQUEST_TYPE_LABELS } from '@/data/legalFlow/mockData';
-import type { LegalRequest } from '@/types/legal-flow';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 
-const archivedRequests = mockRequests.filter(r => r.status === 'archived');
-
-const INTEGRITY_STATUS: Record<string, { label: string; style: string }> = {
-  complete: { label: 'Expediente íntegro', style: 'bg-primary/10 text-primary' },
-  pending: { label: 'Pendiente de evidencia', style: 'bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]' },
-  validated: { label: 'Archivo validado', style: 'bg-primary/10 text-primary' },
-};
-
-function getIntegrity(r: LegalRequest): string {
-  const allSigned = r.signers?.every(s => s.status === 'signed');
-  const hasDoc = r.documents?.some(d => d.status === 'signed');
-  return allSigned && hasDoc ? 'complete' : 'pending';
-}
-
-function getArchiveDate(r: LegalRequest): string {
-  return r.updatedAt;
-}
-
-function getLastSignatureDate(r: LegalRequest): string | undefined {
-  const dates = r.signers?.filter(s => s.signedAt).map(s => s.signedAt!) || [];
-  if (dates.length === 0) return undefined;
-  return dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
-}
-
-const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
-
+/**
+ * Expedientes Archivados — lista de cuentas de cobranza tipo Propiedad
+ * cuya propiedad está en estatus "Vendido" (id_estatus_disponibilidad = 5).
+ * El expediente que se muestra es el folio CC-XXXXXX. El detalle se abre
+ * en /admin/legal-flow/cases/:folio.
+ */
 export default function ArchivedRequests() {
+  const { data: expedientes, isLoading, error } = useLegalFlowExpedientesArchivados();
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [lawyerFilter, setLawyerFilter] = useState('all');
-  const [methodFilter, setMethodFilter] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [agentFilter, setAgentFilter] = useState('all');
 
-  const projects = [...new Set(archivedRequests.map(r => r.project).filter(Boolean))];
-  const lawyers = [...new Set(archivedRequests.map(r => r.assignedTo).filter(Boolean))];
-  const types = [...new Set(archivedRequests.map(r => r.type))];
+  const list = expedientes ?? [];
 
-  const filtered = archivedRequests.filter((r) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q ||
-      r.title.toLowerCase().includes(q) ||
-      r.id.toLowerCase().includes(q) ||
-      r.counterparty.toLowerCase().includes(q) ||
-      (r.titular || '').toLowerCase().includes(q) ||
-      (r.project || '').toLowerCase().includes(q) ||
-      (r.cuentaCobranza || '').toLowerCase().includes(q) ||
-      (r.property || '').toLowerCase().includes(q);
-    const matchProject = projectFilter === 'all' || r.project === projectFilter;
-    const matchType = typeFilter === 'all' || r.type === typeFilter;
-    const matchLawyer = lawyerFilter === 'all' || r.assignedTo === lawyerFilter;
-    const matchMethod = methodFilter === 'all' || r.signers?.some(s =>
-      methodFilter === 'digital' ? s.signatureMethod === 'digital' : s.signatureMethod === 'physical'
-    );
-    return matchSearch && matchProject && matchType && matchLawyer && matchMethod;
-  });
+  const projects = useMemo(
+    () => Array.from(new Set(list.map((r) => r.project).filter(Boolean))) as string[],
+    [list],
+  );
+  const agents = useMemo(
+    () =>
+      Array.from(
+        new Set(list.map((r) => r.agenteVendedor).filter(Boolean)),
+      ) as string[],
+    [list],
+  );
 
-  // KPIs
-  const thisMonth = new Date();
-  thisMonth.setDate(1);
-  const archivedThisMonth = archivedRequests.filter(r => new Date(getArchiveDate(r)) >= thisMonth).length;
-  const byProject: Record<string, number> = {};
-  archivedRequests.forEach(r => { byProject[r.project || 'Otro'] = (byProject[r.project || 'Otro'] || 0) + 1; });
-  const digitalCount = archivedRequests.filter(r => r.signers?.every(s => s.signatureMethod === 'digital')).length;
-  const physicalCount = archivedRequests.filter(r => r.signers?.some(s => s.signatureMethod === 'physical')).length;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return list.filter((r) => {
+      const matchSearch = !q
+        || r.id.toLowerCase().includes(q)
+        || (r.project || '').toLowerCase().includes(q)
+        || (r.modelo || '').toLowerCase().includes(q)
+        || (r.property || '').toLowerCase().includes(q)
+        || (r.titular || '').toLowerCase().includes(q)
+        || r.counterparty.toLowerCase().includes(q)
+        || (r.counterparties || []).some((c) => c.toLowerCase().includes(q))
+        || (r.agenteVendedor || '').toLowerCase().includes(q);
+      const matchProject = projectFilter === 'all' || r.project === projectFilter;
+      const matchAgent = agentFilter === 'all' || r.agenteVendedor === agentFilter;
+      return matchSearch && matchProject && matchAgent;
+    });
+  }, [list, search, projectFilter, agentFilter]);
 
-  const hasActiveFilters = projectFilter !== 'all' || typeFilter !== 'all' || lawyerFilter !== 'all' || methodFilter !== 'all';
+  const archivedThisMonth = useMemo(() => {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    return list.filter((r) => {
+      const d = r.fechaCompra ? new Date(r.fechaCompra) : null;
+      return d != null && d >= start;
+    }).length;
+  }, [list]);
 
-  const clearFilters = () => {
-    setProjectFilter('all');
-    setTypeFilter('all');
-    setLawyerFilter('all');
-    setMethodFilter('all');
-  };
+  const fmtDate = (d?: string) =>
+    d
+      ? new Date(d).toLocaleDateString('es-MX', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : '—';
 
   return (
-    <div className="px-10 py-8 space-y-6 max-w-[1400px]">
+    <div className="px-10 py-8 space-y-6 max-w-[1600px]">
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div className="flex items-center gap-3 mb-1">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
             <Archive className="h-5 w-5 text-primary" />
@@ -97,228 +87,194 @@ export default function ArchivedRequests() {
           <div>
             <h1 className="text-[24px] font-bold tracking-tight">Expedientes Archivados</h1>
             <p className="text-[13px] text-muted-foreground">
-              Repositorio de contratos y convenios que completaron el proceso legal
+              Cuentas de cobranza con propiedad en estatus Vendido — proceso legal completado
             </p>
           </div>
         </div>
       </motion.div>
 
-      {/* KPI Summary */}
+      {/* KPIs */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.05 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="grid grid-cols-2 md:grid-cols-2 gap-4"
       >
         <div className="panel p-4">
-          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Total archivados</p>
-          <p className="text-[28px] font-bold text-foreground mt-1">{archivedRequests.length}</p>
+          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">
+            Total archivados
+          </p>
+          <p className="text-[28px] font-bold text-foreground mt-1 tabular-nums">
+            {isLoading ? '…' : list.length}
+          </p>
         </div>
         <div className="panel p-4">
-          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Archivados este mes</p>
-          <p className="text-[28px] font-bold text-foreground mt-1">{archivedThisMonth}</p>
-        </div>
-        <div className="panel p-4">
-          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Firma digital</p>
-          <div className="flex items-center gap-2 mt-1">
-            <Zap className="h-4 w-4 text-primary" />
-            <p className="text-[28px] font-bold text-foreground">{digitalCount}</p>
-          </div>
-        </div>
-        <div className="panel p-4">
-          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Firma física</p>
-          <div className="flex items-center gap-2 mt-1">
-            <FileUp className="h-4 w-4 text-muted-foreground" />
-            <p className="text-[28px] font-bold text-foreground">{physicalCount}</p>
-          </div>
+          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">
+            Archivados este mes
+          </p>
+          <p className="text-[28px] font-bold text-foreground mt-1 tabular-nums">
+            {isLoading ? '…' : archivedThisMonth}
+          </p>
         </div>
       </motion.div>
 
-      {/* Search & Filters */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[260px] max-w-lg">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-            <Input
-              placeholder="Buscar por expediente, contraparte, titular, proyecto, cuenta cobranza, unidad..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-[38px] text-[13px] bg-card rounded-lg"
-            />
-          </div>
-          <Button
-            variant={showFilters ? 'default' : 'outline'}
-            size="sm"
-            className="h-[38px] text-[13px] gap-1.5 rounded-lg"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className="h-3.5 w-3.5" />
-            Filtros
-            {hasActiveFilters && (
-              <span className="ml-1 h-5 w-5 flex items-center justify-center rounded-full bg-primary-foreground text-primary text-[11px] font-bold">
-                {[projectFilter, typeFilter, lawyerFilter, methodFilter].filter(f => f !== 'all').length}
-              </span>
-            )}
-          </Button>
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" className="h-[38px] text-[13px] gap-1 text-muted-foreground" onClick={clearFilters}>
-              <X className="h-3.5 w-3.5" /> Limpiar
-            </Button>
-          )}
+      {/* Search + Filters */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        className="flex flex-wrap items-center gap-3"
+      >
+        <div className="relative flex-1 min-w-[260px] max-w-lg">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+          <Input
+            placeholder="Buscar por ID cuenta, proyecto, modelo, comprador, agente..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-[38px] text-[13px] bg-card rounded-lg"
+          />
         </div>
-
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} transition={{ duration: 0.2 }}
-            className="flex flex-wrap items-center gap-3 pt-1"
-          >
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger className="w-[180px] h-[36px] text-[13px] bg-card rounded-lg">
-                <SelectValue placeholder="Proyecto" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los proyectos</SelectItem>
-                {projects.map(p => <SelectItem key={p} value={p!}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[180px] h-[36px] text-[13px] bg-card rounded-lg">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los tipos</SelectItem>
-                {types.map(t => <SelectItem key={t} value={t}>{REQUEST_TYPE_LABELS[t] || t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={lawyerFilter} onValueChange={setLawyerFilter}>
-              <SelectTrigger className="w-[200px] h-[36px] text-[13px] bg-card rounded-lg">
-                <SelectValue placeholder="Abogado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los abogados</SelectItem>
-                {lawyers.map(l => <SelectItem key={l} value={l!}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={methodFilter} onValueChange={setMethodFilter}>
-              <SelectTrigger className="w-[180px] h-[36px] text-[13px] bg-card rounded-lg">
-                <SelectValue placeholder="Método de firma" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los métodos</SelectItem>
-                <SelectItem value="digital">Firma digital</SelectItem>
-                <SelectItem value="physical">Firma física</SelectItem>
-              </SelectContent>
-            </Select>
-          </motion.div>
-        )}
+        <Select value={projectFilter} onValueChange={setProjectFilter}>
+          <SelectTrigger className="w-[200px] h-[38px] text-[13px] bg-card rounded-lg">
+            <SelectValue placeholder="Proyecto" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los proyectos</SelectItem>
+            {projects.map((p) => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={agentFilter} onValueChange={setAgentFilter}>
+          <SelectTrigger className="w-[220px] h-[38px] text-[13px] bg-card rounded-lg">
+            <SelectValue placeholder="Agente vendedor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los agentes</SelectItem>
+            {agents.map((a) => (
+              <SelectItem key={a} value={a}>{a}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </motion.div>
 
-      {/* Results */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}>
-        <div className="panel">
-          <div className="panel-header">
-            <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {filtered.length} expediente{filtered.length !== 1 ? 's' : ''} archivado{filtered.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          {filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <Archive className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-[14px] text-muted-foreground font-medium">No se encontraron expedientes archivados</p>
-              <p className="text-[12px] text-muted-foreground/60 mt-1">Ajusta los filtros de búsqueda</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {filtered.map((r) => (
-                <ArchivedRow key={r.id} request={r} />
-              ))}
-            </div>
-          )}
+      {/* Table */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.15 }}
+        className="panel overflow-hidden"
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left border-b">
+                <th className="table-head w-[120px]">ID Cuenta</th>
+                <th className="table-head">Proyecto</th>
+                <th className="table-head">Modelo</th>
+                <th className="table-head">Propiedad</th>
+                <th className="table-head">Dueño</th>
+                <th className="table-head">Compradores</th>
+                <th className="table-head">Agente Vendedor</th>
+                <th className="table-head w-[130px]">Fecha Compra</th>
+                <th className="table-head w-[80px] text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} className="px-5 py-20 text-center">
+                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando expedientes…
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={9} className="px-5 py-20 text-center">
+                    <p className="text-sm font-medium text-destructive">Error al cargar</p>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {(error as Error).message}
+                    </p>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-5 py-20 text-center">
+                    <Archive className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-foreground">
+                      No se encontraron expedientes archivados
+                    </p>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      Ajusta los filtros de búsqueda
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((r) => {
+                  const compradores = (r.counterparties && r.counterparties.length > 0
+                    ? r.counterparties
+                    : [r.counterparty]
+                  ).filter(Boolean);
+                  return (
+                    <tr
+                      key={r.id}
+                      className="border-t border-border/50 table-row-hover"
+                      style={{ height: '52px' }}
+                    >
+                      <td className="table-cell font-mono text-[12px] text-muted-foreground/80 whitespace-nowrap">
+                        {r.id}
+                      </td>
+                      <td className="table-cell text-[13px]">{r.project || '—'}</td>
+                      <td className="table-cell text-[13px] text-muted-foreground">
+                        {r.modelo || '—'}
+                      </td>
+                      <td className="table-cell text-[13px]">{r.property || '—'}</td>
+                      <td className="table-cell text-[13px] text-muted-foreground">
+                        {r.titular || '—'}
+                      </td>
+                      <td className="table-cell text-[13px]">
+                        <div className="max-w-[220px]">
+                          {compradores.length === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : compradores.length === 1 ? (
+                            compradores[0]
+                          ) : (
+                            <span title={compradores.join(', ')}>
+                              {compradores[0]}{' '}
+                              <span className="text-muted-foreground">
+                                +{compradores.length - 1}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="table-cell text-[13px] text-muted-foreground">
+                        {r.agenteVendedor || '—'}
+                      </td>
+                      <td className="table-cell text-[12px] font-mono text-muted-foreground/70 tabular-nums whitespace-nowrap">
+                        {fmtDate(r.fechaCompra)}
+                      </td>
+                      <td className="table-cell text-right">
+                        <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]">
+                          <Link
+                            to={`/admin/legal-flow/cases/${r.id}`}
+                            aria-label={`Ver detalle del expediente ${r.id}`}
+                            title="Ver detalle del expediente"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Ver
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </motion.div>
-    </div>
-  );
-}
-
-function ArchivedRow({ request: r }: { request: LegalRequest }) {
-  const integrity = getIntegrity(r);
-  const integrityConfig = INTEGRITY_STATUS[integrity];
-  const lastSig = getLastSignatureDate(r);
-  const archiveDate = getArchiveDate(r);
-  const hasPhysical = r.signers?.some(s => s.signatureMethod === 'physical');
-
-  return (
-    <div className="flex items-center gap-4 px-5 py-4 hover:bg-muted/30 transition-colors group">
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[11px] font-mono text-muted-foreground/60">{r.id}</span>
-          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${integrityConfig.style}`}>
-            <ShieldCheck className="h-2.5 w-2.5" />
-            {integrityConfig.label}
-          </span>
-        </div>
-        <Link to={`/admin/legal-flow/cases/${r.id}`} className="text-[14px] font-semibold text-foreground hover:text-primary transition-colors line-clamp-1">
-          {r.title}
-        </Link>
-        <div className="flex items-center gap-4 mt-1.5 text-[12px] text-muted-foreground">
-          {r.project && (
-            <span className="flex items-center gap-1">
-              <Building2 className="h-3 w-3" /> {r.project}
-            </span>
-          )}
-          <span className="flex items-center gap-1">
-            <User className="h-3 w-3" /> {r.counterparty}
-          </span>
-          {r.titular && (
-            <span className="flex items-center gap-1 text-muted-foreground/60">
-              Titular: {r.titular}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Signature info */}
-      <div className="hidden lg:flex flex-col items-end gap-1 min-w-[140px]">
-        <div className="flex items-center gap-1.5">
-          {hasPhysical ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <FileUp className="h-3 w-3" /> Firma física
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] text-primary">
-              <Zap className="h-3 w-3" /> Firma digital
-            </span>
-          )}
-        </div>
-        {lastSig && (
-          <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-            <FileText className="h-3 w-3" /> Firma: {formatDate(lastSig)}
-          </span>
-        )}
-      </div>
-
-      {/* Dates */}
-      <div className="hidden md:flex flex-col items-end gap-1 min-w-[130px]">
-        <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-          <Calendar className="h-3 w-3" /> Archivo: {formatDate(archiveDate)}
-        </span>
-        {r.assignedTo && (
-          <span className="text-[11px] text-muted-foreground/60">
-            {r.assignedTo}
-          </span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg" asChild>
-          <Link to={`/admin/legal-flow/cases/${r.id}`}>
-            <Eye className="h-4 w-4 text-muted-foreground" />
-          </Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg">
-          <Download className="h-4 w-4 text-muted-foreground" />
-        </Button>
-      </div>
     </div>
   );
 }

@@ -110,6 +110,8 @@ export interface LegalRequest {
   counterparties?: string[];
   titular?: string;
   cuentaCobranza?: string;
+  agenteVendedor?: string;
+  fechaCompra?: string;
   estimatedValue: number;
   priority: Priority;
   description: string;
