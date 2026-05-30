@@ -119,7 +119,7 @@ interface RequesterDrawerRealProfile {
   name: string;
   phone?: string | null;
   email?: string | null;
-  inmobiliariaName?: string | null;
+  empresaName?: string | null;
 }
 
 function RequesterDrawer({
@@ -136,13 +136,15 @@ function RequesterDrawer({
   // Cuando el expediente proviene de la BD (real) usamos realProfile;
   // si no, caemos a los perfiles mock heredados por nombre.
   const mock = REQUESTER_PROFILES[requester];
-  const profile: RequesterDrawerRealProfile & { type: 'inmobiliaria' | 'independiente'; inmobiliaria?: string } | null = realProfile
+  const profile:
+    | (RequesterDrawerRealProfile & { type: 'inmobiliaria' | 'independiente'; inmobiliaria?: string })
+    | null = realProfile
     ? {
         name: realProfile.name,
         phone: realProfile.phone ?? null,
         email: realProfile.email ?? null,
-        type: realProfile.inmobiliariaName ? 'inmobiliaria' : 'independiente',
-        inmobiliaria: realProfile.inmobiliariaName ?? undefined,
+        type: realProfile.empresaName ? 'inmobiliaria' : 'independiente',
+        inmobiliaria: realProfile.empresaName ?? undefined,
       }
     : mock
       ? { ...mock }
@@ -168,14 +170,14 @@ function RequesterDrawer({
                 profile.type === 'inmobiliaria' ? 'bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]' : 'bg-muted text-muted-foreground'
               }`}>
                 <User className="h-2.5 w-2.5" />
-                {profile.type === 'inmobiliaria' ? 'Ligado a inmobiliaria' : 'Agente independiente'}
+                {profile.type === 'inmobiliaria' ? 'Ligado a empresa' : 'Agente independiente'}
               </span>
             </div>
           </div>
 
           {profile.type === 'inmobiliaria' && profile.inmobiliaria && (
             <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Inmobiliaria</p>
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Empresa</p>
               <p className="text-[13px] font-medium flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-muted-foreground/50" />{profile.inmobiliaria}</p>
             </div>
           )}
@@ -2044,7 +2046,7 @@ export default function CaseDetail() {
                       label="Empresa"
                       value={
                         realRequest
-                          ? realRequest.inmobiliariaName ?? 'Agente Independiente'
+                          ? realRequest.empresaName ?? 'Agente Independiente'
                           : request.company
                       }
                     />
@@ -2292,7 +2294,7 @@ export default function CaseDetail() {
                 name: realRequest.requester,
                 phone: realRequest.requesterPhone ?? null,
                 email: realRequest.requesterEmail ?? null,
-                inmobiliariaName: realRequest.inmobiliariaName ?? null,
+                empresaName: realRequest.empresaName ?? null,
               }
             : undefined
         }

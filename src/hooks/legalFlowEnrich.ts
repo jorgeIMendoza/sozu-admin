@@ -32,6 +32,15 @@ import type {
 
 const TIPO_ENTIDAD_AGENTE = 19;
 
+// Dominios que identifican a empleados/agentes internos del grupo SOZU.
+// Mantener alineado con DOMINIOS_INTERNOS_GRUPO en otros lugares del repo.
+const DOMINIOS_INTERNOS_SOZU = ["sozu.com", "investimento.mx", "tallwood.mx", "daiku.mx"];
+function isDominioInternoSozu(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const dominio = email.split("@")[1]?.toLowerCase();
+  return DOMINIOS_INTERNOS_SOZU.some((d) => dominio === d);
+}
+
 interface EnrichInput {
   cuentas: Array<any>;
   ofertas: Array<any>;
@@ -332,16 +341,30 @@ export async function enrichLegalFlowCases({
     const rolNombre: string = agenteUsuario?.rol_id
       ? rolMap.get(agenteUsuario.rol_id) ?? ""
       : "";
-    let inmobiliariaName: string | undefined = undefined;
-    const esAgenteInmobiliario =
-      rolNombre.toLowerCase().includes("agente") &&
-      rolNombre.toLowerCase().includes("inmobiliario");
-    if (esAgenteInmobiliario && agenteUsuario?.id_persona) {
-      const inmobPersonaId = inmobiliariaPersonaIdByAgente.get(
-        agenteUsuario.id_persona,
-      );
-      if (inmobPersonaId) {
-        inmobiliariaName = inmobiliariaNameById.get(inmobPersonaId);
+    // Empresa del agente:
+    //  1. Si el email del creador pertenece al grupo SOZU (@sozu.com /
+    //     dominios internos), la empresa es "Sozu" — caso de agentes
+    //     internos (vendedores SOZU directos).
+    //  2. Si el agente tiene rol Agente Inmobiliario y existe una
+    //     inmobiliaria afiliada vía entidades_relacionadas, esa es su
+    //     empresa.
+    //  3. Cualquier otro caso queda undefined ⇒ "Agente Independiente"
+    //     en la UI.
+    let empresaName: string | undefined = undefined;
+    const dominioInterno = isDominioInternoSozu(agenteEmail);
+    if (dominioInterno) {
+      empresaName = "Sozu";
+    } else {
+      const esAgenteInmobiliario =
+        rolNombre.toLowerCase().includes("agente") &&
+        rolNombre.toLowerCase().includes("inmobiliario");
+      if (esAgenteInmobiliario && agenteUsuario?.id_persona) {
+        const inmobPersonaId = inmobiliariaPersonaIdByAgente.get(
+          agenteUsuario.id_persona,
+        );
+        if (inmobPersonaId) {
+          empresaName = inmobiliariaNameById.get(inmobPersonaId);
+        }
       }
     }
 
@@ -358,10 +381,10 @@ export async function enrichLegalFlowCases({
       id: folio,
       title,
       type: "new_contract",
-      // `company` se conserva por compatibilidad. La UI usa inmobiliariaName
+      // `company` se conserva por compatibilidad. La UI usa empresaName
       // (o "Agente Independiente") en lugar de este campo para expedientes
       // reales en SOZU Legal Flow.
-      company: inmobiliariaName || "Agente Independiente",
+      company: empresaName || "Agente Independiente",
       project: proyecto,
       modelo: modeloNombre ?? undefined,
       property: unidad || undefined,
@@ -369,7 +392,7 @@ export async function enrichLegalFlowCases({
       requesterDept: "Comercial",
       requesterPhone: agentePhone ?? undefined,
       requesterEmail: agenteEmailNorm ?? undefined,
-      inmobiliariaName,
+      empresaName,
       counterparty,
       counterparties,
       compradoresDetalle,

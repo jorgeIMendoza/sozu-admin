@@ -119,8 +119,12 @@ export interface LegalRequest {
   requesterDept: string;
   requesterPhone?: string;
   requesterEmail?: string;
-  /** Nombre de la inmobiliaria del agente. Null/undefined ⇒ "Agente Independiente". */
-  inmobiliariaName?: string;
+  /**
+   * Empresa u organización del agente vendedor (Sozu si es interno o
+   * la inmobiliaria si está afiliado). Null/undefined ⇒ "Agente
+   * Independiente" en la UI.
+   */
+  empresaName?: string;
   counterparty: string;
   counterparties?: string[];
   compradoresDetalle?: CompradorDetalle[];
