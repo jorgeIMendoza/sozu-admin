@@ -8,9 +8,13 @@ import type { LegalRequest } from "@/types/legal-flow";
  * está en estatus "Vendido" (id_estatus_disponibilidad = 5).
  *
  * El expediente que se muestra es el folio de la cuenta de cobranza
- * (CC-XXXXXX). Adicional al enrich de la versión "Solicitudes recibidas"
- * se incluye el agente vendedor (vía `oferta.email_creador` → `usuarios.nombre`)
- * y la fecha de compra de la cuenta.
+ * (CC-XXXXXX). Adicional al enrich estándar se incluye el agente vendedor
+ * (vía `oferta.email_creador` → `usuarios.nombre`) y la fecha de compra
+ * de la cuenta.
+ *
+ * Arquitectura: partir de `cuentas_cobranza` paginadas y filtrar Vendido
+ * en JS — igual que `useCobrosPorGestionar`. Partir de `propiedades` no
+ * funciona porque la BD tiene ~8k Vendido y PostgREST corta a 1000.
  */
 
 const ESTATUS_VENDIDO = 5;
@@ -24,65 +28,78 @@ export function useLegalFlowExpedientesArchivados() {
 }
 
 async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
-  // 1) Propiedades Vendidas (id_estatus = 5).
-  //    NO se filtra por `activo` — en esta BD las propiedades se marcan
-  //    `activo=false` al cerrar la venta (mismo patrón que usa el resto
-  //    de hooks que muestran Vendido: useCobrosPorGestionar,
-  //    useDispersionesInternasPendientes). El estatus ya es discriminante
-  //    suficiente.
-  const { data: props, error: propErr } = await (supabase as any)
-    .from("propiedades")
-    .select(
-      "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
-    )
-    .eq("id_estatus_disponibilidad", ESTATUS_VENDIDO);
-  if (propErr) throw propErr;
-  const propRows = (props || []) as Array<any>;
-  if (!propRows.length) return [];
-  const propIds = propRows.map((p) => p.id as number);
-  const vendidasByProp = new Map<number, any>(propRows.map((p) => [p.id, p]));
-
-  // 2) Ofertas que apuntan a esas propiedades (incluye email_creador para
-  //    derivar agente vendedor).
-  const { data: ofs } = ((await (supabase as any)
-    .from("ofertas")
-    .select("id, id_propiedad, id_producto, id_persona_lead, email_creador")
-    .in("id_propiedad", propIds)) as any);
-  const ofertaRows = (ofs || []) as Array<any>;
-  const ofMap = new Map<number, any>(ofertaRows.map((o: any) => [o.id, o]));
-  const ofertaIds = ofertaRows.map((o) => o.id as number);
-
-  // 3) Cuentas de cobranza vinculadas (por id_propiedad directo o vía id_oferta).
-  const cuentasMap = new Map<number, any>();
+  // 1) Paginar cuentas_cobranza activas, sin padre. Universo manejable
+  //    (~1.5k rows). Filtros adicionales (tipo Propiedad, Vendido) se
+  //    aplican en JS después del enrich.
+  const cuentasRows: Array<any> = [];
+  const PAGE = 1000;
   const ccCols =
     "id, id_oferta, id_propiedad, precio_final, fecha_compra, fecha_creacion";
-  if (propIds.length) {
+  for (let offset = 0; ; offset += PAGE) {
     const { data, error } = (await (supabase as any)
       .from("cuentas_cobranza")
       .select(ccCols)
       .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
-      .in("id_propiedad", propIds)) as any;
+      .order("id", { ascending: false })
+      .range(offset, offset + PAGE - 1)) as any;
     if (error) throw error;
-    (data || []).forEach((c: any) => cuentasMap.set(c.id, c));
+    const batch = (data || []) as Array<any>;
+    cuentasRows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (offset > 100_000) break; // safety
   }
-  if (ofertaIds.length) {
-    const { data, error } = (await (supabase as any)
-      .from("cuentas_cobranza")
-      .select(ccCols)
-      .eq("activo", true)
-      .is("id_cuenta_cobranza_padre", null)
-      .in("id_oferta", ofertaIds)) as any;
-    if (error) throw error;
-    (data || []).forEach((c: any) => cuentasMap.set(c.id, c));
-  }
-  const cuentasRows = Array.from(cuentasMap.values());
   if (!cuentasRows.length) return [];
 
-  // 4) edificios_modelos → id_edificio + modelo.
+  // 2) Ofertas para resolver id_propiedad efectivo (cc.id_propiedad suele
+  //    venir NULL y la propiedad real vive en oferta.id_propiedad) +
+  //    id_producto y email_creador (agente vendedor) + id_persona_lead.
+  const ofertaIds = Array.from(
+    new Set(
+      cuentasRows.map((c) => c.id_oferta).filter((v): v is number => !!v),
+    ),
+  );
+  const ofs: Array<any> = [];
+  for (let offset = 0; ofertaIds.length && offset < ofertaIds.length; offset += PAGE) {
+    const slice = ofertaIds.slice(offset, offset + PAGE);
+    const { data, error } = (await (supabase as any)
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto, id_persona_lead, email_creador")
+      .in("id", slice)) as any;
+    if (error) throw error;
+    ofs.push(...((data || []) as Array<any>));
+  }
+  const ofMap = new Map<number, any>(ofs.map((o: any) => [o.id, o]));
+
+  // 3) id_propiedad efectivo por cuenta (cc.id_propiedad o oferta.id_propiedad).
+  const propIdsEfectivos = Array.from(
+    new Set(
+      cuentasRows
+        .map((c) => c.id_propiedad ?? ofMap.get(c.id_oferta)?.id_propiedad ?? null)
+        .filter((v): v is number => !!v),
+    ),
+  );
+
+  // 4) Propiedades correspondientes — incluye id_estatus_disponibilidad
+  //    para filtrar Vendido en JS.
+  const props: Array<any> = [];
+  for (let offset = 0; propIdsEfectivos.length && offset < propIdsEfectivos.length; offset += PAGE) {
+    const slice = propIdsEfectivos.slice(offset, offset + PAGE);
+    const { data, error } = (await (supabase as any)
+      .from("propiedades")
+      .select(
+        "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
+      )
+      .in("id", slice)) as any;
+    if (error) throw error;
+    props.push(...((data || []) as Array<any>));
+  }
+  const propMap = new Map<number, any>(props.map((p: any) => [p.id, p]));
+
+  // 5) edificios_modelos → id_edificio + modelo.
   const emIds = Array.from(
     new Set(
-      propRows.map((p) => p.id_edificio_modelo).filter((v): v is number => !!v),
+      props.map((p) => p.id_edificio_modelo).filter((v): v is number => !!v),
     ),
   );
   const { data: ems } = emIds.length
@@ -95,7 +112,7 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     : { data: [] };
   const emMap = new Map<number, any>((ems || []).map((em: any) => [em.id, em]));
 
-  // 5) edificios → proyecto.
+  // 6) edificios → proyecto.
   const edIds = Array.from(
     new Set(
       (ems || []).map((e: any) => e.id_edificio).filter((v: any): v is number => !!v),
@@ -124,10 +141,10 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     (projs || []).map((p: any) => [p.id, p.nombre as string]),
   );
 
-  // 6) Productos (para tipo Propiedad/Producto/Servicio).
+  // 7) Productos (para tipo Propiedad/Producto/Servicio).
   const productoIds = Array.from(
     new Set(
-      (ofs || []).map((o: any) => o.id_producto).filter((v: any): v is number => !!v),
+      ofs.map((o: any) => o.id_producto).filter((v: any): v is number => !!v),
     ),
   );
   const { data: prods } = productoIds.length
@@ -140,10 +157,10 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     : { data: [] };
   const prodMap = new Map<number, any>((prods || []).map((p: any) => [p.id, p]));
 
-  // 7) Entidad dueña → titular.
+  // 8) Entidad dueña → titular.
   const entIds = Array.from(
     new Set(
-      propRows
+      props
         .map((p) => p.id_entidad_relacionada_dueno)
         .filter((v: any): v is number => !!v),
     ),
@@ -158,10 +175,10 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     : { data: [] };
   const entMap = new Map<number, any>((ents || []).map((e: any) => [e.id, e]));
 
-  // 8) Personas (comprador / lead de la oferta).
+  // 9) Personas (comprador / lead de la oferta).
   const personaIds = Array.from(
     new Set(
-      (ofs || []).map((o: any) => o.id_persona_lead).filter((v: any): v is number => !!v),
+      ofs.map((o: any) => o.id_persona_lead).filter((v: any): v is number => !!v),
     ),
   );
   const { data: pers } = personaIds.length
@@ -172,10 +189,10 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     : { data: [] };
   const persMap = new Map<number, any>((pers || []).map((p: any) => [p.id, p]));
 
-  // 9) Usuarios — para mapear oferta.email_creador → nombre (agente vendedor).
+  // 10) Usuarios — para mapear oferta.email_creador → nombre (agente vendedor).
   const emailsCreadores = Array.from(
     new Set(
-      (ofs || []).map((o: any) => o.email_creador).filter((v: any): v is string => !!v),
+      ofs.map((o: any) => o.email_creador).filter((v: any): v is string => !!v),
     ),
   );
   const { data: usuariosCreadores } = emailsCreadores.length
@@ -188,14 +205,15 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     (usuariosCreadores || []).map((u: any) => [u.email, u]),
   );
 
-  // 10) Construir LegalRequest por cuenta Vendida.
+  // 11) Componer + filtrar a propiedad Vendido y tipo Propiedad.
   const result: LegalRequest[] = [];
   for (const c of cuentasRows) {
     const oferta = c.id_oferta ? ofMap.get(c.id_oferta) : null;
     const idPropEfectivo: number | null = c.id_propiedad ?? oferta?.id_propiedad ?? null;
     if (!idPropEfectivo) continue;
-    const propiedad = vendidasByProp.get(idPropEfectivo);
+    const propiedad = propMap.get(idPropEfectivo);
     if (!propiedad) continue;
+    if (propiedad.id_estatus_disponibilidad !== ESTATUS_VENDIDO) continue;
 
     const em = propiedad.id_edificio_modelo
       ? emMap.get(propiedad.id_edificio_modelo)
@@ -216,8 +234,6 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
       const cat = (producto.categorias_producto?.nombre || "").toLowerCase();
       tipo = cat === "servicios" ? "Servicio" : "Producto";
     }
-    // Solo cuentas tipo Propiedad: el estatus Vendido pertenece al bien
-    // inmueble, no aplica a Productos ni Servicios.
     if (tipo !== "Propiedad") continue;
 
     const folio = formatCuentaCobranzaId(c.id, tipo);
