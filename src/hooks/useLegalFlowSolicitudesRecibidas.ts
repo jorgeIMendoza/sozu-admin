@@ -248,6 +248,7 @@ async function fetchSolicitudesRecibidas(): Promise<LegalRequest[]> {
       type: "new_contract",
       company: "SOZU Desarrollos",
       project: proyecto,
+      modelo: modeloNombre ?? undefined,
       property: unidad || undefined,
       requester: "—",
       requesterDept: "Comercial",

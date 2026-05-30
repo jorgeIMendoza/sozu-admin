@@ -102,6 +102,7 @@ export interface LegalRequest {
   type: RequestType;
   company: string;
   project: string;
+  modelo?: string;
   property?: string;
   requester: string;
   requesterDept: string;
