@@ -92,3 +92,8 @@ export const ENVIRONMENT = String(
 
 // App Version (injected at build time)
 export const APP_VERSION = `v${__APP_VERSION__}-${__BUILD_TIMESTAMP__}`;
+
+// Production Edge Functions — always points to Supabase Cloud regardless of environment.
+// Used for functions not deployed in self-hosted dev (e.g. generar-recibo-pago).
+export const PROD_FUNCTIONS_BASE_URL = "https://tzmhgfjmddkfyffkkmto.supabase.co/functions/v1";
+export const PROD_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6bWhnZmptZGRrZnlmZmtrbXRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNTU0NDUsImV4cCI6MjA3MjkzMTQ0NX0.8DaFtWO6zyJg14jFo_Zm2idYKwI-mvfmUtlixG2JDSE";

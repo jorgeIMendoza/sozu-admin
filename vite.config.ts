@@ -50,6 +50,7 @@ export default defineConfig(({ mode }) => {
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: ["extruding-splotchy-surfer.ngrok-free.dev"],
   },
   plugins: [
     react(), 

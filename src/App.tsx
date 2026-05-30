@@ -140,13 +140,17 @@ const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/
 
 // Portal Cliente pages
 const ClienteInicio = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteInicio"));
-const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClientePerfil = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePerfil"));
 const ClienteHistorialPagos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteHistorialPagos"));
 const ClientePropiedadDetalle = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadDetalle"));
 const ClienteMantenimientoPago = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteMantenimientoPago"));
 const ClientePropiedadPago = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadPago"));
 const ClienteDetallesTecnicos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDetallesTecnicos"));
+const ClienteDocumentos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDocumentos"));
+const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteNotificaciones"));
+const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
+const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
+const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
 
 // Portal Cobranza pages
 const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
@@ -420,12 +424,18 @@ const App = () => (
                     <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
                     <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
-                    <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                    <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
+                    <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                    <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
+                    <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                    <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
                     <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                     <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                     <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                    <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
+                    <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                     <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
@@ -562,12 +572,18 @@ const App = () => (
                   <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
                   <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
-                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
+                  <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                  <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
+                  <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                  <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                   <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                   <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                  <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
+                  <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
                   <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
                   <Route path="portal-cobranza/bandeja" element={<CobranzaBandeja />} />

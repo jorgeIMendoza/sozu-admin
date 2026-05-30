@@ -38,13 +38,13 @@ export function ClienteImpersonationSelector() {
   });
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <UserSearch className="h-4 w-4 text-muted-foreground shrink-0" />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" className="w-full sm:w-[260px] justify-between h-8 text-sm">
+          <Button variant="outline" role="combobox" className="w-full max-w-[220px] justify-between h-8 text-sm">
             {isImpersonating ? (
-              <span className="truncate">{impersonatedClienteName}</span>
+              <span className="flex-1 truncate min-w-0">{impersonatedClienteName}</span>
             ) : (
               <span className="text-muted-foreground">Seleccionar cliente...</span>
             )}

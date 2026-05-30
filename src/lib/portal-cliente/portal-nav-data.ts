@@ -1,0 +1,60 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Home,
+  ShoppingBag,
+  Wallet,
+  FileText,
+  Bell,
+  User,
+  CreditCard,
+  BarChart2,
+  type LucideIcon,
+} from "lucide-react";
+
+export interface PortalNavItem {
+  id: number;
+  label: string;
+  route: string;
+  icon: LucideIcon;
+}
+
+const ROUTE_ICON: Record<string, LucideIcon> = {
+  "/admin/portal-cliente/inicio":          Home,
+  "/admin/portal-cliente/en-adquisicion":  ShoppingBag,
+  "/admin/portal-cliente/patrimonio":      Wallet,
+  "/admin/portal-cliente/documentos":      FileText,
+  "/admin/portal-cliente/notificaciones":  Bell,
+  "/admin/portal-cliente/perfil":          User,
+  "/admin/portal-cliente/pagos":           CreditCard,
+  "/admin/portal-cliente/historial-pagos": CreditCard,
+  "/admin/portal-cliente/estado-de-cuenta": BarChart2,
+};
+
+export function usePortalNavItems() {
+  return useQuery<PortalNavItem[]>({
+    queryKey: ["portal-nav-submenus"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("submenus")
+        .select("id, nombre, vista_front_end, orden")
+        .eq("menu_id", 18)
+        .eq("activo", true)
+        .not("vista_front_end", "is", null)
+        .order("orden");
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id as number,
+        label: row.nombre as string,
+        route: row.vista_front_end as string,
+        icon: ROUTE_ICON[row.vista_front_end as string] ?? Home,
+      }));
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function isNavItemActive(route: string, pathname: string): boolean {
+  if (route === "/admin/portal-cliente/inicio") return pathname === route;
+  return pathname.startsWith(route);
+}
