@@ -31,6 +31,7 @@ import { ReferralFormDialog } from './AmbassadorsAdminTab';
 import { ReferralPortalDrawer } from './ReferralPortalDrawer';
 import { EmbajadorDocsCard } from './EmbajadorDocsCard';
 import { EmbajadorComisionesSection, EmbajadorPagosSection } from './EmbajadorComisionesSections';
+import { EmbajadorComoFuncionaDialog } from './EmbajadorComoFuncionaDialog';
 import { useEmbajadorDocumentos } from '@/hooks/useEmbajadorDocumentos';
 import { useEmbajadorComisiones } from '@/hooks/useEmbajadorComisiones';
 import { Receipt } from 'lucide-react';
@@ -89,6 +90,7 @@ export default function AmbassadorsPortalTab() {
   const [activeId, setActiveId] = useState(ambassadors[0]?.id ?? '');
   const [section, setSection] = useState<Section>('home');
   const [showForm, setShowForm] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [openRefId, setOpenRefId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReferralStatus>('all');
@@ -159,7 +161,7 @@ export default function AmbassadorsPortalTab() {
               <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto shadow-sm">
                 <Plus className="h-4 w-4 mr-1.5" /> Registrar nuevo referido
               </Button>
-              <Button variant="outline" size="lg" onClick={() => setSection('profile')} className="w-full sm:w-auto">
+              <Button variant="outline" size="lg" onClick={() => setShowHowItWorks(true)} className="w-full sm:w-auto">
                 Ver cómo funciona <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
               </Button>
             </div>
@@ -632,6 +634,7 @@ export default function AmbassadorsPortalTab() {
         hideAdvisor
       />
       <ReferralPortalDrawer referralId={openRefId} onOpenChange={setOpenRefId} />
+      <EmbajadorComoFuncionaDialog open={showHowItWorks} onOpenChange={setShowHowItWorks} />
     </TooltipProvider>
   );
 }
