@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,7 +22,7 @@ import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
 
 // Retry wrapper for lazy imports — handles stale cache after deploys
-const lazyRetry = (importFn: () => Promise<any>) =>
+const lazyRetry = (importFn: () => Promise<{ default: ComponentType }>) =>
   lazy(() =>
     importFn().catch(() => {
       // If the chunk fails to load, reload the page once
@@ -267,6 +267,13 @@ const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flo
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
+const OfertaCliente = lazyRetry(() => import("./pages/public/OfertaCliente"));
+const CapturaDatosPage = lazyRetry(() => import("./pages/public/CapturaDatosPage"));
+const VerificarEmailPage = lazyRetry(() => import("./pages/public/VerificarEmailPage"));
+const VerificacionCallbackPage = lazyRetry(() => import("./pages/public/VerificacionCallbackPage"));
+const TipoCompradorPage = lazyRetry(() => import("./pages/public/TipoCompradorPage"));
+const HoldTarjetaPage = lazyRetry(() => import("./pages/public/HoldTarjetaPage"));
+const ConfirmacionPage = lazyRetry(() => import("./pages/public/ConfirmacionPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -412,6 +419,13 @@ const App = () => (
                   <Route path="/auth/change-password" element={<ChangePassword />} />
                   <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                   <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
+                  <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
+                  <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
+                  <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                  <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
+                  <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
+                  <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/admin" element={
                     <ProtectedRoute>
@@ -456,7 +470,14 @@ const App = () => (
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
-                
+                <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
+                <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
+                <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
+                <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
+                <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
+                <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
+
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
                   <ProtectedRoute>
