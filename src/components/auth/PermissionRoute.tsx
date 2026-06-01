@@ -93,7 +93,14 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // Si el rol tiene permiso sobre CUALQUIER submenu del portal, habilitamos sus rutas
   // (coarse, igual que el caso de /reportes/ver).
   if (location.pathname.startsWith('/admin/portal-administracion')) {
-    const tieneAccesoPortalAdmin = allowedPaths.some((p) => p.startsWith('/admin/portal-administracion'));
+    // allowedPaths es un Set<string>: iterar, no usar Array.some
+    let tieneAccesoPortalAdmin = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-administracion')) {
+        tieneAccesoPortalAdmin = true;
+        break;
+      }
+    }
     return tieneAccesoPortalAdmin
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
