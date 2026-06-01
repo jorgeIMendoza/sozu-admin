@@ -50,9 +50,9 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow portal-embajador routes only for Super Admin
+  // Allow portal-embajador routes para el rol Embajador y para Super Admin / Admin (impersonación)
   if (location.pathname.startsWith('/admin/portal-embajador')) {
-    if (profile?.rol_id === 1) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
       return <>{children}</>;
     }
     return <Navigate to="/admin/access-denied" replace />;

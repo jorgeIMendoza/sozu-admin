@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown, Pencil, ShieldCheck } from 'lucide-react';
+import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown, Pencil, ShieldCheck, Mail, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import NuevoEmbajadorDialog from './NuevoEmbajadorDialog';
@@ -1027,7 +1027,14 @@ export default function AmbassadorsAdminTab() {
                       <TableCell className="font-mono text-xs">{a.code}</TableCell>
                       <TableCell>
                         <div>{a.fullName}</div>
-                        <div className="text-xs text-muted-foreground">{a.email} · {a.phone}</div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {a.email && (
+                            <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{a.email}</span>
+                          )}
+                          {a.phone && (
+                            <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{a.phone}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{AMBASSADOR_TYPE_LABEL[a.type]}</TableCell>
                       <TableCell>
