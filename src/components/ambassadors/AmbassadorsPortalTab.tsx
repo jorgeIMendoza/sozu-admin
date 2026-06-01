@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   COMMISSION_STATUS_HELP,
   COMMISSION_STATUS_LABEL,
@@ -87,6 +88,11 @@ export default function AmbassadorsPortalTab() {
     setDocumentStatus, markAllRead, markNotificationRead,
   } = useAmbassadors();
 
+  const { profile } = useAuth();
+  // Admins (Super Admin / Admin Proyecto) pueden ver/impersonar a cualquier embajador.
+  // Un embajador real solo debe ver su propio registro.
+  const isAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+
   const [activeId, setActiveId] = useState(ambassadors[0]?.id ?? '');
   const [section, setSection] = useState<Section>('home');
   const [showForm, setShowForm] = useState(false);
@@ -94,6 +100,17 @@ export default function AmbassadorsPortalTab() {
   const [openRefId, setOpenRefId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReferralStatus>('all');
+
+  // Embajador real (no admin): fijar su propio registro por email / id_persona.
+  useEffect(() => {
+    if (isAdmin || ambassadors.length === 0) return;
+    const own = ambassadors.find(
+      (a) =>
+        (profile?.email && a.email?.toLowerCase() === profile.email.toLowerCase()) ||
+        (profile?.id_persona != null && a.idPersona === profile.id_persona),
+    );
+    if (own && own.id !== activeId) setActiveId(own.id);
+  }, [isAdmin, ambassadors, profile?.email, profile?.id_persona, activeId]);
 
   const active = ambassadors.find((a) => a.id === activeId);
 
@@ -228,17 +245,19 @@ export default function AmbassadorsPortalTab() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
-            <div className="w-full sm:w-64">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Estoy viendo como…</div>
-              <Select value={activeId} onValueChange={setActiveId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ambassadors.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.fullName} ({a.code})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isAdmin && (
+              <div className="w-full sm:w-64">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Estoy viendo como…</div>
+                <Select value={activeId} onValueChange={setActiveId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ambassadors.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.fullName} ({a.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-1" /> Registrar nuevo referido
             </Button>
