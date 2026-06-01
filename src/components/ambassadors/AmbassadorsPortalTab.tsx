@@ -30,7 +30,10 @@ import {
 import { ReferralFormDialog } from './AmbassadorsAdminTab';
 import { ReferralPortalDrawer } from './ReferralPortalDrawer';
 import { EmbajadorDocsCard } from './EmbajadorDocsCard';
+import { EmbajadorComisionesSection, EmbajadorPagosSection } from './EmbajadorComisionesSections';
 import { useEmbajadorDocumentos } from '@/hooks/useEmbajadorDocumentos';
+import { useEmbajadorComisiones } from '@/hooks/useEmbajadorComisiones';
+import { Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (n: number) =>
@@ -39,7 +42,7 @@ const dateShort = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('es-
 
 const commLabelForAmb = (s: string) => s === 'potencial' ? 'Sin comisión generada' : COMMISSION_STATUS_LABEL[s as keyof typeof COMMISSION_STATUS_LABEL];
 
-type Section = 'home' | 'referrals' | 'commissions' | 'profile';
+type Section = 'home' | 'referrals' | 'commissions' | 'payments' | 'profile';
 
 function KpiCard({
   label, value, sub, help, accent,
@@ -103,6 +106,7 @@ export default function AmbassadorsPortalTab() {
   const unread = myNotifs.filter((n) => !n.read).length;
 
   const { pendingCount: pendingDocs } = useEmbajadorDocumentos(active?.idPersona);
+  const { totals: comTotals } = useEmbajadorComisiones(active?.email);
 
   const stats = useMemo(() => {
     const total = myRefs.length;
@@ -244,9 +248,9 @@ export default function AmbassadorsPortalTab() {
         <KpiCard label="Mis referidos" value={String(stats.total)} accent />
         <KpiCard label="En seguimiento" value={String(stats.active)} />
         <KpiCard label="Vendidos" value={String(stats.sold)} />
-        <KpiCard label="Comisión generada" value={stats.generated ? fmt(stats.generated) : 'Sin generar'} help={COMMISSION_STATUS_HELP.generada} />
-        <KpiCard label="Comisión autorizada" value={stats.authorized ? fmt(stats.authorized) : '—'} help={COMMISSION_STATUS_HELP.autorizada} />
-        <KpiCard label="Comisión pagada" value={stats.paid ? fmt(stats.paid) : '—'} help={COMMISSION_STATUS_HELP.pagada} />
+        <KpiCard label="Comisión generada" value={comTotals.generada ? fmt(comTotals.generada) : 'Sin generar'} help={COMMISSION_STATUS_HELP.generada} />
+        <KpiCard label="Comisión autorizada" value={comTotals.autorizada ? fmt(comTotals.autorizada) : '—'} help={COMMISSION_STATUS_HELP.autorizada} />
+        <KpiCard label="Comisión pagada" value={comTotals.pagada ? fmt(comTotals.pagada) : '—'} help={COMMISSION_STATUS_HELP.pagada} />
         <KpiCard label="Documentación" value={pendingDocs === 0 ? 'Al día' : `${pendingDocs} pend.`} sub={pendingDocs === 0 ? 'Todo en orden' : 'Revisa tu perfil'} />
       </div>
 
@@ -425,71 +429,10 @@ export default function AmbassadorsPortalTab() {
   );
 
   // ─── Section: Comisiones ───
-  const CommissionsSection = (
-    <div className="space-y-4">
-      <Card className="p-4 border-primary/30 bg-primary/5">
-        <div className="flex items-start gap-3">
-          <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-          <p className="text-sm">
-            La comisión se calculará una vez que el referido concrete una compra y la operación sea validada por SOZU.
-            Antes del cierre no mostramos montos estimados.
-          </p>
-        </div>
-      </Card>
+  const CommissionsSection = <EmbajadorComisionesSection email={active.email} />;
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Comisión generada" value={stats.generated ? fmt(stats.generated) : 'Sin comisiones generadas todavía'} help={COMMISSION_STATUS_HELP.generada} />
-        <KpiCard label="Comisión autorizada" value={stats.authorized ? fmt(stats.authorized) : '—'} help={COMMISSION_STATUS_HELP.autorizada} />
-        <KpiCard label="Comisión pagada" value={stats.paid ? fmt(stats.paid) : '—'} help={COMMISSION_STATUS_HELP.pagada} accent />
-        <KpiCard label="Documentación" value={pendingDocs === 0 ? 'Al día' : `${pendingDocs} pend.`} sub={pendingDocs === 0 ? 'Todo en orden' : 'Revisa Perfil'} />
-      </div>
-
-      <Card className="p-4 overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Estatus comercial</TableHead>
-              <TableHead>Estatus de comisión</TableHead>
-              <TableHead>Generada</TableHead>
-              <TableHead>Autorizada</TableHead>
-              <TableHead>Pagada</TableHead>
-              <TableHead>Fecha pago</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {myRefs.filter((r) => r.commissionStatus !== 'cancelada').map((r) => {
-              const c = r.commissionAmount;
-              const cs = r.commissionStatus;
-              return (
-                <TableRow key={r.id}>
-                  <TableCell>{r.clientName}</TableCell>
-                  <TableCell><Badge variant="outline">{mapStatusForAmbassador(r.status)}</Badge></TableCell>
-                  <TableCell><Badge variant="outline">{commLabelForAmb(cs)}</Badge></TableCell>
-                  <TableCell>{cs === 'generada' || cs === 'autorizada' || cs === 'pagada' ? fmt(c) : '—'}</TableCell>
-                  <TableCell>{cs === 'autorizada' || cs === 'pagada' ? fmt(c) : '—'}</TableCell>
-                  <TableCell>{cs === 'pagada' ? fmt(c) : '—'}</TableCell>
-                  <TableCell className="text-xs">
-                    {r.paymentDate ? dateShort(r.paymentDate) :
-                      r.estimatedPaymentDate ? `Estim. ${dateShort(r.estimatedPaymentDate)}` : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" onClick={() => setOpenRefId(r.id)}>Ver</Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-        <p className="text-xs text-muted-foreground mt-3">
-          La comisión solo se calcula cuando existe una venta cerrada y validada por SOZU.
-        </p>
-      </Card>
-    </div>
-  );
-
-
+  // ─── Section: Pagos ───
+  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} />;
 
   // ─── Section: Perfil ───
   const ProfileSection = (
@@ -597,6 +540,7 @@ export default function AmbassadorsPortalTab() {
     { id: 'home', label: 'Inicio', icon: Home },
     { id: 'referrals', label: 'Referidos', icon: Users },
     { id: 'commissions', label: 'Comisiones', icon: Wallet },
+    { id: 'payments', label: 'Pagos', icon: Receipt },
     { id: 'profile', label: 'Perfil', icon: UserCircle2 },
   ];
 
@@ -639,6 +583,7 @@ export default function AmbassadorsPortalTab() {
         {section === 'home' && HomeSection}
         {section === 'referrals' && ReferralsSection}
         {section === 'commissions' && CommissionsSection}
+        {section === 'payments' && PaymentsSection}
         {section === 'profile' && ProfileSection}
       </div>
 
