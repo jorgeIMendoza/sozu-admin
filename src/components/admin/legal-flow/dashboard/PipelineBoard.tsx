@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize2 } from 'lucide-react';
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
+import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
 
 const PIPELINE_STAGES: { status: CaseStatus; label: string }[] = [
@@ -58,7 +59,19 @@ const isOverdue = (d: string) => new Date(d) < new Date();
 
 export default function PipelineBoard({ onColumnClick }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('expanded');
-  const activeRequests = mockRequests.filter(r => !['cancelled', 'rejected', 'archived'].includes(r.status));
+  const { data: solicitudesRecibidas } = useLegalFlowSolicitudesRecibidas();
+
+  // La primera etapa (request_received / missing_information) se alimenta de
+  // datos reales: cuentas de cobranza con propiedad en estatus Apartado. Las
+  // etapas posteriores siguen usando mock hasta que cada una tenga su origen.
+  const activeRequests = useMemo<LegalRequest[]>(() => {
+    const realRequestReceived = solicitudesRecibidas ?? [];
+    const downstreamMock = mockRequests.filter(
+      (r) => !['request_received', 'missing_information', 'cancelled', 'rejected', 'archived'].includes(r.status),
+    );
+    return [...realRequestReceived, ...downstreamMock];
+  }, [solicitudesRecibidas]);
+
   const grouped = groupByStage(activeRequests);
 
   return (

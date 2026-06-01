@@ -21,7 +21,18 @@ import {
   mockRequests, mockTimeline, STATUS_CONFIG, REQUEST_TYPE_LABELS,
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
 } from '@/data/legalFlow/mockData';
-import type { CaseStatus, IntegrationStatus } from '@/types/legal-flow';
+import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
+import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
+import {
+  useBitacoraCuentaCobranza,
+  useAppendBitacoraEntry,
+  getValidationState,
+  type ValidationStatus,
+} from '@/hooks/useBitacoraCuentaCobranza';
+import type { BitacoraEntry, BitacoraEntryInput, BitacoraScope } from '@/types/bitacora';
+import { Loader2, CheckCircle, ShieldAlert } from 'lucide-react';
+import type { CaseStatus, CompradorDetalle, IntegrationStatus, TipoPersona } from '@/types/legal-flow';
 
 // ── Mock data for clickable detail drawers ──
 
@@ -112,8 +123,40 @@ const CUENTA_COBRANZA_DETAILS: Record<string, CuentaCobranzaDetail> = {
 
 // ── Drawer components ──
 
-function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose: () => void; requester: string }) {
-  const profile = REQUESTER_PROFILES[requester];
+interface RequesterDrawerRealProfile {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  empresaName?: string | null;
+}
+
+function RequesterDrawer({
+  open,
+  onClose,
+  requester,
+  realProfile,
+}: {
+  open: boolean;
+  onClose: () => void;
+  requester: string;
+  realProfile?: RequesterDrawerRealProfile;
+}) {
+  // Cuando el expediente proviene de la BD (real) usamos realProfile;
+  // si no, caemos a los perfiles mock heredados por nombre.
+  const mock = REQUESTER_PROFILES[requester];
+  const profile:
+    | (RequesterDrawerRealProfile & { type: 'inmobiliaria' | 'independiente'; inmobiliaria?: string })
+    | null = realProfile
+    ? {
+        name: realProfile.name,
+        phone: realProfile.phone ?? null,
+        email: realProfile.email ?? null,
+        type: realProfile.empresaName ? 'inmobiliaria' : 'independiente',
+        inmobiliaria: realProfile.empresaName ?? undefined,
+      }
+    : mock
+      ? { ...mock }
+      : null;
   if (!profile) return null;
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
@@ -135,14 +178,14 @@ function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose:
                 profile.type === 'inmobiliaria' ? 'bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]' : 'bg-muted text-muted-foreground'
               }`}>
                 <User className="h-2.5 w-2.5" />
-                {profile.type === 'inmobiliaria' ? 'Ligado a inmobiliaria' : 'Agente independiente'}
+                {profile.type === 'inmobiliaria' ? 'Ligado a empresa' : 'Agente independiente'}
               </span>
             </div>
           </div>
 
           {profile.type === 'inmobiliaria' && profile.inmobiliaria && (
             <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Inmobiliaria</p>
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Empresa</p>
               <p className="text-[13px] font-medium flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-muted-foreground/50" />{profile.inmobiliaria}</p>
             </div>
           )}
@@ -154,24 +197,28 @@ function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose:
                 <Phone className="h-4 w-4 text-muted-foreground/50" />
                 <div>
                   <p className="text-[11px] text-muted-foreground/60">Teléfono</p>
-                  <p className="text-[13px] font-medium font-mono">{profile.phone}</p>
+                  <p className="text-[13px] font-medium font-mono">{profile.phone || '—'}</p>
                 </div>
               </div>
-              <button onClick={() => copyToClipboard(profile.phone)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+              {profile.phone && (
+                <button onClick={() => copyToClipboard(profile.phone!)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3 group hover:bg-muted/20 transition-colors">
               <div className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 text-muted-foreground/50" />
                 <div>
                   <p className="text-[11px] text-muted-foreground/60">Correo electrónico</p>
-                  <p className="text-[13px] font-medium">{profile.email}</p>
+                  <p className="text-[13px] font-medium">{profile.email || '—'}</p>
                 </div>
               </div>
-              <button onClick={() => copyToClipboard(profile.email)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+              {profile.email && (
+                <button onClick={() => copyToClipboard(profile.email!)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -180,8 +227,41 @@ function RequesterDrawer({ open, onClose, requester }: { open: boolean; onClose:
   );
 }
 
-function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; onClose: () => void; counterparties: string[] }) {
-  const details = counterparties.map(cp => COUNTERPARTY_DETAILS[cp]).filter(Boolean);
+const TIPO_PERSONA_LABEL: Record<TipoPersona, 'Persona física' | 'Persona moral' | 'Persona extranjera'> = {
+  pf: 'Persona física',
+  pm: 'Persona moral',
+  pe: 'Persona extranjera',
+};
+
+function CounterpartyDrawer({
+  open,
+  onClose,
+  counterparties,
+  realDetalle,
+  idCuentaCobranza,
+}: {
+  open: boolean;
+  onClose: () => void;
+  counterparties: string[];
+  realDetalle?: CompradorDetalle[];
+  idCuentaCobranza?: number;
+}) {
+  // Si hay datos reales (cuentas de BD), renderizamos el drawer rico con
+  // 5 tabs (Básica / Dirección / Fiscal / Documentos / Cuentas Bancarias).
+  // Si no, caemos al renderer mock heredado para compat con expedientes
+  // EXP-2025-*.
+  if (realDetalle && realDetalle.length > 0) {
+    return (
+      <CounterpartyRealDrawer
+        open={open}
+        onClose={onClose}
+        compradores={realDetalle}
+        idCuentaCobranza={idCuentaCobranza}
+      />
+    );
+  }
+
+  const mockDetails = counterparties.map(cp => COUNTERPARTY_DETAILS[cp]).filter(Boolean);
   const docStatusStyle = (s: string) =>
     s === 'validado' ? 'bg-primary/10 text-primary' :
     s === 'cargado' ? 'bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]' :
@@ -194,9 +274,9 @@ function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; 
           <SheetTitle className="text-[16px]">Partes y documentación</SheetTitle>
         </SheetHeader>
         <div className="px-6 py-5 space-y-6">
-          {details.length === 0 ? (
+          {mockDetails.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">No se encontró información detallada de las contrapartes.</p>
-          ) : details.map((cp, idx) => (
+          ) : mockDetails.map((cp, idx) => (
             <div key={idx} className="space-y-4">
               {idx > 0 && <div className="border-t" />}
               <div className="flex items-start gap-3">
@@ -237,15 +317,21 @@ function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; 
               <div>
                 <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-2">Documentación de soporte</p>
                 <div className="space-y-1.5">
-                  {cp.documents.map((doc, di) => (
-                    <div key={di} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
-                        <span className="text-[13px]">{doc.name}</span>
+                  {cp.documents.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground italic">
+                      Documentación pendiente de cargar.
+                    </p>
+                  ) : (
+                    cp.documents.map((doc, di) => (
+                      <div key={di} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          <span className="text-[13px]">{doc.name}</span>
+                        </div>
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${docStatusStyle(doc.status)}`}>{doc.status}</span>
                       </div>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${docStatusStyle(doc.status)}`}>{doc.status}</span>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -253,6 +339,473 @@ function CounterpartyDrawer({ open, onClose, counterparties }: { open: boolean; 
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CounterpartyRealDrawer({
+  open,
+  onClose,
+  compradores,
+  idCuentaCobranza,
+}: {
+  open: boolean;
+  onClose: () => void;
+  compradores: CompradorDetalle[];
+  idCuentaCobranza?: number;
+}) {
+  const idPersonas = compradores.map((c) => c.idPersona);
+  const { data: fullByPersona, isLoading } = useCompradoresFullDetail(idPersonas);
+  const [selectedId, setSelectedId] = useState<number>(idPersonas[0] ?? 0);
+  // Si los compradores cambian (caso multi-buyer), apuntar al primero.
+  const safeSelectedId = idPersonas.includes(selectedId) ? selectedId : idPersonas[0] ?? 0;
+  const summary = compradores.find((c) => c.idPersona === safeSelectedId);
+  const full = fullByPersona?.[safeSelectedId];
+
+  // Bitácora — fuente única para el estado de validación de cada sección
+  // y documento. Las acciones (validar / rechazar) appendéan una entrada.
+  const { entries: bitacora, columnaFaltante } = useBitacoraCuentaCobranza(idCuentaCobranza);
+  const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
+
+  const [rejectFor, setRejectFor] = useState<{
+    scope: BitacoraScope;
+    idDocumento?: number;
+    label: string;
+  } | null>(null);
+  const [rejectJustification, setRejectJustification] = useState("");
+
+  const validate = (scope: BitacoraScope, label: string, refs: { idDocumento?: number } = {}) => {
+    if (columnaFaltante) {
+      alert("La columna bitácora aún no existe en BD. Aplica el DDL antes de validar.");
+      return;
+    }
+    appendMutation.mutate({
+      tipo: "validacion",
+      mensaje: `Validó: ${label}`,
+      referencia: {
+        scope,
+        idPersona: safeSelectedId,
+        idDocumento: refs.idDocumento,
+      },
+    });
+  };
+
+  const submitReject = () => {
+    if (!rejectFor || !rejectJustification.trim()) return;
+    appendMutation.mutate({
+      tipo: "rechazo",
+      mensaje: rejectJustification.trim(),
+      referencia: {
+        scope: rejectFor.scope,
+        idPersona: safeSelectedId,
+        idDocumento: rejectFor.idDocumento,
+      },
+    });
+    setRejectFor(null);
+    setRejectJustification("");
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="sm:max-w-[680px] p-0 overflow-y-auto">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          <SheetTitle className="text-[16px]">Partes y documentación</SheetTitle>
+        </SheetHeader>
+        <div className="px-6 py-5 space-y-5">
+          {compradores.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {compradores.map((c) => {
+                const active = c.idPersona === safeSelectedId;
+                return (
+                  <button
+                    key={c.idPersona}
+                    onClick={() => setSelectedId(c.idPersona)}
+                    className={`text-[12px] font-medium px-3 py-1.5 rounded-full transition-colors ${
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    {c.name}
+                    {typeof c.porcentajeCopropiedad === 'number' && c.porcentajeCopropiedad > 0 && (
+                      <span className="ml-1.5 opacity-70">{c.porcentajeCopropiedad.toFixed(0)}%</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {summary && (
+            <div className="flex items-start gap-3">
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 ${
+                summary.tipoPersona === 'pm'
+                  ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {summary.tipoPersona === 'pm'
+                  ? <Building2 className="h-5 w-5" />
+                  : summary.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold leading-tight">{summary.name}</p>
+                <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full mt-1 ${
+                  summary.tipoPersona === 'pm'
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}>{TIPO_PERSONA_LABEL[summary.tipoPersona]}</span>
+              </div>
+            </div>
+          )}
+
+          {isLoading && !full ? (
+            <div className="py-12 text-center text-sm text-muted-foreground inline-flex w-full justify-center items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando información…
+            </div>
+          ) : full ? (
+            <Tabs defaultValue="basica" className="w-full">
+              <TabsList className="w-full justify-start flex-wrap h-auto">
+                <TabsTrigger value="basica">Básica</TabsTrigger>
+                <TabsTrigger value="direccion">Dirección</TabsTrigger>
+                <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+                <TabsTrigger value="documentos">
+                  Documentos
+                  {full.documentos.length > 0 && (
+                    <span className="ml-1.5 text-[10px] opacity-70">({full.documentos.length})</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="cuentas">
+                  Cuentas
+                  {full.cuentasBancarias.length > 0 && (
+                    <span className="ml-1.5 text-[10px] opacity-70">({full.cuentasBancarias.length})</span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basica" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_basica', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_basica', 'Información básica del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_basica', label: 'Información básica' })}
+                />
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Tipo de persona" value={full.basica.tipoPersonaLabel} />
+                  <DrawerKv label="Nombre" value={full.basica.nombreLegal || full.basica.nombreComercial} />
+                  <DrawerKv label="Correo" value={full.basica.email} />
+                  <DrawerKv
+                    label="Teléfono"
+                    value={
+                      full.basica.telefono
+                        ? `${full.basica.clavePaisTelefono ? `(${full.basica.clavePaisTelefono}) ` : ''}${full.basica.telefono}`
+                        : null
+                    }
+                    mono
+                  />
+                  <DrawerKv label="RFC" value={full.basica.rfc} mono />
+                  <DrawerKv label="CURP" value={full.basica.curp} mono />
+                  <DrawerKv label="Sexo" value={full.basica.sexo === 'M' ? 'Masculino' : full.basica.sexo === 'F' ? 'Femenino' : full.basica.sexo} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="direccion" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_direccion', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_direccion', 'Dirección del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_direccion', label: 'Dirección' })}
+                />
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Calle" value={full.direccion.calle} />
+                  <DrawerKv label="Núm. exterior" value={full.direccion.numExterior} />
+                  <DrawerKv label="Núm. interior" value={full.direccion.numInterior} />
+                  <DrawerKv label="Código postal" value={full.direccion.codigoPostal} mono />
+                  <DrawerKv label="Colonia" value={full.direccion.colonia} />
+                  <DrawerKv label="País" value={full.direccion.paisNombre} />
+                  <DrawerKv label="Estado" value={full.direccion.estadoNombre} />
+                  <DrawerKv label="Municipio" value={full.direccion.municipioNombre} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="fiscal" className="pt-4 space-y-4">
+                <SectionValidationBar
+                  state={getValidationState(bitacora, 'comprador_fiscal', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Aplica el DDL de bitácora primero.' : undefined}
+                  onValidate={() => validate('comprador_fiscal', 'Información fiscal del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_fiscal', label: 'Información fiscal' })}
+                />
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DrawerKv label="Régimen" value={full.fiscal.regimenNombre ?? full.fiscal.regimenCodigo} />
+                  <DrawerKv label="Uso de CFDI" value={full.fiscal.usoCfdiNombre ?? full.fiscal.usoCfdiCodigo} />
+                  <DrawerKv label="Estado civil" value={full.fiscal.estadoCivilNombre} />
+                  <DrawerKv label="Tipo de identificación" value={full.fiscal.tipoIdentificacionNombre} />
+                  <DrawerKv
+                    label="Fecha de nacimiento"
+                    value={
+                      full.fiscal.fechaNacimiento
+                        ? new Date(full.fiscal.fechaNacimiento).toLocaleDateString('es-MX', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })
+                        : null
+                    }
+                  />
+                  <DrawerKv label="País nacimiento" value={full.fiscal.paisNacimientoNombre} />
+                  <DrawerKv label="Estado nacimiento" value={full.fiscal.estadoNacimientoNombre} />
+                  <DrawerKv label="Municipio nacimiento" value={full.fiscal.municipioNacimientoNombre} />
+                  <DrawerKv label="Ocupación" value={full.fiscal.ocupacion} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="documentos" className="pt-4">
+                {full.documentos.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground italic">Documentación pendiente de cargar.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {full.documentos.map((doc) => {
+                      const docState = getValidationState(bitacora, 'documento', {
+                        idPersona: safeSelectedId,
+                        idDocumento: doc.id,
+                      });
+                      return (
+                        <div key={doc.id} className="rounded-lg border p-2.5 hover:bg-muted/20 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <a
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 min-w-0 flex-1"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                              <span className="text-[13px] truncate">{doc.tipoDocumentoNombre}</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary shrink-0">
+                                <Eye className="h-3 w-3" /> Ver
+                              </span>
+                            </a>
+                            <ValidationStatusBadge status={docState.status} />
+                          </div>
+                          <div className="flex items-center justify-between mt-2 gap-2">
+                            {docState.lastEntry?.tipo === 'rechazo' && (
+                              <p className="text-[11px] text-destructive flex-1 min-w-0 truncate">
+                                Rechazo: {docState.lastEntry.mensaje}
+                              </p>
+                            )}
+                            <div className="flex gap-1.5 ml-auto">
+                              <Button
+                                size="sm"
+                                variant={docState.status === 'validado' ? 'outline' : 'default'}
+                                className="h-7 px-2 text-[11px] gap-1"
+                                disabled={appendMutation.isPending || columnaFaltante}
+                                onClick={() => validate('documento', doc.tipoDocumentoNombre, { idDocumento: doc.id })}
+                              >
+                                <CheckCircle className="h-3 w-3" /> Validar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
+                                disabled={appendMutation.isPending || columnaFaltante}
+                                onClick={() => setRejectFor({
+                                  scope: 'documento',
+                                  idDocumento: doc.id,
+                                  label: doc.tipoDocumentoNombre,
+                                })}
+                              >
+                                <XCircle className="h-3 w-3" /> Rechazar
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="cuentas" className="pt-4">
+                {full.cuentasBancarias.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground italic">Sin cuentas bancarias registradas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {full.cuentasBancarias.map((c) => (
+                      <div key={c.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-semibold">{c.bancoNombre || 'Banco no especificado'}</span>
+                          {c.titular && <span className="text-[11px] text-muted-foreground">Titular: {c.titular}</span>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          <DrawerKv label="Cuenta" value={c.numeroCuenta} mono />
+                          <DrawerKv label="CLABE" value={c.cuentaClabe} mono />
+                          {c.cuentaSwift && <DrawerKv label="SWIFT" value={c.cuentaSwift} mono />}
+                        </div>
+                        {c.urlEvidencia && (
+                          <a
+                            href={c.urlEvidencia}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" /> Ver evidencia
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">No se encontró información detallada del comprador.</p>
+          )}
+          {columnaFaltante && (
+            <div className="rounded-lg border border-[hsl(var(--status-warning)/0.4)] bg-[hsl(var(--status-warning)/0.08)] px-3 py-2 text-[12px] text-[hsl(var(--status-warning))] flex items-center gap-2">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              La bitácora en BD aún no está habilitada. Aplica el DDL para activar validaciones.
+            </div>
+          )}
+        </div>
+      </SheetContent>
+
+      <Dialog
+        open={!!rejectFor}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRejectFor(null);
+            setRejectJustification("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-[16px]">Rechazar {rejectFor?.label}</DialogTitle>
+            <DialogDescription className="text-[13px]">
+              Esta nota se registrará en la bitácora de la cuenta de cobranza.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-[13px]">Justificación del rechazo</Label>
+            <Textarea
+              placeholder="Describe por qué se rechaza…"
+              value={rejectJustification}
+              onChange={(e) => setRejectJustification(e.target.value)}
+              className="min-h-[100px] text-[13px]"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectFor(null);
+                setRejectJustification("");
+              }}
+              className="h-9 text-[13px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitReject}
+              disabled={!rejectJustification.trim() || appendMutation.isPending}
+              className="h-9 text-[13px] gap-1"
+            >
+              <XCircle className="h-3.5 w-3.5" /> Confirmar rechazo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Sheet>
+  );
+}
+
+function SectionValidationBar({
+  state,
+  busy,
+  disabledReason,
+  onValidate,
+  onReject,
+}: {
+  state: ReturnType<typeof getValidationState>;
+  busy: boolean;
+  disabledReason?: string;
+  onValidate: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 px-3 py-2 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <ValidationStatusBadge status={state.status} />
+        {state.lastEntry?.tipo === 'rechazo' && (
+          <p className="text-[11px] text-destructive truncate">
+            Rechazo: {state.lastEntry.mensaje}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-1.5 shrink-0">
+        <Button
+          size="sm"
+          variant={state.status === 'validado' ? 'outline' : 'default'}
+          className="h-7 px-2 text-[11px] gap-1"
+          disabled={busy || !!disabledReason}
+          title={disabledReason}
+          onClick={onValidate}
+        >
+          <CheckCircle className="h-3 w-3" /> Validar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
+          disabled={busy || !!disabledReason}
+          title={disabledReason}
+          onClick={onReject}
+        >
+          <XCircle className="h-3 w-3" /> Rechazar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ValidationStatusBadge({ status }: { status: ValidationStatus }) {
+  if (status === 'validado') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+        <CheckCircle className="h-3 w-3" /> Validado
+      </span>
+    );
+  }
+  if (status === 'rechazado') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+        <XCircle className="h-3 w-3" /> Rechazado
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+      <ShieldAlert className="h-3 w-3" /> Pendiente
+    </span>
+  );
+}
+
+function DrawerKv({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">{label}</p>
+      <p className={`text-[13px] ${mono ? 'font-mono' : ''} ${value ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+        {value || '—'}
+      </p>
+    </div>
   );
 }
 
@@ -1675,7 +2228,21 @@ function FirmadoActions({
 
 export default function CaseDetail() {
   const { id } = useParams();
-  const request = mockRequests.find((r) => r.id === id);
+  // Buscar en datos reales primero (cuentas Apartado / Vendido) y caer al
+  // mock como fallback. Los expedientes con folio CC-XXXXXX / CCP-XXXXXX
+  // viven en BD; el mock conserva los EXP-2025-* heredados.
+  const {
+    data: solicitudesRecibidas = [],
+    isLoading: loadingSolicitudes,
+  } = useLegalFlowSolicitudesRecibidas();
+  const {
+    data: archivados = [],
+    isLoading: loadingArchivados,
+  } = useLegalFlowExpedientesArchivados();
+  const realRequest = [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
+  const mockRequest = mockRequests.find((r) => r.id === id);
+  const request = realRequest ?? mockRequest;
+  const isLoadingReal = loadingSolicitudes || loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -1706,6 +2273,28 @@ export default function CaseDetail() {
   const [showContractType, setShowContractType] = useState(false);
   const [showCuentaCobranza, setShowCuentaCobranza] = useState(false);
 
+  // Bitácora + detalle de compradores — sólo para expedientes reales.
+  // Se invocan aquí para alimentar el banner de validaciones pendientes
+  // en la cabecera; el drawer reusa los mismos hooks con la misma query
+  // key, así que no hay double-fetch.
+  const idCuentaCobranzaForBitacora = realRequest?.idCuentaCobranza;
+  const { entries: bitacoraEntries } = useBitacoraCuentaCobranza(
+    idCuentaCobranzaForBitacora,
+  );
+  const compradorIdsForBanner = realRequest?.compradoresDetalle?.map((c) => c.idPersona) ?? [];
+  const { data: compradoresFull } = useCompradoresFullDetail(compradorIdsForBanner);
+
+  if (!request && isLoadingReal) {
+    return (
+      <div className="px-10 py-8 text-center py-24">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+          <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+        </div>
+        <p className="text-sm font-medium text-muted-foreground">Cargando expediente…</p>
+      </div>
+    );
+  }
+
   if (!request) {
     return (
       <div className="px-10 py-8 text-center py-24">
@@ -1733,6 +2322,35 @@ export default function CaseDetail() {
   const isClientSignature = request.status === 'client_signature';
   const isFirmaTitular = request.status === 'in_validation';
   const isFirmado = request.status === 'fully_signed';
+
+  // Conteos de validación (sólo expedientes reales) — alimentan el banner
+  // y se derivan de la bitácora. Cada comprador aporta 3 secciones
+  // (básica, dirección, fiscal) + sus documentos.
+  let validacionPendienteCount = 0;
+  let validadoCount = 0;
+  let rechazadoCount = 0;
+  if (realRequest) {
+    for (const c of realRequest.compradoresDetalle ?? []) {
+      const sections: BitacoraScope[] = ['comprador_basica', 'comprador_direccion', 'comprador_fiscal'];
+      for (const scope of sections) {
+        const st = getValidationState(bitacoraEntries, scope, { idPersona: c.idPersona }).status;
+        if (st === 'validado') validadoCount += 1;
+        else if (st === 'rechazado') rechazadoCount += 1;
+        else validacionPendienteCount += 1;
+      }
+      const docs = compradoresFull?.[c.idPersona]?.documentos ?? [];
+      for (const d of docs) {
+        const st = getValidationState(bitacoraEntries, 'documento', {
+          idPersona: c.idPersona,
+          idDocumento: d.id,
+        }).status;
+        if (st === 'validado') validadoCount += 1;
+        else if (st === 'rechazado') rechazadoCount += 1;
+        else validacionPendienteCount += 1;
+      }
+    }
+  }
+  const showValidacionBanner = isRecibida && !!realRequest && (validacionPendienteCount + rechazadoCount + validadoCount) > 0;
   const lawyerName = assignedLawyer ? AVAILABLE_LAWYERS.find(l => l.id === assignedLawyer)?.name || 'Sin asignar' : 'Sin asignar';
 
   return (
@@ -1773,6 +2391,33 @@ export default function CaseDetail() {
 
       {/* Stepper */}
       <StatusStepper status={request.status} />
+
+      {/* Banner de validaciones — sólo expedientes reales en Solicitud recibida */}
+      {showValidacionBanner && (
+        <div className="panel">
+          <div className="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-border/60">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <ShieldAlert className="h-3.5 w-3.5" /> Validación de la solicitud
+            </h3>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+                <ShieldAlert className="h-3 w-3" /> {validacionPendienteCount} pendiente{validacionPendienteCount !== 1 ? 's' : ''}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                <CheckCircle className="h-3 w-3" /> {validadoCount} validado{validadoCount !== 1 ? 's' : ''}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full ${
+                rechazadoCount > 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
+              }`}>
+                <XCircle className="h-3 w-3" /> {rechazadoCount} rechazado{rechazadoCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+          <div className="px-5 py-3 text-[12px] text-muted-foreground">
+            Abre la contraparte para validar o rechazar la información básica, dirección, datos fiscales y documentos de cada comprador. Cada rechazo queda registrado en la bitácora con su justificación.
+          </div>
+        </div>
+      )}
 
       {/* Stage-specific actions */}
       {isRecibida && (
@@ -1942,10 +2587,33 @@ export default function CaseDetail() {
                 </div>
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-6">
-                    <DossierField icon={Building2} label="Empresa" value={request.company} />
-                    <DossierField icon={User} label="Solicitante" value={request.requester} sub={request.requesterDept} onClick={() => setShowRequester(true)} />
-                    <DossierField icon={Calendar} label="Solicitud" value={formatDate(request.createdAt)} />
-                    <DossierField icon={Clock} label="Fecha límite" value={formatDate(request.dueDate)} highlight={new Date(request.dueDate) < new Date()} />
+                    <DossierField
+                      icon={Building2}
+                      label="Empresa"
+                      value={
+                        realRequest
+                          ? realRequest.empresaName ?? 'Agente Independiente'
+                          : request.company
+                      }
+                    />
+                    <DossierField
+                      icon={User}
+                      label="Solicitante"
+                      value={request.requester}
+                      sub={request.requesterDept}
+                      onClick={() => setShowRequester(true)}
+                    />
+                    <DossierField
+                      icon={Calendar}
+                      label="Solicitud"
+                      value={formatDate(realRequest?.fechaCompra ?? request.createdAt)}
+                    />
+                    <DossierField
+                      icon={Clock}
+                      label="Fecha límite"
+                      value={formatDate(request.dueDate)}
+                      highlight={new Date(request.dueDate) < new Date()}
+                    />
                   </div>
                 </div>
               </div>
@@ -2157,16 +2825,38 @@ export default function CaseDetail() {
           </div>
 
           {/* Bitácora */}
-          <BitacoraPanel caseId={id!} timeline={timeline} formatTime={formatTime} />
+          <BitacoraPanel
+            caseId={id!}
+            timeline={timeline}
+            formatTime={formatTime}
+            idCuentaCobranza={realRequest?.idCuentaCobranza}
+            isReal={!!realRequest}
+          />
         </motion.div>
       </div>
 
       {/* Detail drawers */}
-      <RequesterDrawer open={showRequester} onClose={() => setShowRequester(false)} requester={request.requester} />
+      <RequesterDrawer
+        open={showRequester}
+        onClose={() => setShowRequester(false)}
+        requester={request.requester}
+        realProfile={
+          realRequest
+            ? {
+                name: realRequest.requester,
+                phone: realRequest.requesterPhone ?? null,
+                email: realRequest.requesterEmail ?? null,
+                empresaName: realRequest.empresaName ?? null,
+              }
+            : undefined
+        }
+      />
       <CounterpartyDrawer
         open={showCounterparty}
         onClose={() => setShowCounterparty(false)}
         counterparties={request.counterparties || [request.counterparty]}
+        realDetalle={realRequest?.compradoresDetalle}
+        idCuentaCobranza={realRequest?.idCuentaCobranza}
       />
       <ContractTypeDrawer open={showContractType} onClose={() => setShowContractType(false)} type={request.type} />
       <CuentaCobranzaDrawer open={showCuentaCobranza} onClose={() => setShowCuentaCobranza(false)} cuenta={request.cuentaCobranza || ''} />
@@ -2194,30 +2884,61 @@ const MOCK_MANUAL_NOTES: ManualNote[] = [
 
 type BitacoraFilter = 'todo' | 'sistema' | 'notas';
 
-function BitacoraPanel({ caseId, timeline, formatTime }: {
+function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal }: {
   caseId: string;
   timeline: { id: string; caseId: string; type: string; timestamp: string; actor: string; actorType: string; notes?: string }[];
   formatTime: (iso: string) => string;
+  idCuentaCobranza?: number;
+  isReal: boolean;
 }) {
   const [filter, setFilter] = useState<BitacoraFilter>('todo');
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteDesc, setNoteDesc] = useState('');
   const [noteType, setNoteType] = useState('nota_interna');
-  const [manualNotes, setManualNotes] = useState<ManualNote[]>(MOCK_MANUAL_NOTES);
+  // Mock data sólo para expedientes heredados EXP-2025-*. Para expedientes
+  // reales (cuentas de cobranza) leemos/escribimos contra el campo jsonb
+  // `cuentas_cobranza.bitacora`.
+  const [manualNotes, setManualNotes] = useState<ManualNote[]>(isReal ? [] : MOCK_MANUAL_NOTES);
 
-  type UnifiedEntry = { id: string; kind: 'system' | 'manual'; timestamp: string; data: any };
-  const systemEntries: UnifiedEntry[] = timeline.map(evt => ({ id: evt.id, kind: 'system', timestamp: evt.timestamp, data: evt }));
-  const manualEntries: UnifiedEntry[] = manualNotes.map(n => ({ id: n.id, kind: 'manual', timestamp: n.createdAt, data: n }));
+  const { entries: bitacoraDb, columnaFaltante } = useBitacoraCuentaCobranza(
+    isReal ? idCuentaCobranza : null,
+  );
+  const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
 
-  let allEntries = [...systemEntries, ...manualEntries].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  type UnifiedEntry = { id: string; kind: 'system' | 'manual' | 'bitacora'; timestamp: string; data: any };
+  const systemEntries: UnifiedEntry[] = isReal
+    ? []
+    : timeline.map(evt => ({ id: evt.id, kind: 'system', timestamp: evt.timestamp, data: evt }));
+  const manualEntries: UnifiedEntry[] = isReal
+    ? []
+    : manualNotes.map(n => ({ id: n.id, kind: 'manual', timestamp: n.createdAt, data: n }));
+  const bitacoraEntries: UnifiedEntry[] = bitacoraDb.map((e) => ({
+    id: e.id,
+    kind: 'bitacora',
+    timestamp: e.timestamp,
+    data: e,
+  }));
+
+  let allEntries = [...systemEntries, ...manualEntries, ...bitacoraEntries].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
   if (filter === 'sistema') allEntries = allEntries.filter(e => e.kind === 'system');
-  if (filter === 'notas') allEntries = allEntries.filter(e => e.kind === 'manual');
+  if (filter === 'notas') allEntries = allEntries.filter(e => e.kind === 'manual' || e.kind === 'bitacora');
 
   const handleSaveNote = () => {
     if (!noteTitle.trim()) return;
-    const newNote: ManualNote = { id: `note-${Date.now()}`, title: noteTitle, description: noteDesc, type: noteType, author: 'Carlos Mendoza', createdAt: new Date().toISOString() };
-    setManualNotes(prev => [newNote, ...prev]);
+    if (isReal) {
+      // Persistir en BD para expedientes reales.
+      appendMutation.mutate({
+        tipo: 'nota',
+        mensaje: noteDesc ? `${noteTitle}\n${noteDesc}` : noteTitle,
+        referencia: { scope: 'expediente' },
+      });
+    } else {
+      const newNote: ManualNote = { id: `note-${Date.now()}`, title: noteTitle, description: noteDesc, type: noteType, author: 'Carlos Mendoza', createdAt: new Date().toISOString() };
+      setManualNotes(prev => [newNote, ...prev]);
+    }
     setNoteTitle(''); setNoteDesc(''); setNoteType('nota_interna'); setShowAddNote(false);
   };
 
@@ -2225,10 +2946,54 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
   const getNoteTypeConfig = (type: string) => NOTE_TYPES.find(t => t.value === type) || NOTE_TYPES[0];
 
   const filterButtons: { key: BitacoraFilter; label: string; count: number }[] = [
-    { key: 'todo', label: 'Todo', count: systemEntries.length + manualNotes.length },
+    { key: 'todo', label: 'Todo', count: systemEntries.length + manualEntries.length + bitacoraEntries.length },
     { key: 'sistema', label: 'Sistema', count: systemEntries.length },
-    { key: 'notas', label: 'Notas', count: manualNotes.length },
+    { key: 'notas', label: 'Notas', count: manualEntries.length + bitacoraEntries.length },
   ];
+
+  const renderBitacoraEntry = (entry: UnifiedEntry) => {
+    const e = entry.data as BitacoraEntry;
+    const isRechazo = e.tipo === 'rechazo';
+    const isValidacion = e.tipo === 'validacion';
+    const dotColor = isRechazo
+      ? 'bg-destructive'
+      : isValidacion
+        ? 'bg-primary'
+        : 'bg-muted-foreground';
+    const Icon = isRechazo ? XCircle : isValidacion ? CheckCircle : MessageSquare;
+    const tipoLabel =
+      e.tipo === 'rechazo' ? 'Rechazo'
+      : e.tipo === 'validacion' ? 'Validación'
+      : e.tipo === 'sistema' ? 'Sistema'
+      : 'Nota';
+    return (
+      <div key={entry.id} className="relative pl-7 pb-5 last:pb-0">
+        <div className={`absolute left-0 top-1 flex h-[15px] w-[15px] items-center justify-center rounded-full ${dotColor}`}>
+          <Icon className="h-[8px] w-[8px] text-white" />
+        </div>
+        <div className={`rounded-lg border ${
+          isRechazo ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
+        } p-3 transition-colors hover:bg-muted/40`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[13px] font-semibold ${isRechazo ? 'text-destructive' : 'text-foreground'}`}>
+                {tipoLabel}
+                {e.referencia && (
+                  <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                    · {e.referencia.scope.replace('_', ' ')}
+                  </span>
+                )}
+              </p>
+              <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground/50 mt-2">
+            {e.autorNombre || e.autorEmail} · {formatTime(e.timestamp)}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -2244,6 +3009,18 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
           </Button>
         </div>
 
+        {isReal && columnaFaltante && (
+          <div className="mx-5 mt-3 rounded-lg border border-[hsl(var(--status-warning)/0.4)] bg-[hsl(var(--status-warning)/0.08)] px-3 py-2 text-[12px] text-[hsl(var(--status-warning))] flex items-start gap-2">
+            <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Bitácora en BD aún no habilitada. Aplica el DDL en
+              <code className="mx-1 px-1 py-0.5 rounded bg-background/60 font-mono text-[11px]">
+                Ejecuciones_manuales/bitacora_cuenta_cobranza.md
+              </code>
+              para registrar validaciones y rechazos.
+            </span>
+          </div>
+        )}
         <div className="px-5 pt-3 pb-1 flex gap-1">
           {filterButtons.map(fb => (
             <button
@@ -2271,6 +3048,9 @@ function BitacoraPanel({ caseId, timeline, formatTime }: {
             <div className="space-y-0 relative">
               <div className="absolute left-[7px] top-2.5 bottom-2.5 w-px bg-border/60" />
               {allEntries.map((entry) => {
+                if (entry.kind === 'bitacora') {
+                  return renderBitacoraEntry(entry);
+                }
                 if (entry.kind === 'system') {
                   const evt = entry.data;
                   const config = TIMELINE_EVENT_CONFIG[evt.type] || { label: evt.type, icon: '•', color: 'bg-muted-foreground' };
