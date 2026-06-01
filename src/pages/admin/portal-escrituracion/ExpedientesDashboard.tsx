@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PersonForm } from '@/components/admin/PersonForm';
 import {
   Search, Plus, Download, Loader2, X, RefreshCw,
   CheckCircle2, Clock, AlertTriangle, XCircle,
@@ -30,6 +32,7 @@ interface ExpedienteRow {
   tipoComprador: TipoComprador;
   unidad: string;
   clienteNombre: string;
+  personaId: number | null;
   estatusExpediente: EstatusExpediente;
   docsCompletos: number;
   docsTotal: number;
@@ -338,6 +341,9 @@ export function ExpedientesDashboard() {
   const [filtroEstatus, setFiltroEstatus] = useState<EstatusExpediente | 'TODOS'>('TODOS');
   const [page, setPage]                   = useState(0);
   const [selected, setSelected]           = useState<ExpedienteRow | null>(null);
+  const [editingPersonaId, setEditingPersonaId] = useState<number | null>(null);
+  const [isEditPersonaOpen, setIsEditPersonaOpen] = useState(false);
+  const qc = useQueryClient();
 
   // ── Proyectos ──────────────────────────────────────────────────────────────
   const { data: proyectos = [], isLoading: loadingProyectos } = useQuery({
@@ -447,11 +453,15 @@ export function ExpedientesDashboard() {
         });
       }
 
-      // Compradores agrupados por cuenta
+      // Compradores agrupados por cuenta + primer personaId por cuenta
       const comprsByCuenta: Record<number, CompradoresData[]> = {};
+      const primerPersonaIdByCuenta: Record<number, number> = {};
       (comprsList || []).forEach(c => {
         const p = personaMap[c.id_persona];
-        if (!comprsByCuenta[c.id_cuenta_cobranza]) comprsByCuenta[c.id_cuenta_cobranza] = [];
+        if (!comprsByCuenta[c.id_cuenta_cobranza]) {
+          comprsByCuenta[c.id_cuenta_cobranza] = [];
+          primerPersonaIdByCuenta[c.id_cuenta_cobranza] = c.id_persona; // primer comprador
+        }
         comprsByCuenta[c.id_cuenta_cobranza].push({
           nombre: p?.nombre_legal ?? '—',
           rfc: p?.rfc ?? null,
@@ -498,6 +508,7 @@ export function ExpedientesDashboard() {
             tipoComprador,
             unidad: p.numero_propiedad,
             clienteNombre,
+            personaId: primerPersonaIdByCuenta[cuenta.id] ?? null,
             estatusExpediente,
             docsCompletos: docStats.completos,
             docsTotal: docStats.total,
@@ -544,6 +555,38 @@ export function ExpedientesDashboard() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // ── Editar comprador ────────────────────────────────────────────────────────
+  const { data: editingPersonaData } = useQuery({
+    queryKey: ['expedientes-persona-edit', editingPersonaId],
+    queryFn: async () => {
+      const { data } = await supabase.from('personas').select('*').eq('id', editingPersonaId).single();
+      return data;
+    },
+    enabled: !!editingPersonaId,
+  });
+
+  const updatePersonaMutation = useMutation({
+    mutationFn: async (personData: any) => {
+      const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId,
+              tempBankAccounts, tempBeneficiaries, pendingDocuments, porcentaje_comision,
+              ...cleanData } = personData;
+      const { error } = await supabase.from('personas').update(cleanData).eq('id', editingPersonaId);
+      if (error) throw error;
+      if (representativeId !== undefined) {
+        await supabase.from('personas')
+          .update({ id_entidad_relacionada_rep_leg: representativeId || null })
+          .eq('id', editingPersonaId);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expedientes-real', proyectoId] });
+      setIsEditPersonaOpen(false);
+      setEditingPersonaId(null);
+      toast.success('Comprador actualizado correctamente.');
+    },
+    onError: () => toast.error('Error al actualizar el comprador.'),
+  });
 
   // ── Proyecto selector ─────────────────────────────────────────────────────
   const handleProyecto = (id: number) => {
@@ -705,7 +748,7 @@ export function ExpedientesDashboard() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60">
-                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Documentos', 'Precio final', 'Actualizado'].map(h => (
+                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Documentos', 'Actualizado'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>
@@ -728,9 +771,22 @@ export function ExpedientesDashboard() {
                         <td className="px-5 py-4 whitespace-nowrap">
                           <TipoBadge tipo={row.tipoComprador} />
                         </td>
-                        <td className="px-5 py-4">
-                          <p className="text-sm font-semibold text-slate-900">{row.unidad}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]">{row.clienteNombre}</p>
+                        <td
+                          className="px-5 py-4 cursor-pointer"
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (row.personaId) {
+                              setEditingPersonaId(row.personaId);
+                              setIsEditPersonaOpen(true);
+                            }
+                          }}
+                        >
+                          <p className={`text-sm font-semibold ${row.personaId ? 'text-emerald-700 hover:underline underline-offset-2' : 'text-slate-900'}`}>
+                            {row.unidad}
+                          </p>
+                          <p className={`text-xs mt-0.5 truncate max-w-[200px] ${row.personaId ? 'text-emerald-600 hover:underline underline-offset-2 decoration-dotted' : 'text-slate-500'}`}>
+                            {row.clienteNombre}
+                          </p>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <StatusBadge status={row.estatusExpediente} />
@@ -749,9 +805,6 @@ export function ExpedientesDashboard() {
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}
-                        </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <span className="text-sm text-slate-700 tabular-nums">{fmtMxn(row.precioFinal)}</span>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <span className="text-xs text-slate-500">{fmtDate(row.fechaActualizacion)}</span>
@@ -803,6 +856,30 @@ export function ExpedientesDashboard() {
           <DetailPanel row={selected} onClose={() => setSelected(null)} />
         )}
       </div>
+
+      {/* ── Dialog Editar Comprador ──────────────────────────────────────── */}
+      <Dialog
+        open={isEditPersonaOpen}
+        onOpenChange={open => { setIsEditPersonaOpen(open); if (!open) setEditingPersonaId(null); }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Comprador</DialogTitle>
+          </DialogHeader>
+          {editingPersonaData && (
+            <PersonForm
+              initialData={{
+                ...editingPersonaData,
+                representativeId: editingPersonaData.id_entidad_relacionada_rep_leg,
+              }}
+              onSubmit={data => updatePersonaMutation.mutate(data)}
+              isLoading={updatePersonaMutation.isPending}
+              onCancel={() => { setIsEditPersonaOpen(false); setEditingPersonaId(null); }}
+              entityType="comprador"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

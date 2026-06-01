@@ -902,7 +902,7 @@ export function NotariasDashboard() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60">
-                    {['ID Cuenta', 'Unidad / Cliente', 'Notaría asignada', 'Estatus', 'Precio final', 'Actualizado'].map(h => (
+                    {['ID Cuenta', 'Unidad / Cliente', 'Notaría asignada', 'Estatus', 'Actualizado'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -948,9 +948,6 @@ export function NotariasDashboard() {
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <EstatusBadge id={row.estatusId} />
-                        </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <span className="text-sm text-slate-700 tabular-nums">{fmtMxn(row.precioFinal)}</span>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <span className="text-xs text-slate-500">{fmtDate(row.fechaActualizacion)}</span>

@@ -96,19 +96,46 @@ export interface IntegrationState {
   errorMessage?: string;
 }
 
+export type TipoPersona = 'pf' | 'pm' | 'pe';
+
+export interface CompradorDetalle {
+  /** id de `personas.id` — usado para cargar bajo demanda el detalle completo. */
+  idPersona: number;
+  name: string;
+  tipoPersona: TipoPersona;
+  rfc?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  porcentajeCopropiedad?: number;
+}
+
 export interface LegalRequest {
   id: string;
   title: string;
   type: RequestType;
   company: string;
   project: string;
+  modelo?: string;
   property?: string;
   requester: string;
   requesterDept: string;
+  requesterPhone?: string;
+  requesterEmail?: string;
+  /**
+   * Empresa u organización del agente vendedor (Sozu si es interno o
+   * la inmobiliaria si está afiliado). Null/undefined ⇒ "Agente
+   * Independiente" en la UI.
+   */
+  empresaName?: string;
   counterparty: string;
   counterparties?: string[];
+  compradoresDetalle?: CompradorDetalle[];
   titular?: string;
   cuentaCobranza?: string;
+  /** id numérico de cuentas_cobranza.id — usado para mutaciones (bitácora). */
+  idCuentaCobranza?: number;
+  agenteVendedor?: string;
+  fechaCompra?: string;
   estimatedValue: number;
   priority: Priority;
   description: string;

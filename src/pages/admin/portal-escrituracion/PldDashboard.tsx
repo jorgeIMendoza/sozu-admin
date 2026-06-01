@@ -23,6 +23,18 @@ interface PagoInfo {
   url_cep: string | null;
   url_recibo: string | null;
   descripcion: string | null;
+  id_metodos_pago: number | null;   // para detectar pagos en efectivo (id=1)
+  nombre_ordenante: string | null;  // de pagos_stp_raw
+  rfc_ordenante: string | null;     // de pagos_stp_raw.rfc_curp_ordenante
+}
+
+interface OrdenanteDistinto {
+  pagoId: number;
+  monto: number;
+  fecha_pago: string;
+  nombre_ordenante: string;
+  rfc_ordenante: string | null;
+  clave_rastreo: string;
 }
 
 interface PldRow {
@@ -31,12 +43,26 @@ interface PldRow {
   proyectoNombre: string;
   unidad: string;
   clienteNombre: string;
+  clienteRfc: string | null;
   pldStatus: PldStatus;
   riesgo: RiskLevel;
   totalPagado: number;
   precioFinal: number;
-  hasSinCR: boolean;        // clave_rastreo null → pago no trazable
-  hasSinCep: boolean;       // url_cep null (con CR) → sin confirmación CECOBAN
+  hasSinCR: boolean;
+  hasSinCep: boolean;
+  // Regla 1: Nombre ordenante ≠ cliente → PRECAUCIÓN (no bloquea escritura)
+  hasNombreDistinto: boolean;
+  pagosNombreDistinto: OrdenanteDistinto[];
+  // Regla 2: RFC ordenante ≠ RFC cliente → BLOQUEO
+  hasRfcDistinto: boolean;
+  pagosRfcDistinto: OrdenanteDistinto[];
+  // Regla 3: Efectivo excedido → BLOQUEO
+  hasEfectivoExcedido: boolean;
+  montoPagadoEfectivo: number;
+  limiteEfectivo: number;
+  // Legacy (alias, para backward compat con panel de detalle)
+  hasOrdenanteDistinto: boolean;
+  pagosOrdenanteDistinto: OrdenanteDistinto[];
   escrituraBloqueada: boolean;
   numPagos: number;
   pagos: PagoInfo[];
@@ -49,7 +75,7 @@ interface PldAlert {
   cuentaLabel: string;
   unidad: string;
   cliente: string;
-  tipo: 'PAGO_NO_TRAZABLE' | 'SIN_CEP' | 'SOBREPAGO' | 'SIN_PAGOS';
+  tipo: 'NOMBRE_DISTINTO' | 'RFC_DISTINTO' | 'EFECTIVO_EXCEDIDO' | 'ORDENANTE_DISTINTO' | 'PAGO_NO_TRAZABLE' | 'SIN_CEP' | 'SOBREPAGO' | 'SIN_PAGOS';
   severidad: 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
   titulo: string;
   descripcion: string;
@@ -58,90 +84,183 @@ interface PldAlert {
 
 // ─── PLD Engine ───────────────────────────────────────────────────────────────
 
-function derivePld(pagos: PagoInfo[], precioFinal: number): {
+// Normaliza texto para comparación: minúsculas, sin tildes, sin chars especiales
+function normalizarTexto(s: string | null | undefined): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita tildes/diacríticos
+    .replace(/[^a-z0-9\s]/g, '')  // quita todo lo que no sea letra, número o espacio
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Normaliza RFC: mayúsculas, sin espacios, sin guiones
+function normalizarRfc(s: string | null | undefined): string {
+  return (s ?? '').toUpperCase().replace(/[\s\-]/g, '').trim();
+}
+
+function derivePld(
+  pagos: PagoInfo[],
+  precioFinal: number,
+  clienteNombre: string,
+  clienteRfc: string | null,
+  valorUma: number,
+): {
   pldStatus: PldStatus;
   riesgo: RiskLevel;
   hasSinCR: boolean;
   hasSinCep: boolean;
+  // Regla 1 — PRECAUCIÓN: nombre ordenante ≠ nombre cliente
+  hasNombreDistinto: boolean;
+  pagosNombreDistinto: OrdenanteDistinto[];
+  // Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente
+  hasRfcDistinto: boolean;
+  pagosRfcDistinto: OrdenanteDistinto[];
+  // Regla 3 — BLOQUEO: efectivo excedido
+  hasEfectivoExcedido: boolean;
+  montoPagadoEfectivo: number;
+  limiteEfectivo: number;
+  // Legacy alias
+  hasOrdenanteDistinto: boolean;
+  pagosOrdenanteDistinto: OrdenanteDistinto[];
   escrituraBloqueada: boolean;
   totalPagado: number;
 } {
-  if (!pagos.length) {
-    return { pldStatus: 'PENDIENTE', riesgo: 'BAJO', hasSinCR: false, hasSinCep: false, escrituraBloqueada: false, totalPagado: 0 };
-  }
+  const limiteEfectivo = (valorUma || 0) * 8025;
+  const empty = {
+    pldStatus: 'PENDIENTE' as PldStatus,
+    riesgo: 'BAJO' as RiskLevel,
+    hasSinCR: false, hasSinCep: false,
+    hasNombreDistinto: false, pagosNombreDistinto: [] as OrdenanteDistinto[],
+    hasRfcDistinto: false,    pagosRfcDistinto:    [] as OrdenanteDistinto[],
+    hasEfectivoExcedido: false, montoPagadoEfectivo: 0, limiteEfectivo,
+    hasOrdenanteDistinto: false, pagosOrdenanteDistinto: [] as OrdenanteDistinto[],
+    escrituraBloqueada: false, totalPagado: 0,
+  };
+  if (!pagos.length) return empty;
 
   const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
+  const hasSinCR    = pagos.some(p => !p.clave_rastreo);
+  const hasSinCep   = pagos.some(p => p.clave_rastreo && !p.url_cep);
 
-  // Pagos sin clave de rastreo = no trazables → ALTO RIESGO
-  const hasSinCR = pagos.some(p => !p.clave_rastreo);
-  // Pagos con clave de rastreo pero sin CEP = sin confirmación CECOBAN → MEDIO RIESGO
-  const hasSinCep = pagos.some(p => p.clave_rastreo && !p.url_cep);
-  // Sobrepago
-  const sobrepago = precioFinal > 0 && totalPagado > precioFinal * 1.01;
+  const clienteNorm    = normalizarTexto(clienteNombre);
+  const clienteRfcNorm = normalizarRfc(clienteRfc);
 
-  const riesgo: RiskLevel = hasSinCR ? 'ALTO' : hasSinCep ? 'MEDIO' : 'BAJO';
-  const escrituraBloqueada = hasSinCR || sobrepago;
+  // ── Regla 1: Nombre ordenante ≠ nombre cliente → PRECAUCIÓN ──────────────
+  const seenNombre = new Set<string>();
+  const pagosNombreDistinto: OrdenanteDistinto[] = [];
+  for (const p of pagos) {
+    if (!p.clave_rastreo || !p.nombre_ordenante) continue;
+    if (normalizarTexto(p.nombre_ordenante) === clienteNorm) continue; // coincide → sin alerta
+    const key = normalizarTexto(p.nombre_ordenante);
+    if (!seenNombre.has(key)) {
+      seenNombre.add(key);
+      pagosNombreDistinto.push({
+        pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
+        nombre_ordenante: p.nombre_ordenante, rfc_ordenante: p.rfc_ordenante,
+        clave_rastreo: p.clave_rastreo,
+      });
+    }
+  }
+  const hasNombreDistinto = pagosNombreDistinto.length > 0;
+
+  // ── Regla 2: RFC ordenante ≠ RFC cliente → BLOQUEO ───────────────────────
+  const seenRfc = new Set<string>();
+  const pagosRfcDistinto: OrdenanteDistinto[] = [];
+  if (clienteRfcNorm) {
+    for (const p of pagos) {
+      if (!p.clave_rastreo || !p.rfc_ordenante) continue; // sin RFC en CEP → no aplica
+      if (normalizarRfc(p.rfc_ordenante) === clienteRfcNorm) continue; // coincide → sin alerta
+      const key = normalizarRfc(p.rfc_ordenante);
+      if (!seenRfc.has(key)) {
+        seenRfc.add(key);
+        pagosRfcDistinto.push({
+          pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
+          nombre_ordenante: p.nombre_ordenante ?? '—', rfc_ordenante: p.rfc_ordenante,
+          clave_rastreo: p.clave_rastreo,
+        });
+      }
+    }
+  }
+  const hasRfcDistinto = pagosRfcDistinto.length > 0;
+
+  // ── Regla 3: Efectivo excedido → BLOQUEO ──────────────────────────────────
+  const montoPagadoEfectivo = pagos
+    .filter(p => p.id_metodos_pago === 1) // id=1 = efectivo
+    .reduce((s, p) => s + p.monto, 0);
+  const hasEfectivoExcedido = limiteEfectivo > 0 && montoPagadoEfectivo > limiteEfectivo;
+
+  // ── Status general ────────────────────────────────────────────────────────
+  // BLOQUEO: RFC distinto O efectivo excedido
+  // OBSERVADO (precaución): solo nombre distinto
+  const escrituraBloqueada = hasRfcDistinto || hasEfectivoExcedido;
+  const hasOrdenanteDistinto = hasNombreDistinto || hasRfcDistinto; // legacy alias
+  const pagosOrdenanteDistinto = pagosNombreDistinto; // legacy alias
+
+  const riesgo: RiskLevel = escrituraBloqueada ? 'ALTO' : hasNombreDistinto ? 'MEDIO' : 'BAJO';
 
   let pldStatus: PldStatus;
-  if (hasSinCR) {
+  if (escrituraBloqueada) {
     pldStatus = 'BLOQUEADO';
-  } else if (sobrepago) {
-    pldStatus = 'OBSERVADO';
-  } else if (hasSinCep) {
-    pldStatus = 'EN_REVISION';
-  } else if (pagos.some(p => !p.clave_rastreo && !p.url_cep)) {
-    pldStatus = 'INCOMPLETO';
+  } else if (hasNombreDistinto) {
+    pldStatus = 'OBSERVADO'; // precaución — no bloquea, requiere revisión
   } else if (precioFinal > 0 && totalPagado >= precioFinal * 0.99) {
     pldStatus = 'APROBADO';
   } else {
     pldStatus = 'PENDIENTE';
   }
 
-  return { pldStatus, riesgo, hasSinCR, hasSinCep, escrituraBloqueada, totalPagado };
+  return {
+    pldStatus, riesgo, hasSinCR, hasSinCep,
+    hasNombreDistinto, pagosNombreDistinto,
+    hasRfcDistinto,    pagosRfcDistinto,
+    hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+    hasOrdenanteDistinto, pagosOrdenanteDistinto,
+    escrituraBloqueada, totalPagado,
+  };
 }
 
 function buildAlerts(rows: PldRow[]): PldAlert[] {
   const alerts: PldAlert[] = [];
   rows.forEach(r => {
-    if (r.hasSinCR) {
+    // Regla 1 — PRECAUCIÓN: nombre ordenante ≠ nombre cliente
+    r.pagosNombreDistinto.forEach((p, idx) => {
       alerts.push({
-        id: `sinCR-${r.cuentaId}`,
-        cuentaId: r.cuentaId,
-        cuentaLabel: r.cuentaLabel,
-        unidad: r.unidad,
-        cliente: r.clienteNombre,
-        tipo: 'PAGO_NO_TRAZABLE',
-        severidad: 'CRITICA',
-        titulo: 'Pago sin clave de rastreo',
-        descripcion: `La cuenta ${r.cuentaLabel} tiene pagos sin clave de rastreo STP. No es posible verificar el origen de los fondos.`,
-        fecha: r.fechaActualizacion,
-      });
-    }
-    if (r.hasSinCep && !r.hasSinCR) {
-      alerts.push({
-        id: `sinCEP-${r.cuentaId}`,
-        cuentaId: r.cuentaId,
-        cuentaLabel: r.cuentaLabel,
-        unidad: r.unidad,
-        cliente: r.clienteNombre,
-        tipo: 'SIN_CEP',
+        id: `nombre-${r.cuentaId}-${idx}`,
+        cuentaId: r.cuentaId, cuentaLabel: r.cuentaLabel,
+        unidad: r.unidad, cliente: r.clienteNombre,
+        tipo: 'NOMBRE_DISTINTO',
         severidad: 'ALTA',
-        titulo: 'Pago sin confirmación CEP',
-        descripcion: `La cuenta ${r.cuentaLabel} tiene transferencias STP sin Comprobante Electrónico de Pago (CECOBAN).`,
+        titulo: 'Precaución — Nombre ordenante diferente',
+        descripcion: `El nombre en el CEP "${p.nombre_ordenante}" no coincide con el comprador "${r.clienteNombre}". Verificar identidad.`,
         fecha: r.fechaActualizacion,
       });
-    }
-    if (r.pldStatus === 'OBSERVADO') {
+    });
+
+    // Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente
+    r.pagosRfcDistinto.forEach((p, idx) => {
       alerts.push({
-        id: `sobrepago-${r.cuentaId}`,
-        cuentaId: r.cuentaId,
-        cuentaLabel: r.cuentaLabel,
-        unidad: r.unidad,
-        cliente: r.clienteNombre,
-        tipo: 'SOBREPAGO',
-        severidad: 'MEDIA',
-        titulo: 'Sobrepago detectado',
-        descripcion: `La cuenta ${r.cuentaLabel} tiene pagos que superan el precio final. Requiere revisión.`,
+        id: `rfc-${r.cuentaId}-${idx}`,
+        cuentaId: r.cuentaId, cuentaLabel: r.cuentaLabel,
+        unidad: r.unidad, cliente: r.clienteNombre,
+        tipo: 'RFC_DISTINTO',
+        severidad: 'CRITICA',
+        titulo: 'Bloqueo — RFC ordenante diferente',
+        descripcion: `El RFC en el CEP "${p.rfc_ordenante}" no coincide con el RFC del comprador "${r.clienteRfc ?? '—'}". Posible evasión fiscal.`,
+        fecha: r.fechaActualizacion,
+      });
+    });
+
+    // Regla 3 — BLOQUEO: efectivo excedido
+    if (r.hasEfectivoExcedido) {
+      alerts.push({
+        id: `efectivo-${r.cuentaId}`,
+        cuentaId: r.cuentaId, cuentaLabel: r.cuentaLabel,
+        unidad: r.unidad, cliente: r.clienteNombre,
+        tipo: 'EFECTIVO_EXCEDIDO',
+        severidad: 'CRITICA',
+        titulo: 'Bloqueo — Límite de efectivo excedido',
+        descripcion: `Se pagaron ${new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(r.montoPagadoEfectivo)} en efectivo, superando el límite permitido de ${new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(r.limiteEfectivo)}.`,
         fecha: r.fechaActualizacion,
       });
     }
@@ -293,7 +412,7 @@ function BlockBanner({ count }: { count: number }) {
           {count} {count === 1 ? 'escritura bloqueada' : 'escrituras bloqueadas'} por PLD
         </p>
         <p className="text-xs text-red-600 mt-0.5">
-          Pagos sin clave de rastreo detectados. No es posible avanzar el proceso notarial hasta resolver.
+          RFC de ordenante diferente al cliente y/o límite de efectivo excedido. No es posible avanzar el proceso notarial hasta resolver.
         </p>
       </div>
       <button
@@ -354,22 +473,47 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
           </div>
         </div>
 
-        {/* Señales PLD */}
+        {/* Señales PLD — 3 reglas independientes */}
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Señales PLD detectadas</p>
-          <div className="space-y-1.5">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasSinCR ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700'}`}>
-              {row.hasSinCR ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-              Clave de rastreo STP {row.hasSinCR ? '⚠ faltante' : '✓ presente'}
+          <div className="space-y-2">
+
+            {/* Regla 1 — PRECAUCIÓN: Nombre ordenante ≠ cliente */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasNombreDistinto ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700'}`}>
+              {row.hasNombreDistinto ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+              <span><strong>Nombre CEP</strong> {row.hasNombreDistinto ? '⚠ PRECAUCIÓN — difiere del cliente' : '✓ coincide'}</span>
             </div>
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasSinCep ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700'}`}>
-              {row.hasSinCep ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-              CEP CECOBAN {row.hasSinCep ? '⚠ sin confirmar' : '✓ confirmado'}
+            {row.pagosNombreDistinto.map(pod => (
+              <div key={pod.pagoId} className="ml-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-0.5">
+                <p className="font-semibold text-amber-800">Ordenante: {pod.nombre_ordenante}</p>
+                <p className="text-slate-600">Cliente: {row.clienteNombre}</p>
+                <p className="text-slate-400 font-mono text-[10px]">CR: {pod.clave_rastreo}</p>
+              </div>
+            ))}
+
+            {/* Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasRfcDistinto ? 'bg-red-50 text-red-700 border border-red-200' : row.clienteRfc ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-500'}`}>
+              {row.hasRfcDistinto ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+              <span><strong>RFC CEP</strong> {row.hasRfcDistinto ? '🔴 BLOQUEO — RFC no coincide' : row.clienteRfc ? '✓ RFC verificado' : '— Sin RFC del cliente'}</span>
             </div>
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.pldStatus === 'OBSERVADO' ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-emerald-50 text-emerald-700'}`}>
-              {row.pldStatus === 'OBSERVADO' ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-              Monto {row.pldStatus === 'OBSERVADO' ? '⚠ sobrepago detectado' : '✓ dentro de rango'}
+            {row.pagosRfcDistinto.map(pod => (
+              <div key={pod.pagoId} className="ml-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs space-y-0.5">
+                <p className="font-semibold text-red-800">RFC ordenante: {pod.rfc_ordenante}</p>
+                <p className="text-slate-600">RFC cliente: {row.clienteRfc ?? '—'}</p>
+                <p className="text-slate-400 font-mono text-[10px]">CR: {pod.clave_rastreo}</p>
+              </div>
+            ))}
+
+            {/* Regla 3 — BLOQUEO: Efectivo excedido */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasEfectivoExcedido ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700'}`}>
+              {row.hasEfectivoExcedido ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+              <span>
+                <strong>Efectivo</strong> {row.hasEfectivoExcedido
+                  ? `🔴 BLOQUEO — ${fmtMxn(row.montoPagadoEfectivo)} excede límite ${fmtMxn(row.limiteEfectivo)}`
+                  : `✓ dentro del límite ${fmtMxn(row.limiteEfectivo)}`}
+              </span>
             </div>
+
           </div>
         </div>
 
@@ -383,10 +527,15 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
           ) : (
             <div className="space-y-2">
               {row.pagos.map(p => {
-                const hasRisk = !p.clave_rastreo;
-                const hasCepRisk = p.clave_rastreo && !p.url_cep;
+                const nombreCoincide = p.nombre_ordenante
+                  ? normalizarTexto(p.nombre_ordenante) === normalizarTexto(row.clienteNombre)
+                  : true;
+                const rfcCoincide = row.clienteRfc && p.rfc_ordenante
+                  ? normalizarRfc(p.rfc_ordenante) === normalizarRfc(row.clienteRfc)
+                  : false;
+                const isOrdenanteDistinto = !!p.clave_rastreo && !!p.nombre_ordenante && !nombreCoincide && !rfcCoincide;
                 return (
-                  <div key={p.id} className={`rounded-xl border p-3 ${hasRisk ? 'border-red-200 bg-red-50/50' : hasCepRisk ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200 bg-slate-50'}`}>
+                  <div key={p.id} className={`rounded-xl border p-3 ${isOrdenanteDistinto ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-sm font-bold text-slate-900 tabular-nums">{fmtMxn(p.monto)}</span>
                       <span className="text-xs text-slate-500">{fmtDate(p.fecha_pago)}</span>
@@ -395,7 +544,18 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                       {p.clave_rastreo ? (
                         <p className="text-xs font-mono text-slate-600 truncate">CR: {p.clave_rastreo}</p>
                       ) : (
-                        <p className="text-xs text-red-600 font-medium">⚠ Sin clave de rastreo</p>
+                        <p className="text-xs text-slate-400">Sin clave de rastreo</p>
+                      )}
+                      {p.nombre_ordenante && (
+                        <div className={`text-xs font-medium ${isOrdenanteDistinto ? 'text-red-700' : 'text-slate-600'}`}>
+                          <p>{isOrdenanteDistinto ? '⚠ ' : '✓ '}Ordenante: {p.nombre_ordenante}</p>
+                          {p.rfc_ordenante && (
+                            <p className={`text-[11px] ${isOrdenanteDistinto ? 'text-red-500' : 'text-slate-400'}`}>
+                              RFC: {p.rfc_ordenante}
+                              {rfcCoincide && ' ✓ coincide con cliente'}
+                            </p>
+                          )}
+                        </div>
                       )}
                       <div className="flex items-center gap-2">
                         {p.url_cep ? (
@@ -405,7 +565,7 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                             <ExternalLink className="w-3 h-3" /> Ver CEP
                           </a>
                         ) : (
-                          <span className="text-xs text-amber-600">Sin CEP</span>
+                          <span className="text-xs text-slate-400">Sin CEP</span>
                         )}
                         {p.url_recibo && (
                           <a href={p.url_recibo} target="_blank" rel="noopener noreferrer"
@@ -537,11 +697,11 @@ export function PldDashboard() {
       // Cuentas de cobranza
       const { data: cuentasList } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, fecha_actualizacion')
+        .select('id, id_propiedad, precio_final, fecha_actualizacion, valor_uma')
         .eq('activo', true)
         .in('id_propiedad', propIds);
 
-      const cuentaByProp: Record<number, { id: number; precio_final: number; fecha_actualizacion: string }> = {};
+      const cuentaByProp: Record<number, { id: number; precio_final: number; fecha_actualizacion: string; valor_uma: number }> = {};
       (cuentasList || []).forEach(c => {
         const ex = cuentaByProp[c.id_propiedad!];
         if (!ex || c.fecha_actualizacion > ex.fecha_actualizacion) cuentaByProp[c.id_propiedad!] = c;
@@ -550,16 +710,40 @@ export function PldDashboard() {
       const cuentaIds = Object.values(cuentaByProp).map(c => c.id);
       if (!cuentaIds.length) return [];
 
-      // Pagos
-      const { data: pagosList } = await supabase
-        .from('pagos')
-        .select('id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, url_cep, url_recibo, descripcion')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true)
-        .order('fecha_pago', { ascending: false });
+      // Pagos — batches de 30 para evitar límite PostgREST
+      const BATCH = 30;
+      const allPagos: any[] = [];
+      for (let i = 0; i < cuentaIds.length; i += BATCH) {
+        const slice = cuentaIds.slice(i, i + BATCH);
+        const { data } = await supabase
+          .from('pagos')
+          .select('id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, url_cep, url_recibo, descripcion, id_metodos_pago')
+          .in('id_cuenta_cobranza', slice)
+          .eq('activo', true)
+          .order('fecha_pago', { ascending: false });
+        allPagos.push(...(data ?? []));
+      }
+
+      // Obtener nombre_ordenante de pagos_stp_raw via clave_rastreo
+      const clavesRastreo = [...new Set(allPagos.map(p => p.clave_rastreo).filter(Boolean))] as string[];
+      const ordenanteMap:    Record<string, string> = {};
+      const rfcOrdenanteMap: Record<string, string> = {};
+      if (clavesRastreo.length) {
+        for (let i = 0; i < clavesRastreo.length; i += 500) {
+          const slice = clavesRastreo.slice(i, i + 500);
+          const { data: stpRaw } = await (supabase as any)
+            .from('pagos_stp_raw')
+            .select('claverastreo, nombre_ordenante, rfc_curp_ordenante')
+            .in('claverastreo', slice);
+          (stpRaw ?? []).forEach((r: any) => {
+            if (r.nombre_ordenante) ordenanteMap[r.claverastreo] = r.nombre_ordenante;
+            if (r.rfc_curp_ordenante) rfcOrdenanteMap[r.claverastreo] = r.rfc_curp_ordenante;
+          });
+        }
+      }
 
       const pagosByCuenta: Record<number, PagoInfo[]> = {};
-      (pagosList || []).forEach(p => {
+      allPagos.forEach(p => {
         if (!pagosByCuenta[p.id_cuenta_cobranza]) pagosByCuenta[p.id_cuenta_cobranza] = [];
         pagosByCuenta[p.id_cuenta_cobranza].push({
           id: p.id,
@@ -569,6 +753,9 @@ export function PldDashboard() {
           url_cep: p.url_cep,
           url_recibo: p.url_recibo,
           descripcion: p.descripcion,
+          id_metodos_pago: p.id_metodos_pago ?? null,
+          nombre_ordenante: p.clave_rastreo ? (ordenanteMap[p.clave_rastreo] ?? null) : null,
+          rfc_ordenante:    p.clave_rastreo ? (rfcOrdenanteMap[p.clave_rastreo] ?? null) : null,
         });
       });
 
@@ -576,17 +763,19 @@ export function PldDashboard() {
       const { data: comprsList } = await supabase
         .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
-      const personaMap: Record<number, string> = {};
+      const personaMap: Record<number, { nombre: string; rfc: string | null }> = {};
       if (personaIds.length) {
-        const { data: personas } = await supabase.from('personas').select('id, nombre_legal').in('id', personaIds);
-        (personas || []).forEach(p => { personaMap[p.id] = p.nombre_legal; });
+        const { data: personas } = await supabase.from('personas').select('id, nombre_legal, rfc').in('id', personaIds);
+        (personas || []).forEach(p => { personaMap[p.id] = { nombre: p.nombre_legal, rfc: p.rfc ?? null }; });
       }
-      const clienteByCuenta: Record<number, string> = {};
+      const clienteByCuenta:    Record<number, string>        = {};
+      const clienteRfcByCuenta: Record<number, string | null> = {};
       const seenC = new Set<number>();
       (comprsList || []).forEach(c => {
         if (!seenC.has(c.id_cuenta_cobranza)) {
           seenC.add(c.id_cuenta_cobranza);
-          clienteByCuenta[c.id_cuenta_cobranza] = personaMap[c.id_persona] || '—';
+          clienteByCuenta[c.id_cuenta_cobranza]    = personaMap[c.id_persona]?.nombre || '—';
+          clienteRfcByCuenta[c.id_cuenta_cobranza] = personaMap[c.id_persona]?.rfc ?? null;
         }
       });
 
@@ -596,19 +785,35 @@ export function PldDashboard() {
         .map(p => {
           const cuenta = cuentaByProp[p.id];
           const pagos = pagosByCuenta[cuenta.id] || [];
-          const { pldStatus, riesgo, hasSinCR, hasSinCep, escrituraBloqueada, totalPagado } = derivePld(pagos, cuenta.precio_final);
+          const clienteNombre = clienteByCuenta[cuenta.id]    || '—';
+          const clienteRfc    = clienteRfcByCuenta[cuenta.id] ?? null;
+          const valorUma = Number(cuenta.valor_uma ?? 0);
+          const {
+            pldStatus, riesgo, hasSinCR, hasSinCep,
+            hasNombreDistinto, pagosNombreDistinto,
+            hasRfcDistinto,    pagosRfcDistinto,
+            hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+            hasOrdenanteDistinto, pagosOrdenanteDistinto,
+            escrituraBloqueada, totalPagado,
+          } = derivePld(pagos, cuenta.precio_final, clienteNombre, clienteRfc, valorUma);
           return {
             cuentaId: cuenta.id,
             cuentaLabel: `CC-${String(cuenta.id).padStart(6, '0')}`,
             proyectoNombre,
             unidad: p.numero_propiedad,
-            clienteNombre: clienteByCuenta[cuenta.id] || '—',
+            clienteNombre,
+            clienteRfc,
             pldStatus,
             riesgo,
             totalPagado,
             precioFinal: cuenta.precio_final ?? 0,
             hasSinCR,
             hasSinCep,
+            hasNombreDistinto, pagosNombreDistinto,
+            hasRfcDistinto,    pagosRfcDistinto,
+            hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+            hasOrdenanteDistinto,
+            pagosOrdenanteDistinto,
             escrituraBloqueada,
             numPagos: pagos.length,
             pagos,
@@ -708,13 +913,16 @@ export function PldDashboard() {
         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="text-sm font-bold text-amber-800">
-            Advertencia: el bloqueo PLD es informativo, no técnico
+            Bloqueo PLD: visual activo — bloqueo técnico en BD pendiente de activar
           </p>
-          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
-            El estatus <span className="font-semibold">BLOQUEADO</span> mostrado aquí es calculado en el frontend a partir de los pagos registrados.
-            <strong className="font-semibold"> No impide a nivel de base de datos</strong> que se registre un número de escritura o se avance el proceso notarial.
-            Para un bloqueo real se requiere ejecutar el trigger <code className="font-mono bg-amber-100 rounded px-1">trg_pld_check_before_escritura</code> en la BD
-            (ver <span className="font-mono">Ejecuciones_manuales/pld_enforcement_real.md</span>).
+          <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+            Las 3 reglas PLD (nombre diferente = precaución, RFC diferente = bloqueo, efectivo excedido = bloqueo)
+            están activas en la UI. El estatus <span className="font-semibold">BLOQUEADO</span>
+            {' '}<strong>no impide aún a nivel de BD</strong> registrar escrituras.
+            Para activar el bloqueo técnico real, ejecuta el trigger{' '}
+            <code className="font-mono bg-amber-100 rounded px-1">trg_pld_check_before_escritura</code>
+            {' '}documentado en{' '}
+            <span className="font-mono">Ejecuciones_manuales/pld_enforcement_real.md</span>.
           </p>
         </div>
       </div>
