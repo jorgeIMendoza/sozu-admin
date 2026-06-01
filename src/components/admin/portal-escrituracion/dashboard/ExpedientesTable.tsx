@@ -42,7 +42,15 @@ interface RowData {
   proyecto: string;
   unidad: string;
   cliente: string;
-  pago: string;
+  // campos financieros numéricos
+  precioFinal: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  pagoEfectivo: number;
+  valorEscritura: number;
+  tieneBodega: boolean;
+  tieneCajon: boolean;
+  // resto
   banco: string;
   notaria: string;
   etapa: string;
@@ -53,8 +61,10 @@ interface RowData {
   tipo: string;
   personaId: number | null;
   cuentaCobranzaId: number | null;
-  precioFinal: number;
 }
+
+const fmtMxn = (n: number) =>
+  n === 0 ? '$0' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
 const columnHelper = createColumnHelper<RowData>();
 
@@ -88,15 +98,67 @@ const columns = [
       </div>
     ),
   }),
-  columnHelper.accessor('pago', {
-    header: 'Pago',
+  // ── Columnas financieras ──────────────────────────────────────────────────
+  columnHelper.accessor('precioFinal', {
+    header: 'Precio Final',
     cell: info => {
-      const val = info.getValue();
-      return val === '—'
-        ? <span className="text-slate-400 text-sm">—</span>
-        : <span className="text-slate-900 text-sm font-medium">{val}</span>;
+      const v = info.getValue();
+      return v > 0
+        ? <span className="text-slate-800 text-sm font-medium tabular-nums">{fmtMxn(v)}</span>
+        : <span className="text-slate-300 text-sm">—</span>;
     },
   }),
+  columnHelper.accessor('totalPagado', {
+    header: 'Total Pagado',
+    cell: info => {
+      const v = info.getValue();
+      return v > 0
+        ? <span className="text-emerald-600 text-sm font-semibold tabular-nums">{fmtMxn(v)}</span>
+        : <span className="text-slate-300 text-sm">$0</span>;
+    },
+  }),
+  columnHelper.accessor('saldoPendiente', {
+    header: 'Saldo Pendiente',
+    cell: info => {
+      const v = info.getValue();
+      return v > 0
+        ? <span className="text-amber-600 text-sm font-semibold tabular-nums">{fmtMxn(v)}</span>
+        : <span className="text-emerald-500 text-sm font-semibold">$0</span>;
+    },
+  }),
+  columnHelper.accessor('pagoEfectivo', {
+    header: 'Pago Efectivo',
+    cell: info => {
+      const v = info.getValue();
+      return v > 0
+        ? <span className="text-slate-700 text-sm tabular-nums">{fmtMxn(v)}</span>
+        : <span className="text-slate-300 text-sm">—</span>;
+    },
+  }),
+  columnHelper.accessor('valorEscritura', {
+    header: 'Valor Escritura',
+    cell: info => {
+      const v = info.getValue();
+      const { tieneBodega, tieneCajon } = info.row.original;
+      return (
+        <div>
+          {v > 0
+            ? <span className="text-purple-700 text-sm font-semibold tabular-nums">{fmtMxn(v)}</span>
+            : <span className="text-slate-300 text-sm">—</span>
+          }
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${tieneBodega ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-300'}`}>
+              Bodega {tieneBodega ? 'Sí' : 'No'}
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${tieneCajon ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-300'}`}>
+              Cajón {tieneCajon ? 'Sí' : 'No'}
+            </span>
+          </div>
+        </div>
+      );
+    },
+  }),
+  // ─────────────────────────────────────────────────────────────────────────
   columnHelper.accessor('banco', {
     header: 'Banco',
     cell: info => <span className="text-slate-500 text-sm">{info.getValue()}</span>,
@@ -305,36 +367,84 @@ export function ExpedientesTable() {
         }
       }
 
-      // Paso 6: Totales pagados por cuenta (acuerdos_pago → aplicaciones_pago)
+      // Paso 6: Totales pagados — query directa a pagos en lotes de 30
+      // (evita el límite de 1000 filas de PostgREST: acuerdos→aplicaciones cascade falla en proyectos grandes)
+      const BATCH = 30;
       const totalPagadoByCuenta: Record<number, number> = {};
+      const pagoEfectivoByCuenta: Record<number, number> = {};
+
       if (cuentaIds.length) {
-        const { data: acuerdos } = await supabase
-          .from('acuerdos_pago')
-          .select('id, id_cuenta_cobranza')
-          .in('id_cuenta_cobranza', cuentaIds)
-          .eq('activo', true);
-
-        if (acuerdos?.length) {
-          const acuerdoIdToCuenta: Record<number, number> = {};
-          acuerdos.forEach(a => { acuerdoIdToCuenta[a.id] = a.id_cuenta_cobranza; });
-
-          const { data: aplicaciones } = await supabase
-            .from('aplicaciones_pago')
-            .select('id_acuerdo_pago, monto, es_multa')
-            .in('id_acuerdo_pago', acuerdos.map(a => a.id))
-            .eq('activo', true);
-
-          (aplicaciones || []).forEach(ap => {
-            if (ap.es_multa) return;
-            const cuentaId = acuerdoIdToCuenta[ap.id_acuerdo_pago];
-            if (cuentaId) {
-              totalPagadoByCuenta[cuentaId] = (totalPagadoByCuenta[cuentaId] || 0) + (ap.monto ?? 0);
+        const batches: Promise<any>[] = [];
+        for (let i = 0; i < cuentaIds.length; i += BATCH) {
+          const slice = (cuentaIds as number[]).slice(i, i + BATCH);
+          batches.push(
+            supabase.from('pagos')
+              .select('id_cuenta_cobranza, monto, id_metodos_pago')
+              .in('id_cuenta_cobranza', slice as any)
+              .eq('activo', true)
+          );
+        }
+        const results = await Promise.allSettled(batches);
+        results.forEach(r => {
+          if (r.status !== 'fulfilled') return;
+          ((r.value as any).data ?? []).forEach((p: any) => {
+            const cid = p.id_cuenta_cobranza;
+            totalPagadoByCuenta[cid] = (totalPagadoByCuenta[cid] || 0) + Number(p.monto);
+            if (p.id_metodos_pago === 1) { // 1 = efectivo
+              pagoEfectivoByCuenta[cid] = (pagoEfectivoByCuenta[cid] || 0) + Number(p.monto);
             }
+          });
+        });
+      }
+
+      // Paso 7: Bodegas y estacionamientos por propiedad
+      const bodegaByProp: Record<number, boolean>  = {};
+      const cajonByProp:  Record<number, boolean>  = {};
+      const extraPorProp: Record<number, number>   = {};
+
+      const [bodegasRes, estacRes] = await Promise.allSettled([
+        supabase.from('bodegas').select('id_propiedad, id_producto, es_incluido')
+          .in('id_propiedad', propIds).eq('activo', true),
+        supabase.from('estacionamientos').select('id_propiedad, id_producto, es_incluido')
+          .in('id_propiedad', propIds).eq('activo', true),
+      ]);
+
+      const bodegas    = bodegasRes.status    === 'fulfilled' ? (bodegasRes.value.data   ?? []) : [];
+      const estaciones = estacRes.status === 'fulfilled' ? (estacRes.value.data ?? []) : [];
+
+      bodegas.forEach((b: any)    => { bodegaByProp[b.id_propiedad] = true; });
+      estaciones.forEach((e: any) => { cajonByProp[e.id_propiedad]  = true; });
+
+      // Cuentas de bodegas/estac NO incluidos → para valor de escritura
+      const extraItems: { id_propiedad: number; id_producto: number }[] = [
+        ...bodegas.filter((b: any)    => !b.es_incluido).map((b: any) => ({ id_propiedad: b.id_propiedad, id_producto: b.id_producto })),
+        ...estaciones.filter((e: any) => !e.es_incluido).map((e: any) => ({ id_propiedad: e.id_propiedad, id_producto: e.id_producto })),
+      ].filter(x => x.id_producto);
+
+      if (extraItems.length) {
+        const extraProductIds = extraItems.map(x => x.id_producto);
+        const { data: ofertasExtra } = await supabase
+          .from('ofertas').select('id, id_producto').in('id_producto', extraProductIds).eq('activo', true);
+
+        if (ofertasExtra?.length) {
+          const { data: ctasExtra } = await supabase
+            .from('cuentas_cobranza').select('id_oferta, precio_final')
+            .in('id_oferta', ofertasExtra.map((o: any) => o.id)).eq('activo', true);
+
+          const productoPropMap: Record<number, number> = {};
+          extraItems.forEach(x => { productoPropMap[x.id_producto] = x.id_propiedad; });
+          const ofertaProductoMap: Record<number, number> = {};
+          (ofertasExtra ?? []).forEach((o: any) => { ofertaProductoMap[o.id] = o.id_producto; });
+
+          (ctasExtra ?? []).forEach((c: any) => {
+            const prodId = ofertaProductoMap[c.id_oferta];
+            const propId = productoPropMap[prodId];
+            if (propId) extraPorProp[propId] = (extraPorProp[propId] || 0) + Number(c.precio_final || 0);
           });
         }
       }
 
-      // Paso 7: Construir filas
+      // Paso 8: Construir filas (pagos ya en totalPagadoByCuenta + pagoEfectivoByCuenta)
       return props.map(p => {
         const cuenta = cuentaByProp[p.id];
         const cuentaId = cuenta?.id ?? null;
@@ -343,14 +453,24 @@ export function ExpedientesTable() {
         const personaId = cuentaId ? (personaIdByCuenta[cuentaId] || null) : null;
         const fechaAct = cuenta?.fecha_actualizacion || p.fecha_actualizacion;
 
+        const precioFinal   = Number(cuenta?.precio_final ?? 0);
+        const totalPagado   = cuentaId ? (totalPagadoByCuenta[cuentaId] ?? 0)   : 0;
+        const saldoPendiente = Math.max(0, precioFinal - totalPagado);
+        const pagoEfectivo  = cuentaId ? (pagoEfectivoByCuenta[cuentaId] ?? 0) : 0;
+        const valorEscritura = precioFinal + (extraPorProp[p.id] ?? 0);
+
         return {
           id: cuentaId ? `CC-${String(cuentaId).padStart(6, '0')}` : `PROP-${p.id}`,
           proyecto: proyectoActivo.nombre,
           unidad: p.numero_propiedad,
           cliente,
-          pago: cuentaId
-            ? (totalPagadoByCuenta[cuentaId] ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
-            : '—',
+          precioFinal,
+          totalPagado,
+          saldoPendiente,
+          pagoEfectivo,
+          valorEscritura,
+          tieneBodega: bodegaByProp[p.id] ?? false,
+          tieneCajon:  cajonByProp[p.id]  ?? false,
           banco: '—',
           notaria,
           etapa: p.id_estatus_disponibilidad === 7
@@ -366,7 +486,6 @@ export function ExpedientesTable() {
           tipo: cuentaId ? 'Propiedad' : '—',
           personaId,
           cuentaCobranzaId: cuentaId,
-          precioFinal: cuenta?.precio_final ?? 0,
           ultimaActualizacion: fechaAct
             ? new Date(fechaAct).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
             : '—',
@@ -421,7 +540,7 @@ export function ExpedientesTable() {
 
   return (
     <>
-    <div className="flex-1 min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col mb-6 lg:mb-0">
+    <div className="flex-1 min-w-0 sz-table-wrapper flex flex-col mb-6 lg:mb-0" style={{ borderRadius: 'var(--sz-radius-xl)' }}>
       {/* Toolbar */}
       <div className="p-4 border-b border-slate-200 flex flex-wrap lg:flex-nowrap items-center gap-3">
         <div className="relative flex-1 min-w-[280px]">
@@ -479,8 +598,8 @@ export function ExpedientesTable() {
             <option value="Todas">Notaría: Todas</option>
           </select>
 
-          <button className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ml-auto shadow-sm">
-            <Plus className="w-4 h-4" />
+          <button className="sz-btn-primary ml-auto">
+            <Plus size={16} strokeWidth={2} />
             Nuevo expediente
           </button>
         </div>
@@ -494,26 +613,27 @@ export function ExpedientesTable() {
             <span className="text-sm">Cargando unidades...</span>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="sz-table w-full text-left border-collapse min-w-[1000px]">
             <thead>
               {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id} className="border-b border-slate-200 bg-slate-50/50">
+                <tr key={headerGroup.id}>
                   {headerGroup.headers.map(header => (
-                    <th key={header.id} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    <th key={header.id}>
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                     </th>
                   ))}
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {table.getRowModel().rows.map(row => {
                 const isSelected = row.original.id === expedienteSeleccionado;
                 return (
                   <tr
                     key={row.id}
                     onClick={() => setExpedienteSeleccionado(isSelected ? null : row.original.id)}
-                    className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-emerald-50/30' : ''}`}
+                    className={`cursor-pointer ${isSelected ? 'bg-emerald-50/40' : ''}`}
+                    style={{ transition: 'var(--sz-transition)' }}
                   >
                     {row.getVisibleCells().map(cell => {
                       const isUnidadClickable = cell.column.id === 'unidad' && !!row.original.personaId;
@@ -522,7 +642,7 @@ export function ExpedientesTable() {
                       return (
                       <td
                         key={cell.id}
-                        className={`px-5 py-4 whitespace-nowrap text-sm align-middle ${isNotariaClickable || isIdClickable ? 'cursor-pointer' : ''}`}
+                        className={`whitespace-nowrap align-middle ${isNotariaClickable || isIdClickable ? 'cursor-pointer' : ''}`}
                         onClick={
                           isUnidadClickable
                             ? (e) => { e.stopPropagation(); setEditingPersonaId(row.original.personaId); setIsEditDialogOpen(true); }

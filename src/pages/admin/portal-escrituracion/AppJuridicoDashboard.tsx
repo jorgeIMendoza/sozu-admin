@@ -215,6 +215,8 @@ function AppJuridicoDashboardInner() {
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilter]   = useState('');
   const [kpiFilter,      setKpiFilter]      = useState('');
+  const [etapaFilter,    setEtapaFilter]    = useState(''); // filtro por etapa del pipeline
+  const [soloVencidos,   setSoloVencidos]   = useState(false); // mostrar solo regularizaciones vencidas
   const [selectedRow,    setSelectedRow]    = useState<LegalRow | null>(null);
   const [detailTab,      setDetailTab]      = useState<'resumen' | 'documentos' | 'bitacora' | 'audiencias' | 'acuerdos' | 'proceso'>('resumen');
   const [adminAbogadoId, setAdminAbogadoId] = useState<number | null>(null);
@@ -335,7 +337,8 @@ function AppJuridicoDashboardInner() {
   } = useQuery({
     queryKey: ['app-juridico-demandas', perfilId, isAdmin, adminAbogadoId],
     enabled: !authLoading && canView && (!isAdmin ? !loadingAssigned : true),
-    staleTime: 2 * 60_000,
+    staleTime: 0,           // siempre refetch al montar — garantiza datos frescos al navegar
+    refetchInterval: 30_000, // polling cada 30s para actualizaciones automáticas
     queryFn: async () => {
       // DDL probes (parallel) — determines available columns and tables
       const [aj1Probe, perfilesProbe, procesoProbe] = await Promise.allSettled([
@@ -364,11 +367,18 @@ function AppJuridicoDashboardInner() {
         .order('fecha_actualizacion', { ascending: false });
 
       if (!isAdmin) {
-        if (!assignedIds || assignedIds.length === 0) {
+        // Abogado: filtrar por asignaciones O por id_perfil_juridico directo en demandas
+        if (assignedIds && assignedIds.length > 0) {
+          q = q.in('id', assignedIds);
+        } else if (perfilId) {
+          // Fallback: demandas asignadas directamente (sin tabla asignaciones)
+          q = q.eq('id_perfil_juridico', perfilId);
+        } else {
           return { rows: [], hasAj1, hasAppJu, hasProceso, assignedEmpty: true, entityMaps: null };
         }
-        q = q.in('id', assignedIds);
       } else if (adminAbogadoId) {
+        // Admin filtrando por abogado: intentar asignaciones, caer back a id_perfil_juridico
+        let filteredByAsignaciones = false;
         try {
           const { data: aIds } = await (supabase as any)
             .from('asignaciones_juridico')
@@ -376,9 +386,16 @@ function AppJuridicoDashboardInner() {
             .eq('id_perfil_juridico', adminAbogadoId)
             .eq('estatus', 'ACTIVA');
           const ids = (aIds ?? []).map((a: any) => a.id_demanda as number);
-          if (ids.length === 0) return { rows: [], hasAj1, hasAppJu, hasProceso, entityMaps: null };
-          q = q.in('id', ids);
-        } catch { /* no asignaciones table yet */ }
+          if (ids.length > 0) {
+            q = q.in('id', ids);
+            filteredByAsignaciones = true;
+          }
+        } catch { /* no asignaciones table yet — usar fallback */ }
+
+        if (!filteredByAsignaciones) {
+          // Fallback: filtrar directamente por id_perfil_juridico en demandas
+          q = q.eq('id_perfil_juridico', adminAbogadoId);
+        }
       }
 
       const { data: rawDem, error: demError } = await q;
@@ -476,7 +493,7 @@ function AppJuridicoDashboardInner() {
   const { data: pagosData = [] } = useQuery({
     queryKey: ['app-juridico-pagos', accountIds],
     enabled: accountIds.length > 0,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
     queryFn: async () => {
       const { data } = await supabase
         .from('pagos').select('id_cuenta_cobranza, monto')
@@ -691,6 +708,30 @@ function AppJuridicoDashboardInner() {
     if (proyectoId && proyectoId !== 'todos') rows = rows.filter(r => String(r.proyectoId) === proyectoId);
     if (statusFilter && statusFilter !== 'todos') rows = rows.filter(r => r.lawsuitStatus === statusFilter);
 
+    // Filtro por etapa del pipeline (derivada de campos hasProcesoCol)
+    if (etapaFilter && etapaFilter !== 'todas') {
+      rows = rows.filter(r => {
+        if (etapaFilter === 'notificacion')   return !!r.fechaNotificacion;
+        if (etapaFilter === 'regularizacion') return !!r.fechaNotificacion && !r.fechaPresentacionDemanda;
+        if (etapaFilter === 'presentacion')   return !!r.fechaPresentacionDemanda;
+        if (etapaFilter === 'admision')       return !!r.fechaAdmision;
+        if (etapaFilter === 'emplazamiento')  return !!r.fechaEmplazamiento;
+        if (etapaFilter === 'audiencia')      return !!r.fechaAudienciaProceso;
+        if (etapaFilter === 'sentencia')      return !!r.fechaSentencia;
+        return true;
+      });
+    }
+
+    // Filtro "solo vencidos": regularización vencida y no resuelta
+    if (soloVencidos) {
+      const today = new Date();
+      rows = rows.filter(r =>
+        r.fechaLimiteRegularizacion &&
+        r.estatusRegularizacion !== 'REGULARIZADO' &&
+        new Date(r.fechaLimiteRegularizacion) < today
+      );
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(r =>
@@ -705,8 +746,8 @@ function AppJuridicoDashboardInner() {
     return rows;
   }, [allRows, kpiFilter, proyectoId, statusFilter, search]);
 
-  const hasFilters = !!(proyectoId && proyectoId !== 'todos') || !!statusFilter || !!search;
-  const clearFilters = () => { setProyectoId(''); setStatusFilter(''); setSearch(''); setKpiFilter(''); };
+  const hasFilters = !!(proyectoId && proyectoId !== 'todos') || !!statusFilter || !!search || !!etapaFilter || soloVencidos;
+  const clearFilters = () => { setProyectoId(''); setStatusFilter(''); setSearch(''); setKpiFilter(''); setEtapaFilter(''); setSoloVencidos(false); };
 
   const isLoading       = loadingDemandas;
   const lastUpdated     = new Date().toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -1010,15 +1051,66 @@ function AppJuridicoDashboardInner() {
         </div>
       )}
 
-      {/* Search + Project */}
+      {/* Filters row */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Proyecto */}
         <Select value={proyectoId || 'todos'} onValueChange={v => setProyectoId(v === 'todos' ? '' : v)}>
-          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Proyecto" /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Proyecto" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos los proyectos</SelectItem>
             {proyectos.map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
           </SelectContent>
         </Select>
+
+        {/* Estatus */}
+        <Select value={statusFilter || 'todos'} onValueChange={v => setStatusFilter(v === 'todos' ? '' : v)}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Estatus" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los estatus</SelectItem>
+            <SelectItem value="EN_REVISION">En revisión</SelectItem>
+            <SelectItem value="DEMANDA_PRESENTADA">Demanda presentada</SelectItem>
+            <SelectItem value="EN_NEGOCIACION">En negociación</SelectItem>
+            <SelectItem value="ACUERDO">Acuerdo</SelectItem>
+            <SelectItem value="RESUELTA">Resuelta</SelectItem>
+            <SelectItem value="CERRADA">Cerrada</SelectItem>
+            <SelectItem value="RIESGO_ALTO">Riesgo alto</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Etapa pipeline */}
+        {hasProcesoCol && (
+          <Select value={etapaFilter || 'todas'} onValueChange={v => setEtapaFilter(v === 'todas' ? '' : v)}>
+            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Etapa" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas las etapas</SelectItem>
+              <SelectItem value="notificacion">Notificación</SelectItem>
+              <SelectItem value="regularizacion">Regularización</SelectItem>
+              <SelectItem value="presentacion">Presentación juzgado</SelectItem>
+              <SelectItem value="admision">Admisión</SelectItem>
+              <SelectItem value="emplazamiento">Emplazamiento</SelectItem>
+              <SelectItem value="audiencia">Audiencia</SelectItem>
+              <SelectItem value="sentencia">Sentencia/Acuerdo</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Solo vencidos toggle */}
+        {hasProcesoCol && (
+          <button
+            onClick={() => setSoloVencidos(v => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors',
+              soloVencidos
+                ? 'bg-red-50 text-red-700 border-red-300'
+                : 'bg-background text-muted-foreground border-border hover:bg-muted/30',
+            )}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {soloVencidos ? 'Mostrando vencidos' : 'Solo vencidos'}
+          </button>
+        )}
+
+        {/* Buscador */}
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
@@ -1032,6 +1124,12 @@ function AppJuridicoDashboardInner() {
             </button>
           )}
         </div>
+
+        {hasFilters && (
+          <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground h-8 px-2 rounded-md hover:bg-muted/30">
+            <X className="h-3 w-3" /> Limpiar
+          </button>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -1104,7 +1202,7 @@ function AppJuridicoDashboardInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Proyecto', 'Unidad — Cliente', 'Precio Final', 'Pagado', 'Por cobrar', 'Estatus', '% Penalidad', 'Observaciones', 'Etapa proceso', 'Fecha notif.', 'Días rest.', 'Próx. acción', 'Acciones'].map(h => (
+                    {['Proyecto', 'Unidad — Cliente', 'Estatus', 'Precio de Venta', 'Pagado', 'Por Pagar', '% Pen.', 'Penalización $', 'Observaciones', 'Etapa', 'Días rest.', 'Acciones'].map(h => (
                       <th key={h} className="px-3 py-3 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1121,37 +1219,58 @@ function AppJuridicoDashboardInner() {
                           : 'hover:bg-muted/20',
                       )}
                     >
+                      {/* Proyecto */}
                       <td className="px-3 py-3">
                         <p className="font-medium text-sm leading-tight text-primary">{row.proyectoNombre}</p>
                         <p className="text-[11px] text-muted-foreground font-mono">{row.accountCode}</p>
                       </td>
+                      {/* Unidad — Cliente */}
                       <td className="px-3 py-3">
                         <p className="font-semibold text-sm">{row.unitCode}</p>
-                        <p className="text-xs text-muted-foreground">{row.clienteName}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[140px]">{row.clienteName}</p>
+                        {/* Alerta regularización vencida */}
+                        {hasProcesoCol && row.fechaLimiteRegularizacion &&
+                          row.estatusRegularizacion !== 'REGULARIZADO' &&
+                          new Date(row.fechaLimiteRegularizacion) < new Date() && (
+                          <span className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-semibold rounded-full border border-red-200">
+                            <AlertTriangle className="h-2.5 w-2.5" /> Reg. vencida
+                          </span>
+                        )}
                       </td>
+                      {/* Estatus */}
+                      <td className="px-3 py-3"><StatusBadge status={row.lawsuitStatus} /></td>
+                      {/* Precio de Venta */}
                       <td className="px-3 py-3 text-right tabular-nums font-medium">{fmtMxn(row.finalSalePrice)}</td>
+                      {/* Pagado */}
                       <td className="px-3 py-3 text-right tabular-nums text-emerald-600 font-medium">{fmtMxn(row.paidAmount)}</td>
+                      {/* Por Pagar */}
                       <td className="px-3 py-3 text-right tabular-nums">
                         {row.pendingAmount > 0
                           ? <span className="text-red-600 font-medium">{fmtMxn(row.pendingAmount)}</span>
                           : <span className="text-emerald-600 font-medium">$0</span>}
                       </td>
-                      <td className="px-3 py-3"><StatusBadge status={row.lawsuitStatus} /></td>
+                      {/* % Penalización */}
                       <td className="px-3 py-3 text-center">
                         <span className={cn('text-xs font-semibold tabular-nums', row.penaltyPct > 10 ? 'text-red-600' : 'text-slate-700')}>
                           {row.penaltyPct > 0 ? `${row.penaltyPct}%` : '—'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 max-w-[180px]">
+                      {/* Penalización $ = precioVenta × pct / 100 */}
+                      <td className="px-3 py-3 text-right tabular-nums">
+                        {row.penaltyPct > 0
+                          ? <span className="text-orange-600 font-semibold text-xs">{fmtMxn(row.penaltyAmount)}</span>
+                          : <span className="text-muted-foreground text-xs">—</span>}
+                      </td>
+                      {/* Observaciones */}
+                      <td className="px-3 py-3 max-w-[160px]">
                         <p className="text-xs text-muted-foreground line-clamp-2">{row.observations || '—'}</p>
                       </td>
-                      {/* Etapa proceso */}
+                      {/* Etapa */}
                       <td className="px-3 py-3 text-center">
                         {hasProcesoCol ? (
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                             {row.fechaSentencia ? 'Sentencia'
                               : row.fechaAudienciaProceso ? 'Audiencia'
-                              : row.fechaContestacionDemanda ? 'Contestación'
                               : row.fechaEmplazamiento ? 'Emplazamiento'
                               : row.fechaAdmision ? 'Admisión'
                               : row.fechaPresentacionDemanda ? 'Presentación'
@@ -1160,29 +1279,12 @@ function AppJuridicoDashboardInner() {
                           </span>
                         ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
                       </td>
-                      {/* Fecha notificación */}
-                      <td className="px-3 py-3 text-center tabular-nums">
-                        <span className="text-[11px] text-muted-foreground">{hasProcesoCol ? fmtDate(row.fechaNotificacion) : '—'}</span>
-                      </td>
-                      {/* Días restantes */}
+                      {/* Días restantes regularización */}
                       <td className="px-3 py-3 text-center tabular-nums">
                         {hasProcesoCol && row.fechaLimiteRegularizacion && row.estatusRegularizacion === 'EN_ESPERA' ? (() => {
                           const d = Math.ceil((new Date(row.fechaLimiteRegularizacion).getTime() - Date.now()) / 86400000);
-                          return <span className={cn('text-xs font-semibold', d < 0 ? 'text-red-600' : d <= 5 ? 'text-amber-600' : 'text-slate-600')}>{d < 0 ? `${d}` : `${d}d`}</span>;
+                          return <span className={cn('text-xs font-semibold', d < 0 ? 'text-red-600' : d <= 5 ? 'text-amber-600' : 'text-slate-600')}>{d < 0 ? `${d}d` : `${d}d`}</span>;
                         })() : <span className="text-[11px] text-muted-foreground/40">—</span>}
-                      </td>
-                      {/* Próxima acción */}
-                      <td className="px-3 py-3 max-w-[120px]">
-                        <span className="text-[11px] text-muted-foreground">
-                          {hasProcesoCol
-                            ? row.resultadoProceso !== 'EN_PROCESO' ? row.resultadoProceso.replace(/_/g, ' ')
-                            : row.fechaAudienciaProceso ? `Aud. ${fmtDate(row.fechaAudienciaProceso)}`
-                            : row.estatusAdmisionJuzgado === 'PENDIENTE' && row.fechaPresentacionDemanda ? 'Esperar admisión'
-                            : row.estatusRegularizacion === 'EN_ESPERA' && row.fechaNotificacion ? 'Regularizar'
-                            : row.fechaNotificacion ? 'Presentar demanda'
-                            : 'Notificar'
-                            : '—'}
-                        </span>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <button onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('resumen'); }}

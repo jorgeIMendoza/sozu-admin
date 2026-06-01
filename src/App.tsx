@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,7 +22,7 @@ import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
 
 // Retry wrapper for lazy imports — handles stale cache after deploys
-const lazyRetry = (importFn: () => Promise<any>) =>
+const lazyRetry = (importFn: () => Promise<{ default: ComponentType }>) =>
   lazy(() =>
     importFn().catch(() => {
       // If the chunk fails to load, reload the page once
@@ -75,6 +75,7 @@ const Servicios = lazyRetry(() => import("./pages/admin/Servicios"));
 const CategoriasProductos = lazyRetry(() => import("./pages/admin/CategoriasProductos"));
 const CuentasMantenimiento = lazyRetry(() => import("./pages/admin/CuentasMantenimiento"));
 const ComingSoon = lazyRetry(() => import("./pages/admin/ComingSoon"));
+const JuridicoAdministrar = lazyRetry(() => import("./pages/admin/juridico/JuridicoAdministrar").then(m => ({ default: m.JuridicoAdministrar })));
 const RevisionDocumentacion = lazyRetry(() => import("./pages/admin/RevisionDocumentacion"));
 const ConsultasIA = lazyRetry(() => import("./pages/admin/ConsultasIA"));
 const Reservas = lazyRetry(() => import("./pages/admin/Reservas"));
@@ -140,13 +141,17 @@ const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/
 
 // Portal Cliente pages
 const ClienteInicio = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteInicio"));
-const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClientePerfil = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePerfil"));
 const ClienteHistorialPagos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteHistorialPagos"));
 const ClientePropiedadDetalle = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadDetalle"));
 const ClienteMantenimientoPago = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteMantenimientoPago"));
 const ClientePropiedadPago = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedadPago"));
 const ClienteDetallesTecnicos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDetallesTecnicos"));
+const ClienteDocumentos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDocumentos"));
+const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteNotificaciones"));
+const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
+const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
+const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
 
 // Portal Cobranza pages
 const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
@@ -263,6 +268,13 @@ const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flo
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
+const OfertaCliente = lazyRetry(() => import("./pages/public/OfertaCliente"));
+const CapturaDatosPage = lazyRetry(() => import("./pages/public/CapturaDatosPage"));
+const VerificarEmailPage = lazyRetry(() => import("./pages/public/VerificarEmailPage"));
+const VerificacionCallbackPage = lazyRetry(() => import("./pages/public/VerificacionCallbackPage"));
+const TipoCompradorPage = lazyRetry(() => import("./pages/public/TipoCompradorPage"));
+const HoldTarjetaPage = lazyRetry(() => import("./pages/public/HoldTarjetaPage"));
+const ConfirmacionPage = lazyRetry(() => import("./pages/public/ConfirmacionPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -408,6 +420,13 @@ const App = () => (
                   <Route path="/auth/change-password" element={<ChangePassword />} />
                   <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                   <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
+                  <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
+                  <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
+                  <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                  <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
+                  <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
+                  <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/admin" element={
                     <ProtectedRoute>
@@ -420,12 +439,18 @@ const App = () => (
                     <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
                     <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
-                    <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                    <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
+                    <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                    <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
+                    <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                    <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
                     <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                     <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                     <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                    <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
+                    <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                     <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
@@ -446,7 +471,14 @@ const App = () => (
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
-                
+                <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
+                <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
+                <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
+                <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
+                <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
+                <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
+
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
                   <ProtectedRoute>
@@ -562,12 +594,18 @@ const App = () => (
                   <Route path="portal-cliente/inicio" element={<ClienteInicio />} />
                   <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
-                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
+                  <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                  <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
+                  <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                  <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                   <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                   <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                  <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
+                  <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
                   <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
                   <Route path="portal-cobranza/bandeja" element={<CobranzaBandeja />} />
@@ -619,7 +657,7 @@ const App = () => (
                   {/* Administrar Notarios — menú admin principal */}
                   <Route path="notarios/administrar" element={<EscNotarios />} />
                   {/* Administrar Jurídico — menú admin principal */}
-                  <Route path="juridico/administrar" element={<ComingSoon title="Administrar Jurídico" hideBack />} />
+                  <Route path="juridico/administrar" element={<JuridicoAdministrar />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />

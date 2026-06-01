@@ -87,6 +87,25 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
+  // Portal de Administración: varias rutas de ejecución (bandeja, ciclo-venta, etc.)
+  // pueden no tener un submenu propio y nunca aparecer en allowedPaths, por lo que el
+  // landing del portal mandaba a 403 a roles no-superadmin con acceso al portal.
+  // Si el rol tiene permiso sobre CUALQUIER submenu del portal, habilitamos sus rutas
+  // (coarse, igual que el caso de /reportes/ver).
+  if (location.pathname.startsWith('/admin/portal-administracion')) {
+    // allowedPaths es un Set<string>: iterar, no usar Array.some
+    let tieneAccesoPortalAdmin = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-administracion')) {
+        tieneAccesoPortalAdmin = true;
+        break;
+      }
+    }
+    return tieneAccesoPortalAdmin
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Check if current path is allowed
   const currentPath = location.pathname;
   

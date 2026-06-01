@@ -128,7 +128,6 @@ import {
     '/admin/portal-inmobiliaria/configuracion': Cog,
     // Portal Cliente
     '/admin/portal-cliente/inicio': LayoutDashboard,
-    '/admin/portal-cliente/propiedades': Building,
     '/admin/portal-cliente/perfil': User,
     // Portal Cobranza
     '/admin/portal-cobranza/dashboard': LayoutDashboard,

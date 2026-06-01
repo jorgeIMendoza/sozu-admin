@@ -84,6 +84,16 @@ const ClientePerfil = () => {
     enabled: !!persona?.uso_cfdi,
   });
 
+  // Required document type IDs for client profile (identity, address, fiscal, personal)
+  const REQUIRED_DOC_TYPES = [
+    { id: 2, label: "Frente INE", group: "Identificación" },
+    { id: 3, label: "Reverso INE", group: "Identificación" },
+    { id: 4, label: "Pasaporte", group: "Identificación" },
+    { id: 8, label: "Comprobante de domicilio", group: "Domicilio" },
+    { id: 6, label: "Constancia de situación fiscal", group: "Fiscal" },
+    { id: 5, label: "CURP", group: "Documentos personales" },
+  ];
+
   // Fetch documents for persona
   const { data: documentos = [] } = useQuery({
     queryKey: ["cliente-perfil-docs", effectivePersonaId],
@@ -98,6 +108,7 @@ const ClientePerfil = () => {
       return (data || []).map((d: any) => ({
         id: d.id,
         name: d.tipos_documento?.nombre || "Documento",
+        tipoId: d.id_tipo_documento as number,
         status: d.id_estatus_verificacion === 2 ? "ok" as const : "pending" as const,
         date: d.fecha_creacion ? new Date(d.fecha_creacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : null,
         url: d.url,
@@ -176,6 +187,8 @@ const ClientePerfil = () => {
   };
 
   // Profile completion
+  const uploadedTypeIds = new Set(documentos.map((d) => d.tipoId));
+  const hasIdentification = uploadedTypeIds.has(2) || uploadedTypeIds.has(4);
   const completionFields = persona ? [
     persona.nombre_legal,
     persona.rfc,
@@ -185,7 +198,8 @@ const ClientePerfil = () => {
     persona.regimen,
     persona.uso_cfdi,
     persona.direccion_fiscal_calle,
-    documentos.length > 0,
+    hasIdentification,
+    uploadedTypeIds.has(8),
     cuentasBancarias.length > 0,
   ] : [];
   const profileCompletion = completionFields.length > 0
@@ -277,33 +291,47 @@ const ClientePerfil = () => {
 
       {/* Docs */}
       <Section title="Documentación" icon={FileText}>
-        {documentos.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">Sin documentos registrados</p>
-        ) : (
-          <div className="space-y-0">
-            {documentos.map((doc, i) => (
-              <div key={doc.id} className={`flex items-center gap-3 py-3 ${i < documentos.length - 1 ? "border-b border-border/60" : ""}`}>
-                {doc.status === "ok"
-                  ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                }
+        <div className="space-y-0">
+          {REQUIRED_DOC_TYPES.map((reqDoc, i) => {
+            const uploaded = documentos.find((d) => d.tipoId === reqDoc.id);
+            const isLast = i === REQUIRED_DOC_TYPES.length - 1;
+            return (
+              <div key={reqDoc.id} className={`flex items-center gap-3 py-3 ${!isLast ? "border-b border-border/60" : ""}`}>
+                {uploaded?.status === "ok" ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                ) : uploaded ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{doc.name}</p>
-                  {doc.date ? (
-                    <p className="text-[11px] text-muted-foreground">{doc.date}</p>
-                  ) : (
-                    <p className="text-[11px] text-amber-500">Pendiente de verificación</p>
-                  )}
+                  <p className="text-sm font-medium text-foreground truncate">{reqDoc.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{reqDoc.group}</p>
                 </div>
-                {doc.url && (
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-                    <Eye className="w-4 h-4" />
-                  </a>
+                {uploaded ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {uploaded.url && (
+                      <a href={uploaded.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
+                        <Eye className="w-4 h-4" />
+                      </a>
+                    )}
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                      uploaded.status === "ok"
+                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30"
+                        : "bg-amber-50 text-amber-600 dark:bg-amber-950/30"
+                    }`}>
+                      {uploaded.status === "ok" ? "Verificado" : "En revisión"}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-500 dark:bg-red-950/30 shrink-0">
+                    Falta
+                  </span>
                 )}
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </Section>
 
       {/* Fiscal */}

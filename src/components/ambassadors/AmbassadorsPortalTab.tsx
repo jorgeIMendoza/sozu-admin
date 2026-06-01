@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { ReferralFormDialog } from './AmbassadorsAdminTab';
 import { ReferralPortalDrawer } from './ReferralPortalDrawer';
+import { EmbajadorDocsCard } from './EmbajadorDocsCard';
+import { useEmbajadorDocumentos } from '@/hooks/useEmbajadorDocumentos';
 import { toast } from 'sonner';
 
 const fmt = (n: number) =>
@@ -100,8 +102,7 @@ export default function AmbassadorsPortalTab() {
   );
   const unread = myNotifs.filter((n) => !n.read).length;
 
-  const docs = active?.paymentDocs ?? DEFAULT_PAYMENT_DOCS;
-  const pendingDocs = docs.filter((d) => d.status !== 'aprobado').length;
+  const { pendingCount: pendingDocs } = useEmbajadorDocumentos(active?.idPersona);
 
   const stats = useMemo(() => {
     const total = myRefs.length;
@@ -126,12 +127,6 @@ export default function AmbassadorsPortalTab() {
       </Card>
     );
   }
-
-  const onUpload = (key: string) => {
-    const fileName = `documento-${key}-${Date.now().toString(36)}.pdf`;
-    setDocumentStatus(active.id, key, 'en_revision', fileName);
-    toast.success('Documento cargado, queda en revisión.');
-  };
 
   const filteredRefs = myRefs.filter((r) => {
     const matchesSearch = !search || r.clientName.toLowerCase().includes(search.toLowerCase());
@@ -518,36 +513,7 @@ export default function AmbassadorsPortalTab() {
       </Card>
 
       {/* Documentos */}
-      <Card className="p-4">
-        <div className="flex items-start gap-2 mb-4">
-          <FileText className="h-4 w-4 text-primary mt-0.5" />
-          <div>
-            <div className="font-medium text-sm">Documentación para pago</div>
-            <p className="text-xs text-muted-foreground">
-              Necesarios para que podamos liquidar tu comisión.
-            </p>
-          </div>
-        </div>
-        <ul className="space-y-2">
-          {docs.map((d) => (
-            <li key={d.key} className="flex items-center justify-between gap-2 p-3 rounded-md border border-border">
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{d.label}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {d.fileName ? `${d.fileName} · ${dateShort(d.uploadedAt)}` : 'Sin archivo'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className={DOC_TONE[d.status]}>{DOCUMENT_STATUS_LABEL[d.status]}</Badge>
-                <Button size="sm" variant="outline" onClick={() => onUpload(d.key)}>
-                  <Upload className="h-3 w-3 mr-1" />
-                  {d.status === 'pendiente' ? 'Cargar' : 'Reemplazar'}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <EmbajadorDocsCard idPersona={active.idPersona} />
 
       {/* Notificaciones */}
       <Card className="p-4">

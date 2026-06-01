@@ -1,346 +1,199 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import {
-  Home, Building2, User, ArrowLeft, LucideIcon, LogOut, CreditCard, Menu, X,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeft, Bell, User, LogOut, Phone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import { ClienteImpersonationSelector } from "./ClienteImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
+import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ClienteImpersonationSelector } from "./ClienteImpersonationSelector";
+import { PortalSearchInput } from "./PortalSearchInput";
+import Sidebar from "./Sidebar";
+import TopBar from "./TopBar";
+import BottomNav from "./BottomNav";
+import sozuLogo from "@/assets/sozu-logo.png";
 
-const PORTAL_CLIENTE_MENU_ID = 18;
-
-const iconMap: Record<string, LucideIcon> = {
-  "/admin/portal-cliente/inicio": Home,
-  "/admin/portal-cliente/propiedades": Building2,
-  "/admin/portal-cliente/pagos": CreditCard,
-  "/admin/portal-cliente/perfil": User,
-};
-
-const FALLBACK_TABS = [
-  { path: "/admin/portal-cliente/inicio", label: "Inicio", icon: Home },
-  { path: "/admin/portal-cliente/propiedades", label: "Propiedades", icon: Building2 },
-  { path: "/admin/portal-cliente/pagos", label: "Pagos", icon: CreditCard },
-  { path: "/admin/portal-cliente/perfil", label: "Perfil", icon: User },
-];
-
-// Only these 3 show in the bottom nav
-const BOTTOM_NAV_PATHS = [
-  "/admin/portal-cliente/inicio",
-  "/admin/portal-cliente/propiedades",
-  "/admin/portal-cliente/perfil",
-];
-
-const SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-cliente/inicio": "Inicio",
-  "/admin/portal-cliente/propiedades": "Propiedades",
-  "/admin/portal-cliente/pagos": "Pagos",
-  "/admin/portal-cliente/perfil": "Perfil",
-};
+function truncateName(full: string, max = 22): string {
+  const parts = full.trim().split(/\s+/);
+  const short = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : (parts[0] ?? full);
+  return short.length > max ? short.slice(0, max - 1).trimEnd() + "…" : short;
+}
 
 export const PortalClienteLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const { impersonatedClienteName, impersonatedClientePersonaId, isImpersonating } = useClienteImpersonation();
-  const [hamburgerOpen, setHamburgerOpen] = useState(false);
+  const showBackToAdmin = profile?.rol_nombre !== "Cliente";
+const unreadCount = useUnreadCount();
+  const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
-  // Fetch client persona name
-  const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [location.key]);
 
-  const { data: personaData } = useQuery({
-    queryKey: ["portal-cliente-persona", effectivePersonaId],
+  const { data: myPersonaData } = useQuery({
+    queryKey: ["portal-my-persona", profile?.id_persona],
     queryFn: async () => {
-      if (!effectivePersonaId) return null;
+      if (!profile?.id_persona) return null;
       const { data } = await supabase
         .from("personas")
-        .select("nombre_legal")
-        .eq("id", effectivePersonaId)
+        .select("nombre_legal, clave_pais_telefono, telefono")
+        .eq("id", profile.id_persona)
         .maybeSingle();
       return data;
     },
-    enabled: !!effectivePersonaId,
+    enabled: !!profile?.id_persona,
   });
 
-  // Determine display name
-  const displayName = isImpersonating
-    ? impersonatedClienteName || "Cliente"
-    : personaData?.nombre_legal || profile?.nombre || profile?.email?.split("@")[0] || "Cliente";
+  const myRawName = myPersonaData?.nombre_legal || profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
+  const myName = truncateName(myRawName);
+  const myRole = profile?.rol_nombre ?? "Cliente";
+  const myPhone = myPersonaData?.clave_pais_telefono && myPersonaData?.telefono
+    ? `${myPersonaData.clave_pais_telefono} ${myPersonaData.telefono}`
+    : myPersonaData?.telefono ?? undefined;
 
-  // Fetch tabs from DB
-  const { data: tabs = FALLBACK_TABS } = useQuery({
-    queryKey: ["portal-cliente-tabs"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("submenus")
-        .select("nombre, vista_front_end, orden")
-        .eq("menu_id", PORTAL_CLIENTE_MENU_ID)
-        .eq("activo", true)
-        .order("orden");
-      if (error || !data || data.length === 0) return FALLBACK_TABS;
-      return data.map((s: any) => ({
-        path: s.vista_front_end,
-        label: s.nombre,
-        icon: iconMap[s.vista_front_end] || Home,
-      }));
-    },
-    staleTime: 5 * 60_000,
-  });
+  const myInitials = myName
+    .split(" ")
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase();
 
-  // Bottom nav only shows 3 tabs
-  const bottomTabs = tabs.filter((tab) => BOTTOM_NAV_PATHS.includes(tab.path));
-
-  const isActive = (path: string) => {
-    if (location.pathname === path || location.pathname.startsWith(path + "/")) return true;
-    if (path === "/admin/portal-cliente/propiedades" && location.pathname.startsWith("/admin/portal-cliente/propiedad/")) return true;
-    if (path === "/admin/portal-cliente/propiedades" && location.pathname.includes("/detalles-tecnicos")) return true;
-    return false;
-  };
-  const showBackButton = profile?.rol_nombre !== "Cliente";
-
-  const currentSection = Object.entries(SECTION_LABELS).find(([path]) => isActive(path))?.[1] || "";
-  const userInitials = displayName.substring(0, 2).toUpperCase();
-
-  const handleHamburgerNav = (path: string) => {
-    navigate(path);
-    setHamburgerOpen(false);
-  };
+  const isNarrow =
+    /\/propiedad\/[^/]+/.test(location.pathname);
 
   return (
-    <div className="inmob-portal min-h-screen flex">
-      {/* ── Sidebar (desktop) ── */}
-      <aside
-        className="hidden lg:flex lg:flex-col border-r border-border bg-[hsl(var(--card))] fixed inset-y-0 left-0 z-30"
-        style={{ width: "var(--inmob-sidebar-width)" }}
-      >
-        {/* Logo area */}
-        <div className="px-4 pt-4 pb-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--inmob-green))] text-white text-sm font-bold shrink-0">
-              S
-            </div>
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">Panel Cliente</p>
-            </div>
-          </div>
-        </div>
+    <div className="inmob-portal min-h-screen bg-background [overflow-x:clip]">
+      {/* ── Desktop sidebar ── */}
+      <Sidebar
+        appVersion={APP_VERSION}
+        showBackToAdmin={showBackToAdmin}
+        onBackToAdmin={() => navigate("/admin")}
+        onSignOut={signOut}
+        displayName={myName}
+        userRole={myRole}
+        isClient={profile?.rol_nombre === "Cliente"}
+      />
 
-        {/* Client info */}
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Cliente</p>
-          <p className="text-sm font-semibold text-foreground truncate mt-0.5">{displayName}</p>
-        </div>
+      <div className="md:pl-64 flex flex-col min-h-screen">
+        {/* ── Desktop topbar ── */}
+        <TopBar userName={myName} userRole={myRole} userPhone={myPhone} />
 
-        {/* Navigation */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {tabs.map((tab) => {
-            const active = isActive(tab.path);
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.path}
-                onClick={() => navigate(tab.path)}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-[hsl(var(--inmob-green-light))] text-[hsl(var(--inmob-green))] font-semibold"
-                    : "text-muted-foreground hover:bg-[hsl(var(--inmob-border-light))] hover:text-foreground"
-                )}
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+        {/* ── Mobile header ── */}
+        <header className="md:hidden sticky top-0 z-20 bg-card border-b border-border">
+          {/* Row 1: Logo | Back (centrado, solo superadmin) | Bell + Avatar */}
+          <div className="flex items-center px-4 pt-3 pb-2 gap-3">
+            {/* Logo */}
+            <img src={sozuLogo} alt="SOZU" className="h-5 w-auto object-contain dark:invert shrink-0" />
 
-        {/* Footer */}
-        <div className="px-3 py-3 border-t border-border space-y-2">
-          <div className="min-w-0 px-1">
-            <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
-            <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {showBackButton && (
-              <button
-                onClick={() => navigate("/admin")}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Menú principal
-              </button>
-            )}
-            <button
-              onClick={signOut}
-              className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Salir
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Mobile hamburger menu overlay ── */}
-      {hamburgerOpen && (
-        <div className="lg:hidden fixed inset-0 z-[60]">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/40" onClick={() => setHamburgerOpen(false)} />
-          {/* Slide-in panel */}
-          <div className="absolute inset-y-0 left-0 w-72 bg-[hsl(var(--card))] shadow-xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border">
-              <div>
-                <p className="text-[15px] font-bold text-foreground">SOZU</p>
-                <p className="text-[11px] text-muted-foreground">Portal del inversionista</p>
-              </div>
-              <button onClick={() => setHamburgerOpen(false)} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-                <X className="h-5 w-5 text-foreground" />
-              </button>
-            </div>
-
-            <nav className="px-3 py-4 space-y-1">
-              {/* Main nav items */}
-              {tabs.map((tab) => {
-                const active = isActive(tab.path);
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.path}
-                    onClick={() => handleHamburgerNav(tab.path)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                      active
-                        ? "text-foreground font-semibold"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                  >
-                    <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-                    {tab.label}
-                  </button>
-                );
-              })}
-
-              {/* Divider */}
-              <div className="border-t border-border my-3" />
-
-              {/* Salir */}
-              <button
-                onClick={() => { setHamburgerOpen(false); signOut(); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                <LogOut className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-                Salir
-              </button>
-            </nav>
-          </div>
-        </div>
-      )}
-
-      {/* ── Mobile bottom nav (3 buttons only) ── */}
-      <nav className="lg:hidden fixed bottom-4 left-4 right-4 z-50">
-        <div className="relative max-w-lg mx-auto">
-          <div
-            className="flex items-center justify-around h-16 bg-[hsl(var(--card))] rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-border/50"
-          >
-            {bottomTabs.map((tab) => {
-              const active = isActive(tab.path);
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => navigate(tab.path)}
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-0.5 min-w-[64px] px-2 h-full transition-colors shrink-0",
-                    active ? "text-[hsl(var(--inmob-green))]" : "text-muted-foreground"
-                  )}
-                >
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
-                  <span className={cn("text-[10px] truncate", active ? "font-semibold" : "font-medium")}>
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Main content ── */}
-      <div className="flex-1 lg:ml-[232px]">
-        {/* Topbar (desktop) */}
-        <header
-          className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-[hsl(var(--card))] border-b border-border px-6"
-          style={{ height: "var(--inmob-topbar-height)" }}
-        >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            {isSuperAdmin ? (
-              <ClienteImpersonationSelector />
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium truncate max-w-[200px]">{displayName}</span>
-              </div>
-            )}
-            {currentSection && (
-              <>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-sm text-muted-foreground">{currentSection}</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9">
-              <AvatarFallback className="bg-[hsl(var(--inmob-green))] text-white text-[13px] font-bold">
-                {userInitials}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-        </header>
-
-        {/* Mobile header */}
-        <header className="lg:hidden sticky top-0 z-20 bg-[hsl(var(--card))] border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[hsl(var(--inmob-green))] text-white text-xs font-bold">S</div>
-              <span className="text-sm font-bold text-foreground">SOZU</span>
-              <span className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {showBackButton && (
+            {/* Centro: Regresar al admin (solo superadmin) */}
+            {showBackToAdmin && (
+              <div className="flex-1 flex justify-center">
                 <button
                   onClick={() => navigate("/admin")}
-                  className="flex items-center gap-1 text-sm text-muted-foreground"
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Regresar al admin
                 </button>
-              )}
+              </div>
+            )}
+            {!showBackToAdmin && <div className="flex-1" />}
+
+            {/* Derecha: Notificaciones + Perfil */}
+            <div className="flex items-center gap-1 shrink-0">
               <button
-                onClick={() => setHamburgerOpen(true)}
-                className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                onClick={() => navigate("/admin/portal-cliente/notificaciones")}
+                className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+                aria-label="Notificaciones"
               >
-                <Menu className="h-5 w-5 text-foreground" />
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] rounded-full bg-destructive" />
+                )}
               </button>
+              <Popover open={mobileProfileOpen} onOpenChange={setMobileProfileOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                    aria-label="Mi perfil"
+                  >
+                    {myInitials}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" sideOffset={8} className="w-60 p-0 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border-soft bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-semibold shrink-0">
+                        {myInitials}
+                      </div>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-[13px] font-semibold text-foreground truncate">{myName}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{myRole}</p>
+                        {myPhone && (
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Phone className="size-3 shrink-0" />
+                            {myPhone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-1.5 space-y-0.5">
+                    <button
+                      onClick={() => { navigate("/admin/portal-cliente/perfil"); setMobileProfileOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-foreground hover:bg-muted/60 transition-colors duration-150"
+                    >
+                      <User className="size-4 text-muted-foreground shrink-0" />
+                      Ver perfil
+                    </button>
+                    <button
+                      onClick={() => { signOut(); setMobileProfileOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-destructive hover:bg-destructive/10 transition-colors duration-150"
+                    >
+                      <LogOut className="size-4 shrink-0" />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
-          {/* Super Admin client selector on mobile */}
+
+          {/* Row 2: Buscador */}
+          <div className="px-4 pb-2">
+            <PortalSearchInput className="w-full" inputHeight="h-9" />
+          </div>
+
+          {/* Row 3: Selector de cliente (solo superadmin) */}
           {isSuperAdmin && (
-            <div className="mt-2">
-              <ClienteImpersonationSelector />
+            <div className="px-4 pb-3 flex items-center gap-2 min-w-0 overflow-hidden">
+              <span className="text-[11px] text-muted-foreground shrink-0">Vista como:</span>
+              <div className="flex-1 min-w-0">
+                <ClienteImpersonationSelector />
+              </div>
             </div>
           )}
         </header>
 
-        <main className="p-8 lg:px-10 lg:py-8 pb-28 lg:pb-8 bg-[hsl(var(--background))] min-h-[calc(100vh-var(--inmob-topbar-height))]">
+        {/* ── Page content ── */}
+        <main
+          className={`flex-1 w-full mx-auto pb-20 md:pb-8 ${
+            isNarrow
+              ? "md:max-w-5xl md:px-6 lg:px-8"
+              : "md:max-w-none xl:max-w-7xl md:px-6 lg:px-8"
+          }`}
+        >
           <Outlet />
         </main>
       </div>
+
+      {/* ── Mobile bottom nav ── */}
+      <BottomNav />
     </div>
   );
 };
