@@ -104,11 +104,11 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null
 # otro → levantarlo con el comando de abajo
 ```
 
-Para levantarlo (Node.js no está en el PATH por defecto — usar ruta completa):
+Para levantarlo (usar pnpm — ruta completa porque no está en PATH por defecto):
 
 ```bash
 cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
-"/c/Program Files/nodejs/npm.cmd" run dev -- --host
+"/c/Users/Tomas/AppData/Roaming/npm/pnpm.cmd" run dev -- --host
 ```
 
 - Puerto: **http://localhost:8080** (no 5173)
