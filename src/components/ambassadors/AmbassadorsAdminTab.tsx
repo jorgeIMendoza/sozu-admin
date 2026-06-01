@@ -20,13 +20,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown } from 'lucide-react';
+import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown, Pencil, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import NuevoEmbajadorDialog from './NuevoEmbajadorDialog';
+import { AmbassadorDocsVerifyDialog } from './AmbassadorDocsVerifyDialog';
 
 const PROT_TONE: Record<ProtectionStatus, string> = {
   protegido: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
@@ -854,6 +855,8 @@ export default function AmbassadorsAdminTab() {
   const [showNuevoEmb, setShowNuevoEmb] = useState(false);
   const [showEditEmb, setShowEditEmb] = useState(false);
   const [editingAmb, setEditingAmb] = useState<Ambassador | null>(null);
+  const [showVerifyDocs, setShowVerifyDocs] = useState(false);
+  const [verifyAmb, setVerifyAmb] = useState<Ambassador | null>(null);
   const [showRefForm, setShowRefForm] = useState(false);
   const [openRefId, setOpenRefId] = useState<string | null>(null);
 
@@ -1015,10 +1018,10 @@ export default function AmbassadorsAdminTab() {
                 <TableHeader><TableRow>
                   <TableHead>Código</TableHead><TableHead>Nombre</TableHead><TableHead>Tipo</TableHead>
                   <TableHead>Estatus</TableHead><TableHead>Comisión</TableHead><TableHead>Trigger</TableHead>
-                  <TableHead>Link</TableHead><TableHead></TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {ambassadors.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Sin embajadores registrados</TableCell></TableRow>}
+                  {ambassadors.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin embajadores registrados</TableCell></TableRow>}
                   {ambassadors.map(a => (
                     <TableRow key={a.id}>
                       <TableCell className="font-mono text-xs">{a.code}</TableCell>
@@ -1036,9 +1039,35 @@ export default function AmbassadorsAdminTab() {
                       </TableCell>
                       <TableCell>{a.commissionPct}%{a.fixedAmount ? ` + ${fmt(a.fixedAmount)}` : ''}</TableCell>
                       <TableCell className="text-xs">{a.commissionTrigger}</TableCell>
-                      <TableCell className="text-xs"><code>{a.referralLink}</code></TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" onClick={() => { setEditingAmb(a); setShowEditEmb(true); }}>Editar</Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => { setEditingAmb(a); setShowEditEmb(true); }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Editar</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => { setVerifyAmb(a); setShowVerifyDocs(true); }}
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Verificar documentos</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1280,6 +1309,13 @@ export default function AmbassadorsAdminTab() {
             ambassador={editingAmb}
           />
         )}
+
+        <AmbassadorDocsVerifyDialog
+          open={showVerifyDocs}
+          onOpenChange={setShowVerifyDocs}
+          idPersona={verifyAmb?.idPersona}
+          ambassadorName={verifyAmb?.fullName}
+        />
 
         <ReferralFormDialog open={showRefForm} onOpenChange={setShowRefForm} />
         <ReferralDetailSheet referralId={openRefId} onOpenChange={setOpenRefId} />
