@@ -1681,13 +1681,32 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     enabled: searchUsuario.length >= 2
   });
 
-  // Combine usuarios and inmobiliarias for display
+  // Query for searching embajadores (rol "Embajador") — pueden ser comisionistas igual que un agente externo
+  const { data: embajadoresUsuarios } = useQuery({
+    queryKey: ["embajadores_search", searchUsuario],
+    queryFn: async () => {
+      if (!searchUsuario || searchUsuario.length < 2) return [];
+      const existingEmails = comisionistas?.map(c => c.email_usuario) || [];
+      const { data } = await supabase
+        .from('usuarios')
+        .select('email, nombre, roles!inner(nombre)')
+        .eq('roles.nombre', 'Embajador')
+        .or(`email.ilike.%${searchUsuario}%,nombre.ilike.%${searchUsuario}%`)
+        .not('email', 'in', existingEmails.length > 0 ? `(${existingEmails.map(e => `"${e}"`).join(',')})` : '("")')
+        .limit(10);
+      return data || [];
+    },
+    enabled: searchUsuario.length >= 2
+  });
+
+  // Combine usuarios, inmobiliarias y embajadores for display
   const combinedSearchResults = useMemo(() => {
     const allResults: Array<{ email: string; nombre: string; esInmobiliaria?: boolean }> = [];
     if (usuarios) allResults.push(...usuarios.map(u => ({ ...u, esInmobiliaria: false })));
     if (inmobiliarias) allResults.push(...inmobiliarias);
+    if (embajadoresUsuarios) allResults.push(...embajadoresUsuarios.map((u: any) => ({ email: u.email, nombre: u.nombre, esInmobiliaria: false })));
     return allResults;
-  }, [usuarios, inmobiliarias]);
+  }, [usuarios, inmobiliarias, embajadoresUsuarios]);
 
   // Mutation to update comisión data
   const updateComisionMutation = useMutation({
