@@ -17,6 +17,20 @@ Al iniciar una sesión, detecta la rama activa con `git branch --show-current`. 
 
 ---
 
+## Package Manager
+
+**Siempre usar `pnpm`. Nunca `npm`, `yarn` ni `bun`.**
+
+- Instalar dependencias: `pnpm install`
+- Agregar paquete: `pnpm add <paquete>`
+- Agregar paquete dev: `pnpm add -D <paquete>`
+- Remover paquete: `pnpm remove <paquete>`
+- Scripts: `pnpm run <script>` o `pnpm <script>`
+
+El `package.json` tiene `"packageManager": "pnpm@11.5.0"` y un script `preinstall` que rechaza cualquier otro package manager. Si se ejecuta `npm install` o `bun install`, falla con error explícito. El lock file oficial es `pnpm-lock.yaml` — nunca commitear `package-lock.json` ni `bun.lock`.
+
+---
+
 ## Ambientes
 
 | Ambiente    | URL                             | BD                                                 |

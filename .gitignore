@@ -41,3 +41,13 @@ Ejecuciones_manuales/*
 .playwright-mcp/
 *.png
 bundle*.js
+
+# Lock files de otros package managers (solo pnpm)
+package-lock.json
+bun.lock
+bun.lockb
+
+# Archivos de análisis/documentación generados localmente
+ARCHITECTURE.md
+DESIGN.md
+graphify-out/
