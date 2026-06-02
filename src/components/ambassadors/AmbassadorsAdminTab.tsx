@@ -373,20 +373,34 @@ export function ReferralFormDialog({
       const emb = ambassadors.find(a => a.id === form.ambassadorId);
       const adv = form.advisorId ? advisors.find(a => a.id === form.advisorId) : null;
 
-      // Crear persona del cliente
-      const { data: persona, error: personaError } = await supabase
+      const emailNorm = form.email.trim().toLowerCase();
+
+      // Reusar persona existente si el email ya está registrado (evita violar personas_email_key)
+      const { data: personaExistente } = await supabase
         .from('personas')
-        .insert({
-          nombre_legal: form.clientName.trim(),
-          email: form.email.trim().toLowerCase(),
-          telefono: form.phone.trim(),
-          clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
-          tipo_persona: 'pf',
-          activo: true,
-        })
         .select('id')
-        .single();
-      if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
+        .eq('email', emailNorm)
+        .maybeSingle();
+
+      let persona: { id: number } | null = personaExistente ?? null;
+
+      if (!persona) {
+        // Crear persona del cliente
+        const { data: nuevaPersona, error: personaError } = await supabase
+          .from('personas')
+          .insert({
+            nombre_legal: form.clientName.trim(),
+            email: emailNorm,
+            telefono: form.phone.trim(),
+            clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
+            tipo_persona: 'pf',
+            activo: true,
+          })
+          .select('id')
+          .single();
+        if (personaError || !nuevaPersona) throw personaError ?? new Error('Error al crear persona');
+        persona = nuevaPersona;
+      }
 
       // Crear entidad_relacionada tipo Prospecto (id_persona_duena_lead = embajador)
       const { data: erData, error: erError } = await supabase

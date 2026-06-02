@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEmbajadorImpersonation } from '@/contexts/EmbajadorImpersonationContext';
 import {
   COMMISSION_STATUS_HELP,
   COMMISSION_STATUS_LABEL,
@@ -89,6 +90,7 @@ export default function AmbassadorsPortalTab() {
   } = useAmbassadors();
 
   const { profile } = useAuth();
+  const { impersonatedEmbajadorId } = useEmbajadorImpersonation();
   // Admins (Super Admin / Admin Proyecto) pueden ver/impersonar a cualquier embajador.
   // Un embajador real solo debe ver su propio registro.
   const isAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
@@ -111,6 +113,19 @@ export default function AmbassadorsPortalTab() {
     );
     if (own && own.id !== activeId) setActiveId(own.id);
   }, [isAdmin, ambassadors, profile?.email, profile?.id_persona, activeId]);
+
+  // Admin: el embajador activo es SIEMPRE el que está impersonando en el header.
+  // Sin esta sincronización, el form de registro y la tabla usaban un activeId local
+  // (por defecto ambassadors[0]) desligado del selector del header → referidos
+  // se asignaban al embajador equivocado.
+  useEffect(() => {
+    if (!isAdmin || ambassadors.length === 0) return;
+    if (impersonatedEmbajadorId) {
+      if (impersonatedEmbajadorId !== activeId) setActiveId(impersonatedEmbajadorId);
+    } else if (!activeId) {
+      setActiveId(ambassadors[0].id);
+    }
+  }, [isAdmin, impersonatedEmbajadorId, ambassadors, activeId]);
 
   const active = ambassadors.find((a) => a.id === activeId);
 
@@ -245,19 +260,8 @@ export default function AmbassadorsPortalTab() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
-            {isAdmin && (
-              <div className="w-full sm:w-64">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Estoy viendo como…</div>
-                <Select value={activeId} onValueChange={setActiveId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ambassadors.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>{a.fullName} ({a.code})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* Selector de embajador eliminado: el único punto de impersonación es el del
+                header (EmbajadorImpersonationSelector). Este activeId ya sigue ese context. */}
             <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-1" /> Registrar nuevo referido
             </Button>
