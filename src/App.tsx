@@ -219,6 +219,8 @@ const AltaDireccionFacturasPorCobrar = lazyRetry(() => import("./pages/admin/por
 const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorPagarPage"));
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
+const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionHistoricoComercialPage"));
+const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
 
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
@@ -679,6 +681,8 @@ const App = () => (
                   <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
                   <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+                  <Route path="portal-alta-direccion/historico-comercial" element={<AltaDireccionHistoricoComercial />} />
+                  <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
