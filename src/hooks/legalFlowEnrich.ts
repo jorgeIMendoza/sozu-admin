@@ -382,7 +382,7 @@ export async function enrichLegalFlowCases({
     result.push({
       id: folio,
       title,
-      type: "new_contract",
+      type: "Nuevo contrato",
       // `company` se conserva por compatibilidad. La UI usa empresaName
       // (o "Agente Independiente") en lugar de este campo para expedientes
       // reales en SOZU Legal Flow.
@@ -404,9 +404,9 @@ export async function enrichLegalFlowCases({
       agenteVendedor: agenteNombre || undefined,
       fechaCompra: fechaCompra ?? undefined,
       estimatedValue: Number(c.precio_final ?? 0),
-      priority: "medium",
+      priority: "Medio",
       description:
-        status === "request_received"
+        status === "Solicitud recibida"
           ? `Solicitud automática generada por apartado de ${unidad || "bien"} (${folio}).`
           : `Cuenta ${folio} con propiedad en estatus Vendido.`,
       dueDate,

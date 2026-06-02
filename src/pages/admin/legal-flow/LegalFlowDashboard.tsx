@@ -4,10 +4,6 @@ import { LayoutDashboard, Kanban } from 'lucide-react';
 import KpiCards from '@/components/admin/legal-flow/dashboard/KpiCards';
 import DashboardFilters from '@/components/admin/legal-flow/dashboard/DashboardFilters';
 import PipelineBoard from '@/components/admin/legal-flow/dashboard/PipelineBoard';
-import AttentionPanel from '@/components/admin/legal-flow/dashboard/AttentionPanel';
-import RenewalsPanel from '@/components/admin/legal-flow/dashboard/RenewalsPanel';
-import SignatureTracker from '@/components/admin/legal-flow/dashboard/SignatureTracker';
-import ActivityFeed from '@/components/admin/legal-flow/dashboard/ActivityFeed';
 import WorkloadPanel from '@/components/admin/legal-flow/dashboard/WorkloadPanel';
 import StatusDistribution from '@/components/admin/legal-flow/dashboard/StatusDistribution';
 import CaseDrawer from '@/components/admin/legal-flow/dashboard/CaseDrawer';
@@ -22,11 +18,11 @@ const tabs: { key: ViewMode; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 
 const KPI_FILTERS: Record<string, (r: LegalRequest) => boolean> = {
-  active: (r) => !['fully_signed', 'cancelled', 'rejected', 'archived'].includes(r.status),
-  review: (r) => ['in_legal_review', 'missing_information'].includes(r.status),
-  validation: (r) => ['in_validation', 'in_signature_process', 'partially_signed'].includes(r.status),
-  completed: (r) => r.status === 'fully_signed',
-  urgent: (r) => r.priority === 'high' && !['fully_signed', 'cancelled', 'archived'].includes(r.status),
+  active: (r) => !['Firmado', 'Cancelado', 'Rechazado', 'Archivado'].includes(r.status),
+  review: (r) => ['En revisión legal', 'Información faltante'].includes(r.status),
+  validation: (r) => ['Firma titular', 'En firma', 'Parcialmente firmado'].includes(r.status),
+  completed: (r) => r.status === 'Firmado',
+  urgent: (r) => r.priority === 'Alto' && !['Firmado', 'Cancelado', 'Archivado'].includes(r.status),
 };
 
 const KPI_DRAWER_TITLES: Record<string, string> = {
@@ -137,22 +133,10 @@ interface ViewProps {
   onStatusFilter: (status: CaseStatus) => void;
 }
 
-function OperativeView({ openDrawer, onStatusFilter }: ViewProps) {
+function OperativeView({ onStatusFilter }: ViewProps) {
   return (
     <div className="space-y-6">
       <PipelineBoard onColumnClick={onStatusFilter} />
-      <div className="grid lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-8">
-          <AttentionPanel />
-        </div>
-        <div className="lg:col-span-4">
-          <SignatureTracker openDrawer={openDrawer} />
-        </div>
-      </div>
-      <div className="grid lg:grid-cols-2 gap-5">
-        <RenewalsPanel />
-        <ActivityFeed />
-      </div>
     </div>
   );
 }
@@ -161,20 +145,12 @@ function ExecutiveView({ openDrawer, onStatusFilter }: ViewProps) {
   return (
     <div className="space-y-6">
       <div className="grid lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-6">
           <StatusDistribution onStatusClick={onStatusFilter} />
         </div>
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-6">
           <WorkloadPanel openDrawer={openDrawer} />
         </div>
-        <div className="lg:col-span-4">
-          <SignatureTracker openDrawer={openDrawer} />
-        </div>
-      </div>
-      <AttentionPanel />
-      <div className="grid lg:grid-cols-2 gap-5">
-        <RenewalsPanel />
-        <ActivityFeed />
       </div>
     </div>
   );

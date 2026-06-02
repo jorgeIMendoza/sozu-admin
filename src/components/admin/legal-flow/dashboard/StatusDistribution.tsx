@@ -5,10 +5,10 @@ import type { CaseStatus } from '@/types/legal-flow';
 const COLORS = ['hsl(145, 35%, 51%)', 'hsl(217, 91%, 60%)', 'hsl(38, 92%, 50%)', 'hsl(258, 56%, 52%)', 'hsl(220, 9%, 60%)'];
 
 const data: { name: string; value: number; color: string; status: CaseStatus }[] = [
-  { name: 'En revisión', value: 12, color: COLORS[1], status: 'in_legal_review' },
-  { name: 'En firma', value: 8, color: COLORS[3], status: 'in_signature_process' },
-  { name: 'Completados', value: 23, color: COLORS[0], status: 'fully_signed' },
-  { name: 'Pendientes', value: 4, color: COLORS[4], status: 'request_received' },
+  { name: 'En revisión', value: 12, color: COLORS[1], status: 'En revisión legal' },
+  { name: 'En firma', value: 8, color: COLORS[3], status: 'En firma' },
+  { name: 'Completados', value: 23, color: COLORS[0], status: 'Firmado' },
+  { name: 'Pendientes', value: 4, color: COLORS[4], status: 'Solicitud recibida' },
 ];
 
 interface Props {

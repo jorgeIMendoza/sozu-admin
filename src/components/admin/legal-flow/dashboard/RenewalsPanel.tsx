@@ -7,18 +7,18 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day:
 const daysUntil = (d: string) => Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
 const RENEWAL_ACTION: Record<string, string> = {
-  renewal: 'Iniciar renovación',
-  in_signature_process: 'Seguimiento de firma',
-  in_legal_review: 'Revisar expediente',
-  in_validation: 'Enviar a firma del titular',
-  request_received: 'Revisar solicitud',
-  missing_information: 'Completar información',
-  approved_for_generation: 'Generar documento',
+  'Renovación': 'Iniciar renovación',
+  'En firma': 'Seguimiento de firma',
+  'En revisión legal': 'Revisar expediente',
+  'Firma titular': 'Enviar a firma del titular',
+  'Solicitud recibida': 'Revisar solicitud',
+  'Información faltante': 'Completar información',
+  'Aprobado': 'Generar documento',
 };
 
 export default function RenewalsPanel() {
   const upcoming = mockRequests
-    .filter(r => !['fully_signed', 'cancelled', 'rejected', 'archived'].includes(r.status))
+    .filter(r => !['Firmado', 'Cancelado', 'Rechazado', 'Archivado'].includes(r.status))
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5);
 
