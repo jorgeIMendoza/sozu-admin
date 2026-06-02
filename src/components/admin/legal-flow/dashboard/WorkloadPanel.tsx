@@ -23,7 +23,7 @@ export default function WorkloadPanel({ openDrawer }: Props) {
       </div>
       <div className="divide-y divide-border/50">
         {LAWYER_WORKLOAD.map((l) => {
-          const lawyerCases = mockRequests.filter(r => r.assignedTo === l.name && !['fully_signed', 'cancelled', 'archived'].includes(r.status));
+          const lawyerCases = mockRequests.filter(r => r.assignedTo === l.name && !['Firmado', 'Cancelado', 'Archivado'].includes(r.status));
           return (
             <button
               key={l.name}

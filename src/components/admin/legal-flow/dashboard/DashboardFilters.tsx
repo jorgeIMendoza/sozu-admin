@@ -3,9 +3,9 @@ import { useState } from 'react';
 
 const COMPANIES = ['SOZU Developments', 'SOZU Capital', 'SOZU Tech', 'SOZU Operations'];
 const PRIORITIES = [
-  { value: 'high', label: 'Alta', dot: 'bg-destructive' },
-  { value: 'medium', label: 'Media', dot: 'bg-[hsl(var(--status-warning))]' },
-  { value: 'low', label: 'Baja', dot: 'bg-[hsl(var(--status-info))]' },
+  { value: 'Alto', label: 'Alta', dot: 'bg-destructive' },
+  { value: 'Medio', label: 'Media', dot: 'bg-[hsl(var(--status-warning))]' },
+  { value: 'Bajo', label: 'Baja', dot: 'bg-[hsl(var(--status-info))]' },
 ];
 
 interface DashboardFiltersProps {

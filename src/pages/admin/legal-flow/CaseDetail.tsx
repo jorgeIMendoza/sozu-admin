@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -24,6 +24,7 @@ import {
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
+import { useFormaPagoOferta, type FormaPagoOferta } from '@/hooks/useFormaPagoOferta';
 import {
   useBitacoraCuentaCobranza,
   useAppendBitacoraEntry,
@@ -93,12 +94,12 @@ interface ContractTypeDetail {
 }
 
 const CONTRACT_TYPE_DETAILS: Record<string, ContractTypeDetail> = {
-  'new_contract': { name: 'Contrato de promesa de compraventa', category: 'Inmobiliario', description: 'Documento para formalizar la promesa de compraventa de una unidad inmobiliaria previo a escrituración. Incluye condiciones de precio, plazos de pago, penalidades y cláusulas de desistimiento.', relatedTemplate: 'Contrato de promesa de compraventa' },
-  'new_agreement': { name: 'Alianza comercial', category: 'Comercial', description: 'Acuerdo formal para establecer relación comercial con agentes inmobiliarios o inmobiliarias. Define esquemas de comisiones, exclusividad, obligaciones y vigencia de la alianza.', relatedTemplate: 'Alianza comercial' },
-  'amendment': { name: 'Convenio modificatorio', category: 'Corporativo', description: 'Documento que formaliza cambios a un contrato existente. Puede incluir ajustes de precio, plazos de entrega, condiciones de pago o cualquier cláusula previamente acordada.', relatedTemplate: 'Convenio modificatorio comercial' },
-  'renewal': { name: 'Renovación de contrato', category: 'Comercial', description: 'Extensión formal de la vigencia de un contrato o alianza existente, con posibilidad de actualizar condiciones comerciales.', relatedTemplate: 'Renovación de alianza comercial' },
-  'termination': { name: 'Terminación de contrato', category: 'Corporativo', description: 'Documento que formaliza la terminación anticipada o natural de un contrato vigente, estableciendo condiciones de cierre y liquidación.' },
-  'external_validation': { name: 'Validación externa', category: 'Corporativo', description: 'Proceso de validación documental y legal de entidades externas. Incluye revisión de personalidad jurídica, poderes y documentación de soporte.' },
+  'Nuevo contrato': { name: 'Contrato de promesa de compraventa', category: 'Inmobiliario', description: 'Documento para formalizar la promesa de compraventa de una unidad inmobiliaria previo a escrituración. Incluye condiciones de precio, plazos de pago, penalidades y cláusulas de desistimiento.', relatedTemplate: 'Contrato de promesa de compraventa' },
+  'Nuevo convenio': { name: 'Alianza comercial', category: 'Comercial', description: 'Acuerdo formal para establecer relación comercial con agentes inmobiliarios o inmobiliarias. Define esquemas de comisiones, exclusividad, obligaciones y vigencia de la alianza.', relatedTemplate: 'Alianza comercial' },
+  'Modificatorio': { name: 'Convenio modificatorio', category: 'Corporativo', description: 'Documento que formaliza cambios a un contrato existente. Puede incluir ajustes de precio, plazos de entrega, condiciones de pago o cualquier cláusula previamente acordada.', relatedTemplate: 'Convenio modificatorio comercial' },
+  'Renovación': { name: 'Renovación de contrato', category: 'Comercial', description: 'Extensión formal de la vigencia de un contrato o alianza existente, con posibilidad de actualizar condiciones comerciales.', relatedTemplate: 'Renovación de alianza comercial' },
+  'Terminación': { name: 'Terminación de contrato', category: 'Corporativo', description: 'Documento que formaliza la terminación anticipada o natural de un contrato vigente, estableciendo condiciones de cierre y liquidación.' },
+  'Validación externa': { name: 'Validación externa', category: 'Corporativo', description: 'Proceso de validación documental y legal de entidades externas. Incluye revisión de personalidad jurídica, poderes y documentación de soporte.' },
 };
 
 interface CuentaCobranzaDetail {
@@ -915,6 +916,165 @@ function CuentaCobranzaDrawer({ open, onClose, cuenta }: { open: boolean; onClos
   );
 }
 
+function FormaPagoDrawer({
+  open,
+  onClose,
+  idCuentaCobranza,
+  folioCuenta,
+}: {
+  open: boolean;
+  onClose: () => void;
+  idCuentaCobranza: number | null | undefined;
+  folioCuenta: string | null;
+}) {
+  const { data: forma, isLoading, error } = useFormaPagoOferta(open ? idCuentaCobranza : null);
+  const fmt = (n: number) =>
+    n > 0
+      ? n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 })
+      : '$0.00';
+  const fmtDate = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="sm:max-w-[520px] p-0 overflow-y-auto">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          <SheetTitle className="text-[16px]">Forma de pago de la oferta</SheetTitle>
+          {folioCuenta && (
+            <p className="text-[12px] text-muted-foreground font-mono">{folioCuenta}</p>
+          )}
+        </SheetHeader>
+        <div className="px-6 py-5 space-y-5">
+          {isLoading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground inline-flex w-full justify-center items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando forma de pago…
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-[12px] text-destructive">
+              Error al cargar: {(error as Error).message}
+            </div>
+          ) : !forma ? (
+            <p className="text-[13px] text-muted-foreground italic">Sin información de oferta vinculada.</p>
+          ) : (
+            <>
+              {/* Resumen financiero */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Precio final</p>
+                  <p className="text-[15px] font-bold font-mono tabular-nums">{fmt(forma.precioFinal)}</p>
+                  {forma.ivaIncluido && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">IVA incluido</p>
+                  )}
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Suma de pagos</p>
+                  <p className="text-[15px] font-bold font-mono tabular-nums">{fmt(forma.totalAcuerdos)}</p>
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">{forma.acuerdos.length} parcialidades</p>
+                </div>
+              </div>
+
+              {/* Esquema seleccionado */}
+              {forma.esquema ? (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Esquema</p>
+                    {forma.esquema.esManual && (
+                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Manual</span>
+                    )}
+                  </div>
+                  <p className="text-[13px] font-semibold">{forma.esquema.nombre}</p>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Enganche</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEnganche.toFixed(2)}%</p>
+                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroPagosEnganche} pagos</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Mensualidades</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeMensualidades.toFixed(2)}%</p>
+                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroMensualidades} meses</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Contra entrega</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEntrega.toFixed(2)}%</p>
+                      {forma.esquema.porcentajeDescuentoAumento !== 0 && (
+                        <p className="text-[10px] text-muted-foreground/60">{forma.esquema.porcentajeDescuentoAumento.toFixed(2)}% desc/aum</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[12px] text-muted-foreground italic">Sin esquema de pago seleccionado en la oferta.</p>
+              )}
+
+              {/* Avance de pagos */}
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Pagado</span>
+                  <span className="font-mono tabular-nums text-primary">{fmt(forma.totalPagado)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+                  <span>Pendiente</span>
+                  <span className="font-mono tabular-nums">{fmt(forma.totalPendiente)}</span>
+                </div>
+                {forma.totalAcuerdos > 0 && (
+                  <div className="mt-2 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary"
+                      style={{ width: `${Math.min(100, (forma.totalPagado / forma.totalAcuerdos) * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Cronograma de acuerdos */}
+              <div>
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+                  Cronograma de pagos
+                </p>
+                {forma.acuerdos.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground italic">Sin acuerdos de pago registrados.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {forma.acuerdos.map((a) => (
+                      <div
+                        key={a.id}
+                        className={`flex items-center justify-between rounded-md border p-2.5 ${
+                          a.pagoCompletado ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[11px] font-mono text-muted-foreground/60 w-5 shrink-0 text-right">
+                            {a.orden}.
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-medium truncate">{a.conceptoNombre}</p>
+                            <p className="text-[11px] text-muted-foreground/70 font-mono">
+                              {fmtDate(a.fechaPago)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[13px] font-mono tabular-nums">{fmt(a.monto)}</span>
+                          {a.pagoCompletado ? (
+                            <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/60 uppercase">pend</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 const AVAILABLE_LAWYERS = [
   { id: 'vladimir', name: 'Vladimir Huerta' },
   { id: 'miguel', name: 'Miguel Ochoa' },
@@ -1111,21 +1271,21 @@ function SignerReviewDrawer({ open, onClose, signerName }: { open: boolean; onCl
 }
 
 const PROGRESSION_STEPS = [
-  { key: 'request_received', label: 'Recibida', step: 0 },
-  { key: 'in_legal_review', label: 'Revisión', step: 1 },
-  { key: 'approved_for_generation', label: 'Aprobada', step: 2 },
-  { key: 'client_signature', label: 'Firma de cliente', step: 3 },
-  { key: 'in_validation', label: 'Firma titular', step: 4 },
-  { key: 'fully_signed', label: 'Firmado', step: 5 },
+  { key: 'Solicitud recibida', label: 'Recibida', step: 0 },
+  { key: 'En revisión legal', label: 'Revisión', step: 1 },
+  { key: 'Aprobado', label: 'Aprobada', step: 2 },
+  { key: 'Firma cliente', label: 'Firma de cliente', step: 3 },
+  { key: 'Firma titular', label: 'Firma titular', step: 4 },
+  { key: 'Firmado', label: 'Firmado', step: 5 },
 ];
 
 const NEXT_ACTIONS: Record<string, { label: string; icon: React.ElementType; primary?: boolean }[]> = {
-  missing_information: [{ label: 'Completar información', icon: Info, primary: true }],
-  in_signature_process: [
+  'Información faltante': [{ label: 'Completar información', icon: Info, primary: true }],
+  'En firma': [
     { label: 'Seguimiento de firma', icon: Send, primary: true },
     { label: 'Descargar PDF', icon: Download },
   ],
-  partially_signed: [
+  'Parcialmente firmado': [
     { label: 'Seguimiento de firma', icon: Send, primary: true },
     { label: 'Descargar PDF', icon: Download },
   ],
@@ -1135,7 +1295,7 @@ function StatusStepper({ status }: { status: CaseStatus }) {
   const config = STATUS_CONFIG[status];
   const currentStep = config.step;
   const isTerminal = currentStep === -1;
-  const isArchived = status === 'archived';
+  const isArchived = status === 'Archivado';
 
   return (
     <div className="panel">
@@ -1152,7 +1312,7 @@ function StatusStepper({ status }: { status: CaseStatus }) {
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive/10">
               <AlertCircle className="h-4 w-4 text-destructive" />
             </div>
-            <span className="font-medium">Este expediente ha sido {status === 'rejected' ? 'rechazado' : 'cancelado'}.</span>
+            <span className="font-medium">Este expediente ha sido {status === 'Rechazado' ? 'rechazado' : 'cancelado'}.</span>
           </div>
         ) : (
           <div className="flex items-center">
@@ -2272,6 +2432,7 @@ export default function CaseDetail() {
   const [showCounterparty, setShowCounterparty] = useState(false);
   const [showContractType, setShowContractType] = useState(false);
   const [showCuentaCobranza, setShowCuentaCobranza] = useState(false);
+  const [showFormaPago, setShowFormaPago] = useState(false);
 
   // Bitácora + detalle de compradores — sólo para expedientes reales.
   // Se invocan aquí para alimentar el banner de validaciones pendientes
@@ -2281,8 +2442,45 @@ export default function CaseDetail() {
   const { entries: bitacoraEntries } = useBitacoraCuentaCobranza(
     idCuentaCobranzaForBitacora,
   );
+  const appendBitacoraCaseDetail = useAppendBitacoraEntry(idCuentaCobranzaForBitacora);
   const compradorIdsForBanner = realRequest?.compradoresDetalle?.map((c) => c.idPersona) ?? [];
   const { data: compradoresFull } = useCompradoresFullDetail(compradorIdsForBanner);
+
+  // Reconstruye estado local desde la bitácora (única fuente de verdad
+  // para expedientes reales). Las entradas se buscan por scope=expediente
+  // y se filtran por tipo+titulo. Asignar abogado y completar validación
+  // son los dos gates que promueven el expediente a "En revisión legal".
+  useEffect(() => {
+    if (!realRequest) return;
+    if (bitacoraEntries.length === 0) return;
+
+    const lastLawyerEntry = [...bitacoraEntries]
+      .reverse()
+      .find(
+        (e) =>
+          e.tipo === 'sistema' &&
+          e.referencia?.scope === 'expediente' &&
+          (e.titulo === 'Abogado asignado' ||
+            // Detecta el shape antiguo cuando aún no había columna `titulo`.
+            (e.mensaje ?? '').startsWith('Abogado asignado')),
+      );
+    if (lastLawyerEntry) {
+      const fromTitle = lastLawyerEntry.titulo === 'Abogado asignado' ? lastLawyerEntry.mensaje : null;
+      const fromMensaje = (lastLawyerEntry.mensaje ?? '').replace(/^Abogado asignado\s*\n*\s*/, '');
+      const lawyerName = (fromTitle || fromMensaje || '').trim();
+      const match = AVAILABLE_LAWYERS.find((l) => l.name === lawyerName || l.id === lawyerName);
+      if (match) setAssignedLawyer(match.id);
+    }
+
+    const hasIntakeComplete = bitacoraEntries.some(
+      (e) =>
+        e.tipo === 'validacion' &&
+        e.referencia?.scope === 'expediente' &&
+        (e.titulo === 'Validación inicial completa' ||
+          (e.mensaje ?? '').includes('Validación inicial completa')),
+    );
+    if (hasIntakeComplete) setIntakeValidation('complete');
+  }, [bitacoraEntries, realRequest]);
 
   if (!request && isLoadingReal) {
     return (
@@ -2315,13 +2513,13 @@ export default function CaseDetail() {
   const documents = request.documents || [];
   const integrations = request.integrations || { sozu: 'idle', googleDocs: 'idle', mifiel: 'idle', kyc: 'idle' };
   const nextActions = NEXT_ACTIONS[request.status] || [];
-  const priorityLabels: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
-  const isRecibida = request.status === 'request_received';
-  const isRevision = request.status === 'in_legal_review';
-  const isAprobada = request.status === 'approved_for_generation';
-  const isClientSignature = request.status === 'client_signature';
-  const isFirmaTitular = request.status === 'in_validation';
-  const isFirmado = request.status === 'fully_signed';
+  const priorityLabels: Record<string, string> = { 'Alto': 'Alta', 'Medio': 'Media', 'Bajo': 'Baja' };
+  const isRecibida = request.status === 'Solicitud recibida';
+  const isRevision = request.status === 'En revisión legal';
+  const isAprobada = request.status === 'Aprobado';
+  const isClientSignature = request.status === 'Firma cliente';
+  const isFirmaTitular = request.status === 'Firma titular';
+  const isFirmado = request.status === 'Firmado';
 
   // Conteos de validación (sólo expedientes reales) — alimentan el banner
   // y se derivan de la bitácora. Cada comprador aporta 3 secciones
@@ -2423,9 +2621,34 @@ export default function CaseDetail() {
       {isRecibida && (
         <RecibidaActions
           assignedLawyer={assignedLawyer}
-          onAssignLawyer={setAssignedLawyer}
+          onAssignLawyer={(id: string) => {
+            setAssignedLawyer(id);
+            // Persistir asignación en bitácora para expedientes reales —
+            // alimenta la promoción a "En revisión legal" en el pipeline.
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              const lawyer = AVAILABLE_LAWYERS.find((l) => l.id === id);
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'sistema',
+                titulo: 'Abogado asignado',
+                mensaje: lawyer?.name ?? id,
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           intakeValidation={intakeValidation}
-          onMarkComplete={() => setIntakeValidation('complete')}
+          onMarkComplete={() => {
+            setIntakeValidation('complete');
+            // Persistir validación inicial completa — segundo gate para
+            // promover a "En revisión legal".
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'validacion',
+                titulo: 'Validación inicial completa',
+                mensaje: 'La información de la solicitud quedó marcada como completa.',
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           onMarkMissing={() => { setIntakeValidation('missing'); setShowMissingInfoDialog(true); }}
           onAdvance={() => {/* advance status */}}
         />
@@ -2495,7 +2718,28 @@ export default function CaseDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMissingInfoDialog(false)} className="h-9 text-[13px]">Cancelar</Button>
-            <Button variant="destructive" onClick={() => { setShowMissingInfoDialog(false); setMissingTitle(''); setMissingDesc(''); }} disabled={!missingTitle.trim()} className="h-9 text-[13px] gap-1">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                // Para expedientes reales (CC-XXXXXX) persistir la nota
+                // en legal_flow_bitacora con tipo 'informacion_faltante'.
+                // Para mocks legacy (EXP-2025-*) seguir el flujo anterior:
+                // solo cerrar el dialog y limpiar state.
+                if (realRequest && idCuentaCobranzaForBitacora) {
+                  appendBitacoraCaseDetail.mutate({
+                    tipo: 'informacion_faltante',
+                    titulo: missingTitle.trim() || 'Información faltante para revisión',
+                    mensaje: missingDesc.trim(),
+                    referencia: { scope: 'expediente' },
+                  });
+                }
+                setShowMissingInfoDialog(false);
+                setMissingTitle('');
+                setMissingDesc('');
+              }}
+              disabled={!missingTitle.trim() || appendBitacoraCaseDetail.isPending}
+              className="h-9 text-[13px] gap-1"
+            >
               <CircleAlert className="h-3.5 w-3.5" /> Registrar
             </Button>
           </DialogFooter>
@@ -2656,7 +2900,13 @@ export default function CaseDetail() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-6">
                     <DossierField icon={Receipt} label="Cuenta cobranza" value={request.cuentaCobranza || '—'} mono onClick={request.cuentaCobranza ? () => setShowCuentaCobranza(true) : undefined} />
                     <DossierField icon={Building2} label="Proyecto" value={request.project} sub={request.property} />
-                    <DossierField icon={Hash} label="Valor estimado" value={formatCurrency(request.estimatedValue)} mono />
+                    <DossierField
+                      icon={Hash}
+                      label="Valor estimado"
+                      value={formatCurrency(request.estimatedValue)}
+                      mono
+                      onClick={realRequest?.idCuentaCobranza ? () => setShowFormaPago(true) : undefined}
+                    />
                     <DossierField icon={FileText} label="Plantilla" value={request.templateName || 'Sin asignar'} />
                   </div>
                 </div>
@@ -2860,6 +3110,12 @@ export default function CaseDetail() {
       />
       <ContractTypeDrawer open={showContractType} onClose={() => setShowContractType(false)} type={request.type} />
       <CuentaCobranzaDrawer open={showCuentaCobranza} onClose={() => setShowCuentaCobranza(false)} cuenta={request.cuentaCobranza || ''} />
+      <FormaPagoDrawer
+        open={showFormaPago}
+        onClose={() => setShowFormaPago(false)}
+        idCuentaCobranza={realRequest?.idCuentaCobranza}
+        folioCuenta={request.cuentaCobranza ?? null}
+      />
     </div>
   );
 }
@@ -2932,7 +3188,8 @@ function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal 
       // Persistir en BD para expedientes reales.
       appendMutation.mutate({
         tipo: 'nota',
-        mensaje: noteDesc ? `${noteTitle}\n${noteDesc}` : noteTitle,
+        titulo: noteTitle,
+        mensaje: noteDesc,
         referencia: { scope: 'expediente' },
       });
     } else {
@@ -2954,41 +3211,54 @@ function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal 
   const renderBitacoraEntry = (entry: UnifiedEntry) => {
     const e = entry.data as BitacoraEntry;
     const isRechazo = e.tipo === 'rechazo';
+    const isFaltante = e.tipo === 'informacion_faltante';
     const isValidacion = e.tipo === 'validacion';
-    const dotColor = isRechazo
+    const isWarning = isRechazo || isFaltante;
+    const dotColor = isWarning
       ? 'bg-destructive'
       : isValidacion
         ? 'bg-primary'
         : 'bg-muted-foreground';
-    const Icon = isRechazo ? XCircle : isValidacion ? CheckCircle : MessageSquare;
+    const Icon = isWarning ? XCircle : isValidacion ? CheckCircle : MessageSquare;
     const tipoLabel =
       e.tipo === 'rechazo' ? 'Rechazo'
+      : e.tipo === 'informacion_faltante' ? 'Información faltante'
       : e.tipo === 'validacion' ? 'Validación'
       : e.tipo === 'sistema' ? 'Sistema'
       : 'Nota';
+    const fecha = new Date(e.timestamp);
+    const fechaTxt = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+    const horaTxt = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     return (
       <div key={entry.id} className="relative pl-7 pb-5 last:pb-0">
         <div className={`absolute left-0 top-1 flex h-[15px] w-[15px] items-center justify-center rounded-full ${dotColor}`}>
           <Icon className="h-[8px] w-[8px] text-white" />
         </div>
         <div className={`rounded-lg border ${
-          isRechazo ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
+          isWarning ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
         } p-3 transition-colors hover:bg-muted/40`}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className={`text-[13px] font-semibold ${isRechazo ? 'text-destructive' : 'text-foreground'}`}>
+              <p className={`text-[11px] font-semibold uppercase tracking-wider ${isWarning ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                 {tipoLabel}
                 {e.referencia && (
-                  <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                  <span className="ml-1.5 text-[11px] font-normal opacity-70">
                     · {e.referencia.scope.replace('_', ' ')}
                   </span>
                 )}
               </p>
-              <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+              {e.titulo && (
+                <p className={`text-[13px] font-semibold mt-1 ${isWarning ? 'text-destructive' : 'text-foreground'}`}>
+                  {e.titulo}
+                </p>
+              )}
+              {e.mensaje && (
+                <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground/50 mt-2">
-            {e.autorNombre || e.autorEmail} · {formatTime(e.timestamp)}
+            {e.autorNombre || e.autorEmail} · {fechaTxt} · {horaTxt}
           </p>
         </div>
       </div>

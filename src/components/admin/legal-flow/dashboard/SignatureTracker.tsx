@@ -9,9 +9,9 @@ interface Props {
 }
 
 export default function SignatureTracker({ openDrawer }: Props) {
-  const inSignature = mockRequests.filter(r => r.status === 'in_signature_process');
-  const partiallySigned = mockRequests.filter(r => r.status === 'partially_signed');
-  const recentlySigned = mockRequests.filter(r => r.status === 'fully_signed');
+  const inSignature = mockRequests.filter(r => r.status === 'En firma');
+  const partiallySigned = mockRequests.filter(r => r.status === 'Parcialmente firmado');
+  const recentlySigned = mockRequests.filter(r => r.status === 'Firmado');
   const kycBlocked = mockRequests.filter(r =>
     r.signers?.some(s => s.kycStatus === 'pending' || s.biometricStatus === 'pending')
   );
