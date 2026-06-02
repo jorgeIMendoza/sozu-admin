@@ -13,6 +13,8 @@ import {
   Workflow,
   ChevronDown,
   ChevronRight,
+  TrendingUp,
+  Banknote,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -34,6 +36,8 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/facturas-por-pagar",
   "/admin/portal-alta-direccion/comisiones-externas",
   "/admin/portal-alta-direccion/comisiones-internas",
+  "/admin/portal-alta-direccion/historico-comercial",
+  "/admin/portal-alta-direccion/analisis-cobranza",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -79,6 +83,13 @@ const navGroups: NavGroup[] = [
           { label: "Internas", path: "/admin/portal-alta-direccion/comisiones-internas" },
         ],
       },
+    ],
+  },
+  {
+    label: "Análisis",
+    items: [
+      { label: "Histórico Comercial", path: "/admin/portal-alta-direccion/historico-comercial", icon: TrendingUp },
+      { label: "Análisis de Cobranza", path: "/admin/portal-alta-direccion/analisis-cobranza", icon: Banknote },
     ],
   },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
