@@ -110,7 +110,7 @@ async function fetchExpedientesArchivados(): Promise<LegalRequest[]> {
     cuentas: cuentasVendido,
     ofertas: ofs,
     propiedades: propsVendido,
-    status: "archived",
+    status: "Archivado",
     titlePhrase: "Contrato firmado",
   });
 }

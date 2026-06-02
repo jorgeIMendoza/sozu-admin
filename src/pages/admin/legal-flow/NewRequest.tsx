@@ -90,12 +90,12 @@ export default function NewRequest() {
                     <Select required>
                       <SelectTrigger className="mt-1.5 h-[38px] rounded-lg"><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="new_contract">Nuevo Contrato</SelectItem>
-                        <SelectItem value="new_agreement">Carta Acuerdo</SelectItem>
-                        <SelectItem value="amendment">Convenio Modificatorio</SelectItem>
-                        <SelectItem value="renewal">Renovación de Contrato</SelectItem>
-                        <SelectItem value="termination">Terminación de Contrato</SelectItem>
-                        <SelectItem value="external_validation">Validación de Documento Externo</SelectItem>
+                        <SelectItem value="Nuevo contrato">Nuevo Contrato</SelectItem>
+                        <SelectItem value="Nuevo convenio">Carta Acuerdo</SelectItem>
+                        <SelectItem value="Modificatorio">Convenio Modificatorio</SelectItem>
+                        <SelectItem value="Renovación">Renovación de Contrato</SelectItem>
+                        <SelectItem value="Terminación">Terminación de Contrato</SelectItem>
+                        <SelectItem value="Validación externa">Validación de Documento Externo</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -104,14 +104,14 @@ export default function NewRequest() {
                     <Select required>
                       <SelectTrigger className="mt-1.5 h-[38px] rounded-lg"><SelectValue placeholder="Seleccionar prioridad" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="high">
-                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-high" /> Alta — Atención inmediata</span>
+                        <SelectItem value="Alto">
+                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-Alto" /> Alta — Atención inmediata</span>
                         </SelectItem>
-                        <SelectItem value="medium">
-                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-medium" /> Media — Plazo estándar</span>
+                        <SelectItem value="Medio">
+                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-Medio" /> Media — Plazo estándar</span>
                         </SelectItem>
-                        <SelectItem value="low">
-                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-low" /> Baja — Sin urgencia</span>
+                        <SelectItem value="Bajo">
+                          <span className="flex items-center gap-2"><span className="priority-dot priority-dot-Bajo" /> Baja — Sin urgencia</span>
                         </SelectItem>
                       </SelectContent>
                     </Select>

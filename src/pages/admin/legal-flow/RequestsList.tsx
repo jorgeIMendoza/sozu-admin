@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 
-const PRIORITY_LABELS: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
+const PRIORITY_LABELS: Record<string, string> = { 'Alto': 'Alta', 'Medio': 'Media', 'Bajo': 'Baja' };
 
 /**
  * Solicitudes Legales — lista plana de todas las cuentas de cobranza
@@ -45,7 +45,7 @@ export default function RequestsList() {
 
   const counts = {
     all: list.length,
-    active: list.filter((r) => !['fully_signed', 'cancelled', 'archived', 'rejected'].includes(r.status)).length,
+    active: list.filter((r) => !['Firmado', 'Cancelado', 'Archivado', 'Rechazado'].includes(r.status)).length,
   };
 
   return (
@@ -100,9 +100,9 @@ export default function RequestsList() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas las prioridades</SelectItem>
-            <SelectItem value="high">Alta</SelectItem>
-            <SelectItem value="medium">Media</SelectItem>
-            <SelectItem value="low">Baja</SelectItem>
+            <SelectItem value="Alto">Alta</SelectItem>
+            <SelectItem value="Medio">Media</SelectItem>
+            <SelectItem value="Bajo">Baja</SelectItem>
           </SelectContent>
         </Select>
       </motion.div>

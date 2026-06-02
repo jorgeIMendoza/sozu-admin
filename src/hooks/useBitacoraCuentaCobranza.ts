@@ -61,6 +61,9 @@ export interface UseBitacoraResult {
 const POSTGREST_TABLE_NOT_FOUND = "42P01";
 
 // Shape de una fila de legal_flow_bitacora.
+// `titulo` aún no existe en BD (DDL incremental pendiente). Una vez que
+// se agregue la columna, sumarla aquí y en el SELECT/INSERT más abajo;
+// el shape de `BitacoraEntry` en types ya lo soporta.
 interface BitacoraRow {
   id: string;
   tipo: BitacoraEntry["tipo"];
@@ -73,14 +76,34 @@ interface BitacoraRow {
   fecha_creacion: string;
 }
 
+// Mensajes con encabezado se escriben como "Título\n\nDescripción".
+// Se separa al renderizar para mostrar título prominente.
+function splitTituloMensaje(raw: string): { titulo?: string; mensaje: string } {
+  const idx = raw.indexOf("\n\n");
+  if (idx <= 0) return { mensaje: raw };
+  const titulo = raw.slice(0, idx).trim();
+  const mensaje = raw.slice(idx + 2);
+  return titulo ? { titulo, mensaje } : { mensaje: raw };
+}
+
+function joinTituloMensaje(titulo: string | undefined, mensaje: string): string {
+  const t = (titulo ?? "").trim();
+  const m = (mensaje ?? "").trim();
+  if (!t) return m;
+  if (!m) return t;
+  return `${t}\n\n${m}`;
+}
+
 function mapRow(row: BitacoraRow): BitacoraEntry {
+  const { titulo, mensaje } = splitTituloMensaje(row.mensaje);
   return {
     id: row.id,
     timestamp: row.fecha_creacion,
     autorEmail: row.autor_email ?? "desconocido",
     autorNombre: row.autor_nombre ?? undefined,
     tipo: row.tipo,
-    mensaje: row.mensaje,
+    titulo,
+    mensaje,
     referencia: row.scope
       ? {
           scope: row.scope,
@@ -142,12 +165,18 @@ export function useAppendBitacoraEntry(idCuentaCobranza: number | null | undefin
     mutationFn: async (input: BitacoraEntryInput): Promise<BitacoraEntry> => {
       if (!idCuentaCobranza) throw new Error("idCuentaCobranza requerido");
 
+      // BD aún no acepta `tipo: 'informacion_faltante'` (CHECK constraint
+      // sólo permite nota/validacion/rechazo/sistema). Mapeamos al tipo
+      // aceptado más cercano hasta que se aplique el DDL incremental.
+      const tipoDb = input.tipo === "informacion_faltante" ? "rechazo" : input.tipo;
+      const mensajeDb = joinTituloMensaje(input.titulo, input.mensaje);
+
       const { data, error } = (await (supabase as any)
         .from("legal_flow_bitacora")
         .insert({
           id_cuenta_cobranza: idCuentaCobranza,
-          tipo: input.tipo,
-          mensaje: input.mensaje,
+          tipo: tipoDb,
+          mensaje: mensajeDb,
           scope: input.referencia?.scope ?? null,
           id_persona: input.referencia?.idPersona ?? null,
           id_documento: input.referencia?.idDocumento ?? null,
@@ -172,6 +201,12 @@ export function useAppendBitacoraEntry(idCuentaCobranza: number | null | undefin
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["bitacora_cuenta_cobranza", idCuentaCobranza],
+      });
+      // Las entradas de bitácora pueden cambiar la etapa del expediente
+      // (p.ej. asignar abogado + validación inicial completa promueven a
+      // "En revisión legal"). Invalidamos también el listado del pipeline.
+      queryClient.invalidateQueries({
+        queryKey: ["legal_flow_solicitudes_recibidas"],
       });
     },
   });

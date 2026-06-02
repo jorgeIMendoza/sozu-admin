@@ -4,28 +4,28 @@ import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 
 const ATTENTION_REASONS: Record<string, string> = {
-  missing_information: 'Información incompleta',
-  in_legal_review: 'Revisión pendiente',
-  in_validation: 'Firma titular pendiente',
-  in_signature_process: 'Firma en proceso',
-  partially_signed: 'Firma parcial',
+  'Información faltante': 'Información incompleta',
+  'En revisión legal': 'Revisión pendiente',
+  'Firma titular': 'Firma titular pendiente',
+  'En firma': 'Firma en proceso',
+  'Parcialmente firmado': 'Firma parcial',
 };
 
 const NEXT_ACTION: Record<string, string> = {
-  request_received: 'Revisar solicitud',
-  missing_information: 'Completar información',
-  in_legal_review: 'Aprobar generación',
-  approved_for_generation: 'Generar documento',
-  in_validation: 'Enviar a firma del titular',
-  in_signature_process: 'Seguimiento de firma',
-  partially_signed: 'Seguimiento de firma',
+  'Solicitud recibida': 'Revisar solicitud',
+  'Información faltante': 'Completar información',
+  'En revisión legal': 'Aprobar generación',
+  'Aprobado': 'Generar documento',
+  'Firma titular': 'Enviar a firma del titular',
+  'En firma': 'Seguimiento de firma',
+  'Parcialmente firmado': 'Seguimiento de firma',
 };
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
 export default function AttentionPanel() {
   const cases = mockRequests.filter(
-    (r) => r.priority === 'high' && !['fully_signed', 'cancelled', 'archived', 'rejected'].includes(r.status)
+    (r) => r.priority === 'Alto' && !['Firmado', 'Cancelado', 'Archivado', 'Rechazado'].includes(r.status)
   );
 
   return (
