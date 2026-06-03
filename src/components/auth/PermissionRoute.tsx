@@ -58,14 +58,6 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow legal-flow routes only for Super Admin
-  if (location.pathname.startsWith('/admin/legal-flow')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    return <Navigate to="/admin/access-denied" replace />;
-  }
-
   // Cliente role should only see portal-cliente, redirect them there
   if (profile?.rol_nombre === 'Cliente') {
     return <Navigate to="/admin/portal-cliente/inicio" replace />;
@@ -102,6 +94,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoPortalAdmin
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Legal Flow: varias rutas (cases/:id, requests/new, templates, etc.)
+  // no tienen un submenu propio en allowedPaths. Si el rol tiene permiso sobre
+  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual
+  // que portal-administracion). Antes este gate estaba hardcodeado a rol_id 1/2,
+  // lo que daba 403 a roles como Admin Legal pese a tener el permiso en DB.
+  if (location.pathname.startsWith('/admin/legal-flow')) {
+    let tieneAccesoLegalFlow = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/legal-flow')) {
+        tieneAccesoLegalFlow = true;
+        break;
+      }
+    }
+    return tieneAccesoLegalFlow
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }
