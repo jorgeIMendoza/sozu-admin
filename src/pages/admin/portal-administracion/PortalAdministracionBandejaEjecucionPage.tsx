@@ -1057,56 +1057,87 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                       <TableHead className="text-xs">No. Departamento</TableHead>
                       <TableHead className="text-xs text-right">Precio final</TableHead>
                       <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
+                      <TableHead className="text-xs">Estatus aprobación</TableHead>
                       <TableHead className="text-xs">Fecha Antigüedad</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dispersionesInternasPage.map((d) => (
-                      <TableRow key={d.id_cuenta_cobranza}>
-                        <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
-                          {d.folio_cuenta}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
-                            {d.tipo}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{d.proyecto_nombre || "—"}</TableCell>
-                        <TableCell className="text-sm">{d.edificio_nombre || "—"}</TableCell>
-                        <TableCell className="text-sm">
-                          {d.tipo === "Propiedad"
-                            ? d.modelo_nombre || "—"
-                            : d.producto_nombre || d.modelo_nombre || "—"}
-                        </TableCell>
-                        <TableCell className="text-sm">{d.numero_departamento || "—"}</TableCell>
-                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
-                          {fmtMxn(d.precio_final)}
-                        </TableCell>
-                        <TableCell className="text-sm text-right font-semibold tabular-nums">
-                          {fmtMxn(d.monto_a_dispersar)}
-                          {d.iva_incluido && (
-                            <span className="block text-[9px] text-muted-foreground font-normal">
-                              IVA incluido
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                          {d.fecha_compra || "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => setSelected({ tipo: "dispersion_interna", data: d })}
-                            aria-label={`Ejecutar dispersión ${d.folio_cuenta}`}
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-1" /> Ejecutar dispersión
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {dispersionesInternasPage.map((d) => {
+                      const isAprobado = d.estado_aprobacion === "aprobado";
+                      const isParcial = d.estado_aprobacion === "parcial";
+                      const isPendiente = d.estado_aprobacion === "pendiente";
+                      const estatusBadgeClass = isAprobado
+                        ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                        : isParcial
+                          ? "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40"
+                          : "border-muted-foreground/40 text-muted-foreground bg-muted/40";
+                      const estatusLabel = isAprobado
+                        ? "Aprobado"
+                        : isParcial
+                          ? `Parcial · ${d.comisionistas_aprobados} aprobados / ${d.comisionistas_pendientes_aprobacion} pendientes`
+                          : "Pendiente aprobación AD";
+                      return (
+                        <TableRow key={d.id_cuenta_cobranza}>
+                          <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
+                            {d.folio_cuenta}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                              {d.tipo}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">{d.proyecto_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm">{d.edificio_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm">
+                            {d.tipo === "Propiedad"
+                              ? d.modelo_nombre || "—"
+                              : d.producto_nombre || d.modelo_nombre || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">{d.numero_departamento || "—"}</TableCell>
+                          <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
+                            {fmtMxn(d.precio_final)}
+                          </TableCell>
+                          <TableCell className="text-sm text-right font-semibold tabular-nums">
+                            {fmtMxn(d.monto_a_dispersar)}
+                            {d.monto_pendiente_aprobacion > 0 && (
+                              <span className="block text-[9px] text-amber-700 dark:text-amber-300 font-normal">
+                                + {fmtMxn(d.monto_pendiente_aprobacion)} pend. aprobación
+                              </span>
+                            )}
+                            {d.iva_incluido && (
+                              <span className="block text-[9px] text-muted-foreground font-normal">
+                                IVA incluido
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${estatusBadgeClass}`}>
+                              {estatusLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                            {d.fecha_compra || "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => setSelected({ tipo: "dispersion_interna", data: d })}
+                              aria-label={
+                                isPendiente
+                                  ? `Ver detalle ${d.folio_cuenta}`
+                                  : `Ejecutar dispersión ${d.folio_cuenta}`
+                              }
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              {isPendiente ? "Ver detalle" : "Ejecutar dispersión"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

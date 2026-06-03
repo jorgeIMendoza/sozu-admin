@@ -121,18 +121,16 @@ export function ComisionInternaContent({
       const aprobados = internos.filter((c) => decisiones[c.email] === "aprobado");
       const rechazados = internos.filter((c) => decisiones[c.email] === "rechazado");
 
-      // 1) Aprobados → marcar aprobada=true Y pagada=true (autorización + dispersión).
-      // El check constraint chk_comisionistas_pagos_coherencia exige que pagada=true
-      // sólo sea válido cuando aprobada=true, por eso se setean ambos en un solo UPDATE.
+      // 1) Aprobados → marcar SOLO aprobada=true. La dispersión efectiva
+      //    (pagada=true + fecha_pago_comision) la ejecuta el Portal de
+      //    Administración en la bandeja "Dispersiones internas pendientes",
+      //    permitiendo separar la autorización (Alta Dirección) del pago
+      //    operativo (Admin).
       if (aprobados.length > 0) {
         const emails = aprobados.map((c) => c.email);
         const { error: errAp } = await (supabase as any)
           .from("comisionistas")
-          .update({
-            aprobada: true,
-            pagada: true,
-            fecha_pago_comision: new Date().toISOString(),
-          })
+          .update({ aprobada: true })
           .eq("id_cuenta_cobranza", cuentaId)
           .eq("activo", true)
           .in("email_usuario", emails);
@@ -168,6 +166,9 @@ export function ComisionInternaContent({
         queryKey: ["expediente_venta_detalle", entity.folio_cuenta],
       });
       queryClient.invalidateQueries({ queryKey: ["comisiones_internas_alta_direccion"] });
+      // Tras aprobar, la cuenta debe aparecer en la bandeja "Dispersiones
+      // internas pendientes" del Portal de Administración.
+      queryClient.invalidateQueries({ queryKey: ["dispersiones_internas_pendientes"] });
       toast({
         title: "Decisiones guardadas",
         description: `${resumen.aprobados} aprobados · ${resumen.rechazados} rechazados.`,

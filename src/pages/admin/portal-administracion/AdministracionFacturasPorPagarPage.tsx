@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -109,6 +110,7 @@ export default function AdministracionFacturasPorPagarPage() {
   const [estatusComisionFilter, setEstatusComisionFilter] = useState<string>("all");
   const [flagCobroFilter, setFlagCobroFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorPagar | null>(null);
+  const [page, setPage] = useState(0);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorPagar();
 
@@ -142,6 +144,12 @@ export default function AdministracionFacturasPorPagarPage() {
       return true;
     });
   }, [search, proyectoFilter, estatusComisionFilter, flagCobroFilter, facturas]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+  const filteredPage = useMemo(
+    () => filtered.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [filtered, page],
+  );
 
   const kpis = useMemo(() => {
     let recibidoTotal = 0,
@@ -390,7 +398,7 @@ export default function AdministracionFacturasPorPagarPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((f) => {
+                {filteredPage.map((f) => {
                   const sinCobro = !f.ya_se_cobro_al_desarrollador;
                   const alertaBloqueo = f.estado === "bloqueada" && f.dias_desde_emision > 15;
                   return (
@@ -502,6 +510,12 @@ export default function AdministracionFacturasPorPagarPage() {
                 })}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={filtered.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>
