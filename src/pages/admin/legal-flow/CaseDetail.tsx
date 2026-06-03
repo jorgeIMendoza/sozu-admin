@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, ExternalLink, FileText, Users, Clock, AlertCircle, CheckCircle2,
   Circle, Download, Eye, ChevronRight, Shield, Fingerprint, PenTool, Zap,
@@ -2152,15 +2155,27 @@ function FirmaClienteActions({
 
 // ── FirmaTitularActions ──
 function FirmaTitularActions({
-  request, signers, onAdvance, onReturn,
+  request, signers, idCuentaCobranza, onAdvance, onReturn,
 }: {
   request: { title: string; project: string; property?: string; titular?: string; templateName?: string; counterparty: string; counterparties?: string[] };
   signers: { id: string; name: string; signerType: string; role: 'internal' | 'external'; status: string; signedAt?: string; signatureMethod?: 'digital' | 'physical'; uploadedSignedDoc?: { fileName: string; uploadedAt: string; uploadedBy: string; status: string; version?: number } }[];
+  idCuentaCobranza?: number;
   onAdvance: () => void; onReturn: () => void;
 }) {
+  // Flujo real: cuando hay idCuentaCobranza, alimentamos el contrato firmado
+  // por el titular desde `documentos` (tipo 18). Si no hay, conservamos el
+  // flujo mock heredado para expedientes EXP-2025-*.
+  const isReal = !!idCuentaCobranza;
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const [titularSent, setTitularSent] = useState(false);
+  // En el flujo real el proceso es físico por defecto: el contrato se imprime,
+  // se entrega al titular para firma manual y luego se sube al sistema.
   const [titularMethod, setTitularMethod] = useState<'digital' | 'physical'>(
-    signers.find(s => s.role === 'internal')?.signatureMethod || 'digital'
+    isReal
+      ? 'physical'
+      : (signers.find(s => s.role === 'internal')?.signatureMethod || 'digital'),
   );
   const [physDocUploaded, setPhysDocUploaded] = useState(false);
   const [physDocValidated, setPhysDocValidated] = useState(false);
@@ -2169,12 +2184,103 @@ function FirmaTitularActions({
   const internalSigners = signers.filter(s => s.role === 'internal');
   const allExternalSigned = externalSigners.length > 0 && externalSigners.every(s => s.status === 'signed');
 
-  const readinessItems = [
-    { key: 'contract', label: 'Contrato generado', done: true },
-    { key: 'counterparty', label: 'Contraparte firmó', done: allExternalSigned },
-    { key: 'observations', label: 'Observaciones resueltas', done: true },
-    { key: 'ready', label: 'Listo para firma del titular', done: allExternalSigned },
-  ];
+  // Documento "Contrato firmado completamente" (tipo 18) para esta cuenta.
+  const { data: contratoDoc, isLoading: loadingContratoDoc } = useQuery({
+    queryKey: ['firma_titular_contrato', idCuentaCobranza],
+    enabled: isReal,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('documentos')
+        .select('id, url, fecha_creacion, id_estatus_verificacion')
+        .eq('id_cuenta_cobranza', idCuentaCobranza)
+        .eq('id_tipo_documento', 18)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return ((data as any[]) ?? [])[0] ?? null;
+    },
+  });
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadContratoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!idCuentaCobranza) throw new Error('Cuenta no identificada');
+      const ext = file.name.split('.').pop();
+      const fileName = `cuenta_cobranza_${idCuentaCobranza}_contrato_titular_${Date.now()}.${ext}`;
+      const { error: upErr } = await (supabase as any).storage
+        .from('documentos')
+        .upload(fileName, file);
+      if (upErr) throw upErr;
+      const { data: urlData } = (supabase as any).storage
+        .from('documentos')
+        .getPublicUrl(fileName);
+      const url = urlData?.publicUrl;
+      const { error: insErr } = await (supabase as any)
+        .from('documentos')
+        .insert({
+          id_cuenta_cobranza: idCuentaCobranza,
+          id_tipo_documento: 18,
+          url,
+          id_estatus_verificacion: 1, // Pendiente
+          activo: true,
+        });
+      if (insErr) throw insErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      toast({ title: 'Contrato cargado', description: 'Queda pendiente de validación legal.' });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: 'Error al cargar contrato',
+        description: err instanceof Error ? err.message : 'No se pudo subir el archivo.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const validateContratoMutation = useMutation({
+    mutationFn: async () => {
+      if (!contratoDoc?.id) throw new Error('Documento no identificado');
+      const { error } = await (supabase as any)
+        .from('documentos')
+        .update({ id_estatus_verificacion: 2 })
+        .eq('id', contratoDoc.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      toast({ title: 'Contrato validado', description: 'Expediente listo para Firmado.' });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: 'Error al validar contrato',
+        description: err instanceof Error ? err.message : 'No se pudo actualizar el estatus.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const docPendienteValidacion = isReal && contratoDoc?.id_estatus_verificacion === 1;
+  const docValidado = isReal && contratoDoc?.id_estatus_verificacion === 2;
+
+  const readinessItems = isReal
+    ? [
+        { key: 'contract', label: 'Contrato generado', done: true },
+        { key: 'counterparty', label: 'Contraparte firmó', done: true },
+        { key: 'observations', label: 'Observaciones resueltas', done: true },
+        { key: 'ready', label: 'Listo para firma del titular', done: true },
+      ]
+    : [
+        { key: 'contract', label: 'Contrato generado', done: true },
+        { key: 'counterparty', label: 'Contraparte firmó', done: allExternalSigned },
+        { key: 'observations', label: 'Observaciones resueltas', done: true },
+        { key: 'ready', label: 'Listo para firma del titular', done: allExternalSigned },
+      ];
 
   const allReady = readinessItems.every(r => r.done);
 
@@ -2236,16 +2342,30 @@ function FirmaTitularActions({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-[12px]">
-                  {(request.titular || 'T').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {(request.titular || request.counterparty || 'T').split(' ').map(n => n[0]).join('').slice(0, 2)}
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold">{request.titular || 'Titular'}</p>
+                  <p className="text-[14px] font-semibold">{request.titular || request.counterparty || 'Titular'}</p>
                   <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${titularMethod === 'physical' ? 'bg-muted text-muted-foreground' : 'bg-[hsl(var(--status-info)/0.08)] text-[hsl(var(--status-info))]'}`}>
                     {titularMethod === 'physical' ? <><FileUp className="h-2.5 w-2.5" /> Física</> : <><Zap className="h-2.5 w-2.5" /> Digital</>}
                   </span>
                 </div>
               </div>
-              {physDocValidated ? (
+              {isReal ? (
+                docValidado ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    <CheckCircle2 className="h-3 w-3" /> Validado
+                  </span>
+                ) : docPendienteValidacion ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+                    <Clock className="h-3 w-3" /> Verificación pendiente
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    <Clock className="h-3 w-3" /> Pendiente
+                  </span>
+                )
+              ) : physDocValidated ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                   <CheckCircle2 className="h-3 w-3" /> Validado
                 </span>
@@ -2260,7 +2380,85 @@ function FirmaTitularActions({
               )}
             </div>
 
-            {titularMethod === 'physical' && titularSent && !physDocValidated && (
+            {/* Flujo real: cargar / visualizar / validar contrato firmado */}
+            {isReal && (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-3 space-y-2">
+                {loadingContratoDoc ? (
+                  <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando contrato…
+                  </p>
+                ) : !contratoDoc ? (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      Sube el contrato firmado por el titular para que el área legal lo valide.
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadContratoMutation.mutate(f);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[11px] gap-1.5 rounded-lg w-full"
+                      disabled={uploadContratoMutation.isPending}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {uploadContratoMutation.isPending ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Cargando…</>
+                      ) : (
+                        <><Upload className="h-3 w-3" /> Cargar contrato firmado</>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                        <span className="text-[12px] font-medium truncate">Contrato firmado completamente</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
+                        {new Date(contratoDoc.fecha_creacion).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 rounded-lg flex-1"
+                        onClick={() => window.open(contratoDoc.url, '_blank')}
+                      >
+                        <Eye className="h-2.5 w-2.5" /> Ver contrato
+                      </Button>
+                      {docPendienteValidacion && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-[10px] gap-1 rounded-lg flex-1"
+                          disabled={validateContratoMutation.isPending}
+                          onClick={() => validateContratoMutation.mutate()}
+                        >
+                          {validateContratoMutation.isPending ? (
+                            <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Validando…</>
+                          ) : (
+                            <><CheckCircle2 className="h-2.5 w-2.5" /> Validar</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Flujo mock heredado (EXP-2025-*) */}
+            {!isReal && titularMethod === 'physical' && titularSent && !physDocValidated && (
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-3 space-y-2">
                 {!physDocUploaded ? (
                   <Button variant="outline" size="sm" className="h-8 text-[11px] gap-1.5 rounded-lg w-full" onClick={() => setPhysDocUploaded(true)}>
@@ -2285,12 +2483,17 @@ function FirmaTitularActions({
 
           {/* Actions */}
           <div className="border-t pt-4 space-y-2.5">
-            {allReady && !titularSent && (
+            {!isReal && allReady && !titularSent && (
               <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={() => setTitularSent(true)}>
                 <Send className="h-4 w-4" /> {titularMethod === 'digital' ? 'Enviar a firma digital' : 'Registrar envío de firma física'}
               </Button>
             )}
-            {physDocValidated && (
+            {!isReal && physDocValidated && (
+              <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={onAdvance}>
+                <CheckCircle2 className="h-4 w-4" /> Completar proceso de firma
+              </Button>
+            )}
+            {isReal && docValidado && (
               <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={onAdvance}>
                 <CheckCircle2 className="h-4 w-4" /> Completar proceso de firma
               </Button>
@@ -2700,6 +2903,7 @@ export default function CaseDetail() {
         <FirmaTitularActions
           request={request}
           signers={signers}
+          idCuentaCobranza={realRequest?.idCuentaCobranza}
           onAdvance={() => {/* advance */}}
           onReturn={() => {/* return */}}
         />

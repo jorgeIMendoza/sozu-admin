@@ -38,6 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -447,6 +448,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
   const [search, setSearch] = useState("");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
 
   const { data: casos = [], isLoading, error } = useCicloVentaCasos();
 
@@ -478,6 +480,12 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       return true;
     });
   }, [search, proyectoFilter, tipoFilter, casos]);
+
+  const totalPages = Math.max(1, Math.ceil(filtrados.length / ADMIN_PAGE_SIZE));
+  const filtradosPage = useMemo(
+    () => filtrados.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [filtrados, page],
+  );
 
   const hayFiltros = !!search || proyectoFilter !== "all" || tipoFilter !== "all";
 
@@ -583,7 +591,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtrados.map((c) => (
+                {filtradosPage.map((c) => (
                   <TableRow key={c.id_cuenta_cobranza}>
                     <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
                       {c.folio}
@@ -617,6 +625,12 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                 ))}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={filtrados.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>
