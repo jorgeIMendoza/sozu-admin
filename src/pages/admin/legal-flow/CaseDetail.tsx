@@ -22,6 +22,7 @@ import {
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { useCompradoresFullDetail, type CompradorFullDetail } from '@/hooks/useCompradoresFullDetail';
 import { useFormaPagoOferta, type FormaPagoOferta } from '@/hooks/useFormaPagoOferta';
@@ -2396,13 +2397,22 @@ export default function CaseDetail() {
     isLoading: loadingSolicitudes,
   } = useLegalFlowSolicitudesRecibidas();
   const {
+    data: firmaTitular = [],
+    isLoading: loadingFirmaTitular,
+  } = useLegalFlowFirmaTitular();
+  const {
     data: archivados = [],
     isLoading: loadingArchivados,
   } = useLegalFlowExpedientesArchivados();
-  const realRequest = [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
+  // Si la cuenta aparece en Firma titular (contrato firmado pendiente de
+  // validación), su detalle debe presentarse como etapa 5 y no como
+  // Solicitud recibida — aunque la propiedad siga en estatus Apartado.
+  const realRequest =
+    firmaTitular.find((r) => r.id === id) ??
+    [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
   const mockRequest = mockRequests.find((r) => r.id === id);
   const request = realRequest ?? mockRequest;
-  const isLoadingReal = loadingSolicitudes || loadingArchivados;
+  const isLoadingReal = loadingSolicitudes || loadingFirmaTitular || loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
