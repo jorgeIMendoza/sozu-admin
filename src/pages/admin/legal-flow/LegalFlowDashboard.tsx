@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, Kanban } from 'lucide-react';
-import KpiCards from '@/components/admin/legal-flow/dashboard/KpiCards';
 import DashboardFilters from '@/components/admin/legal-flow/dashboard/DashboardFilters';
 import PipelineBoard from '@/components/admin/legal-flow/dashboard/PipelineBoard';
 import WorkloadPanel from '@/components/admin/legal-flow/dashboard/WorkloadPanel';
@@ -17,26 +16,9 @@ const tabs: { key: ViewMode; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'operative', label: 'Vista Operativa', icon: Kanban },
 ];
 
-const KPI_FILTERS: Record<string, (r: LegalRequest) => boolean> = {
-  active: (r) => !['Firmado', 'Cancelado', 'Rechazado', 'Archivado'].includes(r.status),
-  review: (r) => ['En revisión legal', 'Información faltante'].includes(r.status),
-  validation: (r) => ['Firma titular', 'En firma', 'Parcialmente firmado'].includes(r.status),
-  completed: (r) => r.status === 'Firmado',
-  urgent: (r) => r.priority === 'Alto' && !['Firmado', 'Cancelado', 'Archivado'].includes(r.status),
-};
-
-const KPI_DRAWER_TITLES: Record<string, string> = {
-  active: 'Expedientes activos',
-  review: 'Pendientes de revisión',
-  validation: 'Firma titular pendiente',
-  completed: 'Firmados este mes',
-  urgent: 'Expedientes urgentes',
-};
-
 export default function Dashboard() {
   const [view, setView] = useState<ViewMode>('operative');
-  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerCases, setDrawerCases] = useState<LegalRequest[]>([]);
   const [drawerTitle, setDrawerTitle] = useState('');
@@ -46,14 +28,6 @@ export default function Dashboard() {
     setDrawerCases(cases);
     setDrawerOpen(true);
   }, []);
-
-  const handleKpiClick = useCallback((key: string | null) => {
-    setKpiFilter(key);
-    if (key && KPI_FILTERS[key]) {
-      const filtered = mockRequests.filter(KPI_FILTERS[key]);
-      openDrawer(KPI_DRAWER_TITLES[key] || 'Expedientes', filtered);
-    }
-  }, [openDrawer]);
 
   const handleStatusFilter = useCallback((status: CaseStatus) => {
     const filtered = mockRequests.filter(r => r.status === status);
@@ -92,28 +66,12 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Active filter indicator */}
-      {kpiFilter && (
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] text-muted-foreground">Filtro activo:</span>
-          <span className="text-[12px] font-semibold bg-primary/10 text-primary px-3 py-1 rounded-full">
-            {KPI_DRAWER_TITLES[kpiFilter]}
-          </span>
-          <button onClick={() => setKpiFilter(null)} className="text-[12px] text-muted-foreground hover:text-foreground underline cursor-pointer">
-            Limpiar
-          </button>
-        </div>
-      )}
-
-      {/* Filters */}
-      <DashboardFilters filters={filters} onFiltersChange={setFilters} />
-
-      {/* KPIs */}
-      <KpiCards activeFilter={kpiFilter} onFilterChange={handleKpiClick} />
+      {/* Buscador */}
+      <DashboardFilters value={search} onChange={setSearch} />
 
       {/* Views */}
       {view === 'operative' ? (
-        <OperativeView openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
+        <OperativeView search={search} openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
       ) : (
         <ExecutiveView openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
       )}
@@ -133,10 +91,10 @@ interface ViewProps {
   onStatusFilter: (status: CaseStatus) => void;
 }
 
-function OperativeView({ onStatusFilter }: ViewProps) {
+function OperativeView({ search, onStatusFilter }: ViewProps & { search: string }) {
   return (
     <div className="space-y-6">
-      <PipelineBoard onColumnClick={onStatusFilter} />
+      <PipelineBoard search={search} onColumnClick={onStatusFilter} />
     </div>
   );
 }

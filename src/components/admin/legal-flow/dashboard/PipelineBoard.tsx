@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize2 } from 'lucide-react';
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
 import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
 
 const PIPELINE_STAGES: { status: CaseStatus; label: string }[] = [
@@ -38,6 +39,7 @@ const STAGE_COLORS: Record<string, string> = {
 
 interface Props {
   onColumnClick?: (status: CaseStatus) => void;
+  search?: string;
 }
 
 type ViewMode = 'compact' | 'expanded';
@@ -57,25 +59,61 @@ function groupByStage(requests: LegalRequest[]) {
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 const isOverdue = (d: string) => new Date(d) < new Date();
 
-export default function PipelineBoard({ onColumnClick }: Props) {
+export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('expanded');
   const { data: solicitudesRecibidas } = useLegalFlowSolicitudesRecibidas();
+  const { data: firmaTitular } = useLegalFlowFirmaTitular();
 
-  // Las dos primeras etapas se alimentan de datos reales (cuentas Apartado
-  // con/sin promoción a "En revisión legal" según bitácora). El resto del
-  // pipeline sigue usando mock hasta que cada etapa tenga su origen propio.
+  // Etapas alimentadas con datos reales:
+  //   • Solicitud recibida + En revisión legal: cuentas Apartado con/sin
+  //     promoción según bitácora.
+  //   • Firma titular: cuentas con Contrato firmado completamente (tipo 18)
+  //     en estatus de verificación Pendiente.
+  // El resto del pipeline sigue usando mock hasta que cada etapa tenga
+  // su origen propio.
   const activeRequests = useMemo<LegalRequest[]>(() => {
-    const real = solicitudesRecibidas ?? [];
+    const firmaTitularSet = new Set(
+      (firmaTitular ?? [])
+        .map((r) => r.idCuentaCobranza)
+        .filter((v): v is number => !!v),
+    );
+    // Las cuentas que ya están en Firma titular salen de Solicitud recibida
+    // para evitar duplicación visual en el board.
+    const recibidasFiltered = (solicitudesRecibidas ?? []).filter(
+      (r) => !r.idCuentaCobranza || !firmaTitularSet.has(r.idCuentaCobranza),
+    );
     const downstreamMock = mockRequests.filter(
       (r) =>
-        !['Solicitud recibida', 'Información faltante', 'En revisión legal', 'Cancelado', 'Rechazado', 'Archivado'].includes(
-          r.status,
-        ),
+        ![
+          'Solicitud recibida',
+          'Información faltante',
+          'En revisión legal',
+          'Firma titular',
+          'En firma',
+          'Parcialmente firmado',
+          'Cancelado',
+          'Rechazado',
+          'Archivado',
+        ].includes(r.status),
     );
-    return [...real, ...downstreamMock];
-  }, [solicitudesRecibidas]);
+    return [...recibidasFiltered, ...(firmaTitular ?? []), ...downstreamMock];
+  }, [solicitudesRecibidas, firmaTitular]);
 
-  const grouped = groupByStage(activeRequests);
+  // Búsqueda por ID de cuenta (folio CC-XXXXXX), contraparte
+  // (titular/compradores) o unidad ("Unidad 1005" o solo "1005").
+  const visibleRequests = useMemo<LegalRequest[]>(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return activeRequests;
+    return activeRequests.filter((r) => {
+      if (r.id.toLowerCase().includes(q)) return true;
+      if (r.counterparty?.toLowerCase().includes(q)) return true;
+      if (r.counterparties?.some((cp) => cp.toLowerCase().includes(q))) return true;
+      if (r.property?.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [activeRequests, search]);
+
+  const grouped = groupByStage(visibleRequests);
 
   return (
     <motion.div
@@ -91,7 +129,7 @@ export default function PipelineBoard({ onColumnClick }: Props) {
             Pipeline de Contratos
           </h2>
           <span className="text-[12px] text-muted-foreground bg-muted rounded-md px-2 py-0.5 tabular-nums font-medium">
-            {activeRequests.length} activos
+            {visibleRequests.length} activos
           </span>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
