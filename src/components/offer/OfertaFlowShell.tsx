@@ -1,6 +1,6 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 
 interface Step {
   label: string;

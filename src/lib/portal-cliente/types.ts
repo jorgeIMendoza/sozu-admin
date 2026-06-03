@@ -74,6 +74,7 @@ export interface PaymentRecord {
 export interface AdditionalProduct {
   id: string;
   name: string;
+  description?: string;
   totalPrice: number;
   totalPaid: number;
   pendingBalance: number;

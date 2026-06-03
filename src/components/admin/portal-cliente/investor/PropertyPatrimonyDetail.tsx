@@ -30,6 +30,7 @@ import PropertyTechnicalSheet from "./PropertyTechnicalSheet";
 import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { createPortal } from "react-dom";
 import ManualsBlock from "../post-delivery/ManualsBlock";
+import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 
 interface Props {
   investment: InvestmentProperty;
@@ -65,6 +66,12 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
           <div className="md:hidden">
             <PropertyHumanContact investment={investment} role="administrator" />
           </div>
+
+          {(investment.additionalProducts?.length ?? 0) > 0 && (
+            <div className="rounded-2xl bg-card border border-border overflow-hidden">
+              <AdditionalProducts products={investment.additionalProducts!} />
+            </div>
+          )}
 
           <AssetValue
             valueMXN={valueMXN}

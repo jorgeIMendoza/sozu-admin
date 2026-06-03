@@ -13,7 +13,7 @@ import { PortalSearchInput } from "./PortalSearchInput";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "./BottomNav";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 
 function truncateName(full: string, max = 22): string {
   const parts = full.trim().split(/\s+/);
