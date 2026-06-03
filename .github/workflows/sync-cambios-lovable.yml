@@ -93,7 +93,9 @@ jobs:
               cp .env .env.development
             fi
 
-            git add .env .env.development
+            # Solo .env.development se versiona; .env esta en .gitignore
+            # (git add .env fallaria con exit!=0 bajo `bash -e`).
+            git add .env.development
             git commit -m "chore: preserve env files during cambios_lovable sync" || echo "No env changes to commit"
           fi
 

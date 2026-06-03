@@ -14,7 +14,7 @@ export default function NuevoUsuario() {
   const queryClient = useQueryClient();
 
   const createPersonaMutation = useMutation({
-    mutationFn: async (data: { nombre: string; curp: string; url_documento_identificacion?: string }) => {
+    mutationFn: async (data: { nombre: string; curp: string }) => {
       const { data: result, error } = await supabase
         .from('personas_fake' as any)
         .insert([data])
@@ -42,7 +42,7 @@ export default function NuevoUsuario() {
     },
   });
 
-  const handleSubmit = (data: { nombre: string; curp: string; url_documento_identificacion?: string }) => {
+  const handleSubmit = (data: { nombre: string; curp: string }) => {
     createPersonaMutation.mutate(data);
   };
 
