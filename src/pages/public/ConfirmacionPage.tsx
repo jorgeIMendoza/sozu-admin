@@ -1,7 +1,7 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { CheckCircle2, Calendar, FileText, CreditCard, MessageCircle, ArrowRight } from "lucide-react";
 import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 
 const MOCK_AGENT = {
   nombre: "Ramón Escobar",

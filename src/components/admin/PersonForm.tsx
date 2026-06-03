@@ -131,11 +131,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
   const [idNotario, setIdNotario] = useState(initialData?.id_notario || '');
   
 
-  // Document processing
-  const [documentImageUrl, setDocumentImageUrl] = useState(initialData?.url_documento_identificacion || '');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isApiProcessing, setIsApiProcessing] = useState(false);
-  
   // Logo
   const [urlLogo, setUrlLogo] = useState(initialData?.url_logo || '');
   
@@ -184,6 +179,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         rfc: rfc.trim() || null,
         uso_cfdi: usoCfdi.trim() || null,
         regimen: regimen ? parseInt(regimen) : null,
+        id_tipo_identificacion: tipoPersona === 'pf' && idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
         activo: true,
       };
 
@@ -825,7 +821,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         telefono: telefono.trim() || null,
         clave_pais_telefono: clavePaisTelefono || 'MX',
         curp: curp.trim() || null,
-        url_documento_identificacion: documentImageUrl || undefined,
       });
     } else if (entityType === 'comprador' && restrictToBasicTab) {
       // For buyer creation in restricted mode, save to database first
@@ -1701,15 +1696,6 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                                 <SelectItem value="3">Licencia de Conducir</SelectItem>
                               </SelectContent>
                             </Select>
-                          </div>
-
-                          <div className="col-span-1 md:col-span-2">
-                            <ImageUploadField
-                              label="Documento de identificación"
-                              value={documentImageUrl}
-                              onChange={setDocumentImageUrl}
-                              accept="image/*,.pdf"
-                            />
                           </div>
 
                           <div>

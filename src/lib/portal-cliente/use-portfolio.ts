@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage } from "./types";
+import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage, AdditionalProduct } from "./types";
 
 const IMAGE_GRADIENTS = [
   "from-primary/20 via-primary/10 to-accent",
@@ -127,6 +127,95 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
+  // 2.5 Fetch product offers (id_producto IS NOT NULL) and build additionalProducts per propiedad
+  const productsByPropId: Record<number, AdditionalProduct[]> = {};
+  {
+    const { data: productOffers } = await supabase
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto")
+      .eq("id_persona_lead", personaId)
+      .eq("activo", true)
+      .not("id_producto", "is", null);
+
+    if (productOffers?.length) {
+      const productOfferIds = productOffers.map((o) => o.id as number);
+      const productoIds = [...new Set(productOffers.map((o) => o.id_producto as number).filter(Boolean))];
+
+      const [productCuentasRes, productosRes] = await Promise.all([
+        supabase
+          .from("cuentas_cobranza")
+          .select("id, id_oferta, precio_final")
+          .in("id_oferta", productOfferIds)
+          .eq("activo", true)
+          .eq("es_aprobado", true),
+        productoIds.length
+          ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
+          : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
+      ]);
+
+      const productCuentas = productCuentasRes.data ?? [];
+      const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
+        Object.fromEntries(
+          (productosRes.data ?? []).map((p) => [
+            p.id as number,
+            { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
+          ]),
+        );
+
+      const productCuentaIds = productCuentas.map((c) => c.id as number);
+      if (productCuentaIds.length) {
+        const { data: productPagos } = await supabase
+          .from("pagos")
+          .select("id_cuenta_cobranza, monto")
+          .in("id_cuenta_cobranza", productCuentaIds)
+          .eq("activo", true);
+
+        const pagosByCuenta: Record<number, number> = {};
+        for (const p of productPagos ?? []) {
+          const cId = p.id_cuenta_cobranza as number;
+          pagosByCuenta[cId] = (pagosByCuenta[cId] ?? 0) + Number(p.monto);
+        }
+
+        const ofertaMap: Record<number, { propiedadId: number; productoId: number }> =
+          Object.fromEntries(
+            productOffers.map((o) => [
+              o.id as number,
+              { propiedadId: o.id_propiedad as number, productoId: o.id_producto as number },
+            ]),
+          );
+
+        for (const cc of productCuentas) {
+          const oferta = ofertaMap[cc.id_oferta as number];
+          if (!oferta) continue;
+
+          const totalPaid = pagosByCuenta[cc.id as number] ?? 0;
+          const totalPrice = Number(cc.precio_final);
+          const pendingBalance = Math.max(0, totalPrice - totalPaid);
+
+          let status: AdditionalProduct["status"];
+          if (totalPaid === 0) status = "pendiente";
+          else if (pendingBalance > 0) status = "financiado";
+          else status = "pagado";
+
+          const ps = productosMap[oferta.productoId];
+          const prod: AdditionalProduct = {
+            id: String(cc.id),
+            name: ps?.nombre ?? "Producto",
+            description: ps?.descripcion ?? undefined,
+            totalPrice,
+            totalPaid,
+            pendingBalance,
+            status,
+            documents: [],
+          };
+
+          const propId = oferta.propiedadId;
+          if (!productsByPropId[propId]) productsByPropId[propId] = [];
+          productsByPropId[propId].push(prod);
+        }
+      }
+    }
+  }
 
   // 3. Parallel: properties + payments + payment schedule + persona
   const [propiedadesRes, pagosRes, acuerdosRes, personaRes] = await Promise.all([
@@ -193,7 +282,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
   // 4. Get edificios_modelos for project chain
   const edificioModeloIds = [...new Set(propiedades.map((p) => p.id_edificio_modelo as number).filter(Boolean))];
-  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona);
+  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId);
 
   const { data: edificiosModelos } = await supabase
     .from("edificios_modelos")
@@ -240,6 +329,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     pagoInfoPorAcuerdo,
     metodosMap,
     persona,
+    productsByPropId,
   );
 }
 
@@ -264,6 +354,7 @@ function buildFromData(
   pagoInfoPorAcuerdo: Record<number, PagoInfo> = {},
   metodosMap: Record<number, string> = {},
   persona: { nombre_legal: string | null; rfc: string | null } | null = null,
+  productsByPropId: Record<number, AdditionalProduct[]> = {},
 ): InvestmentProperty[] {
   const propMap = Object.fromEntries(propiedades.map((p) => [p.id as number, p]));
   const emMap = Object.fromEntries(edificiosModelos.map((em) => [em.id as number, em]));
@@ -367,7 +458,7 @@ function buildFromData(
               history: [],
             }
           : undefined,
-      additionalProducts: [],
+      additionalProducts: productsByPropId[cc.id_propiedad as number] ?? [],
     };
   });
 }
