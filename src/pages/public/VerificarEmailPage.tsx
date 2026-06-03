@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Mail, RefreshCw, ArrowLeft } from "lucide-react";
 import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 
 export default function VerificarEmailPage() {
   const { ofertaId } = useParams<{ ofertaId: string }>();

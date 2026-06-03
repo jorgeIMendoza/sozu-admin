@@ -1,73 +1,94 @@
 import { useState } from "react";
 import { Package, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import type { AdditionalProduct } from "@/lib/portal-cliente/mock-data";
+import type { AdditionalProduct } from "@/lib/portal-cliente/types";
 import ProductDetailSheet from "./ProductDetailSheet";
 import { fmtMXN as fmt } from "@/lib/utils";
 
-interface AdditionalProductsProps {
+interface Props {
   products: AdditionalProduct[];
 }
 
-const statusConfig: Record<AdditionalProduct["status"], { label: string; className: string }> = {
-  pendiente: { label: "Pendiente", className: "bg-warning/15 text-warning-foreground border-warning/30" },
-  financiado: { label: "Financiado", className: "bg-primary/10 text-primary border-primary/30" },
-  pagado: { label: "Pagado", className: "bg-success/15 text-success border-success/30" },
-  entregado: { label: "Entregado", className: "bg-success/15 text-success border-success/30" },
+const STATUS_CFG: Record<AdditionalProduct["status"], { label: string; dot: string; badge: string }> = {
+  pendiente:  { label: "Pendiente",  dot: "bg-warning",         badge: "bg-warning/15 text-warning border-warning/30" },
+  financiado: { label: "En curso",   dot: "bg-primary",         badge: "bg-primary/10 text-primary border-primary/30" },
+  pagado:     { label: "Pagado",     dot: "bg-success",         badge: "bg-success/15 text-success border-success/30" },
+  entregado:  { label: "Entregado",  dot: "bg-success",         badge: "bg-success/15 text-success border-success/30" },
 };
 
-const AdditionalProducts = ({ products }: AdditionalProductsProps) => {
+const AdditionalProducts = ({ products }: Props) => {
   const [selected, setSelected] = useState<AdditionalProduct | null>(null);
 
   if (!products.length) return null;
 
   return (
-    <section className="px-5 py-4">
-      <h4 className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mb-2">
-        Productos adicionales
-      </h4>
+    <>
+      <div className="px-5 pt-5 pb-4 space-y-2.5">
+        <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-muted-foreground mb-3">
+          Productos adicionales · {products.length}
+        </p>
 
-      <div className="space-y-2.5">
-        {products.map((product) => {
-          const progress = product.totalPrice > 0
-            ? (product.totalPaid / product.totalPrice) * 100
-            : 0;
-          const cfg = statusConfig[product.status];
+        {products.map((p) => {
+          const cfg = STATUS_CFG[p.status];
+          const paidPct = p.totalPrice > 0 ? Math.round((p.totalPaid / p.totalPrice) * 100) : 0;
 
           return (
             <button
-              key={product.id}
-              onClick={() => setSelected(product)}
-              className="w-full bg-card rounded-xl border border-border p-4 text-left transition-colors hover:bg-muted/50 active:bg-muted group"
+              key={p.id}
+              onClick={() => setSelected(p)}
+              className="w-full text-left rounded-xl border border-border bg-secondary/30 hover:bg-secondary/60 active:bg-secondary transition-colors overflow-hidden group"
             >
-              <div className="flex items-start justify-between gap-3 mb-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-                    <Package className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
-                    <p className="text-xs text-muted-foreground tabular-nums">{fmt(product.totalPrice)}</p>
-                  </div>
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                {/* Icon */}
+                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-4 h-4 text-primary" />
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${cfg.className}`}>
-                    {cfg.label}
-                  </Badge>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30" />
-                </div>
-              </div>
 
-              {product.pendingBalance > 0 && (
-                <div className="space-y-1.5">
-                  <Progress value={progress} className="h-1.5 bg-secondary" />
-                  <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
-                    <span>Pagado {fmt(product.totalPaid)}</span>
-                    <span>Pendiente {fmt(product.pendingBalance)}</span>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+                      {p.name}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] px-1.5 py-0 h-4 leading-none flex-shrink-0 ${cfg.badge}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1 inline-block`} />
+                      {cfg.label}
+                    </Badge>
+                  </div>
+
+                  {/* Progress bar */}
+                  {p.totalPrice > 0 && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${p.status === "pagado" || p.status === "entregado" ? "bg-success" : "bg-primary"}`}
+                          style={{ width: `${paidPct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground tabular-nums flex-shrink-0">
+                        {paidPct}%
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Amounts */}
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-[11px] font-semibold text-foreground tabular-nums">
+                      {fmt(p.totalPrice)}
+                    </span>
+                    {p.pendingBalance > 0 && (
+                      <span className="text-[10px] text-muted-foreground tabular-nums">
+                        · {fmt(p.pendingBalance)} pendiente
+                      </span>
+                    )}
                   </div>
                 </div>
-              )}
+
+                <ChevronRight className="w-4 h-4 text-muted-foreground/40 flex-shrink-0 group-hover:text-muted-foreground transition-colors" />
+              </div>
             </button>
           );
         })}
@@ -78,7 +99,7 @@ const AdditionalProducts = ({ products }: AdditionalProductsProps) => {
         open={!!selected}
         onClose={() => setSelected(null)}
       />
-    </section>
+    </>
   );
 };
 

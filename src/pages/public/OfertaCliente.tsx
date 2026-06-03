@@ -15,7 +15,7 @@ import AgentCard from "@/components/offer/AgentCard";
 import AgentSignature from "@/components/offer/AgentSignature";
 import DevelopmentPresenceSection from "@/components/offer/DevelopmentPresenceSection";
 import FormalReservationGateModal from "@/components/offer/FormalReservationGateModal";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 
 // ─── Mock assets locales ─────────────────────────────────────────────────────
 import obra1 from "@/assets/obra-daiku-1.jpg";
