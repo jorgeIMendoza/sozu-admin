@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronRight, Search } from "lucide-react";
 import PaymentHistoryView from "@/components/admin/portal-cliente/PaymentHistoryView";
@@ -21,13 +21,6 @@ const ClienteHistorialPagos = () => {
   const [search, setSearch] = useState("");
 
   const propertyId = searchParams.get("p");
-
-  // Auto-select when only 1 property
-  useEffect(() => {
-    if (!propertyId && portfolio.length === 1 && portfolio[0]) {
-      setSearchParams({ p: portfolio[0].property.id }, { replace: true });
-    }
-  }, [portfolio, propertyId, setSearchParams]);
 
   const selected = portfolio.find(inv => inv.property.id === propertyId) ?? null;
 

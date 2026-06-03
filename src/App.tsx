@@ -152,6 +152,7 @@ const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-clien
 const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
 const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
 const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
+const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
 
 // Portal Cobranza pages
 const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
@@ -451,6 +452,7 @@ const App = () => (
                     <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                     <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                     <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                    <Route path="portal-cliente/productos" element={<ClienteProductos />} />
                     <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                     <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                     <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
@@ -606,6 +608,7 @@ const App = () => (
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                   <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                   <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                  <Route path="portal-cliente/productos" element={<ClienteProductos />} />
                   <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
