@@ -23,7 +23,7 @@ import {
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
-import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
+import { useCompradoresFullDetail, type CompradorFullDetail } from '@/hooks/useCompradoresFullDetail';
 import { useFormaPagoOferta, type FormaPagoOferta } from '@/hooks/useFormaPagoOferta';
 import {
   useBitacoraCuentaCobranza,
@@ -2947,95 +2947,111 @@ export default function CaseDetail() {
             </TabsContent>
 
             <TabsContent value="documents" className="mt-0">
-              <div className="panel">
-                {documents.length === 0 ? (
-                  <div className="panel-body text-center py-20">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
-                      <FileText className="h-6 w-6 text-muted-foreground/50" />
+              {realRequest ? (
+                <ContrapartesDocumentos
+                  compradores={realRequest?.compradoresDetalle ?? []}
+                  fullByPersona={compradoresFull ?? {}}
+                  bitacora={bitacoraEntries}
+                />
+              ) : (
+                <div className="panel">
+                  {documents.length === 0 ? (
+                    <div className="panel-body text-center py-20">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+                        <FileText className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Sin documentos generados</p>
+                      <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">Aparecerán una vez aprobado para generación.</p>
                     </div>
-                    <p className="text-sm font-medium text-foreground">Sin documentos generados</p>
-                    <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">Aparecerán una vez aprobado para generación.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/50">
-                    {documents.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(28_72%_94%)]">
-                            <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
-                          </div>
-                          <div>
-                            <p className="text-[14px] font-medium">{doc.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`status-badge ${DOCUMENT_STATUS_CONFIG[doc.status].style}`}>
-                                {DOCUMENT_STATUS_CONFIG[doc.status].label}
-                              </span>
-                              {doc.generatedAt && <span className="text-[11px] text-muted-foreground/60">{formatDate(doc.generatedAt)}</span>}
+                  ) : (
+                    <div className="divide-y divide-border/50">
+                      {documents.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(28_72%_94%)]">
+                              <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
+                            </div>
+                            <div>
+                              <p className="text-[14px] font-medium">{doc.name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`status-badge ${DOCUMENT_STATUS_CONFIG[doc.status].style}`}>
+                                  {DOCUMENT_STATUS_CONFIG[doc.status].label}
+                                </span>
+                                {doc.generatedAt && <span className="text-[11px] text-muted-foreground/60">{formatDate(doc.generatedAt)}</span>}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            {doc.pdfUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Download className="h-4 w-4" /></Button>}
+                            {doc.googleDocUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Eye className="h-4 w-4" /></Button>}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {doc.pdfUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Download className="h-4 w-4" /></Button>}
-                          {doc.googleDocUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Eye className="h-4 w-4" /></Button>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="signers" className="mt-0">
-              <div className="panel">
-                {signers.length === 0 ? (
-                  <div className="panel-body text-center py-20">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
-                      <Users className="h-6 w-6 text-muted-foreground/50" />
+              {realRequest ? (
+                <ContrapartesFirmantes
+                  compradores={realRequest?.compradoresDetalle ?? []}
+                  fullByPersona={compradoresFull ?? {}}
+                  bitacora={bitacoraEntries}
+                />
+              ) : (
+                <div className="panel">
+                  {signers.length === 0 ? (
+                    <div className="panel-body text-center py-20">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+                        <Users className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Sin firmantes configurados</p>
                     </div>
-                    <p className="text-sm font-medium text-foreground">Sin firmantes configurados</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left border-b">
-                          <th className="table-head">Nombre</th>
-                          <th className="table-head">Rol</th>
-                          <th className="table-head">KYC</th>
-                          <th className="table-head">Biométrico</th>
-                          <th className="table-head">Firma</th>
-                          <th className="table-head">Fecha</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {signers.map((s) => (
-                          <tr key={s.id} className="border-t border-border/50 table-row-hover" style={{ height: '52px' }}>
-                            <td className="table-cell">
-                              <p className="font-medium text-[14px]">{s.name}</p>
-                              <p className="text-[12px] text-muted-foreground/60 mt-0.5">{s.email}</p>
-                            </td>
-                            <td className="table-cell">
-                              <span className={`badge-base ${s.role === 'internal' ? 'badge-case' : 'badge-signer'}`}>
-                                {s.role === 'internal' ? 'Interno' : 'Externo'}
-                              </span>
-                            </td>
-                            <td className="table-cell"><MicroStatus status={s.kycStatus || 'not_required'} /></td>
-                            <td className="table-cell"><MicroStatus status={s.biometricStatus || 'not_required'} /></td>
-                            <td className="table-cell">
-                              <span className={`status-badge ${SIGNER_STATUS_CONFIG[s.status].style}`}>
-                                {SIGNER_STATUS_CONFIG[s.status].label}
-                              </span>
-                            </td>
-                            <td className="table-cell text-[13px] text-muted-foreground font-mono tabular-nums">
-                              {s.signedAt ? formatTime(s.signedAt) : '—'}
-                            </td>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left border-b">
+                            <th className="table-head">Nombre</th>
+                            <th className="table-head">Rol</th>
+                            <th className="table-head">KYC</th>
+                            <th className="table-head">Biométrico</th>
+                            <th className="table-head">Firma</th>
+                            <th className="table-head">Fecha</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                        </thead>
+                        <tbody>
+                          {signers.map((s) => (
+                            <tr key={s.id} className="border-t border-border/50 table-row-hover" style={{ height: '52px' }}>
+                              <td className="table-cell">
+                                <p className="font-medium text-[14px]">{s.name}</p>
+                                <p className="text-[12px] text-muted-foreground/60 mt-0.5">{s.email}</p>
+                              </td>
+                              <td className="table-cell">
+                                <span className={`badge-base ${s.role === 'internal' ? 'badge-case' : 'badge-signer'}`}>
+                                  {s.role === 'internal' ? 'Interno' : 'Externo'}
+                                </span>
+                              </td>
+                              <td className="table-cell"><MicroStatus status={s.kycStatus || 'not_required'} /></td>
+                              <td className="table-cell"><MicroStatus status={s.biometricStatus || 'not_required'} /></td>
+                              <td className="table-cell">
+                                <span className={`status-badge ${SIGNER_STATUS_CONFIG[s.status].style}`}>
+                                  {SIGNER_STATUS_CONFIG[s.status].label}
+                                </span>
+                              </td>
+                              <td className="table-cell text-[13px] text-muted-foreground font-mono tabular-nums">
+                                {s.signedAt ? formatTime(s.signedAt) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="integrations" className="mt-0">
@@ -3454,4 +3470,322 @@ function MicroStatus({ status }: { status: string }) {
   };
   const s = styles[status] || styles.not_required;
   return <span className={`text-[13px] font-medium ${s.cls}`}>{s.label}</span>;
+}
+
+function ContrapartesDocumentos({
+  compradores,
+  fullByPersona,
+  bitacora,
+}: {
+  compradores: CompradorDetalle[];
+  fullByPersona: Record<number, CompradorFullDetail>;
+  bitacora: BitacoraEntry[];
+}) {
+  if (compradores.length === 0) {
+    return (
+      <div className="panel">
+        <div className="panel-body text-center py-20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+            <Users className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Sin contrapartes registradas</p>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
+            Los documentos de los involucrados que firmarán el contrato aparecerán aquí.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {compradores.map((cp) => {
+        const full = fullByPersona[cp.idPersona];
+        const docs = full?.documentos ?? [];
+        const isPm = cp.tipoPersona === 'pm';
+        const initials = cp.name
+          .split(' ')
+          .map((n) => n[0])
+          .filter(Boolean)
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+        return (
+          <div key={cp.idPersona} className="panel">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center gap-3">
+              <div
+                className={`h-10 w-10 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                  isPm
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {isPm ? <Building2 className="h-4 w-4" /> : initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold leading-tight truncate">{cp.name}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                      isPm
+                        ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {isPm ? 'Persona moral' : cp.tipoPersona === 'pe' ? 'Persona extranjera' : 'Persona física'}
+                  </span>
+                  {cp.rfc && (
+                    <span className="text-[11px] text-muted-foreground/60 font-mono">{cp.rfc}</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Documentos</p>
+                <p className="text-[14px] font-semibold tabular-nums">{docs.length}</p>
+              </div>
+            </div>
+            {docs.length === 0 ? (
+              <div className="px-5 py-6 text-[13px] text-muted-foreground italic">
+                Documentación pendiente de cargar.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {docs.map((doc) => {
+                  const st = getValidationState(bitacora, 'documento', {
+                    idPersona: cp.idPersona,
+                    idDocumento: doc.id,
+                  });
+                  return (
+                    <div key={doc.id} className="flex items-center justify-between px-5 py-3 gap-3">
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 min-w-0 flex-1 group"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[hsl(28_72%_94%)] shrink-0">
+                          <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium truncate group-hover:text-primary group-hover:underline underline-offset-2 decoration-primary/40">
+                            {doc.tipoDocumentoNombre}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground/60">
+                            {new Date(doc.fechaCreacion).toLocaleDateString('es-MX', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                      </a>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <ValidationStatusBadge status={st.status} />
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted/60 text-muted-foreground"
+                          title="Ver documento"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ContrapartesFirmantes({
+  compradores,
+  fullByPersona,
+  bitacora,
+}: {
+  compradores: CompradorDetalle[];
+  fullByPersona: Record<number, CompradorFullDetail>;
+  bitacora: BitacoraEntry[];
+}) {
+  if (compradores.length === 0) {
+    return (
+      <div className="panel">
+        <div className="panel-body text-center py-20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+            <Users className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Sin contrapartes registradas</p>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
+            Las personas y empresas que firmarán el contrato aparecerán aquí.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isCopropiedad = compradores.length > 1;
+
+  return (
+    <div className="space-y-4">
+      {isCopropiedad && (
+        <div className="rounded-lg border border-[hsl(var(--status-info)/0.4)] bg-[hsl(var(--status-info)/0.05)] px-4 py-3 flex items-start gap-2">
+          <Info className="h-4 w-4 text-[hsl(var(--status-info))] mt-0.5 shrink-0" />
+          <p className="text-[12px] text-foreground/80">
+            <span className="font-medium">Copropiedad:</span> {compradores.length} firmantes deberán
+            firmar el contrato. Cada uno aparece como una sección independiente con su información y
+            documentación.
+          </p>
+        </div>
+      )}
+
+      {compradores.map((cp, idx) => {
+        const full = fullByPersona[cp.idPersona];
+        const docs = full?.documentos ?? [];
+        const isPm = cp.tipoPersona === 'pm';
+        const initials = cp.name
+          .split(' ')
+          .map((n) => n[0])
+          .filter(Boolean)
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+
+        const basicaState = getValidationState(bitacora, 'comprador_basica', { idPersona: cp.idPersona });
+        const direccionState = getValidationState(bitacora, 'comprador_direccion', { idPersona: cp.idPersona });
+        const fiscalState = getValidationState(bitacora, 'comprador_fiscal', { idPersona: cp.idPersona });
+
+        return (
+          <div key={cp.idPersona} className="panel">
+            <div className="px-5 py-4 border-b border-border/50 flex items-start gap-3">
+              <div
+                className={`h-11 w-11 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 ${
+                  isPm
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {isPm ? <Building2 className="h-5 w-5" /> : initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[14px] font-semibold leading-tight truncate">{cp.name}</p>
+                  {isCopropiedad && (
+                    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      Firmante {idx + 1} de {compradores.length}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span
+                    className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                      isPm
+                        ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {isPm ? 'Persona moral' : cp.tipoPersona === 'pe' ? 'Persona extranjera' : 'Persona física'}
+                  </span>
+                  {cp.porcentajeCopropiedad != null && (
+                    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]">
+                      {cp.porcentajeCopropiedad}% copropiedad
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <InfoCell label="RFC" value={cp.rfc || full?.basica.rfc || '—'} mono />
+                <InfoCell label="Email" value={cp.email || full?.basica.email || '—'} />
+                <InfoCell label="Teléfono" value={cp.phone || full?.basica.telefono || '—'} mono />
+                {isPm && full?.basica.representanteLegal && (
+                  <InfoCell label="Representante legal" value={full.basica.representanteLegal} />
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <ValidationChip label="Información básica" status={basicaState.status} />
+                <ValidationChip label="Dirección" status={direccionState.status} />
+                <ValidationChip label="Fiscal" status={fiscalState.status} />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">
+                    Documentos del firmante
+                  </p>
+                  <span className="text-[11px] text-muted-foreground/60 tabular-nums">{docs.length}</span>
+                </div>
+                {docs.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground italic">
+                    Documentación pendiente de cargar.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {docs.map((doc) => {
+                      const st = getValidationState(bitacora, 'documento', {
+                        idPersona: cp.idPersona,
+                        idDocumento: doc.id,
+                      });
+                      return (
+                        <a
+                          key={doc.id}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/30 transition-colors gap-2 group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                            <span className="text-[13px] truncate group-hover:text-primary group-hover:underline underline-offset-2 decoration-primary/40">
+                              {doc.tipoDocumentoNombre}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <ValidationStatusBadge status={st.status} />
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ValidationChip({
+  label,
+  status,
+}: {
+  label: string;
+  status: 'validado' | 'rechazado' | 'pendiente';
+}) {
+  const styles = {
+    validado: 'bg-primary/10 text-primary border-primary/20',
+    rechazado: 'bg-destructive/10 text-destructive border-destructive/30',
+    pendiente: 'bg-muted text-muted-foreground border-border',
+  } as const;
+  const labelMap = {
+    validado: 'Validado',
+    rechazado: 'Rechazado',
+    pendiente: 'Pendiente',
+  } as const;
+  return (
+    <div className={`rounded-md border px-2 py-1.5 text-center ${styles[status]}`}>
+      <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70">{label}</p>
+      <p className="text-[12px] font-semibold mt-0.5">{labelMap[status]}</p>
+    </div>
+  );
 }
