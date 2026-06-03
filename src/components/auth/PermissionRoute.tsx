@@ -42,14 +42,6 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow portal-escrituracion routes only for Super Admin
-  if (location.pathname.startsWith('/admin/portal-escrituracion')) {
-    if (profile?.rol_id === 1) {
-      return <>{children}</>;
-    }
-    return <Navigate to="/admin/access-denied" replace />;
-  }
-
   // Allow portal-embajador routes para el rol Embajador y para Super Admin / Admin (impersonación)
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
@@ -112,6 +104,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoLegalFlow
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal de Escrituración: varias rutas (expedientes, unidades, relacion-pagos, etc.)
+  // pueden no tener un submenu propio en allowedPaths. Si el rol tiene permiso sobre
+  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual que
+  // portal-administracion y legal-flow). Antes este gate estaba hardcodeado a rol_id 1,
+  // lo que daba 403 a roles como Administrador de Finanzas pese a tener el permiso en DB.
+  if (location.pathname.startsWith('/admin/portal-escrituracion')) {
+    let tieneAccesoEscrituracion = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-escrituracion')) {
+        tieneAccesoEscrituracion = true;
+        break;
+      }
+    }
+    return tieneAccesoEscrituracion
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }
