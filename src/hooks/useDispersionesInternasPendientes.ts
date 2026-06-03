@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Hook que entrega las cuentas de cobranza con al menos una comisión interna
- * autorizada por Dirección y todavía pendiente de dispersar al equipo SOZU.
+ * pendiente de dispersar al equipo SOZU.
  *
  * Filtros aplicados (alineados con el flujo "Bandeja de Ejecución"):
  *
@@ -11,16 +11,21 @@ import { supabase } from "@/integrations/supabase/client";
  *   2. cuentas_cobranza.id_cuenta_cobranza_padre IS NULL  (excluye mantenimiento)
  *   3. cuentas_cobranza.precio_final > 0
  *   4. propiedades.id_estatus_disponibilidad = 5          (Vendida)
- *   5. Existe al menos un `comisionistas` con
- *        activo = true AND aprobada = true AND pagada = false
+ *   5. Existe al menos un `comisionistas` con activo = true Y pagada = false
+ *      (independiente de `aprobada`: las que aún no están aprobadas se
+ *      muestran con estatus "Pendiente aprobación AD").
  *
- * Grano: una fila por cuenta_cobranza (no por comisionista). "Comisión a
- * dispersar" suma los montos de todos los comisionistas pendientes de esa
- * cuenta — fórmula consistente con AprobacionComisiones.tsx:
+ * Grano: una fila por cuenta_cobranza. Para cada cuenta se separa:
+ *   - `monto_a_dispersar`: suma de comisionistas aprobados-no-pagados
+ *      (lo que el Portal de Administración puede ejecutar ya).
+ *   - `monto_pendiente_aprobacion`: suma de comisionistas aún sin
+ *      autorizar por Alta Dirección.
  *
  *   monto_comisionista = precio_final * (porcentaje_comision / 100)
  *                      * (iva_incluido ? 1.16 : 1)
  */
+
+export type EstadoAprobacionDispersion = "aprobado" | "parcial" | "pendiente";
 
 export type DispersionInternaPendiente = {
   id_cuenta_cobranza: number;
@@ -33,9 +38,15 @@ export type DispersionInternaPendiente = {
   numero_departamento: string | null;
   precio_final: number;
   iva_incluido: boolean;
-  /** Suma de las comisiones internas pendientes de dispersar (con IVA si aplica). */
+  /** Suma de comisionistas aprobados-no-pagados (con IVA si aplica). */
   monto_a_dispersar: number;
-  /** Cantidad de comisionistas pendientes — útil para el drawer / tooltip. */
+  /** Suma de comisionistas aún sin autorizar por Alta Dirección. */
+  monto_pendiente_aprobacion: number;
+  comisionistas_aprobados: number;
+  comisionistas_pendientes_aprobacion: number;
+  /** "aprobado" = todos autorizados · "pendiente" = ninguno · "parcial" = mezcla. */
+  estado_aprobacion: EstadoAprobacionDispersion;
+  /** @deprecated reservado para compat; equivale a `comisionistas_aprobados`. */
   comisionistas_pendientes: number;
   fecha_compra: string | null;
 };
@@ -48,16 +59,15 @@ const formatId = (id: number, tipo: DispersionInternaPendiente["tipo"]) =>
     : `CC-${PAD_ID(id)}`;
 
 async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaPendiente[]> {
-  // 1) Comisionistas autorizados y aún no pagados. Estos son los que
-  //    realmente disparan la presencia de una cuenta en esta bandeja.
+  // 1) Comisionistas no pagados. Disparan la presencia de la cuenta en la
+  //    bandeja. Separamos aprobados-por-AD de pendientes-aprobación.
   const comRows: Array<any> = [];
   const PAGE = 1000;
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = (await (supabase as any)
       .from("comisionistas")
-      .select("id_cuenta_cobranza, porcentaje_comision")
+      .select("id_cuenta_cobranza, porcentaje_comision, aprobada")
       .eq("activo", true)
-      .eq("aprobada", true)
       .eq("pagada", false)
       .range(offset, offset + PAGE - 1)) as any;
     if (error) throw error;
@@ -68,13 +78,32 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   }
   if (!comRows.length) return [];
 
-  // Agrupa por cuenta: suma de porcentaje y conteo de comisionistas.
-  const comAggMap = new Map<number, { sumPct: number; count: number }>();
+  // Agrupa por cuenta: porcentaje y conteo separando aprobados / pendientes.
+  type Agg = {
+    sumPctAprobados: number;
+    countAprobados: number;
+    sumPctPendientes: number;
+    countPendientes: number;
+  };
+  const comAggMap = new Map<number, Agg>();
   for (const c of comRows) {
     const idCc = c.id_cuenta_cobranza as number;
     const pct = Number(c.porcentaje_comision ?? 0);
-    const prev = comAggMap.get(idCc) ?? { sumPct: 0, count: 0 };
-    comAggMap.set(idCc, { sumPct: prev.sumPct + pct, count: prev.count + 1 });
+    const prev =
+      comAggMap.get(idCc) ?? {
+        sumPctAprobados: 0,
+        countAprobados: 0,
+        sumPctPendientes: 0,
+        countPendientes: 0,
+      };
+    if (c.aprobada === true) {
+      prev.sumPctAprobados += pct;
+      prev.countAprobados += 1;
+    } else {
+      prev.sumPctPendientes += pct;
+      prev.countPendientes += 1;
+    }
+    comAggMap.set(idCc, prev);
   }
   const ccIds = Array.from(comAggMap.keys());
 
@@ -207,11 +236,23 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       tipo = cat === "servicios" ? "Servicio" : "Producto";
     }
 
-    const agg = comAggMap.get(c.id) ?? { sumPct: 0, count: 0 };
+    const agg = comAggMap.get(c.id) ?? {
+      sumPctAprobados: 0,
+      countAprobados: 0,
+      sumPctPendientes: 0,
+      countPendientes: 0,
+    };
     const precio = Number(c.precio_final ?? 0);
-    const subtotal = (precio * agg.sumPct) / 100;
-    const total = c.iva_incluido ? subtotal * 1.16 : subtotal;
-    if (total <= 0) continue;
+    const ivaMult = c.iva_incluido ? 1.16 : 1;
+    const montoAprobados = ((precio * agg.sumPctAprobados) / 100) * ivaMult;
+    const montoPendientes = ((precio * agg.sumPctPendientes) / 100) * ivaMult;
+    const totalBruto = montoAprobados + montoPendientes;
+    if (totalBruto <= 0) continue;
+
+    let estado: EstadoAprobacionDispersion;
+    if (agg.countAprobados > 0 && agg.countPendientes === 0) estado = "aprobado";
+    else if (agg.countAprobados === 0 && agg.countPendientes > 0) estado = "pendiente";
+    else estado = "parcial";
 
     result.push({
       id_cuenta_cobranza: c.id,
@@ -224,8 +265,12 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       numero_departamento: propiedad?.numero_propiedad ?? null,
       precio_final: precio,
       iva_incluido: !!c.iva_incluido,
-      monto_a_dispersar: total,
-      comisionistas_pendientes: agg.count,
+      monto_a_dispersar: montoAprobados,
+      monto_pendiente_aprobacion: montoPendientes,
+      comisionistas_aprobados: agg.countAprobados,
+      comisionistas_pendientes_aprobacion: agg.countPendientes,
+      estado_aprobacion: estado,
+      comisionistas_pendientes: agg.countAprobados,
       fecha_compra: c.fecha_compra ?? null,
     });
   }

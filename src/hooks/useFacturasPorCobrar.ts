@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { fetchAllRows } from "@/utils/supabasePagination";
 
 export type EstadoFacturaPorCobrar =
   | "timbrada_pendiente"
@@ -73,33 +74,36 @@ export function useFacturasPorCobrar() {
   return useQuery({
     queryKey: ["facturas_por_cobrar_alta_direccion"],
     queryFn: async (): Promise<FacturaPorCobrar[]> => {
-      const { data: cuentas, error: cuentasError } = await supabase
-        .from("cuentas_cobranza")
-        .select(
-          `
-          id,
-          id_oferta,
-          precio_final,
-          porcentaje_comision_venta,
-          fecha_compra,
-          fecha_pago_comision,
-          es_pagada_comision_venta,
-          monto_comision_pagado,
-          url_factura_comision,
-          url_factura_xml_comision,
-          es_draft_factura_comision,
-          iva_incluido,
-          id_tipo_cancelacion
-        `,
-        )
-        .eq("activo", true)
-        .eq("es_aprobado", true)
-        .is("id_cuenta_cobranza_padre", null)
-        .not("fecha_compra", "is", null)
-        .order("fecha_compra", { ascending: false });
+      // Hay >1000 cuentas — pagina hasta agotar para evitar truncado de PostgREST.
+      const cuentas = await fetchAllRows((from, to) =>
+        supabase
+          .from("cuentas_cobranza")
+          .select(
+            `
+            id,
+            id_oferta,
+            precio_final,
+            porcentaje_comision_venta,
+            fecha_compra,
+            fecha_pago_comision,
+            es_pagada_comision_venta,
+            monto_comision_pagado,
+            url_factura_comision,
+            url_factura_xml_comision,
+            es_draft_factura_comision,
+            iva_incluido,
+            id_tipo_cancelacion
+          `,
+          )
+          .eq("activo", true)
+          .eq("es_aprobado", true)
+          .is("id_cuenta_cobranza_padre", null)
+          .not("fecha_compra", "is", null)
+          .order("fecha_compra", { ascending: false })
+          .range(from, to),
+      );
 
-      if (cuentasError) throw cuentasError;
-      if (!cuentas || cuentas.length === 0) return [];
+      if (cuentas.length === 0) return [];
 
       const ofertaIds = Array.from(
         new Set(cuentas.map((c) => c.id_oferta).filter((v): v is number => v != null)),

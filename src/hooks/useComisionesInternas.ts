@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/utils/supabasePagination";
 
 export type EstadoComisionInterna =
   | "devengada"
@@ -62,14 +63,18 @@ export function useComisionesInternas() {
   return useQuery({
     queryKey: ["comisiones_internas_alta_direccion"],
     queryFn: async (): Promise<ComisionInterna[]> => {
-      const { data: comisionistas, error: cmErr } = await supabase
-        .from("comisionistas")
-        .select(
-          "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, fecha_actualizacion",
-        )
-        .eq("activo", true);
-      if (cmErr) throw cmErr;
-      if (!comisionistas || comisionistas.length === 0) return [];
+      // Lee todas las filas — `comisionistas` puede superar 1000 sumando
+      // entre todas las cuentas. Sin paginación, PostgREST trunca.
+      const comisionistas = await fetchAllRows((from, to) =>
+        supabase
+          .from("comisionistas")
+          .select(
+            "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, pagada, fecha_pago_comision, fecha_creacion, fecha_actualizacion",
+          )
+          .eq("activo", true)
+          .range(from, to),
+      );
+      if (comisionistas.length === 0) return [];
 
       const emails = Array.from(
         new Set(comisionistas.map((c) => c.email_usuario).filter((v): v is string => !!v)),

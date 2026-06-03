@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -111,6 +112,7 @@ export default function AdministracionComisionesExternasPage() {
   const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [estadoPagoFilter, setEstadoPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionExterna | null>(null);
+  const [page, setPage] = useState(0);
   const navigate = useNavigate();
 
   const { data: comisiones = [], isLoading, error } = useComisionesExternas();
@@ -139,6 +141,12 @@ export default function AdministracionComisionesExternasPage() {
       return true;
     });
   }, [search, proyectoFilter, tipoFilter, estadoPagoFilter, comisiones]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+  const filteredPage = useMemo(
+    () => filtered.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [filtered, page],
+  );
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -387,7 +395,7 @@ export default function AdministracionComisionesExternasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((c) => {
+                {filteredPage.map((c) => {
                   const sinCobro = !c.ya_se_cobro_al_desarrollador;
                   const alerta =
                     c.dias_desde_devengo > 15 &&
@@ -497,6 +505,12 @@ export default function AdministracionComisionesExternasPage() {
                 })}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={filtered.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>
