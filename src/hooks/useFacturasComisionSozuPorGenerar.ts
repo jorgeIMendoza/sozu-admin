@@ -382,7 +382,7 @@ export function useGenerarFacturaComisionSozu() {
         "generar-factura-comision-sozu",
         { body: { id_cuenta_cobranza, environment: ENVIRONMENT } },
       );
-      if (error) throw error;
+      if (error) throw await extractEdgeFunctionError(error, "generar CFDI de comisión");
       return data as { not_applicable?: boolean; already_exists?: boolean; message?: string };
     },
     onSuccess: () => {
@@ -408,7 +408,7 @@ export function useTimbrarFacturaComisionSozu() {
         "timbrar-factura-comision-sozu",
         { body: { id_cuenta_cobranza, environment: ENVIRONMENT } },
       );
-      if (error) throw error;
+      if (error) throw await extractEdgeFunctionError(error, "timbrar CFDI de comisión");
       return data as { message?: string };
     },
     onSuccess: () => {
@@ -417,4 +417,41 @@ export function useTimbrarFacturaComisionSozu() {
       queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
     },
   });
+}
+
+/**
+ * Cuando una Edge Function responde con un status >= 400, supabase-js
+ * lanza un `FunctionsHttpError` con un mensaje genérico
+ * ("Edge Function returned a non-2xx status code") y la respuesta real
+ * vive en `error.context` (objeto `Response`). Este helper extrae el
+ * `message` del JSON de la respuesta y devuelve un `Error` con el
+ * detalle real para que el toast del UI muestre algo accionable.
+ */
+async function extractEdgeFunctionError(error: any, fallbackAction: string): Promise<Error> {
+  try {
+    const ctx = error?.context;
+    if (ctx) {
+      let body: any = null;
+      if (typeof ctx.json === "function") {
+        try { body = await ctx.clone().json(); } catch { /* ignore */ }
+      }
+      if (!body && typeof ctx.text === "function") {
+        try {
+          const txt = await ctx.clone().text();
+          if (txt) {
+            try { body = JSON.parse(txt); } catch { body = { message: txt }; }
+          }
+        } catch { /* ignore */ }
+      }
+      const msg = body?.message || body?.error || body?.detail;
+      if (msg && typeof msg === "string") {
+        return new Error(msg);
+      }
+    }
+  } catch {
+    /* fallthrough */
+  }
+  return new Error(
+    (error?.message as string | undefined) ?? `No fue posible ${fallbackAction}.`,
+  );
 }
