@@ -1,4 +1,171 @@
 name: Deploy Frontend to Firebase
 
 on:
-  push
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.5.0
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_GCP_PRD || secrets.FIREBASE_GCP_DEV }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get secrets from Secret Manager
+        id: gcp-secrets
+        run: |
+          PROJECT_ID=${{ github.ref == 'refs/heads/main' && 'sozu-admin-prd' || 'sozu-admin-dev' }}
+
+          echo "=== Intentando extraer secretos del proyecto: $PROJECT_ID ==="
+
+          VITE_SUPABASE_URL=$(gcloud secrets versions access latest --secret=VITE_SUPABASE_URL --project=$PROJECT_ID 2>&1)
+          echo "VITE_SUPABASE_URL obtenido: $VITE_SUPABASE_URL"
+          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" >> $GITHUB_ENV
+
+          VITE_SUPABASE_PUBLISHABLE_KEY=$(gcloud secrets versions access latest --secret=VITE_SUPABASE_PUBLISHABLE_KEY --project=$PROJECT_ID 2>&1)
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY obtenido (primeros 20 chars): ${VITE_SUPABASE_PUBLISHABLE_KEY:0:20}..."
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY" >> $GITHUB_ENV
+
+          VITE_ENVIRONMENT=$(gcloud secrets versions access latest --secret=VITE_ENVIRONMENT --project=$PROJECT_ID 2>&1)
+          echo "VITE_ENVIRONMENT obtenido: $VITE_ENVIRONMENT"
+          echo "VITE_ENVIRONMENT=$VITE_ENVIRONMENT" >> $GITHUB_ENV
+
+          VITE_N8N_WEBHOOK_BASE_URL=$(gcloud secrets versions access latest --secret=VITE_N8N_WEBHOOK_BASE_URL --project=$PROJECT_ID 2>&1)
+          echo "VITE_N8N_WEBHOOK_BASE_URL obtenido: $VITE_N8N_WEBHOOK_BASE_URL"
+          echo "VITE_N8N_WEBHOOK_BASE_URL=$VITE_N8N_WEBHOOK_BASE_URL" >> $GITHUB_ENV
+
+          VITE_SUPABASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=VITE_SUPABASE_PROJECT_ID --project=$PROJECT_ID 2>&1)
+          echo "VITE_SUPABASE_PROJECT_ID obtenido: $VITE_SUPABASE_PROJECT_ID"
+          echo "VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID" >> $GITHUB_ENV
+
+          echo "=== Secretos cargados en GITHUB_ENV ==="
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Frontend
+        run: pnpm run build
+
+      - name: Configure firebase.json based on branch
+        run: |
+          cat > firebase.json << 'FIREBASE_EOF'
+          {
+            "hosting": {
+              "public": "dist",
+              "ignore": [
+                "firebase.json",
+                "**/.*",
+                "**/node_modules/**"
+              ],
+              "rewrites": [
+                {
+                  "source": "**",
+                  "destination": "/index.html"
+                }
+              ],
+              "headers": [
+                {
+                  "source": "/index.html",
+                  "headers": [
+                    {
+                      "key": "Cache-Control",
+                      "value": "no-cache, no-store, must-revalidate"
+                    }
+                  ]
+                },
+                {
+                  "source": "/**/*.@(js|css|woff|woff2)",
+                  "headers": [
+                    {
+                      "key": "Cache-Control",
+                      "value": "max-age=31536000, immutable"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+          FIREBASE_EOF
+
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "Rama main - configurando site: sozu-admin-prd"
+            jq '.hosting.site = "sozu-admin-prd"' firebase.json > firebase.json.tmp
+            mv firebase.json.tmp firebase.json
+          else
+            echo "Rama dev - configurando site: sozu-admin-dev"
+            jq '.hosting.site = "sozu-admin-dev"' firebase.json > firebase.json.tmp
+            mv firebase.json.tmp firebase.json
+          fi
+
+          echo "firebase.json configurado:"
+          cat firebase.json | jq '.hosting | {site, public}'
+
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_GCP_PRD || secrets.FIREBASE_GCP_DEV }}
+          channelId: live
+          projectId: ${{ github.ref == 'refs/heads/main' && 'sozu-admin-prd' || 'sozu-admin-dev' }}
+        env:
+          FIREBASE_CLI_PREVIEWS: hostingchannels
+
+      - name: Autenticar a Google Cloud (Firestore dev)
+        if: success()
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_GCP_DEV }}
+
+      - name: Configurar gcloud (notify)
+        if: success()
+        continue-on-error: true
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Notificar deploy listo (WhatsApp)
+        if: success()
+        continue-on-error: true
+        env:
+          ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'PROD' || 'DEV' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIRESTORE_PROJECT: sozu-admin-dev
+          N8N_WEBHOOK: https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/manda_notificacion
+          N8N_APIKEY: 80FA62E3FD0C-4477-8B31-8A2CD6AF7B57
+        run: bash ci/notify-deploy.sh
