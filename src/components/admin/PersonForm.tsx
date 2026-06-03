@@ -184,6 +184,8 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
         rfc: rfc.trim() || null,
         uso_cfdi: usoCfdi.trim() || null,
         regimen: regimen ? parseInt(regimen) : null,
+        id_tipo_identificacion: tipoPersona === 'pf' && idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
+        url_documento_identificacion: documentImageUrl || null,
         activo: true,
       };
 
@@ -741,6 +743,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       uso_cfdi: usoCfdi.trim() || null,
       regimen: regimen || null,
       id_tipo_identificacion: tipoPersona === 'pf' && idTipoIdentificacion ? parseInt(idTipoIdentificacion) : null,
+      url_documento_identificacion: documentImageUrl || null,
       sexo: sexo || null,
       fecha_nacimiento: tipoPersona === 'pf' && fechaNacimiento ? fechaNacimiento.toISOString() : null,
       id_estado_civil: tipoPersona === 'pf' && idEstadoCivil ? parseInt(idEstadoCivil) : null,
