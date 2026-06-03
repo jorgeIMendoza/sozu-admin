@@ -9,6 +9,7 @@ import {
   User,
   CreditCard,
   BarChart2,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   "/admin/portal-cliente/pagos":           CreditCard,
   "/admin/portal-cliente/historial-pagos": CreditCard,
   "/admin/portal-cliente/estado-de-cuenta": BarChart2,
+  "/admin/portal-cliente/productos": Package,
 };
 
 export function usePortalNavItems() {
