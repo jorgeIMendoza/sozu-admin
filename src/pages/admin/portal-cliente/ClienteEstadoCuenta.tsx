@@ -74,13 +74,6 @@ const ClienteEstadoCuenta = () => {
 
   const propertyId = searchParams.get("p");
 
-  // Auto-select when only 1 property
-  useEffect(() => {
-    if (!propertyId && portfolio.length === 1 && portfolio[0]) {
-      setSearchParams({ p: portfolio[0].property.id }, { replace: true });
-    }
-  }, [portfolio, propertyId, setSearchParams]);
-
   const selected = portfolio.find(inv => inv.property.id === propertyId) ?? null;
 
   const filtered = portfolio.filter(inv =>

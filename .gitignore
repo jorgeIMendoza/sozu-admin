@@ -11,6 +11,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+graphify-out
 *.local
 .env
 !.env.development
@@ -41,6 +42,7 @@ Ejecuciones_manuales/*
 .playwright-mcp/
 *.png
 !src/assets/*.png
+!public/*.png
 bundle*.js
 
 # Lock files de otros package managers (solo pnpm)
