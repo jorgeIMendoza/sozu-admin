@@ -84,7 +84,7 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       setRfcError(null);
     }
   };
-  const [idTipoIdentificacion, setIdTipoIdentificacion] = useState(initialData?.id_tipo_identificacion || '');
+  const [idTipoIdentificacion, setIdTipoIdentificacion] = useState(initialData?.id_tipo_identificacion ? initialData.id_tipo_identificacion.toString() : '');
   
   // Personal info
   const [sexo, setSexo] = useState(initialData?.sexo || '');
@@ -1696,6 +1696,17 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                                 <SelectItem value="3">Licencia de Conducir</SelectItem>
                               </SelectContent>
                             </Select>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="ocupacion">Ocupación</Label>
+                            <Input
+                              id="ocupacion"
+                              type="text"
+                              value={ocupacion}
+                              onChange={(e) => setOcupacion(e.target.value)}
+                              placeholder="Ingresa la ocupación"
+                            />
                           </div>
 
                           <div>

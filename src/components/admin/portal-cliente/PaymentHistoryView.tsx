@@ -9,6 +9,10 @@ import { buildReceiptFromPaymentRecord, buildReceiptFromInstallment, buildReceip
 import { fmtMXN as fmt } from "@/lib/utils";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
 
+const sozuLogo = "/sozu-logo.png";
+const MONTH_NAMES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const currentPeriod = () => { const d = new Date(); return `${MONTH_NAMES_FULL[d.getMonth()]} ${d.getFullYear()}`; };
+
 interface PaymentHistoryViewProps {
   investment: InvestmentProperty;
 }
@@ -326,22 +330,34 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
 
   const summaryBlock = (
     <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-      <div className="flex items-center justify-between gap-2 flex-nowrap">
-        <h3 className="font-display font-semibold text-xs text-muted-foreground uppercase tracking-wider shrink-0">Resumen</h3>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${statusColorClass}`}>{status.label}</span>
+      <div className="flex items-center gap-2 flex-nowrap">
+        <img src={sozuLogo} alt="SOZU" className="h-3.5 w-auto object-contain dark:invert shrink-0" />
+        <span className="text-muted-foreground text-xs shrink-0">-</span>
+        <p className="text-xs font-semibold text-foreground truncate flex-1">Historial de Pagos</p>
+        <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${statusColorClass}`}>{status.label}</span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <p className="text-[11px] text-muted-foreground">Total pagado</p>
-          <p className="font-display font-bold text-base text-foreground tabular-nums mt-0.5">{fmt(totalPaid)}</p>
+      <div className="text-[11px] text-muted-foreground space-y-1 border-t border-border pt-3">
+        <div className="flex justify-between">
+          <span>Propiedad</span>
+          <span className="font-semibold text-foreground">{property.projectName} · U-{property.unitNumber}</span>
         </div>
-        <div className="text-center">
-          <p className="text-[11px] text-muted-foreground">Pagos</p>
-          <p className="font-display font-bold text-base text-foreground mt-0.5">{paidPayments.length}</p>
+        <div className="flex justify-between">
+          <span>Periodo</span>
+          <span className="font-semibold text-foreground">{currentPeriod()}</span>
         </div>
-        <div className="text-right">
-          <p className="text-[11px] text-muted-foreground">Último</p>
-          <p className="text-xs font-semibold text-foreground mt-0.5">{lastPaid ? fmtShortDate(lastPaid.date) : "—"}</p>
+      </div>
+      <div className="space-y-2.5 border-t border-border pt-3">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Total Pagado</span>
+          <span className="font-display font-bold text-sm text-primary tabular-nums">{fmt(totalPaid)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Pagos realizados</span>
+          <span className="font-semibold text-sm text-foreground">{paidPayments.length}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Último pago</span>
+          <span className="font-semibold text-sm text-foreground">{lastPaid ? fmtShortDate(lastPaid.date) : "—"}</span>
         </div>
       </div>
       <div className="border-t border-border pt-3">
