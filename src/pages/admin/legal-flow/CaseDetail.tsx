@@ -370,6 +370,8 @@ function CounterpartyRealDrawer({
   // y documento. Las acciones (validar / rechazar) appendéan una entrada.
   const { entries: bitacora, columnaFaltante } = useBitacoraCuentaCobranza(idCuentaCobranza);
   const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [rejectFor, setRejectFor] = useState<{
     scope: BitacoraScope;
@@ -377,6 +379,27 @@ function CounterpartyRealDrawer({
     label: string;
   } | null>(null);
   const [rejectJustification, setRejectJustification] = useState("");
+
+  // Cuando la validación/rechazo es de un documento concreto, también se
+  // actualiza `documentos.id_estatus_verificacion` (1=Pendiente, 2=Validado,
+  // 3=Rechazado) para que el Admin Panel ("Editar cuenta de cobranza →
+  // Documentos") y el Portal del Cliente reflejen el cambio sin depender
+  // de la bitácora.
+  const syncDocumentoEstatus = async (
+    idDocumento: number,
+    nuevoEstatus: 1 | 2 | 3,
+  ) => {
+    const { error } = await (supabase as any)
+      .from("documentos")
+      .update({ id_estatus_verificacion: nuevoEstatus })
+      .eq("id", idDocumento);
+    if (error) throw error;
+    // Refresca las queries que listan documentos en el resto del sistema.
+    queryClient.invalidateQueries({ queryKey: ["documentos"] });
+    queryClient.invalidateQueries({ queryKey: ["cuenta_cobranza"] });
+    queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+    queryClient.invalidateQueries({ queryKey: ["compradores_full_detail"] });
+  };
 
   const validate = (scope: BitacoraScope, label: string, refs: { idDocumento?: number } = {}) => {
     if (columnaFaltante) {
@@ -392,6 +415,17 @@ function CounterpartyRealDrawer({
         idDocumento: refs.idDocumento,
       },
     });
+    if (scope === "documento" && refs.idDocumento) {
+      void syncDocumentoEstatus(refs.idDocumento, 2).catch((err) => {
+        toast({
+          title: "Bitácora guardada, pero el documento no se sincronizó",
+          description:
+            pgErrorMessage(err) ??
+            "No se pudo actualizar id_estatus_verificacion en documentos.",
+          variant: "destructive",
+        });
+      });
+    }
   };
 
   const submitReject = () => {
@@ -405,6 +439,17 @@ function CounterpartyRealDrawer({
         idDocumento: rejectFor.idDocumento,
       },
     });
+    if (rejectFor.scope === "documento" && rejectFor.idDocumento) {
+      void syncDocumentoEstatus(rejectFor.idDocumento, 3).catch((err) => {
+        toast({
+          title: "Bitácora guardada, pero el documento no se sincronizó",
+          description:
+            pgErrorMessage(err) ??
+            "No se pudo actualizar id_estatus_verificacion en documentos.",
+          variant: "destructive",
+        });
+      });
+    }
     setRejectFor(null);
     setRejectJustification("");
   };
@@ -2236,7 +2281,7 @@ function FirmaTitularActions({
     onError: (err: unknown) => {
       toast({
         title: 'Error al cargar contrato',
-        description: err instanceof Error ? err.message : 'No se pudo subir el archivo.',
+        description: pgErrorMessage(err) ?? 'No se pudo subir el archivo.',
         variant: 'destructive',
       });
     },
@@ -2245,21 +2290,46 @@ function FirmaTitularActions({
   const validateContratoMutation = useMutation({
     mutationFn: async () => {
       if (!contratoDoc?.id) throw new Error('Documento no identificado');
-      const { error } = await (supabase as any)
+      if (!idCuentaCobranza) throw new Error('Cuenta no identificada');
+      // Cambia el estatus a Validado (2) en `documentos`. El mismo update
+      // que ejecuta el Admin Panel desde "Editar Cuenta de Cobranza →
+      // Documentos de la Propiedad", de modo que ambas vistas reflejen
+      // el cambio.
+      const { error: updErr } = await (supabase as any)
         .from('documentos')
         .update({ id_estatus_verificacion: 2 })
         .eq('id', contratoDoc.id);
-      if (error) throw error;
+      if (updErr) throw updErr;
+
+      // Replica el side-effect del Admin Panel: al validar un contrato
+      // firmado (tipo 18) en una cuenta_cobranza, dispara
+      // `check-property-sold-status` para que la propiedad pueda avanzar
+      // a Vendida si ya cumple las condiciones. La falla del edge function
+      // no debe bloquear la UI: la validación del documento ya quedó
+      // persistida.
+      try {
+        await (supabase as any).functions.invoke('check-property-sold-status', {
+          body: { id_cuenta_cobranza: idCuentaCobranza },
+        });
+      } catch (efErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[firma-titular] check-property-sold-status falló:', efErr);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
       queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      // Invalida cualquier query del Admin Panel que liste documentos de
+      // esta cuenta para que su tab de Documentos refleje "Validado".
+      queryClient.invalidateQueries({ queryKey: ['documentos'] });
+      queryClient.invalidateQueries({ queryKey: ['cuenta_cobranza'] });
+      queryClient.invalidateQueries({ queryKey: ['expediente_venta_detalle'] });
       toast({ title: 'Contrato validado', description: 'Expediente listo para Firmado.' });
     },
     onError: (err: unknown) => {
       toast({
         title: 'Error al validar contrato',
-        description: err instanceof Error ? err.message : 'No se pudo actualizar el estatus.',
+        description: pgErrorMessage(err) ?? 'No se pudo actualizar el estatus.',
         variant: 'destructive',
       });
     },
@@ -4002,4 +4072,23 @@ function ValidationChip({
       <p className="text-[12px] font-semibold mt-0.5">{labelMap[status]}</p>
     </div>
   );
+}
+
+/**
+ * Extrae un mensaje legible para el toast a partir de cualquier shape de
+ * error. supabase-js devuelve `PostgrestError` como objeto plano
+ * (`{ message, details, hint, code }`), por lo que `err instanceof Error`
+ * es false y `err.message` se pierde. Este helper cubre ambos casos.
+ */
+function pgErrorMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (parts.length > 0) return parts.join(' — ');
+  }
+  return null;
 }
