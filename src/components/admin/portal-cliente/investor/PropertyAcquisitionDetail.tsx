@@ -27,6 +27,7 @@ import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-dat
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
+import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 
 interface Props {
   investment: InvestmentProperty;
@@ -98,7 +99,14 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
           {/* 2 · Avance de obra */}
           <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
 
-          {/* 3 · Etapa actual */}
+          {/* 3 · Productos adicionales */}
+          {(investment.additionalProducts?.length ?? 0) > 0 && (
+            <div className="rounded-2xl bg-card border border-border overflow-hidden">
+              <AdditionalProducts products={investment.additionalProducts!} />
+            </div>
+          )}
+
+          {/* 4 · Etapa actual */}
           <section className="rounded-2xl bg-card border border-border p-5">
             <div className="flex items-center gap-2 mb-5">
               <Building2 className="w-4 h-4 text-muted-foreground" />
