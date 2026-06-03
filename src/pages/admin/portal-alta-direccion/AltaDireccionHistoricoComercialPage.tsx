@@ -3,8 +3,8 @@ import {
   TrendingDown,
   Home,
   Building2,
-  Activity,
-  Clock,
+  CheckCircle2,
+  Package,
   RefreshCw,
   X,
   CalendarIcon,
@@ -48,6 +48,7 @@ import {
   type TipoCuenta,
 } from "@/hooks/usePortalAltaDireccion/useHistoricoComercial";
 import { useMetricasConversionComercial } from "@/hooks/usePortalAltaDireccion/useMetricasConversionComercial";
+import { usePropiedadesEstatusKpis } from "@/hooks/usePortalAltaDireccion/usePropiedadesEstatusKpis";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,7 @@ export default function AltaDireccionHistoricoComercialPage() {
   });
 
   const conversion = useMetricasConversionComercial(idProyecto, tipo);
+  const estatusKpis = usePropiedadesEstatusKpis(idProyecto);
 
   // Series para chart (siempre cronológico ascendente).
   const seriesChart = useMemo(() => {
@@ -358,32 +360,24 @@ export default function AltaDireccionHistoricoComercialPage() {
               }
             />
             <Kpi
-              label="Apartados este mes"
-              value={kpis.ventas?.apartados_count ?? 0}
-              hint={fmtMxn(kpis.ventas?.apartados_monto ?? 0)}
+              label="Apartados al momento"
+              value={estatusKpis.data?.apartados ?? 0}
+              hint="Estatus Apartado"
               icon={Building2}
               tone="info"
-              trend={
-                kpis.prevApartados
-                  ? deltaTrend(
-                      kpis.ventas?.apartados_count ?? 0,
-                      kpis.prevApartados.apartados_count,
-                    )
-                  : undefined
-              }
             />
             <Kpi
-              label="Velocidad de conversión"
-              value={`${(conversion.data?.velocidad_conversion_pct ?? 0).toFixed(1)}%`}
-              hint={`${conversion.data?.apartados_convertidos_count ?? 0} de ${conversion.data?.apartados_ultimos_90d_count ?? 0} apartados (90d)`}
-              icon={Activity}
+              label="Ventas totales"
+              value={estatusKpis.data?.ventas_totales ?? 0}
+              hint="Vendido + Pagada completamente"
+              icon={CheckCircle2}
               tone="primary"
             />
             <Kpi
-              label="Ciclo promedio de venta"
-              value={`${conversion.data?.ciclo_promedio_dias ?? 0} días`}
-              hint="Apartado → Venta"
-              icon={Clock}
+              label="Disponibles"
+              value={estatusKpis.data?.disponibles ?? 0}
+              hint="Estatus Disponible"
+              icon={Package}
               tone="default"
             />
           </>
