@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { X, Download, Share2, Shield, CheckCircle2, Copy, Check, Loader2 } from "lucide-react";
 import { fmtMXNDecimals as fmt } from "@/lib/utils";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
 
 export interface ReceiptData {

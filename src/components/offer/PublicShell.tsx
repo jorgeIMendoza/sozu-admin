@@ -1,5 +1,5 @@
 import { Phone } from "lucide-react";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 import type { Agent } from "@/lib/offer-types";
 import { buildAgentWhatsAppLink } from "@/lib/offer-types";
 

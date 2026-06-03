@@ -8,7 +8,7 @@ import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptMo
 import { buildReceiptFromInstallment, buildReceiptFromPaymentRecord } from "@/lib/portal-cliente/receipt-utils";
 import { fmtMXN as fmt } from "@/lib/utils";
 import { toast } from "sonner";
-import sozuLogo from "@/assets/sozu-logo.png";
+const sozuLogo = "/sozu-logo.png";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
 
 interface AccountStatementViewProps {
