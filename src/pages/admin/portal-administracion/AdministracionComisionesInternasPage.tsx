@@ -21,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -240,6 +241,7 @@ export default function AdministracionComisionesInternasPage() {
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [rolFilter, setRolFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ComisionInternaCuenta | null>(null);
+  const [page, setPage] = useState(0);
 
   const { data: comisiones = [], isLoading, error } = useComisionesInternas();
 
@@ -323,6 +325,12 @@ export default function AdministracionComisionesInternasPage() {
         new Date(b.representativo.fecha_devengo).getTime(),
     );
   }, [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(agrupadasPorCuenta.length / ADMIN_PAGE_SIZE));
+  const agrupadasPorCuentaPage = useMemo(
+    () => agrupadasPorCuenta.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [agrupadasPorCuenta, page],
+  );
 
   const kpis = useMemo(() => {
     let devengadaTotal = 0,
@@ -524,7 +532,7 @@ export default function AdministracionComisionesInternasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agrupadasPorCuenta.map((c) => (
+                {agrupadasPorCuentaPage.map((c) => (
                   <TableRow key={c.id_cuenta_cobranza}>
                     <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
                       {c.folio_cuenta}
@@ -572,6 +580,12 @@ export default function AdministracionComisionesInternasPage() {
                 ))}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={agrupadasPorCuenta.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>

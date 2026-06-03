@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -101,6 +102,7 @@ export default function AdministracionFacturasPorCobrarPage() {
   const [facturaSozuFilter, setFacturaSozuFilter] = useState<string>("all");
   const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorCobrar | null>(null);
+  const [page, setPage] = useState(0);
 
   const { data: facturas = [], isLoading, error } = useFacturasPorCobrar();
 
@@ -133,6 +135,12 @@ export default function AdministracionFacturasPorCobrarPage() {
       return true;
     });
   }, [search, proyectoFilter, entidadDuenaFilter, facturaSozuFilter, estatusPagoFilter, facturas]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+  const filteredPage = useMemo(
+    () => filtered.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [filtered, page],
+  );
 
   const kpis = useMemo(() => {
     let emitidoTotal = 0,
@@ -343,7 +351,7 @@ export default function AdministracionFacturasPorCobrarPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((f) => {
+                {filteredPage.map((f) => {
                   const vencida = f.estado === "vencida";
                   return (
                     <TableRow
@@ -447,6 +455,12 @@ export default function AdministracionFacturasPorCobrarPage() {
                 })}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={filtered.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>
