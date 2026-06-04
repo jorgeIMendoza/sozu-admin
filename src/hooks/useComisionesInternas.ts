@@ -65,7 +65,7 @@ export function useComisionesInternas() {
     queryFn: async (): Promise<ComisionInterna[]> => {
       // Lee todas las filas — `comisionistas` puede superar 1000 sumando
       // entre todas las cuentas. Sin paginación, PostgREST trunca.
-      const comisionistas = await fetchAllRows((from, to) =>
+      const comisionistas = await fetchAllRows<any>((from, to) =>
         supabase
           .from("comisionistas")
           .select(

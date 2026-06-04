@@ -69,6 +69,7 @@ export interface PaymentRecord {
   evidenceUrl?: string;
   trackingKey?: string;
   paymentMethodName?: string;
+  receiptUrl?: string;
 }
 
 export interface AdditionalProduct {

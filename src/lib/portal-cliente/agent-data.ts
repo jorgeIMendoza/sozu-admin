@@ -70,7 +70,7 @@ export function useAgentForCuenta(
     queryKey: ["agent-for-cuenta", cuentaId, tipo],
     queryFn: async (): Promise<Agent | null> => {
       // Step 1: explicit assignment from asesores_cuenta
-      const { data: asig, error: e1 } = await supabase
+      const { data: asig, error: e1 } = await (supabase as any)
         .from("asesores_cuenta")
         .select("email_asesor")
         .eq("id_cuenta_cobranza", Number(cuentaId))

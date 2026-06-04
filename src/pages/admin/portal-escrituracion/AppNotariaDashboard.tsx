@@ -444,7 +444,7 @@ export function AppNotariaDashboard() {
     queryFn: async () => {
       const BATCH = 30;
       const results: any[] = [];
-      const batches: Promise<any>[] = [];
+      const batches: PromiseLike<any>[] = [];
       for (let i = 0; i < allCuentaIds.length; i += BATCH) {
         const slice = (allCuentaIds as number[]).slice(i, i + BATCH);
         batches.push(

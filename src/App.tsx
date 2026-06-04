@@ -22,8 +22,8 @@ import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
 
 // Retry wrapper for lazy imports — handles stale cache after deploys
-const lazyRetry = (importFn: () => Promise<{ default: ComponentType }>) =>
-  lazy(() =>
+const lazyRetry = <T extends ComponentType<any>>(importFn: () => Promise<{ default: T }>) =>
+  lazy<T>(() =>
     importFn().catch(() => {
       // If the chunk fails to load, reload the page once
       const key = "chunk-retry";
@@ -248,6 +248,18 @@ const AdminBandejaEjecucion     = lazyRetry(() => import("./pages/admin/portal-a
 const AdminPagosEjecutados      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionPagosEjecutadosPage"));
 const AdminCFDIsEmitidos        = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionCFDIsEmitidosPage"));
 const AdminConciliacionSTP      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionConciliacionSTPPage"));
+
+// Portal Condominio Administración
+const CondominioDashboard    = lazyRetry(() => import("./pages/admin/portal-condominio/Dashboard"));
+const CondominioDepartamentos = lazyRetry(() => import("./pages/admin/portal-condominio/Departamentos"));
+const CondominioUnidadDetalle = lazyRetry(() => import("./pages/admin/portal-condominio/UnidadDetalle"));
+const CondominioCargos        = lazyRetry(() => import("./pages/admin/portal-condominio/Cargos"));
+const CondominioPagos         = lazyRetry(() => import("./pages/admin/portal-condominio/Pagos"));
+const CondominioCobranza      = lazyRetry(() => import("./pages/admin/portal-condominio/Cobranza"));
+const CondominioTesoreria     = lazyRetry(() => import("./pages/admin/portal-condominio/Tesoreria"));
+const CondominioAmenidades    = lazyRetry(() => import("./pages/admin/portal-condominio/Amenidades"));
+const CondominioAuditoria     = lazyRetry(() => import("./pages/admin/portal-condominio/Auditoria"));
+const CondominioConfiguracion = lazyRetry(() => import("./pages/admin/portal-condominio/Configuracion"));
 
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
@@ -713,6 +725,18 @@ const App = () => (
                  <Route path="portal-administracion/pagos-ejecutados" element={<AdminPagosEjecutados />} />
                  <Route path="portal-administracion/cfdis-emitidos" element={<AdminCFDIsEmitidos />} />
                  <Route path="portal-administracion/conciliacion-stp" element={<AdminConciliacionSTP />} />
+
+                 {/* Portal Condominio Administración */}
+                 <Route path="portal-condominio/dashboard"        element={<CondominioDashboard />} />
+                 <Route path="portal-condominio/departamentos"    element={<CondominioDepartamentos />} />
+                 <Route path="portal-condominio/departamentos/:numero" element={<CondominioUnidadDetalle />} />
+                 <Route path="portal-condominio/cargos"           element={<CondominioCargos />} />
+                 <Route path="portal-condominio/pagos"            element={<CondominioPagos />} />
+                 <Route path="portal-condominio/cobranza"         element={<CondominioCobranza />} />
+                 <Route path="portal-condominio/tesoreria"        element={<CondominioTesoreria />} />
+                 <Route path="portal-condominio/amenidades"       element={<CondominioAmenidades />} />
+                 <Route path="portal-condominio/auditoria"        element={<CondominioAuditoria />} />
+                 <Route path="portal-condominio/configuracion"    element={<CondominioConfiguracion />} />
 
                  {/* Portal Embajadores */}
                  <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
