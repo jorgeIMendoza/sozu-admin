@@ -22,8 +22,8 @@ import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
 
 // Retry wrapper for lazy imports — handles stale cache after deploys
-const lazyRetry = (importFn: () => Promise<{ default: ComponentType }>) =>
-  lazy(() =>
+const lazyRetry = <T extends ComponentType<any>>(importFn: () => Promise<{ default: T }>) =>
+  lazy<T>(() =>
     importFn().catch(() => {
       // If the chunk fails to load, reload the page once
       const key = "chunk-retry";

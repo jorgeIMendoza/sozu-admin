@@ -18,6 +18,7 @@ export interface Installment {
   paidAt?: string;
   confirmationStatus?: PaymentConfirmationStatus;
   confirmationTimestamp?: string;
+  constructionMilestone?: string;
 }
 
 export interface STPPaymentInfo {
@@ -137,7 +138,7 @@ export function usePaymentSchedule(cuentaId: string | undefined) {
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
-      return buildPlan(cuentaId!, (rows ?? []) as AcuerdoRow[], cuenta?.clabe_stp);
+      return buildPlan(cuentaId!, (rows ?? []) as unknown as AcuerdoRow[], cuenta?.clabe_stp);
     },
     enabled: !!cuentaId,
     staleTime: 60_000,
