@@ -28,6 +28,7 @@ import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
+import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
 
 interface Props {
   investment: InvestmentProperty;
@@ -62,6 +63,9 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const currentStageIdx = Math.max(0, STAGES.findIndex((s) => s.id === activeStage?.id));
   const currentStage = STAGES[currentStageIdx];
   const stageInfo = getStageInfo(activeStage?.id ?? "preventa");
+
+  const [showPaySheet, setShowPaySheet] = useState(false);
+  const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
 
   return (
     <div className="pb-24 space-y-5">
@@ -165,7 +169,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
           {/* Precio de compra (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
-            <FinancialSideCard investment={investment} />
+            <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
           </div>
 
           {/* 5 · Cronograma de pagos */}
@@ -183,13 +187,20 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
         {/* ── Right column (desktop only) ── */}
         <div className="hidden md:block space-y-4">
           <AgentSideCard investment={investment} />
-          <FinancialSideCard investment={investment} />
+          <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
           <TechnicalSideCard property={property} />
         </div>
       </div>
 
       {/* Mobile-only sticky CTA */}
-      <AcquisitionStickyCTA investment={investment} />
+      <AcquisitionStickyCTA investment={investment} onPay={() => setShowPaySheet(true)} />
+
+      <AcquisitionPaymentSheet
+        open={showPaySheet}
+        onClose={() => setShowPaySheet(false)}
+        cuentaId={property.id}
+        propertyLabel={propertyLabel}
+      />
     </div>
   );
 };
@@ -545,12 +556,12 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
 
 // ── Financial side card ──
 
-const FinancialSideCard = ({ investment }: { investment: InvestmentProperty }) => {
+const FinancialSideCard = ({ investment, onPay }: { investment: InvestmentProperty; onPay: () => void }) => {
   const { financials, property } = investment;
   const progress = financials.initialPrice > 0
     ? (financials.totalPaid / financials.initialPrice) * 100
     : 0;
-  const cta = getContextualCTA(investment);
+  const cta = getContextualCTA(investment, onPay);
 
   return (
     <div className="rounded-2xl bg-card border border-border p-5">
@@ -702,8 +713,8 @@ const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
 
 // ── Mobile-only sticky CTA ──
 
-const AcquisitionStickyCTA = ({ investment }: { investment: InvestmentProperty }) => {
-  const cta = getContextualCTA(investment);
+const AcquisitionStickyCTA = ({ investment, onPay }: { investment: InvestmentProperty; onPay: () => void }) => {
+  const cta = getContextualCTA(investment, onPay);
   if (!cta) return null;
 
   return (
@@ -733,12 +744,12 @@ function getStageInfo(stageId: string) {
   return map[stageId] ?? { label: stageId, classes: "bg-muted text-muted-foreground" };
 }
 
-function getContextualCTA(investment: InvestmentProperty) {
+function getContextualCTA(investment: InvestmentProperty, onPay: () => void) {
   const { financials, stages } = investment;
   const active = stages.find((s) => s.status === "active");
 
   if (active?.id === "pago_final" && financials.pendingBalance > 0) {
-    return { label: `Pagar ${fmtMXN(financials.pendingBalance)}`, classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: () => console.log("pago") };
+    return { label: `Pagar ${fmtMXN(financials.pendingBalance)}`, classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
   }
   if (active?.id === "escrituracion") {
     return { label: "Agendar firma con notaría", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <FileText className="w-4 h-4" />, onClick: () => console.log("escritura") };

@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { X, Download, Share2, Shield, CheckCircle2, Copy, Check, Loader2 } from "lucide-react";
+import { Download, Share2, Shield, CheckCircle2, Copy, Check, Loader2, FileText } from "lucide-react";
 import { fmtMXNDecimals as fmt } from "@/lib/utils";
 const sozuLogo = "/sozu-logo.png";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
@@ -95,7 +95,7 @@ const PaymentReceiptModal = ({ receipt, open, onClose }: PaymentReceiptModalProp
           "max-sm:translate-x-0 max-sm:translate-y-0",
           "max-sm:w-full max-sm:max-w-none",
           "max-sm:rounded-t-2xl max-sm:rounded-b-none",
-          "max-sm:max-h-[75svh]",
+          "max-sm:max-h-[75dvh]",
           // desktop: centered dialog
           "sm:max-w-md sm:max-h-[90vh] sm:rounded-2xl",
         ].join(" ")}
@@ -105,17 +105,13 @@ const PaymentReceiptModal = ({ receipt, open, onClose }: PaymentReceiptModalProp
           <DialogTitle>Recibo de Pago</DialogTitle>
         </DialogHeader>
 
-        {/* Sticky close header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-3 bg-card border-b border-border shrink-0">
-          <p className="text-sm font-semibold text-foreground">Recibo de Pago</p>
-          <DialogClose asChild>
-            <button
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 active:scale-95 transition-all shadow-sm"
-              aria-label="Cerrar"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </DialogClose>
+        {/* Sticky header */}
+        <div className="sticky top-0 z-10 flex items-center gap-3 px-5 pt-5 pb-4 bg-card border-b border-border shrink-0">
+          <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-foreground text-sm leading-tight">Recibo de Pago</h3>
+            <p className="text-xs text-muted-foreground">Comprobante electrónico</p>
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -227,28 +223,36 @@ const PaymentReceiptModal = ({ receipt, open, onClose }: PaymentReceiptModalProp
         </div>
 
         {/* Sticky actions footer */}
-        <div className="sticky bottom-0 bg-background border-t border-border px-6 py-4 flex gap-3 shrink-0">
+        <div className="sticky bottom-0 bg-background border-t border-border px-6 py-4 space-y-2 shrink-0">
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownload}
+              disabled={!receipt.pagoId || downloading}
+              className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold text-sm py-3 rounded-xl hover:bg-primary/90 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloading ? "Generando…" : "Descargar PDF"}
+            </button>
+            <button
+              onClick={() => {
+                if (navigator.share) {
+                  navigator.share({
+                    title: `Recibo SOZU ${receipt.folio}`,
+                    text: `Recibo de pago ${receipt.concept} - ${fmt(receipt.amount)}`,
+                  });
+                }
+              }}
+              className="w-12 h-12 flex items-center justify-center rounded-xl border border-border bg-card hover:bg-muted transition-colors active:scale-[0.98]"
+              aria-label="Compartir"
+            >
+              <Share2 className="w-4 h-4 text-foreground" />
+            </button>
+          </div>
           <button
-            onClick={handleDownload}
-            disabled={!receipt.pagoId || downloading}
-            className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold text-sm py-3 rounded-xl hover:bg-primary/90 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={onClose}
+            className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
           >
-            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {downloading ? "Generando…" : "Descargar PDF"}
-          </button>
-          <button
-            onClick={() => {
-              if (navigator.share) {
-                navigator.share({
-                  title: `Recibo SOZU ${receipt.folio}`,
-                  text: `Recibo de pago ${receipt.concept} - ${fmt(receipt.amount)}`,
-                });
-              }
-            }}
-            className="w-12 h-12 flex items-center justify-center rounded-xl border border-border bg-card hover:bg-muted transition-colors active:scale-[0.98]"
-            aria-label="Compartir"
-          >
-            <Share2 className="w-4 h-4 text-foreground" />
+            Cerrar
           </button>
         </div>
       </DialogContent>

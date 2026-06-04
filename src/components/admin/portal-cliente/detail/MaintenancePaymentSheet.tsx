@@ -1,158 +1,192 @@
-import { CheckCircle2, CreditCard, Copy, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Wrench, Copy, Info, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { fmtMXN as fmt } from "@/lib/utils";
-import { markChargeAsPaid, type MaintenanceAccount, type MaintenanceCharge } from "@/lib/portal-cliente/maintenance-data";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { fmtMXN } from "@/lib/utils";
 
-interface MaintenancePaymentSheetProps {
+interface Props {
   open: boolean;
   onClose: () => void;
-  charge: MaintenanceCharge | null;
-  account: MaintenanceAccount | null;
+  clabe: string | null;
+  beneficiario: string | null;
+  monto: number;
+  proximoVencimiento: string | null;
+  mesesAtrasados: number;
   propertyLabel: string;
 }
 
-const copyToClipboard = (text: string, label: string) => {
+const cp = (text: string, label: string) => {
   navigator.clipboard.writeText(text);
-  toast.success(`${label} copiado al portapapeles`);
+  toast.success(`${label} copiado`);
 };
 
 const MaintenancePaymentSheet = ({
-  open,
-  onClose,
-  charge,
-  account,
-  propertyLabel,
-}: MaintenancePaymentSheetProps) => {
-  if (!charge || !account) return null;
+  open, onClose, clabe, beneficiario, monto,
+  proximoVencimiento, mesesAtrasados, propertyLabel,
+}: Props) => {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
-  const reference = `${account.paymentInfo.referencePrefix}-${charge.monthKey.replace("-", "")}`;
-  const isOverdue = charge.daysUntilDue < -3 || charge.status === "vencido";
+  const vencimientoDisplay = proximoVencimiento
+    ? new Date(proximoVencimiento + "T12:00:00").toLocaleDateString("es-MX", {
+        day: "2-digit", month: "long", year: "numeric",
+      })
+    : null;
 
-  const handleConfirm = () => {
-    markChargeAsPaid(account.propertyId, charge.id);
-    toast.success("Pago registrado. Se reflejará en tu cuenta en 24-48 horas.");
-    setTimeout(() => onClose(), 300);
-  };
+  const content = (
+    <div className="flex flex-col overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border shrink-0">
+        <Wrench className="w-5 h-5 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-foreground text-sm leading-tight">Pagar mantenimiento</h3>
+          <p className="text-xs text-muted-foreground truncate">{propertyLabel}</p>
+        </div>
+      </div>
 
-  return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
-        side="bottom"
-        className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 pt-2">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <CreditCard className="w-5 h-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-display font-semibold text-foreground text-base">
-              Pagar mantenimiento
-            </h3>
-            <p className="text-xs text-muted-foreground truncate">
-              {propertyLabel} · {charge.month}
+      <div className="px-5 py-4 space-y-4">
+        {/* Meses vencidos */}
+        {mesesAtrasados > 0 && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/8 border border-destructive/20">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive font-medium">
+              Tienes {mesesAtrasados} {mesesAtrasados === 1 ? "mes vencido" : "meses vencidos"}.
+              Realiza el pago lo antes posible.
             </p>
           </div>
-        </div>
+        )}
 
         {/* Monto */}
-        <div className="rounded-2xl bg-primary/5 border border-primary/20 p-5 my-4 text-center">
+        <div className="rounded-xl bg-primary/5 border border-primary/15 p-4 text-center">
           <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
-            Total a pagar
+            Cuota mensual
           </p>
-          <p className="font-display font-bold text-4xl tabular-nums text-foreground mt-1">
-            {fmt(charge.amount)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">Vence el {charge.dueDateDisplay}</p>
-          {isOverdue && (
-            <p className="text-[11px] text-destructive mt-1 font-medium">
-              Vencido hace {Math.abs(charge.daysUntilDue)} días
+          <p className="font-bold text-3xl tabular-nums text-foreground mt-1">{fmtMXN(monto)}</p>
+          {vencimientoDisplay && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Próximo vencimiento: {vencimientoDisplay}
             </p>
+          )}
+          {monto > 0 && (
+            <button
+              onClick={() => cp(monto.toFixed(2), "Monto")}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Copy className="w-3 h-3" /> Copiar monto
+            </button>
           )}
         </div>
 
         {/* Instrucciones */}
-        <div className="rounded-xl border border-border p-4 space-y-3">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
-            Instrucciones de transferencia
-          </p>
+        {clabe ? (
+          <div className="rounded-xl border border-border overflow-hidden">
+            <div className="px-4 pt-3 pb-2 bg-muted/30">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
+                Instrucciones de transferencia
+              </p>
+            </div>
 
-          <div className="flex justify-between items-start gap-3 py-2 border-b border-border/40">
-            <span className="text-xs text-muted-foreground flex-shrink-0">CLABE</span>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-mono tabular-nums text-foreground text-right break-all">
-                {account.paymentInfo.clabe}
-              </span>
-              <button
-                onClick={() => copyToClipboard(account.paymentInfo.clabe, "CLABE")}
-                className="p-1 rounded-md hover:bg-muted transition-colors"
-                aria-label="Copiar CLABE"
-              >
-                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/60">
+              <span className="text-xs text-muted-foreground shrink-0">CLABE</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-mono tabular-nums text-foreground break-all text-right">
+                  {clabe}
+                </span>
+                <button
+                  onClick={() => cp(clabe, "CLABE")}
+                  className="p-1.5 rounded-md hover:bg-muted transition-colors shrink-0"
+                  aria-label="Copiar CLABE"
+                >
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+
+            {beneficiario && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/60">
+                <span className="text-xs text-muted-foreground shrink-0">Beneficiario</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium text-foreground text-right truncate max-w-[180px]">
+                    {beneficiario}
+                  </span>
+                  <button
+                    onClick={() => cp(beneficiario, "Beneficiario")}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors shrink-0"
+                    aria-label="Copiar beneficiario"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/60">
+              <span className="text-xs text-muted-foreground shrink-0">Concepto</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">Mantenimiento mensual</span>
+                <button
+                  onClick={() => cp("Mantenimiento mensual", "Concepto")}
+                  className="p-1.5 rounded-md hover:bg-muted transition-colors shrink-0"
+                  aria-label="Copiar concepto"
+                >
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="flex justify-between items-start gap-3 py-2 border-b border-border/40">
-            <span className="text-xs text-muted-foreground flex-shrink-0">Banco</span>
-            <span className="text-sm font-medium text-foreground text-right">
-              {account.paymentInfo.bankName}
-            </span>
+        ) : (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border">
+            <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              La CLABE de pago aún no está configurada. Contacta a tu administrador.
+            </p>
           </div>
-
-          <div className="flex justify-between items-start gap-3 py-2 border-b border-border/40">
-            <span className="text-xs text-muted-foreground flex-shrink-0">Beneficiario</span>
-            <span className="text-sm font-medium text-foreground text-right">
-              {account.paymentInfo.beneficiary}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-start gap-3 py-2">
-            <span className="text-xs text-muted-foreground flex-shrink-0">Referencia</span>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground text-right break-all">
-                {reference}
-              </span>
-              <button
-                onClick={() => copyToClipboard(reference, "Referencia")}
-                className="p-1 rounded-md hover:bg-muted transition-colors"
-                aria-label="Copiar referencia"
-              >
-                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Disclaimer */}
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/40 mt-3">
-          <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/40">
+          <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Tu pago se reflejará en 24-48 horas hábiles después de realizar la transferencia.
-            Asegúrate de incluir la referencia exacta para que se acredite a tu cuota.
+            Realiza la transferencia desde tu banca en línea. El pago se reflejará en 24–48 horas hábiles.
+            No olvides usar el concepto exacto para que se acredite correctamente.
           </p>
         </div>
 
-        {/* Acciones */}
-        <div className="mt-5">
-          <button
-            onClick={handleConfirm}
-            className="w-full h-12 rounded-xl bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-[0.98]"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Ya realicé el pago
-          </button>
-          <p className="text-[10px] text-muted-foreground text-center mt-2">
-            Solo márcalo cuando ya hayas hecho la transferencia.
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full h-10 text-xs text-muted-foreground mt-2 hover:text-foreground transition-colors"
-          >
-            Cerrar
-          </button>
-        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 pb-8 pt-4 border-t border-border/50">
+        <button
+          onClick={onClose}
+          className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="p-0 max-w-md max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden">
+          {content}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="bottom" className="p-0 rounded-t-2xl [&>button:last-child]:hidden">
+        {content}
       </SheetContent>
     </Sheet>
   );

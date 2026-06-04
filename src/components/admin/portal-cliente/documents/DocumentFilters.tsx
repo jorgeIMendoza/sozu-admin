@@ -14,8 +14,10 @@ interface FiltersProps {
   portfolio: InvestmentProperty[];
   filterProperty: string | null;
   filterType: DocumentType | null;
+  groupBy: "property" | "status";
   onChangeProperty: (v: string | null) => void;
   onChangeType: (v: string | null) => void;
+  onChangeGroupBy: (v: "property" | "status") => void;
   hasActiveFilters: boolean;
   onClearAll: () => void;
 }
@@ -34,8 +36,10 @@ const DocumentFilters = ({
   portfolio,
   filterProperty,
   filterType,
+  groupBy,
   onChangeProperty,
   onChangeType,
+  onChangeGroupBy,
   hasActiveFilters,
   onClearAll,
 }: FiltersProps) => {
@@ -72,6 +76,19 @@ const DocumentFilters = ({
               {getTypeInfo(t).label}
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={groupBy}
+        onValueChange={(v) => onChangeGroupBy(v as "property" | "status")}
+      >
+        <SelectTrigger className="h-9 text-xs min-w-[120px] w-auto">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="property">Por propiedad</SelectItem>
+          <SelectItem value="status">Por estado</SelectItem>
         </SelectContent>
       </Select>
 

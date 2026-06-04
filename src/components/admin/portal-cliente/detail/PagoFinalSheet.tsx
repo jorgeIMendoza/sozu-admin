@@ -175,7 +175,7 @@ const PagoFinalSheet = ({
       <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl max-h-[85vh] overflow-y-auto px-5 pb-8"
+          className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8"
         >
           <div className="flex flex-col items-center text-center pt-6 pb-4 gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -379,13 +379,12 @@ const PagoFinalSheet = ({
             <RefreshCcw className="w-3.5 h-3.5" />
             Cambiar banco
           </Button>
-          <Button
-            variant="ghost"
-            className="w-full rounded-xl h-10 text-sm"
+          <button
             onClick={handleClose}
+            className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
           >
             Cerrar
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -493,13 +492,11 @@ const PagoFinalSheet = ({
     <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
+        className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
       >
         <SheetHeader className="text-left pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-warning/15 flex items-center justify-center flex-shrink-0">
-              <CreditCard className="w-5 h-5 text-warning" />
-            </div>
+            <CreditCard className="w-5 h-5 text-muted-foreground shrink-0" />
             <div>
               <SheetTitle className="text-foreground font-display">
                 Pago final

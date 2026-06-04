@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Download, ChevronRight, Search, Loader2, X } from "lucide-react";
+import { Download, ChevronRight, Search, Loader2 } from "lucide-react";
+import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import AccountStatementView from "@/components/admin/portal-cliente/AccountStatementView";
 import { usePortfolioCliente } from "@/lib/portal-cliente/use-portfolio";
 import { getPropertyStatus } from "@/lib/portal-cliente/mock-data";
@@ -54,21 +54,6 @@ const ClienteEstadoCuenta = () => {
       setPdfModal({ url: data.url_estado_cuenta, title });
     } finally {
       setGeneratingPdf(false);
-    }
-  }
-
-  async function downloadPdf(url: string, filename: string) {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objUrl;
-      a.download = filename;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
-    } catch {
-      window.open(url, "_blank");
     }
   }
 
@@ -128,49 +113,14 @@ const ClienteEstadoCuenta = () => {
           </div>
         </div>
 
-        {pdfModal && createPortal(
-          <div
-            className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center"
-            onClick={() => setPdfModal(null)}
-          >
-            <div
-              className="bg-card w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col max-h-[90svh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Estado de Cuenta</p>
-                  <p className="text-[11px] text-muted-foreground">{pdfModal.title}</p>
-                </div>
-                <button
-                  onClick={() => setPdfModal(null)}
-                  className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-destructive/15 transition-colors"
-                  aria-label="Cerrar"
-                >
-                  <X className="w-4 h-4 text-destructive" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-hidden" style={{ minHeight: "60vh" }}>
-                <iframe
-                  src={pdfModal.url}
-                  className="w-full h-full border-0"
-                  title="Estado de Cuenta"
-                  style={{ height: "60vh" }}
-                />
-              </div>
-              <div className="px-5 py-4 border-t border-border shrink-0">
-                <button
-                  onClick={() => downloadPdf(pdfModal.url, `SOZU-EstadoCuenta-${pdfModal.title}.pdf`)}
-                  className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold text-sm py-3 rounded-xl hover:bg-primary/90 transition-colors active:scale-[0.98]"
-                >
-                  <Download className="w-4 h-4" />
-                  Descargar PDF
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        <DocViewerPortal
+          open={!!pdfModal}
+          onClose={() => setPdfModal(null)}
+          url={pdfModal?.url ?? ""}
+          title="Estado de Cuenta"
+          subtitle={pdfModal?.title}
+          downloadFilename={pdfModal ? `SOZU-EstadoCuenta-${pdfModal.title}.pdf` : undefined}
+        />
       </>
     );
   }
@@ -201,7 +151,7 @@ const ClienteEstadoCuenta = () => {
                 className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            <div className="space-y-2 max-h-[min(380px,60svh)] overflow-y-auto">
+            <div className="space-y-2 max-h-[min(380px,60dvh)] overflow-y-auto">
               {filtered.length === 0 ? (
                 <p className="px-4 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>
               ) : (

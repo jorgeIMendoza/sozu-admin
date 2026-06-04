@@ -1,5 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { X, Download, ExternalLink, FileText } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -12,49 +12,19 @@ interface Props {
 const PDFViewerSheet = ({ open, onClose, title, url, fileSize }: Props) => {
   const isMockEmpty = !url || url === "#";
 
-  const handleOpenExternal = () => {
-    if (!isMockEmpty) window.open(url, "_blank", "noopener,noreferrer");
-  };
-
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="h-[95vh] p-0 rounded-t-2xl flex flex-col"
+        className="h-[75dvh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden"
       >
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-border">
+          <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground truncate">{title}</p>
-            <p className="text-xs text-muted-foreground">
-              PDF{fileSize ? ` · ${(fileSize / (1024 * 1024)).toFixed(1)} MB` : ""}
-            </p>
+            <p className="text-xs text-muted-foreground">Vista previa del documento</p>
           </div>
-          <button
-            onClick={handleOpenExternal}
-            disabled={isMockEmpty}
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Abrir en nueva pestaña"
-          >
-            <ExternalLink className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <a
-            href={isMockEmpty ? undefined : url}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`w-9 h-9 rounded-lg flex items-center justify-center hover:bg-muted ${isMockEmpty ? "opacity-30 pointer-events-none" : ""}`}
-            aria-label="Descargar"
-          >
-            <Download className="w-4 h-4 text-muted-foreground" />
-          </a>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-muted"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4 text-foreground" />
-          </button>
         </div>
 
         {/* Viewer */}
@@ -79,6 +49,28 @@ const PDFViewerSheet = ({ open, onClose, title, url, fileSize }: Props) => {
               className="w-full h-full border-0"
             />
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 pb-6 pt-4 border-t border-border/50 space-y-2 shrink-0">
+          {!isMockEmpty && (
+            <a
+              href={url}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+          >
+            Cerrar
+          </button>
         </div>
       </SheetContent>
     </Sheet>
