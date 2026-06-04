@@ -1,4 +1,4 @@
-import type { ReceiptData } from "@/components/portal/detail/PaymentReceiptModal";
+import type { ReceiptData } from "@/components/admin/portal-cliente/detail/PaymentReceiptModal";
 import type { InvestmentProperty, PaymentRecord } from "@/lib/portal-cliente/mock-data";
 import type { Installment, PropertyPaymentPlan } from "@/lib/portal-cliente/payment-data";
 
