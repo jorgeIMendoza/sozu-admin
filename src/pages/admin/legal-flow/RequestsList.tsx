@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Eye, Loader2 } from 'lucide-react';
+import { Search, Eye, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -62,9 +62,6 @@ export default function RequestsList() {
             {isLoading ? 'Cargando…' : `${counts.active} activas · ${counts.all} total`}
           </p>
         </div>
-        <Button asChild className="h-9 text-[13px] gap-1.5 rounded-lg">
-          <Link to="/admin/legal-flow/requests/new"><Plus className="h-4 w-4" /> Nueva Solicitud</Link>
-        </Button>
       </motion.div>
 
       {/* Filters */}

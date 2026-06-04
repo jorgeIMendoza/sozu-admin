@@ -2327,9 +2327,15 @@ function FirmaTitularActions({
       toast({ title: 'Contrato validado', description: 'Expediente listo para Firmado.' });
     },
     onError: (err: unknown) => {
+      const desc = pgErrorMessage(err);
+      const isPrivateSchemaPermission =
+        isPgCode(err, '42501') ||
+        (typeof desc === 'string' && desc.toLowerCase().includes('permission denied for schema private'));
       toast({
         title: 'Error al validar contrato',
-        description: pgErrorMessage(err) ?? 'No se pudo actualizar el estatus.',
+        description: isPrivateSchemaPermission
+          ? 'Permiso BD pendiente: el trigger usa pg_net pero el rol no tiene USAGE sobre el schema "private". Pídele a Jorge que ejecute el DDL en Ejecuciones_manuales/fix_permission_denied_private_validar_documento.md.'
+          : desc ?? 'No se pudo actualizar el estatus.',
         variant: 'destructive',
       });
     },
@@ -4091,4 +4097,11 @@ function pgErrorMessage(err: unknown): string | null {
     if (parts.length > 0) return parts.join(' — ');
   }
   return null;
+}
+
+/** True si el error es un `PostgrestError` con `code === expected`. */
+function isPgCode(err: unknown, expected: string): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as Record<string, unknown>;
+  return typeof e.code === 'string' && e.code === expected;
 }
