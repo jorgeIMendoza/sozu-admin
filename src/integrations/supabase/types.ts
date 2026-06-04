@@ -3935,6 +3935,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_banco: number | null
+          id_estatus_verificacion: number
           id_persona: number
           numero_cuenta: string
           titular: string | null
@@ -3949,6 +3950,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_banco?: number | null
+          id_estatus_verificacion?: number
           id_persona: number
           numero_cuenta: string
           titular?: string | null
@@ -3963,6 +3965,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_banco?: number | null
+          id_estatus_verificacion?: number
           id_persona?: number
           numero_cuenta?: string
           titular?: string | null
@@ -5808,6 +5811,256 @@ export type Database = {
         }
         Relationships: []
       }
+      legal_flow_bitacora: {
+        Row: {
+          activo: boolean
+          autor_email: string
+          autor_nombre: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: string
+          id_cuenta_cobranza: number
+          id_documento: number | null
+          id_persona: number | null
+          mensaje: string
+          scope: string | null
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          autor_email: string
+          autor_nombre?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_cuenta_cobranza: number
+          id_documento?: number | null
+          id_persona?: number | null
+          mensaje: string
+          scope?: string | null
+          tipo: string
+        }
+        Update: {
+          activo?: boolean
+          autor_email?: string
+          autor_nombre?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_cuenta_cobranza?: number
+          id_documento?: number | null
+          id_persona?: number | null
+          mensaje?: string
+          scope?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_bitacora_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_documento_fkey"
+            columns: ["id_documento"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_flow_etapas: {
+        Row: {
+          activo: boolean
+          codigo: string
+          es_terminal: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          nombre: string
+          orden: number
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      legal_flow_expedientes: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          email_asignado: string | null
+          email_solicitante: string
+          etapa: string
+          fecha_actualizacion: string
+          fecha_aprobacion: string | null
+          fecha_creacion: string
+          fecha_envio_firma: string | null
+          fecha_firmado: string | null
+          fecha_limite: string | null
+          id: number
+          id_cuenta_cobranza: number
+          id_template: number | null
+          notas_rechazo: string | null
+          prioridad: string
+          tipo_solicitud: string
+          titulo: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          email_asignado?: string | null
+          email_solicitante: string
+          etapa?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          fecha_envio_firma?: string | null
+          fecha_firmado?: string | null
+          fecha_limite?: string | null
+          id?: number
+          id_cuenta_cobranza: number
+          id_template?: number | null
+          notas_rechazo?: string | null
+          prioridad?: string
+          tipo_solicitud?: string
+          titulo?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          email_asignado?: string | null
+          email_solicitante?: string
+          etapa?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          fecha_envio_firma?: string | null
+          fecha_firmado?: string | null
+          fecha_limite?: string | null
+          id?: number
+          id_cuenta_cobranza?: number
+          id_template?: number | null
+          notas_rechazo?: string | null
+          prioridad?: string
+          tipo_solicitud?: string
+          titulo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_expedientes_etapa_fkey"
+            columns: ["etapa"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_expedientes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_expedientes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
+      }
+      legal_flow_historico: {
+        Row: {
+          activo: boolean
+          email_usuario: string
+          etapa_anterior: string | null
+          etapa_nueva: string
+          fecha: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_expediente: number
+          notas: string | null
+        }
+        Insert: {
+          activo?: boolean
+          email_usuario: string
+          etapa_anterior?: string | null
+          etapa_nueva: string
+          fecha?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_expediente: number
+          notas?: string | null
+        }
+        Update: {
+          activo?: boolean
+          email_usuario?: string
+          etapa_anterior?: string | null
+          etapa_nueva?: string
+          fecha?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_expediente?: number
+          notas?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_historico_etapa_anterior_fkey"
+            columns: ["etapa_anterior"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_historico_etapa_nueva_fkey"
+            columns: ["etapa_nueva"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_historico_id_expediente_fkey"
+            columns: ["id_expediente"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_expedientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logs_actividad: {
         Row: {
           actividad_id: number
@@ -6951,9 +7204,12 @@ export type Database = {
           activo: boolean
           clave_pais_telefono: string | null
           curp: string | null
+          datos_basicos_estatus_verificacion: number
+          datos_fiscales_estatus_verificacion: number
           direccion_calle: string | null
           direccion_codigo_postal: string | null
           direccion_colonia: string | null
+          direccion_estatus_verificacion: number
           direccion_fiscal_calle: string | null
           direccion_fiscal_codigo_postal: string | null
           direccion_fiscal_colonia: string | null
@@ -7002,9 +7258,12 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
+          datos_basicos_estatus_verificacion?: number
+          datos_fiscales_estatus_verificacion?: number
           direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
+          direccion_estatus_verificacion?: number
           direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
@@ -7053,9 +7312,12 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
+          datos_basicos_estatus_verificacion?: number
+          datos_fiscales_estatus_verificacion?: number
           direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
+          direccion_estatus_verificacion?: number
           direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
@@ -7510,6 +7772,7 @@ export type Database = {
           descripcion: string
           descripcion_reparacion: string | null
           diagnostico: string | null
+          es_reclamo_garantia: boolean
           estatus: string
           fecha_actualizacion: string
           fecha_confirmacion_cliente: string | null
@@ -7541,6 +7804,7 @@ export type Database = {
           descripcion: string
           descripcion_reparacion?: string | null
           diagnostico?: string | null
+          es_reclamo_garantia?: boolean
           estatus?: string
           fecha_actualizacion?: string
           fecha_confirmacion_cliente?: string | null
@@ -7572,6 +7836,7 @@ export type Database = {
           descripcion?: string
           descripcion_reparacion?: string | null
           diagnostico?: string | null
+          es_reclamo_garantia?: boolean
           estatus?: string
           fecha_actualizacion?: string
           fecha_confirmacion_cliente?: string | null
@@ -8670,6 +8935,7 @@ export type Database = {
           descripcion_direccion: string
           fecha_actualizacion: string
           fecha_creacion: string
+          horarios: string | null
           id: number
           id_proyecto: number
           latitud: number
@@ -8681,6 +8947,7 @@ export type Database = {
           descripcion_direccion: string
           fecha_actualizacion?: string
           fecha_creacion?: string
+          horarios?: string | null
           id?: never
           id_proyecto: number
           latitud: number
@@ -8692,6 +8959,7 @@ export type Database = {
           descripcion_direccion?: string
           fecha_actualizacion?: string
           fecha_creacion?: string
+          horarios?: string | null
           id?: never
           id_proyecto?: number
           latitud?: number
@@ -10267,6 +10535,14 @@ export type Database = {
           url_recibo: string
         }[]
       }
+      get_payments_for_cep_audit: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
       get_pending_payments: {
         Args: {
           p_excluir_metodos?: string[]
@@ -10366,6 +10642,7 @@ export type Database = {
           vista: string
         }[]
       }
+      get_proyectos_publicados: { Args: never; Returns: Json }
       get_relacion_pagos:
         | {
             Args: {
@@ -10406,6 +10683,8 @@ export type Database = {
             }
             Returns: Json
           }
+      get_showrooms_contacto: { Args: never; Returns: Json }
+      get_stats_respaldo: { Args: never; Returns: Json }
       get_totales_comisiones_sozu: {
         Args: never
         Returns: {
@@ -10474,6 +10753,10 @@ export type Database = {
         | { Args: { user_id: string }; Returns: boolean }
       mark_email_confirmed: { Args: never; Returns: undefined }
       mark_password_changed: { Args: never; Returns: undefined }
+      migrate_invalid_cep_to_recibo: {
+        Args: { p_ids: string[] }
+        Returns: Json
+      }
       obtener_pagos_sin_cep: {
         Args: { p_edificio?: string }
         Returns: {
