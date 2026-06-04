@@ -26,6 +26,7 @@ import {
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
+import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { useCompradoresFullDetail, type CompradorFullDetail } from '@/hooks/useCompradoresFullDetail';
 import { useFormaPagoOferta, type FormaPagoOferta } from '@/hooks/useFormaPagoOferta';
@@ -2319,17 +2320,26 @@ function FirmaTitularActions({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
       queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      // El expediente avanza a Etapa 6: invalida la query para que la
+      // columna "Firmado" del Pipeline aparezca al instante.
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firmado'] });
       // Invalida cualquier query del Admin Panel que liste documentos de
       // esta cuenta para que su tab de Documentos refleje "Validado".
       queryClient.invalidateQueries({ queryKey: ['documentos'] });
       queryClient.invalidateQueries({ queryKey: ['cuenta_cobranza'] });
       queryClient.invalidateQueries({ queryKey: ['expediente_venta_detalle'] });
-      toast({ title: 'Contrato validado', description: 'Expediente listo para Firmado.' });
+      toast({ title: 'Contrato validado', description: 'Expediente movido a Firmado.' });
     },
     onError: (err: unknown) => {
+      const desc = pgErrorMessage(err);
+      const isPrivateSchemaPermission =
+        isPgCode(err, '42501') ||
+        (typeof desc === 'string' && desc.toLowerCase().includes('permission denied for schema private'));
       toast({
         title: 'Error al validar contrato',
-        description: pgErrorMessage(err) ?? 'No se pudo actualizar el estatus.',
+        description: isPrivateSchemaPermission
+          ? 'Permiso BD pendiente: el trigger usa pg_net pero el rol no tiene USAGE sobre el schema "private". Pídele a Jorge que ejecute el DDL en Ejecuciones_manuales/fix_permission_denied_private_validar_documento.md.'
+          : desc ?? 'No se pudo actualizar el estatus.',
         variant: 'destructive',
       });
     },
@@ -2674,18 +2684,26 @@ export default function CaseDetail() {
     isLoading: loadingFirmaTitular,
   } = useLegalFlowFirmaTitular();
   const {
+    data: firmado = [],
+    isLoading: loadingFirmado,
+  } = useLegalFlowFirmado();
+  const {
     data: archivados = [],
     isLoading: loadingArchivados,
   } = useLegalFlowExpedientesArchivados();
-  // Si la cuenta aparece en Firma titular (contrato firmado pendiente de
-  // validación), su detalle debe presentarse como etapa 5 y no como
-  // Solicitud recibida — aunque la propiedad siga en estatus Apartado.
+  // Prioridad al resolver el detalle: Firmado (etapa 6) > Firma titular
+  // (etapa 5) > Solicitudes recibidas (etapa 1) > Archivados. Una vez el
+  // contrato se valida, el expediente vive en Firmado y no debe
+  // presentarse de nuevo como Solicitud recibida aunque la propiedad
+  // siga en estatus Apartado.
   const realRequest =
+    firmado.find((r) => r.id === id) ??
     firmaTitular.find((r) => r.id === id) ??
     [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
   const mockRequest = mockRequests.find((r) => r.id === id);
   const request = realRequest ?? mockRequest;
-  const isLoadingReal = loadingSolicitudes || loadingFirmaTitular || loadingArchivados;
+  const isLoadingReal =
+    loadingSolicitudes || loadingFirmaTitular || loadingFirmado || loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -4091,4 +4109,11 @@ function pgErrorMessage(err: unknown): string | null {
     if (parts.length > 0) return parts.join(' — ');
   }
   return null;
+}
+
+/** True si el error es un `PostgrestError` con `code === expected`. */
+function isPgCode(err: unknown, expected: string): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as Record<string, unknown>;
+  return typeof e.code === 'string' && e.code === expected;
 }
