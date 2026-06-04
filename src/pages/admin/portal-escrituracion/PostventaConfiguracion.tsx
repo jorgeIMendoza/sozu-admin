@@ -436,7 +436,7 @@ function TabPersonal() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">{personal.length} técnico(s) registrado(s)</p>
-        <button onClick={() => { setForm({ activo: true }); setEditing(null); setShowForm(true); }} className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800">
+        <button onClick={() => { setForm({ nombre: '', especialidad: '', email: '', telefono: '', activo: true }); setEditing(null); setShowForm(true); }} className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800">
           <Plus className="w-3.5 h-3.5" /> Nuevo técnico
         </button>
       </div>
