@@ -17,8 +17,8 @@
  * en páginas de 1000 hasta que un lote regresa menos filas que el
  * tamaño de página o llega al hard cap (`maxPages`).
  */
-export async function fetchAllRows<T>(
-  build: (from: number, to: number) => Promise<{ data: T[] | null; error: any }>,
+export async function fetchAllRows<T = any>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
   options: { pageSize?: number; maxPages?: number } = {},
 ): Promise<T[]> {
   const pageSize = options.pageSize ?? 1000;

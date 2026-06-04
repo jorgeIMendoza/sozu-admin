@@ -18,6 +18,7 @@ export interface Installment {
   paidAt?: string;
   confirmationStatus?: PaymentConfirmationStatus;
   confirmationTimestamp?: string;
+  constructionMilestone?: string;
 }
 
 export interface STPPaymentInfo {

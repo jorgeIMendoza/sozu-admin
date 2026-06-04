@@ -69,7 +69,7 @@ export function useComisionesExternas() {
   return useQuery({
     queryKey: ["comisiones_externas_alta_direccion"],
     queryFn: async (): Promise<ComisionExterna[]> => {
-      const comisionistas = await fetchAllRows((from, to) =>
+      const comisionistas = await fetchAllRows<any>((from, to) =>
         supabase
           .from("comisionistas")
           .select(
