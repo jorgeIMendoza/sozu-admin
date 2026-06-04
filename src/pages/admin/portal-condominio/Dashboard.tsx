@@ -1,5 +1,7 @@
-import { PageHeader, KPICard } from "./_helpers";
-import { getKPIs, formatMXN, tendenciaMensual, antiguedad, pagos, cobranza } from "@/data/portalCondominio/mockData";
+import { PageHeader, KPICard, EstadoVista } from "./_helpers";
+import { formatMXN } from "@/lib/portal-condominio/format";
+import { useCondominio } from "@/contexts/CondominioContext";
+import { useCondominioDataset } from "@/hooks/condominio/useCondominioData";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
@@ -8,19 +10,31 @@ import {
 const COLORS = ["hsl(142,71%,45%)", "hsl(38,92%,50%)", "hsl(0,84%,60%)", "hsl(0,50%,45%)"];
 
 export default function CondominioDashboard() {
-  const k = getKPIs();
-  const excepciones = pagos.filter((p) => p.estatus_conciliacion === "excepcion" || p.estatus_conciliacion === "pendiente").slice(0, 5);
+  const { proyectoId } = useCondominio();
+  const { data, isLoading, error } = useCondominioDataset(proyectoId);
+
+  if (isLoading || error || !data) {
+    return (
+      <div>
+        <PageHeader title="Dashboard Condominio" subtitle="Vista general" />
+        <EstadoVista isLoading={isLoading} error={error} />
+      </div>
+    );
+  }
+
+  const k = data.kpis;
+  const excepciones = data.pagos.filter((p) => p.estatus_conciliacion !== "conciliado").slice(0, 5);
 
   return (
     <div>
-      <PageHeader title="Dashboard Condominio" subtitle="Vista general · Marzo 2025" />
+      <PageHeader title="Dashboard Condominio" subtitle="Vista general · Mantenimiento" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <KPICard title="Cobranza esperada" value={formatMXN(k.totalEsperado)} subtitle="320 deptos" />
-        <KPICard title="Cobrado del mes" value={formatMXN(k.totalCobrado)} subtitle={`${k.tasaCobranza}% de avance`} variant="success" />
+        <KPICard title="Cobranza esperada" value={formatMXN(k.totalEsperado)} subtitle={`${k.numUnidades} unidades`} />
+        <KPICard title="Cobrado histórico" value={formatMXN(k.totalCobrado)} subtitle={`${k.tasaCobranza}% de avance`} variant="success" />
         <KPICard title="Cartera vencida" value={formatMXN(k.totalVencido)} subtitle={`${k.morosos} morosos`} variant="danger" />
         <KPICard title="Excepciones" value={String(k.excepciones)} subtitle="Pagos por revisar" variant="warning" />
-        <KPICard title="Balance neto" value={formatMXN(k.balanceNeto)} subtitle={`Egresos ${formatMXN(k.totalEgresos)}`} />
+        <KPICard title="Saldo pendiente" value={formatMXN(k.saldoPendiente)} subtitle="Por cobrar total" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -28,7 +42,7 @@ export default function CondominioDashboard() {
           <h2 className="text-sm font-semibold text-foreground mb-3">Tendencia mensual</h2>
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
-              <BarChart data={tendenciaMensual}>
+              <BarChart data={data.tendenciaMensual}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -36,7 +50,6 @@ export default function CondominioDashboard() {
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="esperado" name="Esperado" fill="hsl(213,27%,84%)" />
                 <Bar dataKey="cobrado" name="Cobrado" fill="hsl(142,71%,45%)" />
-                <Bar dataKey="egresos" name="Egresos" fill="hsl(0,84%,60%)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -47,8 +60,8 @@ export default function CondominioDashboard() {
           <div style={{ width: "100%", height: 220 }}>
             <ResponsiveContainer>
               <PieChart>
-                <Pie data={antiguedad} dataKey="monto" nameKey="rango" outerRadius={80} label={(d: any) => d.rango}>
-                  {antiguedad.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={data.antiguedad} dataKey="monto" nameKey="rango" outerRadius={80} label={(d: any) => d.rango}>
+                  {data.antiguedad.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip formatter={(v: number) => formatMXN(v)} />
               </PieChart>
@@ -67,17 +80,19 @@ export default function CondominioDashboard() {
                 <span className="tabular-nums text-warning">{formatMXN(p.monto)}</span>
               </li>
             ))}
+            {excepciones.length === 0 && <li className="py-2 text-muted-foreground">Sin excepciones.</li>}
           </ul>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground mb-3">Top morosos</h2>
           <ul className="divide-y divide-border text-sm">
-            {cobranza.slice(0, 5).map((c) => (
+            {data.morosos.slice(0, 5).map((c) => (
               <li key={c.id} className="flex justify-between py-2">
                 <span>#{c.unidad_numero} · {c.propietario}</span>
                 <span className="tabular-nums text-destructive">{formatMXN(c.monto_vencido)}</span>
               </li>
             ))}
+            {data.morosos.length === 0 && <li className="py-2 text-muted-foreground">Sin morosos.</li>}
           </ul>
         </div>
       </div>

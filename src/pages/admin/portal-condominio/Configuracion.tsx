@@ -1,4 +1,7 @@
 import { PageHeader } from "./_helpers";
+import { formatMXN } from "@/lib/portal-condominio/format";
+import { useCondominio } from "@/contexts/CondominioContext";
+import { useCondominioConfig } from "@/hooks/condominio/useCondominioData";
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -10,6 +13,9 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export default function Configuracion() {
+  const { proyectoId } = useCondominio();
+  const { data: config, isLoading } = useCondominioConfig(proyectoId);
+
   return (
     <div>
       <PageHeader title="Configuración" subtitle="Parámetros del condominio" />
@@ -17,18 +23,19 @@ export default function Configuracion() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-semibold mb-3">Datos generales</h2>
           <div className="space-y-3 text-sm">
-            <Field label="Nombre del condominio" value="Sozu Tower" />
-            <Field label="RFC administradora" value="ADM250101XXX" />
-            <Field label="Dirección" value="Av. Reforma 250, CDMX" />
-            <Field label="Fecha de corte" value="Día 10 de cada mes" />
+            <Field label="Nombre del condominio" value={isLoading ? "…" : config?.nombre ?? "—"} />
+            <Field label="Costo mantenimiento / m²" value={isLoading ? "…" : formatMXN(config?.costo_mantenimiento_m2 ?? 0)} />
+            <Field
+              label="Cuota extraordinaria mensual"
+              value={isLoading ? "…" : config?.monto_mensual_cuota_extraordinaria ? formatMXN(config.monto_mensual_cuota_extraordinaria) : "—"}
+            />
           </div>
         </section>
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-semibold mb-3">Conciliación bancaria</h2>
           <div className="space-y-3 text-sm">
             <Field label="Banco" value="STP" />
-            <Field label="CLABE base" value="64618010000000000" />
-            <Field label="Tolerancia monto" value="±$0.50 MXN" />
+            <Field label="Tolerancia monto" value="±$0.01 MXN" />
             <Field label="Conciliación automática" value="Activa" />
           </div>
         </section>

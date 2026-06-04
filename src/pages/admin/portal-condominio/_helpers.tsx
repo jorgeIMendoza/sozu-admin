@@ -1,4 +1,37 @@
 import { ReactNode } from "react";
+import { Loader2, AlertCircle } from "lucide-react";
+
+// Renderiza estados de carga / error / vacío para vistas cableadas a BD.
+export function EstadoVista({
+  isLoading,
+  error,
+  vacio,
+  mensajeVacio = "Sin datos para este condominio.",
+}: {
+  isLoading: boolean;
+  error?: unknown;
+  vacio?: boolean;
+  mensajeVacio?: string;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" /> Cargando información…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-destructive">
+        <AlertCircle className="h-5 w-5" /> Error al cargar: {error instanceof Error ? error.message : "desconocido"}
+      </div>
+    );
+  }
+  if (vacio) {
+    return <div className="py-16 text-center text-muted-foreground">{mensajeVacio}</div>;
+  }
+  return null;
+}
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (

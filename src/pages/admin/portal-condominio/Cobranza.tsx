@@ -1,19 +1,26 @@
-import { PageHeader, KPICard, StatusBadge } from "./_helpers";
-import { cobranza, formatMXN, antiguedad } from "@/data/portalCondominio/mockData";
+import { PageHeader, KPICard, StatusBadge, EstadoVista } from "./_helpers";
+import { formatMXN } from "@/lib/portal-condominio/format";
+import { useCondominio } from "@/contexts/CondominioContext";
+import { useCondominioDataset } from "@/hooks/condominio/useCondominioData";
 
 export default function Cobranza() {
-  const total = cobranza.reduce((s, c) => s + c.monto_vencido, 0);
-  const promesas = cobranza.filter((c) => c.tipo_accion === "promesa_pago").length;
+  const { proyectoId } = useCondominio();
+  const { data, isLoading, error } = useCondominioDataset(proyectoId);
+  const morosos = data?.morosos ?? [];
+  const antiguedad = data?.antiguedad ?? [];
+
+  const total = morosos.reduce((s, c) => s + c.monto_vencido, 0);
+  const cuentas90 = morosos.filter((c) => c.antiguedad === "90+").length;
 
   return (
     <div>
-      <PageHeader title="Cobranza" subtitle={`${cobranza.length} casos activos`} />
+      <PageHeader title="Cobranza" subtitle={`${morosos.length} casos activos`} />
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
         <KPICard title="Cartera vencida" value={formatMXN(total)} variant="danger" />
-        <KPICard title="Casos activos" value={String(cobranza.length)} variant="warning" />
-        <KPICard title="Promesas pago" value={String(promesas)} />
-        <KPICard title="Cuentas 90+ días" value={String(cobranza.filter((c) => c.antiguedad === "90+").length)} variant="danger" />
+        <KPICard title="Casos activos" value={String(morosos.length)} variant="warning" />
+        <KPICard title="Cuentas 90+ días" value={String(cuentas90)} variant="danger" />
+        <KPICard title="Promedio por caso" value={formatMXN(morosos.length ? total / morosos.length : 0)} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-4">
@@ -26,34 +33,35 @@ export default function Cobranza() {
         ))}
       </div>
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
-            <tr>
-              <th className="px-3 py-2 text-left">Unidad</th>
-              <th className="px-3 py-2 text-left">Propietario</th>
-              <th className="px-3 py-2 text-right">Monto vencido</th>
-              <th className="px-3 py-2 text-left">Antigüedad</th>
-              <th className="px-3 py-2 text-left">Última acción</th>
-              <th className="px-3 py-2 text-left">Agente</th>
-              <th className="px-3 py-2 text-left">Promesa</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {cobranza.map((c) => (
-              <tr key={c.id} className="hover:bg-muted/30">
-                <td className="px-3 py-2 font-medium">#{c.unidad_numero}</td>
-                <td className="px-3 py-2">{c.propietario}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-destructive">{formatMXN(c.monto_vencido)}</td>
-                <td className="px-3 py-2"><StatusBadge label={c.antiguedad} tone={c.antiguedad === "90+" ? "danger" : c.antiguedad === "61-90" ? "warning" : "default"} /></td>
-                <td className="px-3 py-2 capitalize text-muted-foreground">{c.tipo_accion.replace("_", " ")}</td>
-                <td className="px-3 py-2 text-muted-foreground">{c.agente}</td>
-                <td className="px-3 py-2">{c.fecha_promesa || "—"}</td>
+      {(isLoading || error) ? (
+        <EstadoVista isLoading={isLoading} error={error} />
+      ) : (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
+              <tr>
+                <th className="px-3 py-2 text-left">Unidad</th>
+                <th className="px-3 py-2 text-left">Propietario</th>
+                <th className="px-3 py-2 text-right">Monto vencido</th>
+                <th className="px-3 py-2 text-left">Antigüedad</th>
+                <th className="px-3 py-2 text-left">Último pago</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {morosos.map((c) => (
+                <tr key={c.id} className="hover:bg-muted/30">
+                  <td className="px-3 py-2 font-medium">#{c.unidad_numero}</td>
+                  <td className="px-3 py-2">{c.propietario}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-destructive">{formatMXN(c.monto_vencido)}</td>
+                  <td className="px-3 py-2"><StatusBadge label={c.antiguedad} tone={c.antiguedad === "90+" ? "danger" : c.antiguedad === "61-90" ? "warning" : "default"} /></td>
+                  <td className="px-3 py-2 text-muted-foreground">{c.ultimo_pago || "—"}</td>
+                </tr>
+              ))}
+              {morosos.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Sin cartera vencida.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,8 +20,27 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { CondominioProvider, useCondominio } from "@/contexts/CondominioContext";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
+
+function CondominioSelector({ className }: { className?: string }) {
+  const { condominios, proyectoId, setProyectoId, isLoading } = useCondominio();
+  if (isLoading) return <span className="text-xs text-muted-foreground">Cargando…</span>;
+  if (condominios.length === 0) return <span className="text-xs text-muted-foreground">Sin condominios</span>;
+  return (
+    <select
+      value={proyectoId ?? ""}
+      onChange={(e) => setProyectoId(Number(e.target.value))}
+      className={cn("h-8 px-2 rounded-md border border-border bg-background text-sm", className)}
+      aria-label="Seleccionar condominio"
+    >
+      {condominios.map((c) => (
+        <option key={c.id} value={c.id}>{c.nombre}</option>
+      ))}
+    </select>
+  );
+}
 
 const navItems: NavItem[] = [
   { label: "Dashboard",           path: "/admin/portal-condominio/dashboard",      icon: LayoutDashboard },
@@ -35,7 +54,7 @@ const navItems: NavItem[] = [
   { label: "Configuración",       path: "/admin/portal-condominio/configuracion",  icon: Settings2 },
 ];
 
-export const PortalCondominioLayout = () => {
+const PortalCondominioLayoutInner = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
@@ -86,9 +105,11 @@ export const PortalCondominioLayout = () => {
           <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => handleNavigate("/admin")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" /> Menú principal
-          </button>
+          {profile?.rol_id === 1 && (
+            <button onClick={() => handleNavigate("/admin")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" /> Menú principal
+            </button>
+          )}
           <button onClick={signOut} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors">
             <LogOut className="h-3.5 w-3.5" /> Salir
           </button>
@@ -115,6 +136,7 @@ export const PortalCondominioLayout = () => {
             <span className="text-muted-foreground">{currentSection}</span>
           </div>
           <div className="flex items-center gap-3 min-w-0">
+            <CondominioSelector />
             <div className="min-w-0 text-right">
               <p className="text-sm font-medium text-foreground truncate">{userName}</p>
               <p className="text-xs text-muted-foreground truncate">Condominio</p>
@@ -135,9 +157,12 @@ export const PortalCondominioLayout = () => {
               <p className="text-[11px] text-muted-foreground leading-tight truncate">{currentSection}</p>
             </div>
           </div>
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="bg-primary text-primary-foreground text-[12px] font-bold">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-2 shrink-0">
+            <CondominioSelector />
+            <Avatar className="h-8 w-8 shrink-0">
+              <AvatarFallback className="bg-primary text-primary-foreground text-[12px] font-bold">{initials}</AvatarFallback>
+            </Avatar>
+          </div>
         </header>
 
         <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
@@ -147,5 +172,11 @@ export const PortalCondominioLayout = () => {
     </div>
   );
 };
+
+export const PortalCondominioLayout = () => (
+  <CondominioProvider>
+    <PortalCondominioLayoutInner />
+  </CondominioProvider>
+);
 
 export default PortalCondominioLayout;
