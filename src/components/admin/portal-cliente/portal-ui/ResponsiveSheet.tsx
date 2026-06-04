@@ -38,7 +38,7 @@ const ResponsiveSheet = ({
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className={`p-0 ${maxWClass} max-h-[90vh] overflow-y-auto rounded-2xl border-border-soft shadow-xl ${className}`}
+          className={`p-0 ${maxWClass} max-h-[75dvh] overflow-y-auto rounded-2xl border-border-soft shadow-xl ${className}`}
         >
           {children}
         </DialogContent>
@@ -50,7 +50,7 @@ const ResponsiveSheet = ({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className={`p-0 max-h-[92vh] overflow-y-auto rounded-t-3xl ${className}`}
+        className={`p-0 max-h-[75dvh] overflow-y-auto rounded-t-3xl ${className}`}
       >
         {children}
       </SheetContent>

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Button } from "@/components/ui/button";
-import { Download, Loader2 } from "lucide-react";
+import { FileText, Download, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface PdfViewerDialogProps {
@@ -14,16 +13,11 @@ interface PdfViewerDialogProps {
 }
 
 function extractStoragePath(url: string): { bucket: string; path: string } | null {
-  // If it's a full public Supabase storage URL, extract bucket+path for signed URL
   const publicMatch = url.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?.*)?$/);
   if (publicMatch) return { bucket: publicMatch[1], path: decodeURIComponent(publicMatch[2]) };
 
-  // Mifiel API file endpoints are handled separately via edge function
-  if (/\/?api\/v1\/documents\/[^/]+\/file(?:_signed)?(?:\?.*)?$/i.test(url)) {
-    return null;
-  }
+  if (/\/?api\/v1\/documents\/[^/]+\/file(?:_signed)?(?:\?.*)?$/i.test(url)) return null;
 
-  // If it's just a relative path like "cartas/xxx.pdf", assume firmas-digitales bucket
   if (!url.startsWith("http") && !url.startsWith("blob:")) {
     return { bucket: "firmas-digitales", path: url };
   }
@@ -31,7 +25,12 @@ function extractStoragePath(url: string): { bucket: string; path: string } | nul
   return null;
 }
 
-export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PDF" }: PdfViewerDialogProps) {
+export function PdfViewerDialog({
+  open,
+  onOpenChange,
+  url,
+  title = "Documento PDF",
+}: PdfViewerDialogProps) {
   const isMobile = useIsMobile();
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +69,6 @@ export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PD
 
     const storageInfo = extractStoragePath(url);
     if (!storageInfo) {
-      // It's a regular URL, use directly
       setSignedUrl(url);
       return;
     }
@@ -78,19 +76,13 @@ export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PD
     setLoading(true);
     setError(null);
 
-    console.log("[PdfViewerDialog] Generating signed URL for:", storageInfo.bucket, storageInfo.path);
-
     supabase.storage
       .from(storageInfo.bucket)
-      .createSignedUrl(storageInfo.path, 3600) // 1 hour
+      .createSignedUrl(storageInfo.path, 3600)
       .then(({ data, error: err }) => {
         if (err || !data?.signedUrl) {
-          console.error("[PdfViewerDialog] Error creating signed URL:", err, "bucket:", storageInfo.bucket, "path:", storageInfo.path);
-          // Fallback: use the original URL directly (public buckets work without signing)
-          console.warn("[PdfViewerDialog] Falling back to original URL");
           setSignedUrl(url);
         } else {
-          console.log("[PdfViewerDialog] Signed URL generated successfully");
           setSignedUrl(data.signedUrl);
         }
       })
@@ -98,51 +90,88 @@ export function PdfViewerDialog({ open, onOpenChange, url, title = "Documento PD
   }, [open, url]);
 
   const effectiveUrl = signedUrl || "";
-
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(url);
 
-  const content = (
-    <div className="flex-1 flex flex-col overflow-hidden">
+  const header = (
+    <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border shrink-0">
+      <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-foreground text-sm leading-tight truncate">{title}</h3>
+        <p className="text-xs text-muted-foreground">Vista previa del documento</p>
+      </div>
+    </div>
+  );
+
+  const viewer = (
+    <div className="flex-1 min-h-0 overflow-hidden bg-muted/20">
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="h-full flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          {error}
+        <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-6">
+          <AlertCircle className="w-10 h-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">{error}</p>
         </div>
       ) : isImage ? (
-        <div className="flex-1 w-full overflow-auto rounded border bg-muted/20 flex items-center justify-center">
+        <div className="h-full overflow-auto flex items-center justify-center p-4">
           <img src={effectiveUrl} alt={title} className="max-w-full max-h-full object-contain" />
         </div>
       ) : (
-        <iframe src={effectiveUrl} className="flex-1 w-full rounded border" title={title} />
+        <iframe
+          src={effectiveUrl ? `${effectiveUrl}#toolbar=0&navpanes=0` : ""}
+          className="w-full h-full border-0"
+          title={title}
+          loading="lazy"
+        />
       )}
+    </div>
+  );
+
+  const footer = (
+    <div className="px-5 pb-6 pt-4 border-t border-border/50 space-y-2 shrink-0">
+      {effectiveUrl && !loading && (
+        <a
+          href={effectiveUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Descargar
+        </a>
+      )}
+      <button
+        onClick={() => onOpenChange(false)}
+        className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+      >
+        Cerrar
+      </button>
     </div>
   );
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[95vh] h-[95vh] rounded-t-3xl overflow-hidden flex flex-col">
-          <DrawerHeader className="text-left pb-1 px-4 shrink-0">
-            <DrawerTitle>{title}</DrawerTitle>
-            <DrawerDescription>Documento firmado</DrawerDescription>
-          </DrawerHeader>
-          <div className="flex-1 overflow-hidden flex flex-col px-4 pb-4">{content}</div>
-        </DrawerContent>
-      </Drawer>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="bottom"
+          className="h-[90vh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden"
+        >
+          {header}
+          {viewer}
+          {footer}
+        </SheetContent>
+      </Sheet>
     );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Documento firmado</DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-hidden flex flex-col">{content}</div>
+      <DialogContent className="max-w-3xl w-full max-h-[90vh] h-[90vh] p-0 flex flex-col overflow-hidden [&>button:last-child]:hidden">
+        {header}
+        {viewer}
+        {footer}
       </DialogContent>
     </Dialog>
   );
