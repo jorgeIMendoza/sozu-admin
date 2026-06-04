@@ -1,10 +1,8 @@
 import {
   LayoutDashboard,
   Inbox,
-  FilePlus,
   FileText,
   Bell,
-  Settings,
   Archive,
   ArrowLeft,
   LogOut,
@@ -32,7 +30,6 @@ const BASE = '/admin/legal-flow';
 const mainNav = [
   { title: 'Panel de Operaciones', url: `${BASE}`, icon: LayoutDashboard, end: true },
   { title: 'Solicitudes Legales', url: `${BASE}/requests`, icon: Inbox },
-  { title: 'Nueva Solicitud', url: `${BASE}/requests/new`, icon: FilePlus },
 ];
 
 const catalogNav = [
@@ -42,7 +39,6 @@ const catalogNav = [
 
 const systemNav = [
   { title: 'Notificaciones', url: `${BASE}/notifications`, icon: Bell },
-  { title: 'Configuración', url: `${BASE}/settings`, icon: Settings },
 ];
 
 export function LegalFlowSidebar() {
