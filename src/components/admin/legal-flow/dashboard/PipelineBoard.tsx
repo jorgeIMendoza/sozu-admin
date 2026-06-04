@@ -5,6 +5,7 @@ import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
+import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
 
 const PIPELINE_STAGES: { status: CaseStatus; label: string }[] = [
@@ -63,24 +64,38 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('expanded');
   const { data: solicitudesRecibidas } = useLegalFlowSolicitudesRecibidas();
   const { data: firmaTitular } = useLegalFlowFirmaTitular();
+  const { data: firmado } = useLegalFlowFirmado();
 
   // Etapas alimentadas con datos reales:
   //   • Solicitud recibida + En revisión legal: cuentas Apartado con/sin
   //     promoción según bitácora.
   //   • Firma titular: cuentas con Contrato firmado completamente (tipo 18)
   //     en estatus de verificación Pendiente.
+  //   • Firmado: cuentas con el mismo documento en estatus Validado. Una
+  //     vez el contrato se valida, el expediente vive aquí y no regresa
+  //     a Solicitud recibida ni a Firma titular.
   // El resto del pipeline sigue usando mock hasta que cada etapa tenga
   // su origen propio.
   const activeRequests = useMemo<LegalRequest[]>(() => {
+    const firmadoSet = new Set(
+      (firmado ?? [])
+        .map((r) => r.idCuentaCobranza)
+        .filter((v): v is number => !!v),
+    );
     const firmaTitularSet = new Set(
       (firmaTitular ?? [])
         .map((r) => r.idCuentaCobranza)
         .filter((v): v is number => !!v),
     );
-    // Las cuentas que ya están en Firma titular salen de Solicitud recibida
-    // para evitar duplicación visual en el board.
+    // Una cuenta en "Firmado" sale de Firma titular y de Solicitud
+    // recibida; una cuenta en "Firma titular" sale de Solicitud recibida.
+    const firmaTitularFiltered = (firmaTitular ?? []).filter(
+      (r) => !r.idCuentaCobranza || !firmadoSet.has(r.idCuentaCobranza),
+    );
     const recibidasFiltered = (solicitudesRecibidas ?? []).filter(
-      (r) => !r.idCuentaCobranza || !firmaTitularSet.has(r.idCuentaCobranza),
+      (r) =>
+        !r.idCuentaCobranza ||
+        (!firmaTitularSet.has(r.idCuentaCobranza) && !firmadoSet.has(r.idCuentaCobranza)),
     );
     const downstreamMock = mockRequests.filter(
       (r) =>
@@ -91,13 +106,19 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
           'Firma titular',
           'En firma',
           'Parcialmente firmado',
+          'Firmado',
           'Cancelado',
           'Rechazado',
           'Archivado',
         ].includes(r.status),
     );
-    return [...recibidasFiltered, ...(firmaTitular ?? []), ...downstreamMock];
-  }, [solicitudesRecibidas, firmaTitular]);
+    return [
+      ...recibidasFiltered,
+      ...firmaTitularFiltered,
+      ...(firmado ?? []),
+      ...downstreamMock,
+    ];
+  }, [solicitudesRecibidas, firmaTitular, firmado]);
 
   // Búsqueda por ID de cuenta (folio CC-XXXXXX), contraparte
   // (titular/compradores) o unidad ("Unidad 1005" o solo "1005").
