@@ -299,8 +299,8 @@ const MUEBLES_CHECKLIST = [
   ]},
 ] as const;
 
-const MUEBLES_TOTAL    = MUEBLES_CHECKLIST.flatMap(z => z.items).length;
-const MUEBLES_INCLUIDOS = MUEBLES_CHECKLIST.flatMap(z => z.items).filter(i => i.incluido).length;
+const MUEBLES_TOTAL    = MUEBLES_CHECKLIST.flatMap(z => z.items as readonly { nombre: string; incluido: boolean }[]).length;
+const MUEBLES_INCLUIDOS = MUEBLES_CHECKLIST.flatMap(z => z.items as readonly { nombre: string; incluido: boolean }[]).filter(i => i.incluido).length;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

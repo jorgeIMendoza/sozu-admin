@@ -374,7 +374,7 @@ export function ExpedientesTable() {
       const pagoEfectivoByCuenta: Record<number, number> = {};
 
       if (cuentaIds.length) {
-        const batches: Promise<any>[] = [];
+        const batches: PromiseLike<any>[] = [];
         for (let i = 0; i < cuentaIds.length; i += BATCH) {
           const slice = (cuentaIds as number[]).slice(i, i + BATCH);
           batches.push(
@@ -508,7 +508,7 @@ export function ExpedientesTable() {
         return false;
       }
       if (filtroSla !== 'Todas' && row.sla !== filtroSla) return false;
-      if (filtroPago !== 'Todos' && row.pago !== filtroPago) return false;
+      if (filtroPago !== 'Todos' && (row as any).pago !== filtroPago) return false;
       if (filtroNotaria !== 'Todas' && row.notaria !== filtroNotaria) return false;
       if (busqueda) {
         const q = busqueda.toLowerCase();
