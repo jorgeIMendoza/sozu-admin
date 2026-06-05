@@ -4,7 +4,6 @@ import {
   CalendarCheck,
   UserSearch,
   Briefcase,
-  FileText,
   Percent,
   ArrowLeft,
   LogOut,
@@ -32,8 +31,6 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/pipeline",
   "/admin/portal-alta-direccion/bandeja",
   "/admin/portal-alta-direccion/ciclo-venta",
-  "/admin/portal-alta-direccion/facturas-por-cobrar",
-  "/admin/portal-alta-direccion/facturas-por-pagar",
   "/admin/portal-alta-direccion/comisiones-externas",
   "/admin/portal-alta-direccion/comisiones-internas",
   "/admin/portal-alta-direccion/historico-comercial",
@@ -67,14 +64,6 @@ const navGroups: NavGroup[] = [
       { label: "Bandeja de Validaciones", path: "/admin/portal-alta-direccion/bandeja",      icon: Inbox },
       { label: "Ciclo de Venta",          path: "/admin/portal-alta-direccion/ciclo-venta",  icon: Workflow },
       // "Cobranza" y "Contratos" ocultas en esta fase de demo; rutas vivas en App.tsx por URL directa.
-      {
-        label: "Facturas",
-        icon: FileText,
-        children: [
-          { label: "Por Cobrar", path: "/admin/portal-alta-direccion/facturas-por-cobrar" },
-          { label: "Por Pagar",  path: "/admin/portal-alta-direccion/facturas-por-pagar"  },
-        ],
-      },
       {
         label: "Comisiones",
         icon: Percent,
