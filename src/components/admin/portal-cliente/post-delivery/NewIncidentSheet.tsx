@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Camera, X, Plus, ShieldCheck, Check } from "lucide-react";
+import { Camera, AlertTriangle, Plus, ShieldCheck, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   useWarrantyForCuenta,
@@ -116,9 +116,10 @@ const NewIncidentSheet = ({
     >
       <SheetContent
         side="bottom"
-        className="h-[95vh] p-0 rounded-t-2xl overflow-y-auto"
+        className="max-h-[75dvh] p-0 rounded-t-2xl overflow-y-auto [&>button:last-child]:hidden"
       >
         <div className="p-5 flex items-start gap-3 border-b border-border">
+          <AlertTriangle className="w-5 h-5 text-muted-foreground shrink-0" />
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-foreground">
               Reportar incidencia
@@ -129,16 +130,6 @@ const NewIncidentSheet = ({
                 : "Cuéntanos qué pasó y nuestro equipo lo revisará"}
             </p>
           </div>
-          <button
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            className="w-9 h-9 rounded-xl hover:bg-muted flex items-center justify-center shrink-0"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4 text-foreground" />
-          </button>
         </div>
 
         <div className="px-5 py-4 space-y-5">
@@ -305,6 +296,12 @@ const NewIncidentSheet = ({
           >
             <Plus className="w-4 h-4" />
             {createIncident.isPending ? "Enviando…" : "Reportar incidencia"}
+          </button>
+          <button
+            onClick={() => { reset(); onClose(); }}
+            className="w-full mt-2 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+          >
+            Cerrar
           </button>
         </div>
       </SheetContent>

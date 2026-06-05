@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/utils/supabasePagination";
 
 /**
  * Pipeline compartido para los 4 hooks de Análisis de Cobranza.
@@ -30,6 +31,15 @@ export interface CobranzaRow {
   id_cuenta: number;
   tipo: TipoCobranza;
   monto_comision: number;
+  /** Precio final completo de la cuenta — usado por la fórmula "Por cobrar
+   *  Todo el histórico" que considera el monto bruto de las cuentas con
+   *  propiedad activa en el inventario. */
+  precio_final: number;
+  /** Total pagado real por el comprador a la fecha (Σ aplicaciones_pago.monto
+   *  con es_multa=false). Es la suma del Detalle Cuenta de Cobranza. */
+  total_pagado: number;
+  /** id_estatus_disponibilidad de la propiedad asociada (null si no hay). */
+  estado_propiedad: number | null;
   fecha_compra: string | null;     // ISO date
   fecha_pago_comision: string | null;
   es_pagada: boolean;
@@ -108,7 +118,10 @@ export async function fetchCobranzaBase(): Promise<CobranzaBaseDataset> {
     }),
   );
 
-  // 3) Propiedades → id_entidad_relacionada_dueno + id_edificio_modelo.
+  // 3) Propiedades → id_entidad_relacionada_dueno + id_edificio_modelo +
+  //    id_estatus_disponibilidad. Este último alimenta la fórmula "Por
+  //    cobrar Todo el histórico" (sólo cuentas cuya propiedad esté en
+  //    Disponible/Apartada/Vendido/Escrituración/Entregada/Pagada/En demanda).
   const propIds = Array.from(
     new Set(
       cuentas
@@ -121,7 +134,7 @@ export async function fetchCobranzaBase(): Promise<CobranzaBaseDataset> {
     const slice = propIds.slice(i, i + PAGE_SIZE);
     const { data, error } = await (supabase as any)
       .from("propiedades")
-      .select("id, id_entidad_relacionada_dueno, id_edificio_modelo")
+      .select("id, id_entidad_relacionada_dueno, id_edificio_modelo, id_estatus_disponibilidad")
       .in("id", slice);
     if (error) throw error;
     propsRows.push(...((data || []) as Array<any>));
@@ -199,7 +212,65 @@ export async function fetchCobranzaBase(): Promise<CobranzaBaseDataset> {
     ]),
   );
 
-  // 6) Compose rows.
+  // 6) Total pagado por cuenta — Σ aplicaciones_pago.monto (es_multa=false)
+  //    vía acuerdos_pago. Misma fuente que el Detalle Cuenta de Cobranza,
+  //    para que "Cobrado · Todo el histórico" cuadre con esa vista.
+  //    Batcheamos los IN(...) en lotes de 500 para no exceder la longitud
+  //    de URL de PostgREST cuando hay >1k cuentas activas. Si algún
+  //    sub-fetch falla, el cálculo no se rompe — todal_pagado queda en 0
+  //    para esa cuenta y los demás KPIs se mantienen.
+  const cuentaIds = cuentas.map((c) => c.id as number);
+  const IN_BATCH = 500;
+  const acuerdos: Array<{ id: number; id_cuenta_cobranza: number }> = [];
+  for (let i = 0; i < cuentaIds.length; i += IN_BATCH) {
+    const slice = cuentaIds.slice(i, i + IN_BATCH);
+    try {
+      const batch = await fetchAllRows<{ id: number; id_cuenta_cobranza: number }>((from, to) =>
+        (supabase as any)
+          .from("acuerdos_pago")
+          .select("id, id_cuenta_cobranza")
+          .in("id_cuenta_cobranza", slice)
+          .eq("activo", true)
+          .range(from, to),
+      );
+      acuerdos.push(...batch);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[cobranza-base] acuerdos_pago fetch falló:", err);
+    }
+  }
+  const acuerdoToCuenta = new Map<number, number>(
+    acuerdos.map((a) => [a.id, a.id_cuenta_cobranza]),
+  );
+  const acuerdoIds = Array.from(acuerdoToCuenta.keys());
+  const aplicaciones: Array<{ id_acuerdo_pago: number; monto: number | null; es_multa: boolean | null }> = [];
+  for (let i = 0; i < acuerdoIds.length; i += IN_BATCH) {
+    const slice = acuerdoIds.slice(i, i + IN_BATCH);
+    try {
+      const batch = await fetchAllRows<{ id_acuerdo_pago: number; monto: number | null; es_multa: boolean | null }>((from, to) =>
+        (supabase as any)
+          .from("aplicaciones_pago")
+          .select("id_acuerdo_pago, monto, es_multa")
+          .in("id_acuerdo_pago", slice)
+          .eq("activo", true)
+          .range(from, to),
+      );
+      aplicaciones.push(...batch);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[cobranza-base] aplicaciones_pago fetch falló:", err);
+    }
+  }
+  const totalPagadoPorCuenta = new Map<number, number>();
+  for (const ap of aplicaciones) {
+    if (ap.es_multa) continue;
+    const idCuenta = acuerdoToCuenta.get(ap.id_acuerdo_pago);
+    if (idCuenta == null) continue;
+    const prev = totalPagadoPorCuenta.get(idCuenta) ?? 0;
+    totalPagadoPorCuenta.set(idCuenta, prev + Number(ap.monto ?? 0));
+  }
+
+  // 7) Compose rows.
   const now = Date.now();
   const rows: CobranzaRow[] = cuentas.map((c) => {
     const idProp = c.id_propiedad ?? (c.id_oferta ? ofPropMap.get(c.id_oferta) : null) ?? null;
@@ -232,6 +303,9 @@ export async function fetchCobranzaBase(): Promise<CobranzaBaseDataset> {
       id_cuenta: c.id as number,
       tipo,
       monto_comision: +monto.toFixed(2),
+      precio_final: +precio.toFixed(2),
+      total_pagado: +(totalPagadoPorCuenta.get(c.id as number) ?? 0).toFixed(2),
+      estado_propiedad: (prop?.id_estatus_disponibilidad as number | null) ?? null,
       fecha_compra: (c.fecha_compra as string | null) ?? null,
       fecha_pago_comision: (c.fecha_pago_comision as string | null) ?? null,
       es_pagada: !!c.es_pagada_comision_venta,

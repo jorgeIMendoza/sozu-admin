@@ -1,9 +1,8 @@
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet";
+import { Clock } from "lucide-react";
 import type { PaymentRecord } from "@/lib/portal-cliente/mock-data";
 
 interface PaymentsSheetProps {
@@ -22,12 +21,11 @@ const formatCurrency = (amount: number) =>
 const PaymentsSheet = ({ open, onClose, payments = [] }: PaymentsSheetProps) => {
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
-        <SheetHeader className="text-left pb-4">
-          <SheetTitle className="text-foreground font-display">
-            Historial de pagos
-          </SheetTitle>
-        </SheetHeader>
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden">
+        <div className="flex items-center gap-3 px-1 pb-4 border-b border-border">
+          <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+          <h2 className="font-semibold text-foreground">Historial de pagos</h2>
+        </div>
 
         <div className="space-y-1">
           {payments.map((payment, i) => (
@@ -58,6 +56,12 @@ const PaymentsSheet = ({ open, onClose, payments = [] }: PaymentsSheetProps) => 
             </div>
           ))}
         </div>
+        <button
+          onClick={onClose}
+          className="w-full mt-4 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+        >
+          Cerrar
+        </button>
       </SheetContent>
     </Sheet>
   );

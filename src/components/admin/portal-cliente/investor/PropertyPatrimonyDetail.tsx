@@ -31,6 +31,8 @@ import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-dat
 import { createPortal } from "react-dom";
 import ManualsBlock from "../post-delivery/ManualsBlock";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
+import MaintenancePaymentSheet from "@/components/admin/portal-cliente/detail/MaintenancePaymentSheet";
+import { useClientePropiedadDetalle, type MantenimientoHistorial } from "@/hooks/useClientePropiedadDetalle";
 
 interface Props {
   investment: InvestmentProperty;
@@ -49,10 +51,27 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
 
   const deliveredAt = property.fechaEscritura ?? "2024-05-15";
 
-  const maintenanceStatus: MaintenanceUiStatus =
-    maintenance?.status === "pendiente" ? "due_soon" : "current";
+  // Real maintenance data from Supabase
+  const { data: propDetalle, isLoading: loadingMaint } = useClientePropiedadDetalle(property.id);
+  const [showMaintSheet, setShowMaintSheet] = useState(false);
+
+  const clabe = propDetalle?.mantenimientoClabeStp ?? null;
+  const beneficiario = propDetalle?.beneficiarioNombre ?? null;
+  const cuotaMensual = propDetalle?.cuotaMensualMantenimiento ?? 0;
+  const mesesAtrasados = propDetalle?.mantenimientosAtrasados ?? 0;
+  const proximoVencimiento = propDetalle?.proximoMantenimiento ?? null;
+  const historialReal: MantenimientoHistorial[] = propDetalle?.mantenimientoHistorial ?? [];
+  const hasMaintenance = !loadingMaint && (cuotaMensual > 0 || clabe !== null);
+
+  // Only derive status after data loads — avoids "Al día" flicker
+  const maintenanceStatus: MaintenanceUiStatus = loadingMaint
+    ? "current"
+    : mesesAtrasados > 0 ? "overdue"
+    : proximoVencimiento ? "due_soon"
+    : "current";
 
   const usage: Usage = "uso_propio";
+  const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
 
   return (
     <div className="pb-24 space-y-6">
@@ -80,7 +99,15 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
             deltaPct={deltaPct}
             deliveredAt={deliveredAt}
           />
-          <MaintenanceSection maintenance={maintenance} status={maintenanceStatus} />
+          <MaintenanceSection
+            cuotaMensual={cuotaMensual}
+            proximoVencimiento={proximoVencimiento}
+            mesesAtrasados={mesesAtrasados}
+            historial={historialReal}
+            status={maintenanceStatus}
+            isLoading={loadingMaint}
+            onPay={() => setShowMaintSheet(true)}
+          />
           <UsageSection usage={usage} />
           <PropertyDocuments propertyId={property.id} />
           <ManualsBlock cuentaId={property.id} />
@@ -97,6 +124,9 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
             <DesktopPatrimonySidebar
               investment={investment}
               maintenanceStatus={maintenanceStatus}
+              cuotaMensual={cuotaMensual}
+              isLoadingMaint={loadingMaint}
+              onPayMaintenance={() => setShowMaintSheet(true)}
             />
             <PatrimonyTechSideCard property={property} />
           </div>
@@ -104,7 +134,24 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
       </div>
 
       {/* Mobile-only sticky CTA */}
-      <PatrimonyStickyCTA status={maintenanceStatus} amount={maintenance?.monthlyFee ?? 0} />
+      {hasMaintenance && (
+        <PatrimonyStickyCTA
+          status={maintenanceStatus}
+          amount={cuotaMensual}
+          onPayMaintenance={() => setShowMaintSheet(true)}
+        />
+      )}
+
+      <MaintenancePaymentSheet
+        open={showMaintSheet}
+        onClose={() => setShowMaintSheet(false)}
+        clabe={clabe}
+        beneficiario={beneficiario}
+        monto={cuotaMensual}
+        proximoVencimiento={proximoVencimiento}
+        mesesAtrasados={mesesAtrasados}
+        propertyLabel={propertyLabel}
+      />
     </div>
   );
 };
@@ -214,11 +261,17 @@ const TechCell = ({ label, value }: { label: string; value: string }) => (
 const DesktopPatrimonySidebar = ({
   investment,
   maintenanceStatus,
+  cuotaMensual,
+  isLoadingMaint,
+  onPayMaintenance,
 }: {
   investment: InvestmentProperty;
   maintenanceStatus: MaintenanceUiStatus;
+  cuotaMensual: number;
+  isLoadingMaint: boolean;
+  onPayMaintenance: () => void;
 }) => {
-  const { financials, maintenance } = investment;
+  const { financials } = investment;
   const valueMXN = financials.currentEstimatedValue;
   const purchaseMXN = financials.initialPrice;
   const deltaMXN = valueMXN - purchaseMXN;
@@ -248,7 +301,13 @@ const DesktopPatrimonySidebar = ({
       </div>
 
       {/* Maintenance card */}
-      {maintenance && (
+      {isLoadingMaint ? (
+        <div className="rounded-2xl border border-border p-4 bg-card animate-pulse">
+          <div className="h-3 w-24 bg-muted rounded mb-2" />
+          <div className="h-6 w-20 bg-muted rounded mb-3" />
+          <div className="h-9 w-full bg-muted rounded-xl" />
+        </div>
+      ) : cuotaMensual > 0 ? (
         <div
           className={`rounded-2xl border p-4 ${
             maintenanceStatus === "current"
@@ -262,23 +321,23 @@ const DesktopPatrimonySidebar = ({
             Mantenimiento mensual
           </p>
           <p className="font-display font-bold text-xl tabular-nums text-foreground">
-            {fmtMXN(maintenance.monthlyFee)}
+            {fmtMXN(cuotaMensual)}
           </p>
-          {maintenanceStatus !== "current" && (
-            <button
-              type="button"
-              className={`mt-3 w-full h-9 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center transition-colors ${
-                maintenanceStatus === "overdue"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : "bg-warning text-warning-foreground hover:bg-warning/90"
-              }`}
-              onClick={() => console.log("Pagar mantenimiento")}
-            >
-              Pagar mantenimiento
-            </button>
-          )}
+          <button
+            type="button"
+            className={`mt-3 w-full h-9 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center transition-colors ${
+              maintenanceStatus === "overdue"
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : maintenanceStatus === "due_soon"
+                ? "bg-warning text-warning-foreground hover:bg-warning/90"
+                : "bg-primary/10 text-primary hover:bg-primary/20"
+            }`}
+            onClick={onPayMaintenance}
+          >
+            Ver datos de pago
+          </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -624,15 +683,41 @@ const KpiCell = ({
 // ── Mantenimiento ──
 
 const MaintenanceSection = ({
-  maintenance,
+  cuotaMensual,
+  proximoVencimiento,
+  mesesAtrasados,
+  historial,
   status,
+  isLoading,
+  onPay,
 }: {
-  maintenance: InvestmentProperty["maintenance"];
+  cuotaMensual: number;
+  proximoVencimiento: string | null;
+  mesesAtrasados: number;
+  historial: MantenimientoHistorial[];
   status: MaintenanceUiStatus;
+  isLoading: boolean;
+  onPay: () => void;
 }) => {
-  const monthlyFee = maintenance?.monthlyFee ?? 4500;
-  const nextDate = maintenance?.nextDueDate ?? "Próximo mes";
-  const history = maintenance?.history ?? [];
+  if (isLoading) {
+    return (
+      <section className="rounded-2xl bg-card border border-border p-5 md:p-6 animate-pulse">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-4 w-4 bg-muted rounded" />
+          <div className="h-3 w-28 bg-muted rounded" />
+        </div>
+        <div className="rounded-xl border border-border/50 p-4 space-y-3">
+          <div className="h-10 bg-muted rounded-lg" />
+          <div className="h-9 bg-muted rounded-xl" />
+        </div>
+      </section>
+    );
+  }
+  const nextDateDisplay = proximoVencimiento
+    ? new Date(proximoVencimiento + "T12:00:00").toLocaleDateString("es-MX", {
+        day: "2-digit", month: "short", year: "numeric",
+      })
+    : "—";
 
   const cfg = {
     current: {
@@ -676,44 +761,71 @@ const MaintenanceSection = ({
               <div>
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Estado</p>
                 <p className="text-[14px] font-semibold text-foreground">{cfg.label}</p>
+                {mesesAtrasados > 0 && (
+                  <p className="text-[11px] text-destructive font-medium">
+                    {mesesAtrasados} {mesesAtrasados === 1 ? "mes vencido" : "meses vencidos"}
+                  </p>
+                )}
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Próximo pago
-              </p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cuota mensual</p>
               <p className="text-[14px] font-semibold text-foreground tabular-nums">
-                {fmtMXN(monthlyFee)}
+                {fmtMXN(cuotaMensual)}
               </p>
-              <p className="text-[11px] text-muted-foreground">{nextDate}</p>
+              <p className="text-[11px] text-muted-foreground">{nextDateDisplay}</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onPay}
+            className={`mt-3 w-full h-9 rounded-xl text-[12px] font-semibold inline-flex items-center justify-center transition-colors ${
+              status === "overdue"
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : status === "due_soon"
+                ? "bg-warning text-warning-foreground hover:bg-warning/90"
+                : "bg-primary/10 text-primary hover:bg-primary/20"
+            }`}
+          >
+            Ver datos de pago
+          </button>
         </div>
 
-        {history.length > 0 && (
+        {historial.length > 0 && (
           <div className="space-y-1">
             <p className="text-[10px] font-semibold tracking-wide uppercase text-muted-foreground px-1 pb-1">
               Historial reciente
             </p>
-            {history.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between gap-3 py-2.5 border-b border-border last:border-0"
-              >
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-medium text-foreground">{item.month}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {item.status === "pagado" ? "Pagado" : "Pendiente"}
-                    </p>
+            {historial.slice(0, 6).map((item) => {
+              const monthLabel = item.fechaPago
+                ? new Date(item.fechaPago + "T12:00:00").toLocaleDateString("es-MX", {
+                    month: "long", year: "numeric",
+                  })
+                : "—";
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 py-2.5 border-b border-border last:border-0"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {item.pagado ? (
+                      <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+                    )}
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground capitalize">{monthLabel}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.pagado ? "Pagado" : "Pendiente"}
+                      </p>
+                    </div>
                   </div>
+                  <p className="text-[13px] font-semibold text-foreground tabular-nums">
+                    {fmtMXN(item.monto)}
+                  </p>
                 </div>
-                <p className="text-[13px] font-semibold text-foreground tabular-nums">
-                  {fmtMXN(item.amount)}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -786,28 +898,33 @@ const UsageSection = ({ usage }: { usage: Usage }) => {
 const PatrimonyStickyCTA = ({
   status,
   amount,
+  onPayMaintenance,
 }: {
   status: MaintenanceUiStatus;
   amount: number;
+  onPayMaintenance: () => void;
 }) => {
-  if (status === "current") return null;
-
   const cfg =
     status === "overdue"
       ? {
-          label: `Pagar mantenimiento vencido ${fmtMXN(amount)}`,
+          label: `Pagar mantenimiento vencido · ${fmtMXN(amount)}`,
           classes: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         }
-      : {
-          label: `Pagar mantenimiento ${fmtMXN(amount)}`,
+      : status === "due_soon"
+      ? {
+          label: `Pagar mantenimiento · ${fmtMXN(amount)}`,
           classes: "bg-warning text-warning-foreground hover:bg-warning/90",
+        }
+      : {
+          label: `Ver datos de pago · ${fmtMXN(amount)}/mes`,
+          classes: "bg-primary text-primary-foreground hover:bg-primary/90",
         };
 
   return (
     <div className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur p-3">
       <button
         type="button"
-        onClick={() => console.log("Navegar a pago de mantenimiento")}
+        onClick={onPayMaintenance}
         className={`w-full h-12 rounded-xl text-[14px] font-semibold inline-flex items-center justify-center gap-2 transition-colors ${cfg.classes}`}
       >
         {cfg.label}

@@ -4,7 +4,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Check, Circle } from "lucide-react";
+import { Circle } from "lucide-react";
 import type { StageInfo } from "@/lib/portal-cliente/mock-data";
 
 interface StageDetailSheetProps {
@@ -19,24 +19,10 @@ const StageDetailSheet = ({ stage, open, onClose, onCtaAction }: StageDetailShee
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] overflow-y-auto">
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden">
         <SheetHeader className="text-left pb-4">
           <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                stage.status === "completed"
-                  ? "bg-primary text-primary-foreground"
-                  : stage.status === "active"
-                  ? "bg-warning text-warning-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {stage.status === "completed" ? (
-                <Check className="w-5 h-5" />
-              ) : (
-                <Circle className="w-4 h-4" />
-              )}
-            </div>
+            <Circle className="w-4 h-4 text-muted-foreground shrink-0" />
             <div>
               <SheetTitle className="text-foreground font-display">
                 {stage.label}
@@ -78,6 +64,12 @@ const StageDetailSheet = ({ stage, open, onClose, onCtaAction }: StageDetailShee
             {stage.cta.label}
           </button>
         )}
+        <button
+          onClick={onClose}
+          className="w-full mt-4 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+        >
+          Cerrar
+        </button>
       </SheetContent>
     </Sheet>
   );

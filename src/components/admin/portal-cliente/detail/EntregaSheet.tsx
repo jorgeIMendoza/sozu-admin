@@ -127,7 +127,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (!data) {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <div className="flex flex-col items-center text-center pt-8 pb-4 gap-4">
             <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
               <Home className="w-7 h-7 text-muted-foreground" />
@@ -232,7 +232,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (view === "signed") {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <div className="flex flex-col items-center text-center pt-6 pb-2 gap-4">
             <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center">
               <CheckCircle2 className="w-8 h-8 text-success" />
@@ -282,9 +282,9 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
             La firma digital tiene validez conforme a los términos aceptados en el contrato de compraventa.
           </p>
 
-          <Button variant="outline" className="w-full mt-3 rounded-xl h-11 text-sm" onClick={onClose}>
+          <button onClick={onClose} className="w-full mt-3 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors">
             Cerrar
-          </Button>
+          </button>
         </SheetContent>
       </Sheet>
     );
@@ -294,7 +294,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (view === "sign") {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <SheetHeader className="text-left pb-3">
             <div className="flex items-center gap-3">
               <button onClick={() => setView("accept")} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -350,7 +350,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (view === "accept") {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <SheetHeader className="text-left pb-3">
             <div className="flex items-center gap-3">
               <button onClick={() => setView("main")} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -411,7 +411,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (view === "report") {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <SheetHeader className="text-left pb-3">
             <div className="flex items-center gap-3">
               <button onClick={() => setView("main")} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -502,7 +502,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   if (view === "tickets") {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <SheetHeader className="text-left pb-3">
             <div className="flex items-center gap-3">
               <button onClick={() => setView("main")} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -564,7 +564,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
     const cfg = ticketStatusConfig[selectedTicket.status];
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <SheetHeader className="text-left pb-3">
             <div className="flex items-center gap-3">
               <button onClick={() => setView("tickets")} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -621,13 +621,11 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   // ── MAIN VIEW ──
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8">
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
         {/* Header */}
         <SheetHeader className="text-left pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-              <Home className="w-5 h-5 text-primary" />
-            </div>
+            <Home className="w-5 h-5 text-muted-foreground shrink-0" />
             <div>
               <SheetTitle className="text-foreground font-display">Entrega de tu unidad</SheetTitle>
               <p className="text-sm text-muted-foreground">Agenda, recibe y formaliza.</p>
