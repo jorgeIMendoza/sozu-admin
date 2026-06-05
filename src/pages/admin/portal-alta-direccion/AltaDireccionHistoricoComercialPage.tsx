@@ -47,6 +47,19 @@ import {
   type PeriodoHistorico,
   type TipoCuenta,
 } from "@/hooks/usePortalAltaDireccion/useHistoricoComercial";
+import {
+  useHistoricoComercialDetalle,
+  type CategoriaHistorico,
+  type HistoricoComercialDetalleRow,
+} from "@/hooks/usePortalAltaDireccion/useHistoricoComercialDetalle";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Eye, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useMetricasConversionComercial } from "@/hooks/usePortalAltaDireccion/useMetricasConversionComercial";
 import { usePropiedadesEstatusKpis } from "@/hooks/usePortalAltaDireccion/usePropiedadesEstatusKpis";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
@@ -93,17 +106,37 @@ export default function AltaDireccionHistoricoComercialPage() {
 
   const proyectosQuery = useProyectosFiltro();
 
-  const historico = useHistoricoComercial({
+  const historicoParams = {
     mesesAtras: periodo,
     idProyecto,
     canal: canal === "todos" ? null : canal,
     tipo,
     fechaInicio,
     fechaFin,
-  });
+  };
+  const historico = useHistoricoComercial(historicoParams);
+  const historicoDetalle = useHistoricoComercialDetalle(historicoParams);
 
   const conversion = useMetricasConversionComercial(idProyecto, tipo);
   const estatusKpis = usePropiedadesEstatusKpis(idProyecto);
+
+  // Drill-down: cuando el usuario hace click en una barra de la
+  // gráfica "Evolución mensual", abrimos un drawer con las cuentas que
+  // forman ese indicador (mes + categoría).
+  const navigate = useNavigate();
+  const [drillDown, setDrillDown] = useState<{
+    mes: string;
+    categoria: CategoriaHistorico;
+  } | null>(null);
+
+  const drillDownRows = useMemo<HistoricoComercialDetalleRow[]>(() => {
+    if (!drillDown) return [];
+    return historicoDetalle.data.filter((r) => {
+      if (r.categoria !== drillDown.categoria) return false;
+      const mes = r.categoria === "ventas" ? r.mes_venta : r.mes_apartado;
+      return mes === drillDown.mes;
+    });
+  }, [historicoDetalle.data, drillDown]);
 
   // Series para chart (siempre cronológico ascendente).
   const seriesChart = useMemo(() => {
@@ -447,12 +480,24 @@ export default function AltaDireccionHistoricoComercialPage() {
                   name={chartMode === "monto" ? "Ventas (monto)" : "Ventas (unidades)"}
                   fill="hsl(142, 71%, 45%)"
                   radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(p: any) => {
+                    if (p?.payload?.mes) {
+                      setDrillDown({ mes: p.payload.mes, categoria: "ventas" });
+                    }
+                  }}
                 />
                 <Bar
                   dataKey={chartMode === "monto" ? "apartados_monto" : "apartados_count"}
                   name={chartMode === "monto" ? "Apartados (monto)" : "Apartados (unidades)"}
                   fill="hsl(217, 91%, 60%)"
                   radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(p: any) => {
+                    if (p?.payload?.mes) {
+                      setDrillDown({ mes: p.payload.mes, categoria: "apartados" });
+                    }
+                  }}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -504,11 +549,126 @@ export default function AltaDireccionHistoricoComercialPage() {
           </div>
         )}
       </Panel>
+
+      {/* Drill-down drawer: cuentas que forman un mes/categoría */}
+      <Sheet
+        open={!!drillDown}
+        onOpenChange={(open) => {
+          if (!open) setDrillDown(null);
+        }}
+      >
+        <SheetContent className="sm:max-w-[1100px] p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle className="text-[16px]">
+              {drillDown
+                ? `${drillDown.categoria === "ventas" ? "Ventas" : "Apartados"} · ${fmtMesLargo(drillDown.mes)}`
+                : ""}
+            </SheetTitle>
+            <p className="text-[12px] text-muted-foreground">
+              {drillDownRows.length === 0
+                ? "Sin cuentas en este período."
+                : `${drillDownRows.length} ${drillDownRows.length === 1 ? "cuenta" : "cuentas"} · ${fmtMxn(drillDownRows.reduce((s, r) => s + r.precio_final, 0))} total`}
+            </p>
+          </SheetHeader>
+          <div className="px-6 py-5">
+            {historicoDetalle.isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando cuentas…
+              </div>
+            ) : drillDownRows.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground text-center py-12">
+                No hay cuentas que coincidan con los filtros aplicados.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs whitespace-nowrap">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Compradores</TableHead>
+                      <TableHead className="text-xs">Propietario</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">No. Prop.</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs text-right">Metraje</TableHead>
+                      <TableHead className="text-xs text-right">Precio/m²</TableHead>
+                      <TableHead className="text-xs text-right">Precio Final</TableHead>
+                      <TableHead className="text-xs text-right">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {drillDownRows.map((r) => (
+                      <TableRow key={r.id_cuenta_cobranza}>
+                        <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
+                          {r.folio_cuenta}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                            {r.tipo}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {r.compradores.length === 0
+                            ? "—"
+                            : r.compradores.length === 1
+                              ? r.compradores[0]
+                              : (
+                                <>
+                                  <p className="truncate max-w-[180px]">{r.compradores[0]}</p>
+                                  <p className="text-[11px] text-muted-foreground/70">+{r.compradores.length - 1} más</p>
+                                </>
+                              )}
+                        </TableCell>
+                        <TableCell className="text-sm truncate max-w-[180px]">{r.propietario}</TableCell>
+                        <TableCell className="text-sm">{r.proyecto_nombre}</TableCell>
+                        <TableCell className="text-sm">{r.numero_propiedad}</TableCell>
+                        <TableCell className="text-sm">{r.modelo_nombre}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">
+                          {r.metraje > 0 ? `${r.metraje.toFixed(2)} m²` : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">
+                          {r.precio_m2 > 0 ? fmtMxn(r.precio_m2) : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-semibold tabular-nums">
+                          {fmtMxn(r.precio_final)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-[11px]"
+                            onClick={() => {
+                              setDrillDown(null);
+                              navigate(
+                                `/admin/portal-alta-direccion/ciclo-venta?caso=${encodeURIComponent(r.folio_cuenta)}`,
+                              );
+                            }}
+                            aria-label={`Ver Ciclo de Venta de ${r.folio_cuenta}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
 /* ───────────── Helpers internos ───────────── */
+
+function fmtMesLargo(mesIso: string): string {
+  // mesIso es 'YYYY-MM-01'.
+  const d = new Date(mesIso + "T00:00:00");
+  return d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+}
 
 function toIsoDate(d: Date): string {
   // YYYY-MM-DD en zona local — evitamos toISOString() porque convierte a UTC.

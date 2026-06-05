@@ -49,7 +49,16 @@ import {
   useAnalisisCobranzaKpis,
   type PeriodoCobranza,
 } from "@/hooks/usePortalAltaDireccion/useAnalisisCobranzaKpis";
-import { useAgingCobranza, type AgingRow } from "@/hooks/usePortalAltaDireccion/useAgingCobranza";
+import { useAgingCobranza, type AgingRow, type AgingBucket } from "@/hooks/usePortalAltaDireccion/useAgingCobranza";
+import { useAgingCobranzaDetalle } from "@/hooks/usePortalAltaDireccion/useAgingCobranzaDetalle";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Eye, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useEvolucionEmisionCobranza } from "@/hooks/usePortalAltaDireccion/useEvolucionEmisionCobranza";
 import {
   useCobranzaPorDesarrollador,
@@ -106,10 +115,26 @@ export default function AltaDireccionAnalisisCobranzaPage() {
   const proyectos = useProyectosFiltro();
   const desarrolladoresLista = useDesarrolladoresFiltro();
   const kpis = useAnalisisCobranzaKpis(periodo, filtros);
-  const aging = useAgingCobranza(filtros);
+  const aging = useAgingCobranza(periodo, filtros);
+  const agingDetalle = useAgingCobranzaDetalle(periodo, filtros);
   const mesesEvolucion = 12;
   const evolucion = useEvolucionEmisionCobranza(mesesEvolucion, filtros);
   const desarrolladores = useCobranzaPorDesarrollador(periodo, filtros);
+
+  // Drill-down del bucket de antigüedad: cuando el usuario hace click en
+  // una barra, abrimos el drawer filtrado por ese bucket.
+  const navigate = useNavigate();
+  const [agingDrillBucket, setAgingDrillBucket] = useState<AgingBucket | null>(null);
+  const agingDrillRows = useMemo(() => {
+    if (!agingDrillBucket) return [];
+    return agingDetalle.data.filter((r) => r.bucket === agingDrillBucket);
+  }, [agingDetalle.data, agingDrillBucket]);
+  const agingBucketTotales = useMemo(() => {
+    return {
+      total: agingDrillRows.reduce((s, r) => s + r.monto_adeudo, 0),
+      pagado: agingDrillRows.reduce((s, r) => s + r.total_pagado, 0),
+    };
+  }, [agingDrillRows]);
 
   const hasFilters =
     idProyecto !== null ||
@@ -326,14 +351,22 @@ export default function AltaDireccionAnalisisCobranzaPage() {
             <Kpi
               label="Cobrado en período"
               value={fmtMxn(kpis.data?.cobrado_periodo ?? 0)}
-              hint={periodoLabel(periodo)}
+              hint={
+                periodo === "todo" && !hayRango
+                  ? "Total Pagado real (inventario cobrable) · Todo el histórico"
+                  : periodoLabel(periodo)
+              }
               icon={Wallet}
               tone="success"
             />
             <Kpi
               label="Por cobrar"
               value={fmtMxn(kpis.data?.por_cobrar_total ?? 0)}
-              hint="Facturas emitidas no cobradas"
+              hint={
+                periodo === "todo" && !hayRango
+                  ? "Inventario activo − cobrado total · Todo el histórico"
+                  : `Emitidas no cobradas · ${periodoLabel(periodo)}`
+              }
               icon={Hourglass}
               tone="warning"
             />
@@ -342,8 +375,8 @@ export default function AltaDireccionAnalisisCobranzaPage() {
               value={fmtMxn(kpis.data?.vencido_30d ?? 0)}
               hint={
                 kpis.data && kpis.data.vencido_30d > 0
-                  ? "Requiere atención"
-                  : "Sin vencimientos"
+                  ? `Requiere atención · ${periodoLabel(periodo)}`
+                  : `Sin vencimientos · ${periodoLabel(periodo)}`
               }
               icon={AlertTriangle}
               tone={kpis.data && kpis.data.vencido_30d > 0 ? "destructive" : "default"}
@@ -351,7 +384,7 @@ export default function AltaDireccionAnalisisCobranzaPage() {
             <Kpi
               label="DSO (días)"
               value={(kpis.data?.dso_dias ?? 0).toFixed(1)}
-              hint="Days Sales Outstanding"
+              hint={`Days Sales Outstanding · ${periodoLabel(periodo)}`}
               icon={Activity}
               tone="primary"
             />
@@ -410,7 +443,16 @@ export default function AltaDireccionAnalisisCobranzaPage() {
                     borderRadius: 8,
                   }}
                 />
-                <Bar dataKey="monto" name="monto" radius={[4, 4, 0, 0]}>
+                <Bar
+                  dataKey="monto"
+                  name="monto"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(p: any) => {
+                    const b = p?.payload?.bucket as AgingBucket | undefined;
+                    if (b) setAgingDrillBucket(b);
+                  }}
+                >
                   {aging.data.map((entry) => (
                     <Cell key={entry.bucket} fill={BUCKET_COLORS[entry.bucket] ?? "hsl(220, 9%, 60%)"} />
                   ))}
@@ -517,6 +559,105 @@ export default function AltaDireccionAnalisisCobranzaPage() {
           </div>
         )}
       </Panel>
+
+      {/* Drill-down de la gráfica Antigüedad de cartera */}
+      <Sheet
+        open={!!agingDrillBucket}
+        onOpenChange={(open) => {
+          if (!open) setAgingDrillBucket(null);
+        }}
+      >
+        <SheetContent className="sm:max-w-[1100px] p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle className="text-[16px]">
+              {agingDrillBucket ? `Antigüedad ${agingDrillBucket} días` : ""}
+            </SheetTitle>
+            <p className="text-[12px] text-muted-foreground">
+              {agingDrillRows.length === 0
+                ? "Sin cuentas en este bucket."
+                : `${agingDrillRows.length} ${agingDrillRows.length === 1 ? "cuenta" : "cuentas"} · adeudo ${fmtMxn(agingBucketTotales.total)} · pagado ${fmtMxn(agingBucketTotales.pagado)}`}
+            </p>
+          </SheetHeader>
+          <div className="px-6 py-5">
+            {agingDetalle.isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando cuentas…
+              </div>
+            ) : agingDrillRows.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground text-center py-12">
+                No hay cuentas en este bucket para los filtros aplicados.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs whitespace-nowrap">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Compradores</TableHead>
+                      <TableHead className="text-xs">Propietario</TableHead>
+                      <TableHead className="text-xs text-right">Precio Final</TableHead>
+                      <TableHead className="text-xs text-right">Total Pagado</TableHead>
+                      <TableHead className="text-xs text-right">Adeudo retrasado</TableHead>
+                      <TableHead className="text-xs text-right">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agingDrillRows.map((r) => (
+                      <TableRow key={r.id_cuenta}>
+                        <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
+                          {r.folio_cuenta}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                            {r.tipo}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {r.compradores.length === 0 ? (
+                            "—"
+                          ) : r.compradores.length === 1 ? (
+                            r.compradores[0]
+                          ) : (
+                            <>
+                              <p className="truncate max-w-[180px]">{r.compradores[0]}</p>
+                              <p className="text-[11px] text-muted-foreground/70">
+                                +{r.compradores.length - 1} más
+                              </p>
+                            </>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm truncate max-w-[180px]">{r.propietario}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">{fmtMxn(r.precio_final)}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">{fmtMxn(r.total_pagado)}</TableCell>
+                        <TableCell className="text-sm text-right font-semibold tabular-nums text-destructive">
+                          {fmtMxn(r.monto_adeudo)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-[11px]"
+                            onClick={() => {
+                              setAgingDrillBucket(null);
+                              navigate(
+                                `/admin/portal-alta-direccion/ciclo-venta?caso=${encodeURIComponent(r.folio_cuenta)}`,
+                              );
+                            }}
+                            aria-label={`Ver Ciclo de Venta de ${r.folio_cuenta}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
