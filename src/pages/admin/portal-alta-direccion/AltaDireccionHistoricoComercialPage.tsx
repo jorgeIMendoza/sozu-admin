@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { PageHeader, Kpi, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { Badge } from "@/components/ui/badge";
+import { RefreshButton } from "@/components/admin/portal-alta-direccion/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -231,13 +232,16 @@ export default function AltaDireccionHistoricoComercialPage() {
         title="Histórico Comercial"
         description="Evolución de ventas y apartados por mes"
         action={
-          <Badge
-            variant="outline"
-            className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800"
-          >
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            Datos en vivo
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800"
+            >
+              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              Datos en vivo
+            </Badge>
+            <RefreshButton keyPrefixes={["historico-comercial", "historico-comercial-detalle", "metricas-conversion-comercial", "propiedades-estatus-kpis"]} />
+          </div>
         }
       />
 
