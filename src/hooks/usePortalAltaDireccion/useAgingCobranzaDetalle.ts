@@ -57,7 +57,9 @@ export function useAgingCobranzaDetalle(
       filtros.fechaInicio,
       filtros.fechaFin,
     ],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const base = await fetchCobranzaBase({ idProyecto: filtros.idProyecto });
       const filtradas = filtrarRows(base.rows, filtros);

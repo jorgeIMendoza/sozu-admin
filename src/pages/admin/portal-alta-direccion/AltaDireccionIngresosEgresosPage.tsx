@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader, Kpi, Panel } from "@/components/admin/portal-alta-direccion/ui";
+import { RefreshButton } from "@/components/admin/portal-alta-direccion/RefreshButton";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import {
   useResumenIngresosEgresos,
@@ -114,6 +115,18 @@ export default function AltaDireccionIngresosEgresosPage() {
   // de las cuentas que la conforman.
   type WaterfallBucket = "ingresos" | "externos" | "internos" | "resultado";
   const [waterfallDrill, setWaterfallDrill] = useState<WaterfallBucket | null>(null);
+
+  // Drill-down de la Evolución mensual: click en barra "Ingresos" o
+  // "Egresos" de un mes específico abre drawer con las cuentas que
+  // conforman ese monto.
+  const [evolucionDrill, setEvolucionDrill] = useState<{ mes: string; kind: "ingreso" | "egreso" } | null>(null);
+
+  // Drill-down de Composición de egresos: click en un beneficiario
+  // externo o en un rol interno abre drawer con las cuentas de ese
+  // beneficiario / rol.
+  const [composicionDrill, setComposicionDrill] = useState<
+    { kind: "externo"; nombre: string } | { kind: "interno"; rol: string } | null
+  >(null);
 
   const hasFilters =
     filtros.base !== DEFAULT_FILTROS.base ||
@@ -275,6 +288,41 @@ export default function AltaDireccionIngresosEgresosPage() {
     return waterfallDrillRows.reduce((s, r) => s + r.subtotal, 0);
   }, [waterfallDrillRows]);
 
+  /* Filas para el drawer del drill-down de Evolución mensual. */
+  const evolucionDrillRows = useMemo(() => {
+    if (!evolucionDrill) return [];
+    return movimientosReales.filter((m) => {
+      const fecha = filtros.base === "devengado" ? m.fecha_causacion : m.fecha_cobro_pago;
+      if (!fecha) return false;
+      const mes = fecha.slice(0, 7) + "-01";
+      if (mes !== evolucionDrill.mes) return false;
+      return evolucionDrill.kind === "ingreso"
+        ? m.tipo_movimiento === "ingreso"
+        : m.tipo_movimiento === "egreso";
+    });
+  }, [evolucionDrill, movimientosReales, filtros.base]);
+  const evolucionDrillTotal = useMemo(
+    () => evolucionDrillRows.reduce((s, r) => s + r.subtotal, 0),
+    [evolucionDrillRows],
+  );
+
+  /* Filas para el drawer del drill-down de Composición de egresos. */
+  const composicionDrillRows = useMemo(() => {
+    if (!composicionDrill) return [];
+    return movimientosReales.filter((m) => {
+      if (m.tipo_movimiento !== "egreso") return false;
+      if (composicionDrill.kind === "externo") {
+        return m.origen_egreso === "externo" && m.contraparte === composicionDrill.nombre;
+      }
+      // interno
+      return m.origen_egreso === "interno" && (m.rol ?? "Otro") === composicionDrill.rol;
+    });
+  }, [composicionDrill, movimientosReales]);
+  const composicionDrillTotal = useMemo(
+    () => composicionDrillRows.reduce((s, r) => s + r.subtotal, 0),
+    [composicionDrillRows],
+  );
+
   // Scroll a exposición al click en KPI.
   const scrollExposicion = () => {
     document.getElementById("exposicion")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -286,13 +334,16 @@ export default function AltaDireccionIngresosEgresosPage() {
         title="Ingresos y Egresos"
         description="Resultado y flujo de Real Estate Ventures, S.A. de C.V."
         action={
-          <Badge
-            variant="outline"
-            className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800"
-          >
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
-            Datos demo
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800"
+            >
+              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              Datos en vivo
+            </Badge>
+            <RefreshButton keyPrefixes={["movimientos-ingresos-egresos"]} />
+          </div>
         }
       />
 
@@ -494,7 +545,10 @@ export default function AltaDireccionIngresosEgresosPage() {
             Sin movimientos en el período.
           </p>
         ) : (
-          <EvolucionChart puntos={evolucionReal} />
+          <EvolucionChart
+            puntos={evolucionReal}
+            onBarClick={(mes, kind) => setEvolucionDrill({ mes, kind })}
+          />
         )}
       </Panel>
 
@@ -509,7 +563,11 @@ export default function AltaDireccionIngresosEgresosPage() {
               <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
             </div>
           ) : (
-            <ComposicionEgresos data={composicionEgresosReal} />
+            <ComposicionEgresos
+              data={composicionEgresosReal}
+              onExternoClick={(nombre) => setComposicionDrill({ kind: "externo", nombre })}
+              onInternoClick={(rol) => setComposicionDrill({ kind: "interno", rol })}
+            />
           )}
         </Panel>
       </div>
@@ -664,6 +722,7 @@ export default function AltaDireccionIngresosEgresosPage() {
                   <TableRow>
                     <TableHead className="text-xs whitespace-nowrap">ID Cuenta</TableHead>
                     <TableHead className="text-xs">Fecha</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap">Fecha de ejecución</TableHead>
                     <TableHead className="text-xs">Tipo</TableHead>
                     <TableHead className="text-xs">Concepto</TableHead>
                     <TableHead className="text-xs">Contraparte</TableHead>
@@ -804,6 +863,192 @@ export default function AltaDireccionIngresosEgresosPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Drill-down de Evolución mensual */}
+      <Sheet
+        open={!!evolucionDrill}
+        onOpenChange={(open) => { if (!open) setEvolucionDrill(null); }}
+      >
+        <SheetContent className="sm:max-w-[1100px] p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle className="text-[16px]">
+              {evolucionDrill
+                ? `${evolucionDrill.kind === "ingreso" ? "Ingresos" : "Egresos"} · ${fmtMesLargo(evolucionDrill.mes)}`
+                : ""}
+            </SheetTitle>
+            <p className="text-[12px] text-muted-foreground">
+              {evolucionDrillRows.length === 0
+                ? "Sin cuentas en este mes."
+                : `${evolucionDrillRows.length} ${evolucionDrillRows.length === 1 ? "cuenta" : "cuentas"} · subtotal ${fmtMxn(evolucionDrillTotal)}`}
+            </p>
+          </SheetHeader>
+          <div className="px-6 py-5">
+            {evolucionDrillRows.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground text-center py-12">
+                No hay cuentas que conformen este monto para los filtros aplicados.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs whitespace-nowrap">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Concepto</TableHead>
+                      <TableHead className="text-xs">Contraparte</TableHead>
+                      <TableHead className="text-xs text-right">Subtotal</TableHead>
+                      <TableHead className="text-xs text-right">IVA</TableHead>
+                      <TableHead className="text-xs text-right">Total</TableHead>
+                      <TableHead className="text-xs text-right">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {evolucionDrillRows.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
+                          {m.folio_cuenta}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] whitespace-nowrap",
+                            m.tipo_movimiento === "ingreso"
+                              ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                              : "border-red-400 text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/40",
+                          )}>
+                            {m.tipo_movimiento === "ingreso"
+                              ? "Ingreso"
+                              : m.origen_egreso === "externo"
+                                ? "Egreso · Externo"
+                                : "Egreso · Interno"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm truncate max-w-[280px]">{m.concepto}</TableCell>
+                        <TableCell className="text-sm">
+                          <p className="truncate max-w-[200px]">{m.contraparte}</p>
+                          {m.tipo_movimiento === "egreso" && m.rol && (
+                            <p className="text-[11px] text-muted-foreground/70 truncate max-w-[200px]">{m.rol}</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">{fmtMxn(m.subtotal)}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">{fmtMxn(m.iva)}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums font-semibold">{fmtMxn(m.total)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-[11px]"
+                            onClick={() => {
+                              setEvolucionDrill(null);
+                              navigate(
+                                `/admin/portal-alta-direccion/ciclo-venta?caso=${encodeURIComponent(m.folio_cuenta)}`,
+                              );
+                            }}
+                            aria-label={`Ver Ciclo de Venta ${m.folio_cuenta}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Ver detalle
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Drill-down de Composición de egresos (top externos / por rol) */}
+      <Sheet
+        open={!!composicionDrill}
+        onOpenChange={(open) => { if (!open) setComposicionDrill(null); }}
+      >
+        <SheetContent className="sm:max-w-[1100px] p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle className="text-[16px]">
+              {composicionDrill
+                ? composicionDrill.kind === "externo"
+                  ? `Egresos externos · ${composicionDrill.nombre}`
+                  : `Egresos internos · ${composicionDrill.rol}`
+                : ""}
+            </SheetTitle>
+            <p className="text-[12px] text-muted-foreground">
+              {composicionDrillRows.length === 0
+                ? "Sin cuentas para los filtros aplicados."
+                : `${composicionDrillRows.length} ${composicionDrillRows.length === 1 ? "cuenta" : "cuentas"} · subtotal ${fmtMxn(composicionDrillTotal)}`}
+            </p>
+          </SheetHeader>
+          <div className="px-6 py-5">
+            {composicionDrillRows.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground text-center py-12">
+                No hay cuentas con egresos en este beneficiario/rol para los filtros aplicados.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs whitespace-nowrap">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs">Concepto</TableHead>
+                      <TableHead className="text-xs">Contraparte</TableHead>
+                      <TableHead className="text-xs text-right">Subtotal</TableHead>
+                      <TableHead className="text-xs text-right">IVA</TableHead>
+                      <TableHead className="text-xs text-right">Total</TableHead>
+                      <TableHead className="text-xs text-right">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {composicionDrillRows.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-xs font-mono whitespace-nowrap font-medium">
+                          {m.folio_cuenta}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] whitespace-nowrap",
+                            m.origen_egreso === "externo"
+                              ? "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40"
+                              : "border-violet-400 text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-950/40",
+                          )}>
+                            {m.origen_egreso === "externo" ? "Egreso · Externo" : "Egreso · Interno"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm truncate max-w-[280px]">{m.concepto}</TableCell>
+                        <TableCell className="text-sm">
+                          <p className="truncate max-w-[200px]">{m.contraparte}</p>
+                          {m.rol && (
+                            <p className="text-[11px] text-muted-foreground/70 truncate max-w-[200px]">{m.rol}</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-right tabular-nums">{fmtMxn(m.subtotal)}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums text-muted-foreground">{fmtMxn(m.iva)}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums font-semibold">{fmtMxn(m.total)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-[11px]"
+                            onClick={() => {
+                              setComposicionDrill(null);
+                              navigate(
+                                `/admin/portal-alta-direccion/ciclo-venta?caso=${encodeURIComponent(m.folio_cuenta)}`,
+                              );
+                            }}
+                            aria-label={`Ver Ciclo de Venta ${m.folio_cuenta}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Ver detalle
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -820,11 +1065,19 @@ function LedgerRow({
   onVer: () => void;
 }) {
   const fecha = base === "devengado" ? m.fecha_causacion : m.fecha_cobro_pago;
+  const fechaEjecucion = m.fecha_cobro_pago;
   return (
     <TableRow>
       <TableCell className="text-xs font-mono whitespace-nowrap font-medium">{m.folio_cuenta}</TableCell>
       <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
         {fecha ?? "—"}
+      </TableCell>
+      <TableCell className="text-xs tabular-nums whitespace-nowrap">
+        {fechaEjecucion ? (
+          <span className="text-foreground">{fechaEjecucion}</span>
+        ) : (
+          <span className="text-muted-foreground/60">Pendiente</span>
+        )}
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={cn(
@@ -943,7 +1196,13 @@ function WaterfallChart({
   );
 }
 
-function EvolucionChart({ puntos }: { puntos: Array<{ mes: string; ingresos: number; egresos: number; resultado: number }> }) {
+function EvolucionChart({
+  puntos,
+  onBarClick,
+}: {
+  puntos: Array<{ mes: string; ingresos: number; egresos: number; resultado: number }>;
+  onBarClick?: (mes: string, kind: "ingreso" | "egreso") => void;
+}) {
   const data = puntos.map((p) => ({ ...p, mesLabel: fmtMes(p.mes) }));
   return (
     <div className="h-[320px] w-full">
@@ -958,8 +1217,28 @@ function EvolucionChart({ puntos }: { puntos: Array<{ mes: string; ingresos: num
             contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="ingresos" name="Ingresos" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="egresos" name="Egresos" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="ingresos"
+            name="Ingresos"
+            fill="hsl(142, 71%, 45%)"
+            radius={[4, 4, 0, 0]}
+            cursor="pointer"
+            onClick={(p: any) => {
+              const mes = p?.payload?.mes as string | undefined;
+              if (mes && onBarClick) onBarClick(mes, "ingreso");
+            }}
+          />
+          <Bar
+            dataKey="egresos"
+            name="Egresos"
+            fill="hsl(0, 84%, 60%)"
+            radius={[4, 4, 0, 0]}
+            cursor="pointer"
+            onClick={(p: any) => {
+              const mes = p?.payload?.mes as string | undefined;
+              if (mes && onBarClick) onBarClick(mes, "egreso");
+            }}
+          />
           <Line dataKey="resultado" name="Resultado" stroke="hsl(265, 80%, 55%)" strokeWidth={2} dot={{ r: 3 }} />
         </ComposedChart>
       </ResponsiveContainer>
@@ -1024,11 +1303,15 @@ function ComposicionIngresos({
 
 function ComposicionEgresos({
   data,
+  onExternoClick,
+  onInternoClick,
 }: {
   data: {
     externos: { total: number; pct: number; top: Array<{ nombre: string; monto: number }> };
     internos: { total: number; pct: number; porRol: Array<{ rol: string; monto: number }> };
   };
+  onExternoClick?: (nombre: string) => void;
+  onInternoClick?: (rol: string) => void;
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1047,9 +1330,16 @@ function ComposicionEgresos({
         ) : (
           <ul className="space-y-1">
             {data.externos.top.map((t) => (
-              <li key={t.nombre} className="flex items-center justify-between text-[12px]">
-                <span className="truncate max-w-[180px]">{t.nombre}</span>
-                <span className="tabular-nums font-medium">{fmtMxn(t.monto)}</span>
+              <li key={t.nombre}>
+                <button
+                  type="button"
+                  onClick={() => onExternoClick?.(t.nombre)}
+                  className="w-full flex items-center justify-between text-[12px] rounded-md px-1.5 py-1 hover:bg-amber-100/60 dark:hover:bg-amber-900/30 transition-colors cursor-pointer text-left"
+                  aria-label={`Ver detalle de ${t.nombre}`}
+                >
+                  <span className="truncate max-w-[180px] group-hover:text-amber-800">{t.nombre}</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(t.monto)}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -1071,9 +1361,16 @@ function ComposicionEgresos({
         ) : (
           <ul className="space-y-1">
             {data.internos.porRol.map((t) => (
-              <li key={t.rol} className="flex items-center justify-between text-[12px]">
-                <span className="truncate max-w-[180px]">{t.rol}</span>
-                <span className="tabular-nums font-medium">{fmtMxn(t.monto)}</span>
+              <li key={t.rol}>
+                <button
+                  type="button"
+                  onClick={() => onInternoClick?.(t.rol)}
+                  className="w-full flex items-center justify-between text-[12px] rounded-md px-1.5 py-1 hover:bg-violet-100/60 dark:hover:bg-violet-900/30 transition-colors cursor-pointer text-left"
+                  aria-label={`Ver detalle del rol ${t.rol}`}
+                >
+                  <span className="truncate max-w-[180px]">{t.rol}</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(t.monto)}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -1095,6 +1392,11 @@ function abbr(n: number): string {
 function fmtMes(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }).replace(".", "");
+}
+
+function fmtMesLargo(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
 }
 
 function toIsoDate(d: Date): string {

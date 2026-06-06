@@ -13,7 +13,8 @@ export function useDesarrolladoresFiltro() {
   return useQuery({
     queryKey: ["cobranza-base", null],
     queryFn: () => fetchCobranzaBase(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
     select: (dataset) => listarDesarrolladores(dataset.rows),
   });
 }

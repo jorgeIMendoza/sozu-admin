@@ -72,7 +72,9 @@ export function useHistoricoComercial(
       fechaInicio ?? null,
       fechaFin ?? null,
     ],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: (prev) => prev,
     queryFn: () =>
       fetchHistorico({ mesesAtras, idProyecto, canal, tipo, fechaInicio, fechaFin }),
   });
