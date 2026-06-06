@@ -29,8 +29,8 @@ export function useAnalisisCobranzaKpis(
   filtros: CobranzaFiltros,
 ): AnalisisCobranzaKpisResult {
   const query = useQuery({
-    queryKey: ["cobranza-base"],
-    queryFn: fetchCobranzaBase,
+    queryKey: ["cobranza-base", filtros.idProyecto ?? null],
+    queryFn: () => fetchCobranzaBase({ idProyecto: filtros.idProyecto }),
     staleTime: 60_000,
   });
 

@@ -59,7 +59,7 @@ export function useAgingCobranzaDetalle(
     ],
     staleTime: 60_000,
     queryFn: async () => {
-      const base = await fetchCobranzaBase();
+      const base = await fetchCobranzaBase({ idProyecto: filtros.idProyecto });
       const filtradas = filtrarRows(base.rows, filtros);
       const candidatas = pickAgingCandidates(filtradas, periodo, filtros);
       if (candidatas.length === 0) return [];

@@ -222,6 +222,7 @@ const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/po
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionHistoricoComercialPage"));
 const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
+const AltaDireccionIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionIngresosEgresosPage"));
 
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
@@ -698,6 +699,7 @@ const App = () => (
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
                   <Route path="portal-alta-direccion/historico-comercial" element={<AltaDireccionHistoricoComercial />} />
                   <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
+                  <Route path="portal-alta-direccion/ingresos-egresos" element={<AltaDireccionIngresosEgresos />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
