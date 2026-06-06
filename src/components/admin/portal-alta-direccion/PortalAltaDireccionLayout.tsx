@@ -6,6 +6,7 @@ import {
   Briefcase,
   Percent,
   ArrowLeft,
+  ArrowLeftRight,
   LogOut,
   Menu,
   Inbox,
@@ -35,6 +36,7 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/comisiones-internas",
   "/admin/portal-alta-direccion/historico-comercial",
   "/admin/portal-alta-direccion/analisis-cobranza",
+  "/admin/portal-alta-direccion/ingresos-egresos",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -79,6 +81,12 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Histórico Comercial", path: "/admin/portal-alta-direccion/historico-comercial", icon: TrendingUp },
       { label: "Análisis de Cobranza", path: "/admin/portal-alta-direccion/analisis-cobranza", icon: Banknote },
+    ],
+  },
+  {
+    label: "Finanzas",
+    items: [
+      { label: "Ingresos y Egresos", path: "/admin/portal-alta-direccion/ingresos-egresos", icon: ArrowLeftRight },
     ],
   },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
