@@ -45,7 +45,9 @@ export function useMetricasConversionComercial(
 ): MetricasConversionResult {
   const query = useQuery({
     queryKey: ["metricas-conversion-comercial", idProyecto, tipo],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: (prev) => prev,
     queryFn: () => fetchMetricas(idProyecto, tipo),
   });
 

@@ -27,6 +27,7 @@ export function useProyectosFiltro() {
   return useQuery({
     queryKey: ["proyectos-filtro-con-cuentas"],
     staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
     queryFn: fetchProyectosConCuentas,
   });
 }
