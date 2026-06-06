@@ -55,24 +55,118 @@ export interface CobranzaBaseDataset {
   proyectosMap: Map<number, string>;
 }
 
-export async function fetchCobranzaBase(): Promise<CobranzaBaseDataset> {
-  // 1) Cuentas activas, sin padre, paginadas.
+export interface FetchCobranzaParams {
+  /** Filtro de proyecto aplicado server-side. Cuando viene set, sólo se
+   *  cargan las cuentas asociadas a ese proyecto (vía waterfall
+   *  proyecto → edificios → modelos → propiedades), lo que reduce
+   *  drásticamente el tiempo de carga inicial. Cuando es null, se carga
+   *  el universo completo (~1.5k cuentas). */
+  idProyecto?: number | null;
+}
+
+export async function fetchCobranzaBase(
+  params: FetchCobranzaParams = {},
+): Promise<CobranzaBaseDataset> {
+  const { idProyecto = null } = params;
+
+  // 0) Si hay idProyecto, pre-resolver el subset de propiedades y ofertas
+  //    para usar como filtro server-side en la query de cuentas.
+  let propiedadIdSet: Set<number> | null = null;
+  let ofertaIdSet: Set<number> | null = null;
+  if (idProyecto != null) {
+    const { data: edRows } = (await (supabase as any)
+      .from("edificios")
+      .select("id")
+      .eq("id_proyecto", idProyecto)
+      .eq("activo", true)) as any;
+    const edIds = ((edRows || []) as Array<any>).map((e) => e.id as number);
+    if (edIds.length === 0) return { rows: [], proyectosMap: new Map() };
+    const { data: emRows } = (await (supabase as any)
+      .from("edificios_modelos")
+      .select("id")
+      .in("id_edificio", edIds)) as any;
+    const emIds = ((emRows || []) as Array<any>).map((e) => e.id as number);
+    if (emIds.length === 0) return { rows: [], proyectosMap: new Map() };
+    const propIdsLocal: number[] = [];
+    for (let i = 0; i < emIds.length; i += PAGE_SIZE) {
+      const slice = emIds.slice(i, i + PAGE_SIZE);
+      const { data } = (await (supabase as any)
+        .from("propiedades")
+        .select("id")
+        .in("id_edificio_modelo", slice)) as any;
+      propIdsLocal.push(...((data || []) as Array<any>).map((p) => p.id as number));
+    }
+    if (propIdsLocal.length === 0) return { rows: [], proyectosMap: new Map() };
+    propiedadIdSet = new Set(propIdsLocal);
+    // Ofertas vinculadas a esas propiedades — para resolver cuentas que
+    // viven sólo vía id_oferta sin id_propiedad directo.
+    const ofIdsLocal: number[] = [];
+    for (let i = 0; i < propIdsLocal.length; i += PAGE_SIZE) {
+      const slice = propIdsLocal.slice(i, i + PAGE_SIZE);
+      const { data } = (await (supabase as any)
+        .from("ofertas")
+        .select("id")
+        .in("id_propiedad", slice)) as any;
+      ofIdsLocal.push(...((data || []) as Array<any>).map((o) => o.id as number));
+    }
+    ofertaIdSet = new Set(ofIdsLocal);
+  }
+
+  // 1) Cuentas activas, sin padre, paginadas. Con filtro por proyecto se
+  //    reduce a un par de cientos de filas; sin filtro recorre el universo.
   const cuentas: Array<any> = [];
-  for (let offset = 0; ; offset += PAGE_SIZE) {
-    const { data, error } = await (supabase as any)
-      .from("cuentas_cobranza")
-      .select(
-        "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, iva_incluido, fecha_compra, fecha_pago_comision, es_pagada_comision_venta",
-      )
-      .eq("activo", true)
-      .is("id_cuenta_cobranza_padre", null)
-      .order("id", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
-    if (error) throw error;
-    const batch = (data || []) as Array<any>;
-    cuentas.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-    if (offset > 100_000) break;
+  const ccSelect =
+    "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, iva_incluido, fecha_compra, fecha_pago_comision, es_pagada_comision_venta";
+  if (propiedadIdSet || ofertaIdSet) {
+    // Dos queries acotadas: por id_propiedad y por id_oferta. Deduplicamos
+    // por id_cuenta al final.
+    const seen = new Set<number>();
+    const collect = (rows: Array<any>) => {
+      for (const r of rows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        cuentas.push(r);
+      }
+    };
+    const propIds = propiedadIdSet ? Array.from(propiedadIdSet) : [];
+    for (let i = 0; i < propIds.length; i += PAGE_SIZE) {
+      const slice = propIds.slice(i, i + PAGE_SIZE);
+      const { data, error } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .select(ccSelect)
+        .eq("activo", true)
+        .is("id_cuenta_cobranza_padre", null)
+        .in("id_propiedad", slice);
+      if (error) throw error;
+      collect((data || []) as Array<any>);
+    }
+    const ofIds = ofertaIdSet ? Array.from(ofertaIdSet) : [];
+    for (let i = 0; i < ofIds.length; i += PAGE_SIZE) {
+      const slice = ofIds.slice(i, i + PAGE_SIZE);
+      const { data, error } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .select(ccSelect)
+        .eq("activo", true)
+        .is("id_cuenta_cobranza_padre", null)
+        .in("id_oferta", slice);
+      if (error) throw error;
+      collect((data || []) as Array<any>);
+    }
+  } else {
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .select(ccSelect)
+        .eq("activo", true)
+        .is("id_cuenta_cobranza_padre", null)
+        .order("id", { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      const batch = (data || []) as Array<any>;
+      cuentas.push(...batch);
+      if (batch.length < PAGE_SIZE) break;
+      if (offset > 100_000) break;
+    }
   }
   if (cuentas.length === 0) {
     return { rows: [], proyectosMap: new Map() };

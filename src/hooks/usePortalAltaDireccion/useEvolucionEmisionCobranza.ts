@@ -24,8 +24,8 @@ export function useEvolucionEmisionCobranza(
   filtros: CobranzaFiltros,
 ): EvolucionEmisionCobranzaResult {
   const query = useQuery({
-    queryKey: ["cobranza-base"],
-    queryFn: fetchCobranzaBase,
+    queryKey: ["cobranza-base", filtros.idProyecto ?? null],
+    queryFn: () => fetchCobranzaBase({ idProyecto: filtros.idProyecto }),
     staleTime: 60_000,
   });
 
