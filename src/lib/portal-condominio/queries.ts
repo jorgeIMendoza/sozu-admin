@@ -13,12 +13,17 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/utils/supabasePagination";
+import {
+  formatCuentaCobranzaId,
+  formatCuentaMantenimientoId,
+} from "@/utils/cuentaCobranzaUtils";
 import { fechaISO, hoyISO, etiquetaMes } from "./format";
 import type {
   AmenidadCondominio,
   AntiguedadBucket,
   BucketAntiguedad,
   CargoCondominio,
+  CategoriaCargo,
   CondominioDataset,
   CondominioKPIs,
   CondominioRef,
@@ -88,6 +93,9 @@ interface PagoRow {
   fecha_pago: string | null;
   clave_rastreo: string | null;
   descripcion: string | null;
+  url_recibo: string | null;
+  url_cep: string | null;
+  id_metodos_pago: number | null;
 }
 
 /**
@@ -158,22 +166,56 @@ export async function fetchCondominios(): Promise<CondominioRef[]> {
 export async function fetchCondominioDataset(proyectoId: number): Promise<CondominioDataset> {
   const hoy = hoyISO();
 
+  // 0. proyecto (nombre)
+  const { data: proyectoRow } = await supabase
+    .from("proyectos")
+    .select("nombre")
+    .eq("id", proyectoId)
+    .maybeSingle();
+  const proyectoNombre = (proyectoRow as any)?.nombre ?? "—";
+
   // 1. edificios del proyecto
   const { data: edificios, error: edErr } = await supabase
     .from("edificios")
-    .select("id")
+    .select("id, nombre")
     .eq("id_proyecto", proyectoId)
     .eq("activo", true);
   if (edErr) throw edErr;
   const edIds = (edificios ?? []).map((e: any) => e.id);
   if (edIds.length === 0) return datasetVacio();
+  const edificioNombre = new Map<number, string>(
+    (edificios ?? []).map((e: any) => [e.id as number, (e.nombre ?? "—") as string]),
+  );
 
   // 2. edificios_modelos
-  const ems = await fetchInChunks<{ id: number }>(edIds, (chunk, from, to) =>
-    supabase.from("edificios_modelos").select("id").in("id_edificio", chunk as number[]).range(from, to),
+  const ems = await fetchInChunks<{ id: number; id_edificio: number | null; id_modelo: number | null }>(
+    edIds,
+    (chunk, from, to) =>
+      supabase
+        .from("edificios_modelos")
+        .select("id, id_edificio, id_modelo")
+        .in("id_edificio", chunk as number[])
+        .range(from, to),
   );
   const emIds = ems.map((e) => e.id);
   if (emIds.length === 0) return datasetVacio();
+  const emToEdificio = new Map<number, number>();
+  const emToModelo = new Map<number, number>();
+  for (const e of ems) {
+    if (e.id_edificio) emToEdificio.set(e.id, e.id_edificio);
+    if (e.id_modelo) emToModelo.set(e.id, e.id_modelo);
+  }
+
+  // 2b. modelos (nombre)
+  const modeloIds = uniq(Array.from(emToModelo.values()));
+  const modelos = modeloIds.length
+    ? await fetchInChunks<{ id: number; nombre: string | null }>(modeloIds, (chunk, from, to) =>
+        supabase.from("modelos").select("id, nombre").in("id", chunk as number[]).range(from, to),
+      )
+    : [];
+  const modeloNombre = new Map<number, string>(
+    modelos.map((m) => [m.id, m.nombre ?? "—"]),
+  );
 
   // 3. propiedades
   const props = await fetchInChunks<PropRow>(emIds, (chunk, from, to) =>
@@ -251,7 +293,9 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
   const pagosRows = await fetchInChunks<PagoRow>(mantCcIds, (chunk, from, to) =>
     supabase
       .from("pagos")
-      .select("id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, descripcion")
+      .select(
+        "id, id_cuenta_cobranza, monto, fecha_pago, clave_rastreo, descripcion, url_recibo, url_cep, id_metodos_pago",
+      )
       .in("id_cuenta_cobranza", chunk as number[])
       .eq("activo", true)
       .range(from, to),
@@ -262,15 +306,43 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
     pagosByCc.get(p.id_cuenta_cobranza)!.push(p);
   }
 
+  // 8b. métodos de pago (catálogo) — para etiqueta humana en la tabla.
+  const metodoIds = uniq(
+    pagosRows.map((p) => p.id_metodos_pago).filter((v): v is number => !!v),
+  );
+  const metodos = metodoIds.length
+    ? await fetchInChunks<{ id: number; nombre: string | null }>(metodoIds, (chunk, from, to) =>
+        supabase.from("metodos_pago").select("id, nombre").in("id", chunk as number[]).range(from, to),
+      )
+    : [];
+  const metodoNombre = new Map<number, string>(
+    metodos.map((m) => [m.id, m.nombre ?? "—"]),
+  );
+
   // 9. aplicaciones de esos pagos (para conciliación)
   const pagoIds = pagosRows.map((p) => p.id);
   const apps = pagoIds.length
-    ? await fetchInChunks<{ id_pago: number; monto: number | null }>(pagoIds, (chunk, from, to) =>
-        supabase.from("aplicaciones_pago").select("id_pago, monto").in("id_pago", chunk as number[]).eq("activo", true).range(from, to),
+    ? await fetchInChunks<{ id_pago: number; monto: number | null; id_acuerdo_pago: number | null }>(pagoIds, (chunk, from, to) =>
+        supabase
+          .from("aplicaciones_pago")
+          .select("id_pago, monto, id_acuerdo_pago")
+          .in("id_pago", chunk as number[])
+          .eq("activo", true)
+          .range(from, to),
       )
     : [];
   const aplicadoPorPago = new Map<number, number>();
-  for (const a of apps) aplicadoPorPago.set(a.id_pago, (aplicadoPorPago.get(a.id_pago) ?? 0) + Number(a.monto ?? 0));
+  /** Acuerdos por pago (para deducir categoría: si todos los acuerdos
+   *  tienen multa asociada → "multa"; sino "mantenimiento"). */
+  const acuerdosPorPago = new Map<number, number[]>();
+  for (const a of apps) {
+    aplicadoPorPago.set(a.id_pago, (aplicadoPorPago.get(a.id_pago) ?? 0) + Number(a.monto ?? 0));
+    if (a.id_acuerdo_pago) {
+      const arr = acuerdosPorPago.get(a.id_pago) ?? [];
+      arr.push(a.id_acuerdo_pago);
+      acuerdosPorPago.set(a.id_pago, arr);
+    }
+  }
 
   // 10. multas ligadas a acuerdos de mantenimiento
   const acuerdoIds = acuerdos.map((a) => a.id);
@@ -332,6 +404,19 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
   const personaNombre = new Map<number, string>();
   for (const p of personas) personaNombre.set(p.id, p.nombre_legal ?? "—");
 
+  // Mapa de complementos por cuenta padre (cuentas hijas que NO son
+  // de mantenimiento — bodegas, estacionamientos u otras). Devuelve los
+  // folios CC-XXXXXX para que la UI pueda listarlos.
+  const complementosPorPadre = new Map<number, string[]>();
+  const mantCcSet = new Set(mantCcIds);
+  for (const h of hijas) {
+    if (!h.id_cuenta_cobranza_padre) continue;
+    if (mantCcSet.has(h.id)) continue; // saltamos la propia cuenta de mantenimiento
+    const arr = complementosPorPadre.get(h.id_cuenta_cobranza_padre) ?? [];
+    arr.push(formatCuentaCobranzaId(h.id));
+    complementosPorPadre.set(h.id_cuenta_cobranza_padre, arr);
+  }
+
   // --- Derivación de UNIDADES ---
   const unidades: UnidadCondominio[] = [];
   for (const ccId of mantCcIds) {
@@ -347,11 +432,26 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
     const saldoActual = pendientes.reduce((s, a) => s + Number(a.monto ?? 0), 0);
     const saldoVencido = vencidos.reduce((s, a) => s + Number(a.monto ?? 0), 0);
 
+    // Pago acumulado a la fecha: Σ monto de acuerdos cuya fecha de pago ya
+    // pasó (devengado, independiente de si están marcados como pagados).
+    const pagoAcumulado = lista
+      .filter((a) => (fechaISO(a.fecha_pago) ?? "9999") <= hoy)
+      .reduce((s, a) => s + Number(a.monto ?? 0), 0);
+
     const pagosCc = pagosByCc.get(ccId) ?? [];
     const ultimoPago = pagosCc.reduce<string | null>((max, p) => {
       const f = fechaISO(p.fecha_pago);
       return f && (!max || f > max) ? f : max;
     }, null);
+    const totalPagado = pagosCc.reduce((s, p) => s + Number(p.monto ?? 0), 0);
+    const saldoBalance = +(pagoAcumulado - totalPagado).toFixed(2);
+
+    // Próxima cuota: primer acuerdo no completado con fecha > hoy.
+    const proximaFechaPago = lista
+      .filter((a) => !a.pago_completado)
+      .map((a) => fechaISO(a.fecha_pago))
+      .filter((f): f is string => !!f && f > hoy)
+      .sort()[0] ?? null;
 
     // dueño
     const duenoEntId = prop.id_entidad_relacionada_dueno ?? undefined;
@@ -364,12 +464,18 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
 
     const clabe = hijaClabe.get(ccId) ?? "";
     const numero = prop.numero_propiedad ?? String(propId);
+    const idEm = prop.id_edificio_modelo ?? null;
+    const edificioId = idEm ? emToEdificio.get(idEm) ?? null : null;
+    const modeloId = idEm ? emToModelo.get(idEm) ?? null : null;
+    const edNombre = edificioId ? edificioNombre.get(edificioId) ?? "—" : "—";
+    const modNombre = modeloId ? modeloNombre.get(modeloId) ?? "—" : "—";
 
     unidades.push({
       id: String(ccId),
       cuentaMantId: ccId,
       cuentaPadreId: padreId,
       propiedadId: prop.id,
+      folio_mant: formatCuentaMantenimientoId(ccId),
       numero,
       piso: prop.numero_piso ?? "—",
       tipo: (prop.id_tipo_propiedad && tipoById.get(prop.id_tipo_propiedad)) || "—",
@@ -383,6 +489,13 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
       saldo_actual: saldoActual,
       saldo_vencido: saldoVencido,
       ultimo_pago: ultimoPago,
+      edificio_nombre: edNombre,
+      modelo_nombre: modNombre,
+      pago_acumulado: +pagoAcumulado.toFixed(2),
+      total_pagado: +totalPagado.toFixed(2),
+      saldo_balance: saldoBalance,
+      proxima_fecha_pago: proximaFechaPago,
+      complementos: complementosPorPadre.get(padreId) ?? [],
     });
   }
   unidades.sort((a, b) => a.numero.localeCompare(b.numero, "es", { numeric: true }));
@@ -430,9 +543,15 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
     });
   }
 
-  // --- PAGOS (con conciliación derivada) ---
+  // --- PAGOS (con conciliación derivada + enrich propietario/residente/categoría) ---
+  const unidadPorCcMant = new Map<number, UnidadCondominio>(
+    unidades.map((u) => [u.cuentaMantId, u]),
+  );
+  // Set de id_acuerdo_pago que tienen multa asociada — para derivar categoría.
+  const acuerdosConMulta = new Set<number>(
+    (multas as Array<any>).map((m) => m.id_acuerdo_pago as number).filter((v) => !!v),
+  );
   const pagos: PagoCondominio[] = pagosRows.map((p) => {
-    const numero = numeroPorCc.get(p.id_cuenta_cobranza) ?? "—";
     const monto = Number(p.monto ?? 0);
     const aplicado = aplicadoPorPago.get(p.id) ?? 0;
     let estatus: EstatusConciliacion;
@@ -446,14 +565,32 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
       estatus = "excepcion";
       nota = "Monto aplicado no coincide";
     }
+    const unidad = unidadPorCcMant.get(p.id_cuenta_cobranza);
+    // Categoría: si TODOS los acuerdos del pago corresponden a una multa,
+    // categoría = "multa". Si no, "mantenimiento".
+    const acuerdosDelPago = acuerdosPorPago.get(p.id) ?? [];
+    const todosMulta =
+      acuerdosDelPago.length > 0 && acuerdosDelPago.every((id) => acuerdosConMulta.has(id));
+    const categoria: CategoriaCargo = todosMulta ? "multa" : "mantenimiento";
+    // Comprobante: STP usa url_cep; transferencia/efectivo usan url_recibo.
+    const urlComprobante = p.url_cep || p.url_recibo || null;
+    const metodoPago = p.id_metodos_pago
+      ? metodoNombre.get(p.id_metodos_pago) ?? "—"
+      : "—";
     return {
       id: `pago-${p.id}`,
       unidad_id: unidadIdPorCc.get(p.id_cuenta_cobranza) ?? "",
-      unidad_numero: numero,
+      unidad_numero: unidad?.numero ?? "—",
+      folio_mant: unidad?.folio_mant ?? formatCuentaMantenimientoId(p.id_cuenta_cobranza),
+      propietario: unidad?.propietario ?? "—",
+      residente: unidad?.residente ?? "—",
       monto,
       fecha: fechaISO(p.fecha_pago) ?? "",
       referencia: p.clave_rastreo ?? "—",
-      concepto: p.descripcion || "Pago de mantenimiento",
+      concepto: p.descripcion || (categoria === "multa" ? "Pago de multa" : "Pago de mantenimiento"),
+      categoria,
+      url_comprobante: urlComprobante,
+      metodo_pago: metodoPago,
       estatus_conciliacion: estatus,
       nota_conciliacion: nota,
     };
@@ -544,7 +681,17 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
   // --- AMENIDADES (catálogo del proyecto) ---
   const amenidades = await fetchAmenidades(proyectoId);
 
-  return { unidades, cargos, pagos, morosos, amenidades, kpis, tendenciaMensual, antiguedad };
+  return {
+    proyecto_nombre: proyectoNombre,
+    unidades,
+    cargos,
+    pagos,
+    morosos,
+    amenidades,
+    kpis,
+    tendenciaMensual,
+    antiguedad,
+  };
 }
 
 async function fetchAmenidades(proyectoId: number): Promise<AmenidadCondominio[]> {
@@ -584,6 +731,7 @@ export async function fetchCondominioConfig(proyectoId: number): Promise<Condomi
 
 function datasetVacio(): CondominioDataset {
   return {
+    proyecto_nombre: "—",
     unidades: [],
     cargos: [],
     pagos: [],
