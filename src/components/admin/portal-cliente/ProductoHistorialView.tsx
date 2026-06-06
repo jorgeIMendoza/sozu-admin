@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
-import { createPortal } from "react-dom";
 import {
   CheckCircle2, Clock, ChevronDown, ChevronUp,
-  Receipt, Download, X,
+  Receipt,
 } from "lucide-react";
+import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import type { ProductoCliente, AcuerdoProducto } from "@/hooks/useClienteProductos";
 import { fmtMXN as fmt } from "@/lib/utils";
 
@@ -458,49 +458,14 @@ const ProductoHistorialView = ({ producto, proyectoNombre, numPropiedad }: Props
         </div>
       </div>
 
-      {/* PDF / CEP viewer */}
-      {pdfModal && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center"
-          onClick={() => setPdfModal(null)}
-        >
-          <div
-            className="bg-card w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col max-h-[90svh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{pdfModal.concept}</p>
-                <p className="text-[11px] text-muted-foreground">{pdfModal.date} · {fmt(pdfModal.amount)}</p>
-              </div>
-              <button
-                onClick={() => setPdfModal(null)}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-destructive/15 transition-colors"
-                aria-label="Cerrar"
-              >
-                <X className="w-4 h-4 text-destructive" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/10" style={{ minHeight: "60vh", maxHeight: "60vh" }}>
-              {isImageUrl(pdfModal.url) ? (
-                <img src={pdfModal.url} alt="CEP" className="max-w-full object-contain" style={{ maxHeight: "60vh" }} />
-              ) : (
-                <iframe src={pdfModal.url} className="w-full border-0" title="CEP" style={{ height: "60vh" }} />
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-border shrink-0">
-              <button
-                onClick={() => downloadPdf(pdfModal.url, `CEP-${pdfModal.concept}-${pdfModal.date}.pdf`)}
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold text-sm py-3 rounded-xl hover:bg-primary/90 transition-colors active:scale-[0.98]"
-              >
-                <Download className="w-4 h-4" />
-                Descargar
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      <DocViewerPortal
+        open={!!pdfModal}
+        onClose={() => setPdfModal(null)}
+        url={pdfModal?.url ?? ""}
+        title={pdfModal?.concept ?? ""}
+        subtitle={pdfModal ? `${pdfModal.date} · ${fmt(pdfModal.amount)}` : undefined}
+        downloadFilename={pdfModal ? `CEP-${pdfModal.concept}-${pdfModal.date}.pdf` : undefined}
+      />
     </div>
   );
 };
