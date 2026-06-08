@@ -26,6 +26,7 @@ import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Decision = "pendiente" | "aprobado" | "rechazado";
 
@@ -51,6 +52,7 @@ export function ComisionInternaContent({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { registrarActualizacion } = useActivityLogger();
+  const { user } = useAuth();
 
   // Decisión individual por comisionista (email como key)
   const [decisiones, setDecisiones] = useState<Record<string, Decision>>({});
@@ -159,6 +161,37 @@ export function ComisionInternaContent({
           "rechazar_dispersion_comision_interna",
         );
       }
+
+      // 3) Persistir la decisión a nivel cuenta para que la Bandeja de
+      //    Validaciones sepa si la fila debe seguir visible:
+      //    - "Autorizado": todos los comisionistas internos aprobados →
+      //      la fila debe DESAPARECER del listado de Alta Dirección.
+      //    - "Rechazado": al menos un comisionista rechazado (parcial o
+      //      total) → la fila PERMANECE visible con el badge actualizado.
+      //    El DDL puede no estar aplicado todavía (ver
+      //    Ejecuciones_manuales/autorizacion_comision_sozu.md); en ese caso
+      //    PostgREST devuelve 42703 y silenciamos para no bloquear el flujo
+      //    de aprobación, que sigue siendo válido en BD via `comisionistas`.
+      const nuevoEstatus: "Autorizado" | "Rechazado" =
+        rechazados.length === 0 ? "Autorizado" : "Rechazado";
+      const notasRechazo = rechazados.length
+        ? rechazados
+            .map((c) => `${c.email}: ${notas[c.email] || "(sin nota)"}`)
+            .join(" | ")
+        : null;
+      const payloadAuth: Record<string, unknown> = {
+        estatus_autorizacion_comision_interna: nuevoEstatus,
+        fecha_autorizacion_comision_interna: new Date().toISOString(),
+        email_autoriza_comision_interna: user?.email ?? null,
+      };
+      if (notasRechazo != null) {
+        payloadAuth.notas_rechazo_comision_interna = notasRechazo;
+      }
+      const { error: errAuth } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .update(payloadAuth)
+        .eq("id", cuentaId);
+      if (errAuth && errAuth.code !== "42703") throw errAuth;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bandeja-comisionistas-pendientes"] });
