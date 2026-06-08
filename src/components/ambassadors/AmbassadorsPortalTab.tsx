@@ -184,7 +184,7 @@ export default function AmbassadorsPortalTab() {
           {/* Left column: copy */}
           <div className="flex flex-col gap-4">
             <h2 className="text-[1.35rem] sm:text-[1.65rem] md:text-[1.85rem] font-bold leading-[1.2] tracking-tight text-foreground">
-              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con sozu es <span className="text-primary font-extrabold">POSIBLE</span>
+              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con SOZU es <span className="text-primary font-extrabold">POSIBLE</span>
             </h2>
             <p className="text-sm sm:text-[0.95rem] text-muted-foreground leading-relaxed max-w-md">
               Recomienda nuestros proyectos inmobiliarios y nosotros hacemos el resto.

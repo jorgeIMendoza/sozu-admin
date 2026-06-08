@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
 import {
   Ambassador, Advisor, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
@@ -336,6 +336,19 @@ export function ReferralFormDialog({
   });
   const [duplicate, setDuplicate] = useState<Referral | null>(null);
   const [loading, setLoading] = useState(false);
+  const [proyectos, setProyectos] = useState<{ id: number; nombre: string }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: rels } = await supabase.from('entidades_relacionadas')
+        .select('id_proyecto').eq('id_tipo_entidad', 5).eq('activo', true);
+      if (!rels?.length) return;
+      const ids = rels.map((r: any) => r.id_proyecto).filter(Boolean);
+      const { data } = await (supabase as any).from('proyectos')
+        .select('id, nombre').in('id', ids).eq('publicar', true).eq('activo', true).order('nombre');
+      if (data) setProyectos(data);
+    })();
+  }, []);
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
@@ -422,6 +435,7 @@ export function ReferralFormDialog({
         id_persona_embajador: emb?.idPersona ?? 0,
         tipo_interes: form.interestType,
         producto_interes: form.productInterest || null,
+        id_proyecto_interes: form.proyectoId ? Number(form.proyectoId) : null,
         relacion_embajador: form.relationship || null,
         comentarios: form.comments || null,
         consentimiento: form.consent ?? true,
@@ -438,7 +452,7 @@ export function ReferralFormDialog({
       if (refError) throw refError;
 
       toast.success('Referido registrado');
-      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '', clavePaisTelefono: 'MX', phone: '' });
+      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '', clavePaisTelefono: 'MX', phone: '', proyectoId: '' });
       setDuplicate(null);
       await refresh();
       onOpenChange(false);
@@ -501,6 +515,14 @@ export function ReferralFormDialog({
             </div>
           </div>
           <div><Label>Relación con el embajador</Label><Input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} /></div>
+          <div><Label>Proyecto</Label>
+            <Select value={form.proyectoId ?? ''} onValueChange={v => set('proyectoId', v)}>
+              <SelectTrigger><SelectValue placeholder="Selecciona proyecto" /></SelectTrigger>
+              <SelectContent>
+                {proyectos.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Interés</Label>
               <Select value={form.interestType} onValueChange={v => set('interestType', v)}>
@@ -517,9 +539,13 @@ export function ReferralFormDialog({
               <Select value={form.productInterest ?? ''} onValueChange={v => set('productInterest', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Loft">Loft</SelectItem>
+                  <SelectItem value="1 recámara">1 Recámara</SelectItem>
                   <SelectItem value="2 recámaras">2 recámaras</SelectItem>
                   <SelectItem value="3 recámaras">3 recámaras</SelectItem>
                   <SelectItem value="Residencia grande">Residencia grande</SelectItem>
+                  <SelectItem value="Oficinas">Oficinas</SelectItem>
+                  <SelectItem value="Comercio">Comercio</SelectItem>
                   <SelectItem value="No definido">No definido</SelectItem>
                 </SelectContent>
               </Select>
