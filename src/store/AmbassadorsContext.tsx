@@ -218,7 +218,6 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         roles!rol_id(nombre),
         personas!id_persona(nombre_legal, telefono)
       `)
-      .eq('activo', true)
       .eq('rol_id', 9)
       .order('nombre');
     if (error) {
