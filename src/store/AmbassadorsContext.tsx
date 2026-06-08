@@ -210,7 +210,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const loadAdvisors = useCallback(async () => {
-    // Todos los usuarios activos excepto Inmobiliaria (4) y Agente Inmobiliario (3)
+    // rol_id 9 = "Agente Interno"
     const { data, error } = await supabase
       .from('usuarios')
       .select(`
@@ -218,8 +218,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         roles!rol_id(nombre),
         personas!id_persona(nombre_legal, telefono)
       `)
-      .eq('activo', true)
-      .not('rol_id', 'in', '(3,4)')
+      .eq('rol_id', 9)
       .order('nombre');
     if (error) {
       console.error('loadAdvisors error:', error);
