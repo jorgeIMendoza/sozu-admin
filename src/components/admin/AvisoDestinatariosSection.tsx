@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
-import { Plus, Loader2, Users, Mail, ChevronDown, ChevronUp, Search, CheckSquare, Square, Building2 } from "lucide-react";
+import { Plus, Loader2, Users, Mail, ChevronDown, ChevronUp, Search, CheckSquare, Square, Building2, Layers, Home } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Destinatario {
@@ -22,6 +22,13 @@ interface PoolItem {
   rolIds: number[];
   proyectos?: string[]; // project names for Cliente users
   telefono?: string;
+}
+
+// Una "finca" = una propiedad del cliente con su proyecto, modelo y piso.
+interface ClienteFinca {
+  proyecto: string;
+  modelo: string;
+  piso: string;
 }
 
 interface Rol {
@@ -40,6 +47,10 @@ interface Props {
   selectedProyectos?: string[];
   onSelectedProyectosChange?: (proyectos: string[]) => void;
   availableProjectOptions?: string[];
+  selectedModelos?: string[];
+  onSelectedModelosChange?: (modelos: string[]) => void;
+  selectedPisos?: string[];
+  onSelectedPisosChange?: (pisos: string[]) => void;
 }
 
 export function AvisoDestinatariosSection({
@@ -51,6 +62,10 @@ export function AvisoDestinatariosSection({
   selectedProyectos = [],
   onSelectedProyectosChange,
   availableProjectOptions = [],
+  selectedModelos = [],
+  onSelectedModelosChange,
+  selectedPisos = [],
+  onSelectedPisosChange,
 }: Props) {
   const { toast } = useToast();
   const [loadingRolId, setLoadingRolId] = useState<number | null>(null);
@@ -66,6 +81,8 @@ export function AvisoDestinatariosSection({
   const [pool, setPool] = useState<PoolItem[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [clienteProyectoMap, setClienteProyectoMap] = useState<Map<string, string[]>>(new Map());
+  // email -> lista de propiedades (proyecto/modelo/piso) del cliente
+  const [clienteFincasMap, setClienteFincasMap] = useState<Map<string, ClienteFinca[]>>(new Map());
 
   const isClienteSelected = selectedRoles.includes(CLIENTE_ROL_ID);
 
@@ -107,7 +124,7 @@ export function AvisoDestinatariosSection({
 
     const { data: propiedades } = await supabase
       .from("propiedades")
-      .select("id, id_edificio_modelo")
+      .select("id, id_edificio_modelo, numero_piso")
       .in("id", propiedadIds);
 
     if (!propiedades) return;
@@ -116,17 +133,20 @@ export function AvisoDestinatariosSection({
 
     const { data: edModelos } = await supabase
       .from("edificios_modelos")
-      .select("id, id_edificio")
+      .select("id, id_edificio, id_modelo")
       .in("id", emIds);
 
     if (!edModelos) return;
 
     const edIds = [...new Set(edModelos.map(em => em.id_edificio))];
+    const modeloIds = [...new Set(edModelos.filter(em => em.id_modelo).map(em => em.id_modelo!))];
 
-    const { data: edificios } = await supabase
-      .from("edificios")
-      .select("id, id_proyecto")
-      .in("id", edIds);
+    const [{ data: edificios }, { data: modelos }] = await Promise.all([
+      supabase.from("edificios").select("id, id_proyecto").in("id", edIds),
+      modeloIds.length > 0
+        ? supabase.from("modelos").select("id, nombre").in("id", modeloIds)
+        : Promise.resolve({ data: [] as { id: number; nombre: string }[] }),
+    ]);
 
     if (!edificios) return;
 
@@ -139,13 +159,18 @@ export function AvisoDestinatariosSection({
 
     if (!proyectos) return;
 
-    // Build reverse map: email -> project names
+    // Maps para reconstruir proyecto/modelo/piso por propiedad
     const proyNombreById = new Map(proyectos.map(p => [p.id, p.nombre]));
+    const modeloNombreById = new Map((modelos || []).map(m => [m.id, m.nombre]));
     const edProyById = new Map(edificios.map(e => [e.id, e.id_proyecto]));
     const emEdById = new Map(edModelos.map(em => [em.id, em.id_edificio]));
+    const emModeloById = new Map(edModelos.map(em => [em.id, em.id_modelo]));
     const propEmById = new Map(propiedades.map(p => [p.id, p.id_edificio_modelo]));
+    const propPisoById = new Map(propiedades.map(p => [p.id, (p.numero_piso ?? "").toString().trim()]));
 
     const emailProyectos = new Map<string, Set<string>>();
+    // dedup de fincas por email con clave proyecto|modelo|piso
+    const emailFincas = new Map<string, Map<string, ClienteFinca>>();
 
     for (const cuenta of cuentas) {
       if (!cuenta.id_oferta || !cuenta.id_propiedad) continue;
@@ -163,17 +188,29 @@ export function AvisoDestinatariosSection({
       const proyNombre = proyNombreById.get(proyId);
       if (!proyNombre) continue;
 
+      const modeloId = emModeloById.get(emId);
+      const modeloNombre = (modeloId ? modeloNombreById.get(modeloId) : "") || "";
+      const piso = propPisoById.get(cuenta.id_propiedad) || "";
+
       if (!emailProyectos.has(email)) emailProyectos.set(email, new Set());
       emailProyectos.get(email)!.add(proyNombre);
+
+      if (!emailFincas.has(email)) emailFincas.set(email, new Map());
+      const fincaKey = `${proyNombre}|${modeloNombre}|${piso}`;
+      emailFincas.get(email)!.set(fincaKey, { proyecto: proyNombre, modelo: modeloNombre, piso });
     }
 
     const map = new Map<string, string[]>();
     for (const [email, proysSet] of emailProyectos) {
-      const proys = [...proysSet];
-      map.set(email, proys);
+      map.set(email, [...proysSet]);
     }
-
     setClienteProyectoMap(map);
+
+    const fincasMap = new Map<string, ClienteFinca[]>();
+    for (const [email, fincas] of emailFincas) {
+      fincasMap.set(email, [...fincas.values()]);
+    }
+    setClienteFincasMap(fincasMap);
   }, []);
 
   // Sync from parent on mount
@@ -222,6 +259,59 @@ export function AvisoDestinatariosSection({
       fetchClienteProyectos();
     }
   }, [isClienteSelected, fetchClienteProyectos]);
+
+  // Fincas que pertenecen a los proyectos seleccionados (si no hay proyectos
+  // seleccionados, se consideran todas). Universo para opciones de modelo/piso.
+  const fincasEnProyectos = useMemo(() => {
+    const out: ClienteFinca[] = [];
+    for (const fincas of clienteFincasMap.values()) {
+      for (const f of fincas) {
+        if (selectedProyectos.length === 0 || selectedProyectos.includes(f.proyecto)) {
+          out.push(f);
+        }
+      }
+    }
+    return out;
+  }, [clienteFincasMap, selectedProyectos]);
+
+  // Opciones de Modelo dependientes del/los proyecto(s) seleccionado(s).
+  const availableModeloOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of fincasEnProyectos) if (f.modelo) set.add(f.modelo);
+    return [...set].sort((a, b) => a.localeCompare(b, "es"));
+  }, [fincasEnProyectos]);
+
+  // Opciones de Piso dependientes del/los proyecto(s) seleccionado(s). Orden numérico.
+  const availablePisoOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of fincasEnProyectos) if (f.piso) set.add(f.piso);
+    return [...set].sort((a, b) => {
+      const na = Number(a), nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return a.localeCompare(b, "es");
+    });
+  }, [fincasEnProyectos]);
+
+  // ¿El cliente tiene alguna propiedad que cumpla proyecto + modelo + piso seleccionados?
+  const clientMatchesFilters = useCallback((email: string): boolean => {
+    const fincas = clienteFincasMap.get(email) || [];
+    if (fincas.length === 0) return false;
+    return fincas.some((f) =>
+      (selectedProyectos.length === 0 || selectedProyectos.includes(f.proyecto)) &&
+      (selectedModelos.length === 0 || selectedModelos.includes(f.modelo)) &&
+      (selectedPisos.length === 0 || selectedPisos.includes(f.piso))
+    );
+  }, [clienteFincasMap, selectedProyectos, selectedModelos, selectedPisos]);
+
+  // Al cambiar el proyecto, podar modelos/pisos seleccionados que ya no existan en las
+  // opciones disponibles (evita filtros "fantasma" que no corresponden al desarrollo).
+  useEffect(() => {
+    if (!isClienteSelected || clienteFincasMap.size === 0) return;
+    const prunedModelos = selectedModelos.filter((m) => availableModeloOptions.includes(m));
+    if (prunedModelos.length !== selectedModelos.length) onSelectedModelosChange?.(prunedModelos);
+    const prunedPisos = selectedPisos.filter((p) => availablePisoOptions.includes(p));
+    if (prunedPisos.length !== selectedPisos.length) onSelectedPisosChange?.(prunedPisos);
+  }, [availableModeloOptions, availablePisoOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notifyParent = useCallback((newSelected: Set<string>, currentPool: PoolItem[]) => {
     const selected = currentPool
@@ -278,29 +368,28 @@ export function AvisoDestinatariosSection({
     }
   };
 
-  // When project filter changes, filter the selected emails for Cliente users
+  // Cuando cambian los filtros (proyecto/modelo/piso), reajusta la selección de clientes:
+  // selecciona los que cumplen el filtro y deselecciona los que no (si son SOLO clientes).
   useEffect(() => {
-    if (!isClienteSelected || selectedProyectos.length === 0) return;
+    if (!isClienteSelected || clienteFincasMap.size === 0) return;
+    const sinFiltro = selectedProyectos.length === 0 && selectedModelos.length === 0 && selectedPisos.length === 0;
+    if (sinFiltro) return;
 
-    const selectedProjectNames = selectedProyectos;
-
-    // Filter: keep only clients that belong to at least one selected project
     const newSelected = new Set(selectedEmails);
     let changed = false;
 
     for (const item of pool) {
       if (!item.rolIds.includes(CLIENTE_ROL_ID)) continue;
-      const clientProjects = clienteProyectoMap.get(item.email) || [];
-      const matchesProject = selectedProjectNames.some((p) => clientProjects.includes(p));
+      const matches = clientMatchesFilters(item.email);
 
-      if (!matchesProject && newSelected.has(item.email)) {
-        // Only deselect if this user is ONLY a Cliente (not also another role)
+      if (!matches && newSelected.has(item.email)) {
+        // Solo deselecciona si el usuario es ÚNICAMENTE Cliente (no también otro rol)
         const hasOtherRoles = item.rolIds.some(r => r !== CLIENTE_ROL_ID);
         if (!hasOtherRoles) {
           newSelected.delete(item.email);
           changed = true;
         }
-      } else if (matchesProject && !newSelected.has(item.email)) {
+      } else if (matches && !newSelected.has(item.email)) {
         newSelected.add(item.email);
         changed = true;
       }
@@ -310,7 +399,7 @@ export function AvisoDestinatariosSection({
       setSelectedEmails(newSelected);
       notifyParent(newSelected, pool);
     }
-  }, [selectedProyectos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedProyectos, selectedModelos, selectedPisos, clienteFincasMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleEmail = (email: string) => {
     const newSelected = new Set(selectedEmails);
@@ -363,15 +452,14 @@ export function AvisoDestinatariosSection({
   const hasManualItems = pool.some(p => p.rolIds.length === 0);
 
   const getFilteredPool = () => {
+    const hayFiltro = selectedProyectos.length > 0 || selectedModelos.length > 0 || selectedPisos.length > 0;
     return pool.filter(d => {
-      // When projects are selected, hide clients that don't belong to any selected project
-      if (isClienteSelected && selectedProyectos.length > 0 && d.rolIds.includes(CLIENTE_ROL_ID)) {
-        const selectedProjectNames = selectedProyectos;
-        const clientProjects = clienteProyectoMap.get(d.email) || [];
-        const matchesProject = selectedProjectNames.some((p) => clientProjects.includes(p));
-        // If user is ONLY a client and doesn't match project, hide completely
+      // Con filtros activos, oculta clientes que no tengan ninguna propiedad que cumpla
+      // proyecto + modelo + piso. Solo aplica a quienes son únicamente Cliente.
+      if (isClienteSelected && hayFiltro && d.rolIds.includes(CLIENTE_ROL_ID)) {
+        const matches = clientMatchesFilters(d.email);
         const hasOtherRoles = d.rolIds.some(r => r !== CLIENTE_ROL_ID);
-        if (!matchesProject && !hasOtherRoles) return false;
+        if (!matches && !hasOtherRoles) return false;
       }
 
       const matchesSearch = d.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -459,6 +547,51 @@ export function AvisoDestinatariosSection({
             searchPlaceholder="Buscar desarrollo..."
             icon={<Building2 className="h-4 w-4" />}
           />
+        </div>
+      )}
+
+      {/* Modelo / Piso filters — dependen del/los desarrollo(s) seleccionado(s) y solo
+          aplican a destinatarios Cliente. */}
+      {isClienteSelected && (availableModeloOptions.length > 0 || availablePisoOptions.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {availableModeloOptions.length > 0 && (
+            <div>
+              <Label className="flex items-center gap-1.5 mb-1.5">
+                <Layers className="h-4 w-4" />
+                Modelo
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Filtra clientes por el modelo de su propiedad. Vacío = todos los modelos.
+              </p>
+              <MultiSelectFilter
+                values={selectedModelos}
+                onValuesChange={(vals) => onSelectedModelosChange?.(vals)}
+                options={availableModeloOptions}
+                placeholder="Todos los modelos"
+                searchPlaceholder="Buscar modelo..."
+                icon={<Layers className="h-4 w-4" />}
+              />
+            </div>
+          )}
+          {availablePisoOptions.length > 0 && (
+            <div>
+              <Label className="flex items-center gap-1.5 mb-1.5">
+                <Home className="h-4 w-4" />
+                Piso
+              </Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Filtra clientes por el piso de su propiedad. Vacío = todos los pisos.
+              </p>
+              <MultiSelectFilter
+                values={selectedPisos}
+                onValuesChange={(vals) => onSelectedPisosChange?.(vals)}
+                options={availablePisoOptions}
+                placeholder="Todos los pisos"
+                searchPlaceholder="Buscar piso..."
+                icon={<Home className="h-4 w-4" />}
+              />
+            </div>
+          )}
         </div>
       )}
 
