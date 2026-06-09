@@ -82,6 +82,7 @@ export function useFacturasPorCobrar() {
             `
             id,
             id_oferta,
+            id_propiedad,
             precio_final,
             porcentaje_comision_venta,
             fecha_compra,
@@ -122,12 +123,18 @@ export function useFacturasPorCobrar() {
         ofertaMap.set(o.id, { idPropiedad: o.id_propiedad, idProducto: o.id_producto });
       });
 
+      // id_propiedad puede venir directamente de cuentas_cobranza (cuentas
+      // creadas sin oferta o con oferta sin propiedad) — fallback a la
+      // propiedad de la oferta cuando exista. Sin esto, todo el waterfall
+      // (proyecto / modelo / no. depto / entidad dueña) queda vacío en la
+      // tabla del Portal Administración.
       const propiedadIds = Array.from(
-        new Set(
-          (ofertas || [])
+        new Set([
+          ...cuentas.map((c) => c.id_propiedad).filter((v): v is number => v != null),
+          ...(ofertas || [])
             .map((o) => o.id_propiedad)
             .filter((v): v is number => v != null),
-        ),
+        ]),
       );
 
       const { data: propiedades, error: propsError } = propiedadIds.length
@@ -320,7 +327,8 @@ export function useFacturasPorCobrar() {
       return cuentas.map((c) => {
         const idOferta = c.id_oferta as number | null;
         const oferta = idOferta != null ? ofertaMap.get(idOferta) : undefined;
-        const idProp = oferta?.idPropiedad ?? null;
+        // Fallback: cuentas_cobranza.id_propiedad cuando la oferta no la trae.
+        const idProp = (c as any).id_propiedad ?? oferta?.idPropiedad ?? null;
         const prop = idProp != null ? propiedadMap.get(idProp) : undefined;
         const em = prop?.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
         const edif = em?.idEdificio != null ? edificioMap.get(em.idEdificio) : undefined;
