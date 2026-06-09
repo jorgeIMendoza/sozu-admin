@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchInBatches } from "@/utils/supabasePagination";
 
 /**
  * Hook que entrega las cuentas de cobranza con al menos una comisión interna
@@ -160,26 +161,26 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   const ofertaIds = Array.from(
     new Set(cuentasBase.map((c) => c.id_oferta).filter((x): x is number => !!x)),
   );
-  const { data: ofs } = ofertaIds.length
-    ? ((await (supabase as any)
-        .from("ofertas")
-        .select("id, id_propiedad, id_producto")
-        .in("id", ofertaIds)) as any)
-    : { data: [] };
+  const ofs = await fetchInBatches<any>(ofertaIds, (batch) =>
+    (supabase as any)
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto")
+      .in("id", batch as number[]),
+  );
   const ofMap = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
 
   // 4) Propiedades (estatus_disponibilidad + edificio_modelo + entidad dueña).
   const propIdsCc = cuentasBase.map((c) => c.id_propiedad).filter((x: any): x is number => !!x);
   const propIdsOferta = (ofs || []).map((o: any) => o.id_propiedad).filter((x: any): x is number => !!x);
   const propIds = Array.from(new Set([...propIdsCc, ...propIdsOferta]));
-  const { data: props } = propIds.length
-    ? ((await (supabase as any)
-        .from("propiedades")
-        .select(
-          "id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad, id_entidad_relacionada_dueno",
-        )
-        .in("id", propIds)) as any)
-    : { data: [] };
+  const props = await fetchInBatches<any>(propIds, (batch) =>
+    (supabase as any)
+      .from("propiedades")
+      .select(
+        "id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad, id_entidad_relacionada_dueno",
+      )
+      .in("id", batch as number[]),
+  );
   const propMap = new Map<number, any>((props || []).map((p: any) => [p.id, p]));
 
   // 4b) Entidad dueña (desarrollador) — entidades_relacionadas → personas
@@ -211,14 +212,12 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
         .filter((x: any): x is number => !!x),
     ),
   );
-  const { data: ems } = emIds.length
-    ? ((await (supabase as any)
-        .from("edificios_modelos")
-        .select(
-          "id, id_edificio, modelos!edificios_modelos_id_modelo_fkey(nombre)",
-        )
-        .in("id", emIds)) as any)
-    : { data: [] };
+  const ems = await fetchInBatches<any>(emIds, (batch) =>
+    (supabase as any)
+      .from("edificios_modelos")
+      .select("id, id_edificio, modelos!edificios_modelos_id_modelo_fkey(nombre)")
+      .in("id", batch as number[]),
+  );
   const emMap = new Map<number, any>((ems || []).map((em: any) => [em.id, em]));
 
   // 6) edificios → proyecto
@@ -256,14 +255,14 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       (ofs || []).map((o: any) => o.id_producto).filter((x: any): x is number => !!x),
     ),
   );
-  const { data: prodsRaw } = productoIds.length
-    ? ((await (supabase as any)
-        .from("productos_servicios")
-        .select(
-          "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
-        )
-        .in("id", productoIds)) as any)
-    : { data: [] };
+  const prodsRaw = await fetchInBatches<any>(productoIds, (batch) =>
+    (supabase as any)
+      .from("productos_servicios")
+      .select(
+        "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+      )
+      .in("id", batch as number[]),
+  );
   const prodMap = new Map<number, any>((prodsRaw || []).map((p: any) => [p.id, p]));
 
   // 8) Composición final + gate de propiedad Vendida.
