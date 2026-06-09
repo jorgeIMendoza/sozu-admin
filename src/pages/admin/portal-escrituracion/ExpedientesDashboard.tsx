@@ -67,11 +67,43 @@ const TIPO_META: Record<TipoComprador, { label: string; cls: string }> = {
   EXTRANJERO:     { label: 'Extranjero',     cls: 'bg-amber-50 text-amber-700' },
 };
 
+// ─── Documentos obligatorios persona física ───────────────────────────────────
+
+// Nombres normalizados (sin tildes, minúsculas, sin chars especiales)
+// para comparar contra tipos_documento.nombre de BD con tolerancia de variaciones.
+function normTipoDoc(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const DOCS_OBLIGATORIOS_FISICA = [
+  'Constancia de situación fiscal',
+  'Comprobante de domicilio',
+  'CURP',
+  'Frente INE',
+  'Acta de nacimiento',
+] as const;
+
+const DOCS_OBLIGATORIOS_NORM = DOCS_OBLIGATORIOS_FISICA.map(normTipoDoc);
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function mapEstatusPropiedad(id: number): EstatusExpediente {
-  if (id === 7 || id === 8) return 'LISTO';       // Escriturado / Entregado
-  if (id === 11) return 'CON_OBSERVACIONES';       // En demanda
+// Regla: LISTO cuando cada doc obligatorio tiene ≥1 versión VALIDADA.
+// Expirados, rechazados o versiones anteriores del mismo tipo no bloquean
+// si existe al menos uno Validado para ese tipo.
+function deriveEstatusExpediente(
+  estatusDisponibilidadId: number,
+  docsCompletos: number,
+): EstatusExpediente {
+  if (estatusDisponibilidadId === 11) return 'CON_OBSERVACIONES'; // En demanda
+  // Escriturado (7) o Entregado (8) → LISTO siempre
+  if (estatusDisponibilidadId === 7 || estatusDisponibilidadId === 8) return 'LISTO';
+  // Para el resto: LISTO solo si todos los obligatorios tienen al menos 1 Validado
+  if (docsCompletos >= DOCS_OBLIGATORIOS_FISICA.length) return 'LISTO';
   return 'PENDIENTE';
 }
 
@@ -471,23 +503,35 @@ export function ExpedientesDashboard() {
         });
       });
 
-      // Paso 4: Conteo de documentos por cuenta
-      const { data: docs } = await supabase
+      // Paso 4: Documentos por cuenta — lógica correcta de obligatorios
+      // Se obtiene el nombre del tipo para poder aplicar la regla por tipo documental.
+      const { data: docs } = await (supabase as any)
         .from('documentos')
-        .select('id, id_cuenta_cobranza, id_estatus_verificacion')
+        .select('id, id_cuenta_cobranza, id_estatus_verificacion, tipos_documento:documentos_id_tipo_documento_fkey(nombre)')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true)
         .eq('es_draft', false);
 
-      const docsByCuenta: Record<number, { total: number; completos: number }> = {};
-      (docs || []).forEach(d => {
+      // Para cada cuenta: qué tipos obligatorios tienen ≥1 versión VALIDADA (id=2)
+      // Regla: ignorar Expirados/Rechazados si existe un Validado del mismo tipo.
+      const validadosPorCuenta: Record<number, Set<string>> = {};
+      (docs || []).forEach((d: any) => {
         if (!d.id_cuenta_cobranza) return;
-        if (!docsByCuenta[d.id_cuenta_cobranza]) docsByCuenta[d.id_cuenta_cobranza] = { total: 0, completos: 0 };
-        docsByCuenta[d.id_cuenta_cobranza].total++;
-        // id_estatus_verificacion = 2 es "Validado" en la mayoría de los schemas
-        if (d.id_estatus_verificacion && d.id_estatus_verificacion >= 2) {
-          docsByCuenta[d.id_cuenta_cobranza].completos++;
-        }
+        if (d.id_estatus_verificacion !== 2) return; // solo id=2 Validado
+        const tipoNombre: string = d.tipos_documento?.nombre ?? '';
+        if (!tipoNombre) return;
+        const norm = normTipoDoc(tipoNombre);
+        // Solo trackear tipos que son obligatorios
+        if (!DOCS_OBLIGATORIOS_NORM.includes(norm as any)) return;
+        if (!validadosPorCuenta[d.id_cuenta_cobranza]) validadosPorCuenta[d.id_cuenta_cobranza] = new Set();
+        validadosPorCuenta[d.id_cuenta_cobranza].add(norm);
+      });
+
+      const docsByCuenta: Record<number, { total: number; completos: number }> = {};
+      cuentaIds.forEach(id => {
+        const validados = validadosPorCuenta[id] ?? new Set<string>();
+        const cumplidos = DOCS_OBLIGATORIOS_NORM.filter(t => validados.has(t)).length;
+        docsByCuenta[id] = { total: DOCS_OBLIGATORIOS_FISICA.length, completos: cumplidos };
       });
 
       // Paso 5: Construir filas
@@ -497,8 +541,8 @@ export function ExpedientesDashboard() {
           const cuenta = cuentaByProp[p.id];
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
-          const estatusExpediente = mapEstatusPropiedad(p.id_estatus_disponibilidad);
-          const docStats = docsByCuenta[cuenta.id] || { total: 0, completos: 0 };
+          const docStats = docsByCuenta[cuenta.id] || { total: DOCS_OBLIGATORIOS_FISICA.length, completos: 0 };
+          const estatusExpediente = deriveEstatusExpediente(p.id_estatus_disponibilidad, docStats.completos);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
             cuentaId: cuenta.id,
@@ -748,7 +792,7 @@ export function ExpedientesDashboard() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60">
-                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Documentos', 'Actualizado'].map(h => (
+                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Docs obligatorios', 'Actualizado'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>

@@ -25,7 +25,8 @@ interface PagoInfo {
   descripcion: string | null;
   id_metodos_pago: number | null;   // para detectar pagos en efectivo (id=1)
   nombre_ordenante: string | null;  // de pagos_stp_raw
-  rfc_ordenante: string | null;     // de pagos_stp_raw.rfc_curp_ordenante
+  rfc_ordenante: string | null;     // de pagos_stp_raw.rfc_curp_ordenante clasificado como RFC
+  curp_ordenante: string | null;    // de pagos_stp_raw.rfc_curp_ordenante clasificado como CURP
 }
 
 interface OrdenanteDistinto {
@@ -34,6 +35,7 @@ interface OrdenanteDistinto {
   fecha_pago: string;
   nombre_ordenante: string;
   rfc_ordenante: string | null;
+  curp_ordenante: string | null;
   clave_rastreo: string;
 }
 
@@ -44,6 +46,7 @@ interface PldRow {
   unidad: string;
   clienteNombre: string;
   clienteRfc: string | null;
+  clienteCurp: string | null;
   pldStatus: PldStatus;
   riesgo: RiskLevel;
   totalPagado: number;
@@ -60,6 +63,10 @@ interface PldRow {
   hasEfectivoExcedido: boolean;
   montoPagadoEfectivo: number;
   limiteEfectivo: number;
+  // Regla 4: CEP sin RFC (solo CURP) → alerta informativa MEDIA
+  hasCepSinRfc: boolean;
+  // Regla 5: Comprador sin RFC registrado → alerta informativa MEDIA
+  hasBuyerSinRfc: boolean;
   // Legacy (alias, para backward compat con panel de detalle)
   hasOrdenanteDistinto: boolean;
   pagosOrdenanteDistinto: OrdenanteDistinto[];
@@ -75,7 +82,7 @@ interface PldAlert {
   cuentaLabel: string;
   unidad: string;
   cliente: string;
-  tipo: 'NOMBRE_DISTINTO' | 'RFC_DISTINTO' | 'EFECTIVO_EXCEDIDO' | 'ORDENANTE_DISTINTO' | 'PAGO_NO_TRAZABLE' | 'SIN_CEP' | 'SOBREPAGO' | 'SIN_PAGOS';
+  tipo: 'NOMBRE_DISTINTO' | 'RFC_DISTINTO' | 'EFECTIVO_EXCEDIDO' | 'CEP_SIN_RFC' | 'RFC_COMPRADOR_NO_REGISTRADO' | 'ORDENANTE_DISTINTO' | 'PAGO_NO_TRAZABLE' | 'SIN_CEP' | 'SOBREPAGO' | 'SIN_PAGOS';
   severidad: 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
   titulo: string;
   descripcion: string;
@@ -94,9 +101,31 @@ function normalizarTexto(s: string | null | undefined): string {
     .trim();
 }
 
-// Normaliza RFC: mayúsculas, sin espacios, sin guiones
+// Normaliza RFC: mayúsculas, sin espacios, sin guiones, sin caracteres especiales
 function normalizarRfc(s: string | null | undefined): string {
-  return (s ?? '').toUpperCase().replace(/[\s\-]/g, '').trim();
+  return (s ?? '')
+    .toUpperCase()
+    .replace(/[\s\-\.]/g, '')     // eliminar espacios, guiones, puntos
+    .replace(/[^A-ZÑ&0-9]/g, '') // conservar solo alfanumérico + Ñ + &
+    .trim();
+}
+
+// Detecta si un valor rfc_curp_ordenante es RFC o CURP y lo clasifica
+function clasificarRfcCurp(raw: string | null): { rfc: string | null; curp: string | null } {
+  if (!raw) return { rfc: null, curp: null };
+  const v = raw.toUpperCase().replace(/[\s\-]/g, '');
+  // CURP: exactamente 18 chars con patrón específico
+  if (/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$/.test(v)) {
+    return { rfc: null, curp: v };
+  }
+  // RFC persona física (13) o moral (12)
+  if (/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(v)) {
+    return { rfc: v, curp: null };
+  }
+  // Ambiguo: longitud >= 17 → probable CURP; <= 13 → probable RFC
+  if (v.length >= 17) return { rfc: null, curp: v };
+  if (v.length >= 9)  return { rfc: v,    curp: null };
+  return { rfc: null, curp: null };
 }
 
 function derivePld(
@@ -120,6 +149,10 @@ function derivePld(
   hasEfectivoExcedido: boolean;
   montoPagadoEfectivo: number;
   limiteEfectivo: number;
+  // Regla 4 — INFO: CEP sin RFC (solo CURP)
+  hasCepSinRfc: boolean;
+  // Regla 5 — INFO: Comprador sin RFC registrado
+  hasBuyerSinRfc: boolean;
   // Legacy alias
   hasOrdenanteDistinto: boolean;
   pagosOrdenanteDistinto: OrdenanteDistinto[];
@@ -134,6 +167,7 @@ function derivePld(
     hasNombreDistinto: false, pagosNombreDistinto: [] as OrdenanteDistinto[],
     hasRfcDistinto: false,    pagosRfcDistinto:    [] as OrdenanteDistinto[],
     hasEfectivoExcedido: false, montoPagadoEfectivo: 0, limiteEfectivo,
+    hasCepSinRfc: false, hasBuyerSinRfc: false,
     hasOrdenanteDistinto: false, pagosOrdenanteDistinto: [] as OrdenanteDistinto[],
     escrituraBloqueada: false, totalPagado: 0,
   };
@@ -158,6 +192,7 @@ function derivePld(
       pagosNombreDistinto.push({
         pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
         nombre_ordenante: p.nombre_ordenante, rfc_ordenante: p.rfc_ordenante,
+        curp_ordenante: p.curp_ordenante,
         clave_rastreo: p.clave_rastreo,
       });
     }
@@ -165,21 +200,42 @@ function derivePld(
   const hasNombreDistinto = pagosNombreDistinto.length > 0;
 
   // ── Regla 2: RFC ordenante ≠ RFC cliente → BLOQUEO ───────────────────────
+  // ── Regla 4: CEP sin RFC (solo CURP) → alerta informativa ────────────────
+  // ── Regla 5: Comprador sin RFC registrado → alerta informativa ────────────
   const seenRfc = new Set<string>();
   const pagosRfcDistinto: OrdenanteDistinto[] = [];
-  if (clienteRfcNorm) {
-    for (const p of pagos) {
-      if (!p.clave_rastreo || !p.rfc_ordenante) continue; // sin RFC en CEP → no aplica
-      if (normalizarRfc(p.rfc_ordenante) === clienteRfcNorm) continue; // coincide → sin alerta
-      const key = normalizarRfc(p.rfc_ordenante);
-      if (!seenRfc.has(key)) {
-        seenRfc.add(key);
-        pagosRfcDistinto.push({
-          pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
-          nombre_ordenante: p.nombre_ordenante ?? '—', rfc_ordenante: p.rfc_ordenante,
-          clave_rastreo: p.clave_rastreo,
-        });
-      }
+  let hasCepSinRfc   = false;
+  // Comprador sin RFC: aplica si hay al menos un pago con identidad en CEP
+  const hasBuyerSinRfc = !clienteRfcNorm && pagos.some(p => p.clave_rastreo && (p.rfc_ordenante || p.curp_ordenante));
+
+  for (const p of pagos) {
+    if (!p.clave_rastreo) continue;
+
+    // CEP tiene CURP pero no RFC → alerta informativa, no bloqueo
+    if (p.curp_ordenante && !p.rfc_ordenante) {
+      hasCepSinRfc = true;
+      continue;
+    }
+
+    // Sin RFC en CEP → no aplicable para esta regla
+    if (!p.rfc_ordenante) continue;
+
+    // Comprador sin RFC → no se puede comparar automáticamente, no bloquear
+    if (!clienteRfcNorm) continue;
+
+    // Comparar RFC CEP (clasificado) vs RFC comprador
+    if (normalizarRfc(p.rfc_ordenante) === clienteRfcNorm) continue; // coincide → sin alerta
+
+    const key = normalizarRfc(p.rfc_ordenante);
+    if (!seenRfc.has(key)) {
+      seenRfc.add(key);
+      pagosRfcDistinto.push({
+        pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
+        nombre_ordenante: p.nombre_ordenante ?? '—',
+        rfc_ordenante: p.rfc_ordenante,
+        curp_ordenante: p.curp_ordenante,
+        clave_rastreo: p.clave_rastreo,
+      });
     }
   }
   const hasRfcDistinto = pagosRfcDistinto.length > 0;
@@ -215,6 +271,7 @@ function derivePld(
     hasNombreDistinto, pagosNombreDistinto,
     hasRfcDistinto,    pagosRfcDistinto,
     hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+    hasCepSinRfc, hasBuyerSinRfc,
     hasOrdenanteDistinto, pagosOrdenanteDistinto,
     escrituraBloqueada, totalPagado,
   };
@@ -261,6 +318,34 @@ function buildAlerts(rows: PldRow[]): PldAlert[] {
         severidad: 'CRITICA',
         titulo: 'Bloqueo — Límite de efectivo excedido',
         descripcion: `Se pagaron ${new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(r.montoPagadoEfectivo)} en efectivo, superando el límite permitido de ${new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(r.limiteEfectivo)}.`,
+        fecha: r.fechaActualizacion,
+      });
+    }
+
+    // Regla 4 — INFO MEDIA: CEP sin RFC (solo CURP presente)
+    if (r.hasCepSinRfc) {
+      alerts.push({
+        id: `cep-sin-rfc-${r.cuentaId}`,
+        cuentaId: r.cuentaId, cuentaLabel: r.cuentaLabel,
+        unidad: r.unidad, cliente: r.clienteNombre,
+        tipo: 'CEP_SIN_RFC',
+        severidad: 'MEDIA',
+        titulo: 'Validación manual — CEP sin RFC del ordenante',
+        descripcion: `Uno o más CEP presentan CURP del ordenante pero no RFC. No se genera bloqueo automático. Se requiere validación manual para confirmar identidad.`,
+        fecha: r.fechaActualizacion,
+      });
+    }
+
+    // Regla 5 — INFO MEDIA: Comprador sin RFC registrado
+    if (r.hasBuyerSinRfc) {
+      alerts.push({
+        id: `buyer-sin-rfc-${r.cuentaId}`,
+        cuentaId: r.cuentaId, cuentaLabel: r.cuentaLabel,
+        unidad: r.unidad, cliente: r.clienteNombre,
+        tipo: 'RFC_COMPRADOR_NO_REGISTRADO',
+        severidad: 'MEDIA',
+        titulo: 'RFC del comprador no registrado',
+        descripcion: `El comprador "${r.clienteNombre}" no tiene RFC registrado en el sistema. No es posible verificar automáticamente la identidad en el CEP. No se marca evasión fiscal.`,
         fecha: r.fechaActualizacion,
       });
     }
@@ -498,11 +583,29 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
             </div>
             {row.pagosRfcDistinto.map(pod => (
               <div key={pod.pagoId} className="ml-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs space-y-0.5">
-                <p className="font-semibold text-red-800">RFC ordenante: {pod.rfc_ordenante}</p>
-                <p className="text-slate-600">RFC cliente: {row.clienteRfc ?? '—'}</p>
+                <p className="font-semibold text-red-800">RFC CEP: {pod.rfc_ordenante ?? '—'}</p>
+                {pod.curp_ordenante && <p className="text-red-700">CURP CEP: {pod.curp_ordenante}</p>}
+                <p className="text-slate-600">RFC Comprador: {row.clienteRfc ?? '—'}</p>
+                {row.clienteCurp && <p className="text-slate-500">CURP Comprador: {row.clienteCurp}</p>}
                 <p className="text-slate-400 font-mono text-[10px]">CR: {pod.clave_rastreo}</p>
               </div>
             ))}
+
+            {/* Regla 4 — INFO: CEP sin RFC (solo CURP) */}
+            {row.hasCepSinRfc && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span><strong>CEP sin RFC del ordenante</strong> — El CEP presenta CURP pero no RFC. Validación manual requerida.</span>
+              </div>
+            )}
+
+            {/* Regla 5 — INFO: Comprador sin RFC registrado */}
+            {row.hasBuyerSinRfc && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span><strong>RFC del comprador no registrado</strong> — No es posible verificar identidad automáticamente. No se marca evasión fiscal.</span>
+              </div>
+            )}
 
             {/* Regla 3 — BLOQUEO: Efectivo excedido */}
             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasEfectivoExcedido ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -530,9 +633,9 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                 const nombreCoincide = p.nombre_ordenante
                   ? normalizarTexto(p.nombre_ordenante) === normalizarTexto(row.clienteNombre)
                   : true;
-                const rfcCoincide = row.clienteRfc && p.rfc_ordenante
-                  ? normalizarRfc(p.rfc_ordenante) === normalizarRfc(row.clienteRfc)
-                  : false;
+                // rfcCoincide: solo compara cuando ambos lados tienen RFC (no CURP)
+                const rfcCoincide = !!(row.clienteRfc && p.rfc_ordenante &&
+                  normalizarRfc(p.rfc_ordenante) === normalizarRfc(row.clienteRfc));
                 const isOrdenanteDistinto = !!p.clave_rastreo && !!p.nombre_ordenante && !nombreCoincide && !rfcCoincide;
                 return (
                   <div key={p.id} className={`rounded-xl border p-3 ${isOrdenanteDistinto ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-slate-50'}`}>
@@ -549,12 +652,21 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                       {p.nombre_ordenante && (
                         <div className={`text-xs font-medium ${isOrdenanteDistinto ? 'text-red-700' : 'text-slate-600'}`}>
                           <p>{isOrdenanteDistinto ? '⚠ ' : '✓ '}Ordenante: {p.nombre_ordenante}</p>
-                          {p.rfc_ordenante && (
-                            <p className={`text-[11px] ${isOrdenanteDistinto ? 'text-red-500' : 'text-slate-400'}`}>
-                              RFC: {p.rfc_ordenante}
-                              {rfcCoincide && ' ✓ coincide con cliente'}
+                        </div>
+                      )}
+                      {/* Datos de auditoría PLD */}
+                      {(p.rfc_ordenante || p.curp_ordenante || row.clienteRfc || row.clienteCurp) && (
+                        <div className="text-[11px] text-slate-500 space-y-0.5 border-t border-slate-100 pt-1 mt-1">
+                          {p.rfc_ordenante  && (
+                            <p><span className="font-semibold">RFC CEP:</span>{' '}
+                              <span className={rfcCoincide ? 'text-emerald-600' : 'text-red-600'}>
+                                {p.rfc_ordenante}{rfcCoincide ? ' ✓' : ''}
+                              </span>
                             </p>
                           )}
+                          {p.curp_ordenante && <p><span className="font-semibold">CURP CEP:</span> {p.curp_ordenante}</p>}
+                          {row.clienteRfc   && <p><span className="font-semibold">RFC Comprador:</span> {row.clienteRfc}</p>}
+                          {row.clienteCurp  && <p><span className="font-semibold">CURP Comprador:</span> {row.clienteCurp}</p>}
                         </div>
                       )}
                       <div className="flex items-center gap-2">
@@ -724,10 +836,11 @@ export function PldDashboard() {
         allPagos.push(...(data ?? []));
       }
 
-      // Obtener nombre_ordenante de pagos_stp_raw via clave_rastreo
+      // Obtener nombre_ordenante y rfc_curp_ordenante de pagos_stp_raw via clave_rastreo
       const clavesRastreo = [...new Set(allPagos.map(p => p.clave_rastreo).filter(Boolean))] as string[];
-      const ordenanteMap:    Record<string, string> = {};
-      const rfcOrdenanteMap: Record<string, string> = {};
+      const ordenanteMap:    Record<string, string>      = {};
+      const rfcOrdenanteMap: Record<string, string|null> = {}; // solo RFCs clasificados
+      const curpOrdenanteMap:Record<string, string|null> = {}; // solo CURPs clasificados
       if (clavesRastreo.length) {
         for (let i = 0; i < clavesRastreo.length; i += 500) {
           const slice = clavesRastreo.slice(i, i + 500);
@@ -737,7 +850,12 @@ export function PldDashboard() {
             .in('claverastreo', slice);
           (stpRaw ?? []).forEach((r: any) => {
             if (r.nombre_ordenante) ordenanteMap[r.claverastreo] = r.nombre_ordenante;
-            if (r.rfc_curp_ordenante) rfcOrdenanteMap[r.claverastreo] = r.rfc_curp_ordenante;
+            if (r.rfc_curp_ordenante) {
+              // Clasificar si el valor es RFC o CURP antes de comparar
+              const { rfc, curp } = clasificarRfcCurp(r.rfc_curp_ordenante);
+              rfcOrdenanteMap[r.claverastreo]  = rfc;
+              curpOrdenanteMap[r.claverastreo] = curp;
+            }
           });
         }
       }
@@ -754,8 +872,9 @@ export function PldDashboard() {
           url_recibo: p.url_recibo,
           descripcion: p.descripcion,
           id_metodos_pago: p.id_metodos_pago ?? null,
-          nombre_ordenante: p.clave_rastreo ? (ordenanteMap[p.clave_rastreo] ?? null) : null,
-          rfc_ordenante:    p.clave_rastreo ? (rfcOrdenanteMap[p.clave_rastreo] ?? null) : null,
+          nombre_ordenante: p.clave_rastreo ? (ordenanteMap[p.clave_rastreo]   ?? null) : null,
+          rfc_ordenante:    p.clave_rastreo ? (rfcOrdenanteMap[p.clave_rastreo]  ?? null) : null,
+          curp_ordenante:   p.clave_rastreo ? (curpOrdenanteMap[p.clave_rastreo] ?? null) : null,
         });
       });
 
@@ -763,19 +882,23 @@ export function PldDashboard() {
       const { data: comprsList } = await supabase
         .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
-      const personaMap: Record<number, { nombre: string; rfc: string | null }> = {};
+      const personaMap: Record<number, { nombre: string; rfc: string | null; curp: string | null }> = {};
       if (personaIds.length) {
-        const { data: personas } = await supabase.from('personas').select('id, nombre_legal, rfc').in('id', personaIds);
-        (personas || []).forEach(p => { personaMap[p.id] = { nombre: p.nombre_legal, rfc: p.rfc ?? null }; });
+        const { data: personas } = await supabase.from('personas').select('id, nombre_legal, rfc, curp').in('id', personaIds);
+        (personas || []).forEach((p: any) => {
+          personaMap[p.id] = { nombre: p.nombre_legal, rfc: p.rfc ?? null, curp: p.curp ?? null };
+        });
       }
       const clienteByCuenta:    Record<number, string>        = {};
       const clienteRfcByCuenta: Record<number, string | null> = {};
+      const clienteCurpByCuenta:Record<number, string | null> = {};
       const seenC = new Set<number>();
       (comprsList || []).forEach(c => {
         if (!seenC.has(c.id_cuenta_cobranza)) {
           seenC.add(c.id_cuenta_cobranza);
-          clienteByCuenta[c.id_cuenta_cobranza]    = personaMap[c.id_persona]?.nombre || '—';
-          clienteRfcByCuenta[c.id_cuenta_cobranza] = personaMap[c.id_persona]?.rfc ?? null;
+          clienteByCuenta[c.id_cuenta_cobranza]     = personaMap[c.id_persona]?.nombre || '—';
+          clienteRfcByCuenta[c.id_cuenta_cobranza]  = personaMap[c.id_persona]?.rfc  ?? null;
+          clienteCurpByCuenta[c.id_cuenta_cobranza] = personaMap[c.id_persona]?.curp ?? null;
         }
       });
 
@@ -785,14 +908,16 @@ export function PldDashboard() {
         .map(p => {
           const cuenta = cuentaByProp[p.id];
           const pagos = pagosByCuenta[cuenta.id] || [];
-          const clienteNombre = clienteByCuenta[cuenta.id]    || '—';
-          const clienteRfc    = clienteRfcByCuenta[cuenta.id] ?? null;
+          const clienteNombre = clienteByCuenta[cuenta.id]     || '—';
+          const clienteRfc    = clienteRfcByCuenta[cuenta.id]  ?? null;
+          const clienteCurp   = clienteCurpByCuenta[cuenta.id] ?? null;
           const valorUma = Number(cuenta.valor_uma ?? 0);
           const {
             pldStatus, riesgo, hasSinCR, hasSinCep,
             hasNombreDistinto, pagosNombreDistinto,
             hasRfcDistinto,    pagosRfcDistinto,
             hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+            hasCepSinRfc, hasBuyerSinRfc,
             hasOrdenanteDistinto, pagosOrdenanteDistinto,
             escrituraBloqueada, totalPagado,
           } = derivePld(pagos, cuenta.precio_final, clienteNombre, clienteRfc, valorUma);
@@ -803,6 +928,7 @@ export function PldDashboard() {
             unidad: p.numero_propiedad,
             clienteNombre,
             clienteRfc,
+            clienteCurp,
             pldStatus,
             riesgo,
             totalPagado,
@@ -812,6 +938,7 @@ export function PldDashboard() {
             hasNombreDistinto, pagosNombreDistinto,
             hasRfcDistinto,    pagosRfcDistinto,
             hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
+            hasCepSinRfc, hasBuyerSinRfc,
             hasOrdenanteDistinto,
             pagosOrdenanteDistinto,
             escrituraBloqueada,
