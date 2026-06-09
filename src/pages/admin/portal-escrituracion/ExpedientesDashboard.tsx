@@ -48,6 +48,8 @@ interface DocItem {
   estatusNombre: string;
   url: string;
   fecha: string | null;
+  isLatest: boolean;        // es el más reciente cargado de su tipo
+  hasOlderValidado: boolean; // hay versión anterior Validada pero la vigente no lo está
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -67,11 +69,43 @@ const TIPO_META: Record<TipoComprador, { label: string; cls: string }> = {
   EXTRANJERO:     { label: 'Extranjero',     cls: 'bg-amber-50 text-amber-700' },
 };
 
+// ─── Documentos obligatorios persona física ───────────────────────────────────
+
+// Nombres normalizados (sin tildes, minúsculas, sin chars especiales)
+// para comparar contra tipos_documento.nombre de BD con tolerancia de variaciones.
+function normTipoDoc(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const DOCS_OBLIGATORIOS_FISICA = [
+  'Constancia de situación fiscal',
+  'Comprobante de domicilio',
+  'CURP',
+  'Frente INE',
+  'Acta de nacimiento',
+] as const;
+
+const DOCS_OBLIGATORIOS_NORM = DOCS_OBLIGATORIOS_FISICA.map(normTipoDoc);
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function mapEstatusPropiedad(id: number): EstatusExpediente {
-  if (id === 7 || id === 8) return 'LISTO';       // Escriturado / Entregado
-  if (id === 11) return 'CON_OBSERVACIONES';       // En demanda
+// Regla: LISTO cuando el ÚLTIMO documento cargado de cada tipo obligatorio
+// está en estatus VALIDADO. Si el último es Expirado/Rechazado/Pendiente,
+// el tipo no se considera cumplido, aunque exista una versión anterior Validada.
+function deriveEstatusExpediente(
+  estatusDisponibilidadId: number,
+  docsCompletos: number,
+): EstatusExpediente {
+  if (estatusDisponibilidadId === 11) return 'CON_OBSERVACIONES'; // En demanda
+  // Escriturado (7) o Entregado (8) → LISTO siempre
+  if (estatusDisponibilidadId === 7 || estatusDisponibilidadId === 8) return 'LISTO';
+  // Para el resto: LISTO solo si todos los obligatorios tienen al menos 1 Validado
+  if (docsCompletos >= DOCS_OBLIGATORIOS_FISICA.length) return 'LISTO';
   return 'PENDIENTE';
 }
 
@@ -186,22 +220,50 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
         .eq('id_cuenta_cobranza', row.cuentaId)
         .eq('activo', true)
         .eq('es_draft', false)
-        .order('id');
-      return (data || []).map((d: any) => ({
+        .order('fecha_actualizacion', { ascending: false })
+        .order('id', { ascending: false });
+
+      const items = (data || []).map((d: any) => ({
         id: d.id,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
         url: d.url,
         fecha: d.fecha_actualizacion,
+        isLatest: false,
+        hasOlderValidado: false,
       }));
+
+      // Determinar el doc más reciente por tipo y si hay versión anterior validada
+      const latestIdByTipo: Record<string, number> = {};
+      const tipoGroups: Record<string, typeof items> = {};
+      items.forEach(d => {
+        if (!tipoGroups[d.tipoNombre]) tipoGroups[d.tipoNombre] = [];
+        tipoGroups[d.tipoNombre].push(d);
+      });
+      Object.entries(tipoGroups).forEach(([tipo, group]) => {
+        // Ya vienen ordenados desc por fecha/id, el primero es el más reciente
+        latestIdByTipo[tipo] = group[0].id;
+      });
+
+      return items.map(d => {
+        const isLatest = latestIdByTipo[d.tipoNombre] === d.id;
+        const latestId = latestIdByTipo[d.tipoNombre];
+        const isValidado = (s: string) =>
+          s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
+        // Advertencia: doc vigente no está validado pero hay versión anterior que sí
+        const hasOlderValidado = isLatest && !isValidado(d.estatusNombre) &&
+          (tipoGroups[d.tipoNombre] ?? []).some(x => x.id !== latestId && isValidado(x.estatusNombre));
+        return { ...d, isLatest, hasOlderValidado };
+      });
     },
     staleTime: 30_000,
   });
 
-  const validatedCount = checklist.filter(d =>
-    d.estatusNombre.toLowerCase().includes('validado') ||
-    d.estatusNombre.toLowerCase().includes('aprobado')
-  ).length;
+  // Contar obligatorios cumplidos: solo el ÚLTIMO doc por tipo obligatorio es Validado
+  const obligatoriosCumplidos = DOCS_OBLIGATORIOS_NORM.filter(norm => {
+    const latest = checklist.find(d => d.isLatest && normTipoDoc(d.tipoNombre) === norm);
+    return latest && (latest.estatusNombre.toLowerCase().includes('validado') || latest.estatusNombre.toLowerCase().includes('aprobado'));
+  }).length;
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
@@ -252,9 +314,14 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
         {/* Documentos / Checklist */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos adjuntos</p>
             {checklist.length > 0 && (
-              <span className="text-xs text-slate-500">{validatedCount}/{checklist.length} validados</span>
+              <span className="text-xs text-slate-500">
+                <span className={obligatoriosCumplidos >= DOCS_OBLIGATORIOS_FISICA.length ? 'text-emerald-600 font-semibold' : ''}>
+                  {obligatoriosCumplidos}/{DOCS_OBLIGATORIOS_FISICA.length}
+                </span>
+                {' '}obligatorios
+              </span>
             )}
           </div>
 
@@ -272,11 +339,29 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
                   doc.estatusNombre.toLowerCase().includes('validado') ||
                   doc.estatusNombre.toLowerCase().includes('aprobado');
                 return (
-                  <div key={doc.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
-                    <p className="text-xs text-slate-700 flex-1 truncate">{doc.tipoNombre}</p>
-                    <span className={`text-xs font-medium ml-2 shrink-0 ${validated ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {doc.estatusNombre}
-                    </span>
+                  <div key={doc.id} className={`rounded-xl px-3 py-2 border ${doc.isLatest ? 'bg-white border-slate-200' : 'bg-slate-50/50 border-transparent opacity-60'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <p className="text-xs text-slate-700 truncate">{doc.tipoNombre}</p>
+                        {doc.isLatest && (
+                          <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded shrink-0 font-medium">
+                            Vigente
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium shrink-0 ${validated ? 'text-emerald-600' : doc.isLatest ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {doc.estatusNombre}
+                      </span>
+                    </div>
+                    {doc.fecha && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(doc.fecha)}</p>
+                    )}
+                    {doc.hasOlderValidado && (
+                      <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                        <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                        El último documento cargado no está validado
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -471,23 +556,41 @@ export function ExpedientesDashboard() {
         });
       });
 
-      // Paso 4: Conteo de documentos por cuenta
-      const { data: docs } = await supabase
+      // Paso 4: Documentos por cuenta — regla "último documento por tipo"
+      // Para cada tipo obligatorio: tomar el doc más reciente (fecha_actualizacion desc,
+      // luego id desc como desempate). LISTO solo si ESE último está VALIDADO (id=2).
+      const { data: docs } = await (supabase as any)
         .from('documentos')
-        .select('id, id_cuenta_cobranza, id_estatus_verificacion')
+        .select('id, id_cuenta_cobranza, id_estatus_verificacion, fecha_actualizacion, tipos_documento:documentos_id_tipo_documento_fkey(nombre)')
         .in('id_cuenta_cobranza', cuentaIds)
         .eq('activo', true)
         .eq('es_draft', false);
 
-      const docsByCuenta: Record<number, { total: number; completos: number }> = {};
-      (docs || []).forEach(d => {
+      // latestDocByKey: clave = "cuentaId__tipoNorm" → doc más reciente de ese tipo
+      const latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+      (docs || []).forEach((d: any) => {
         if (!d.id_cuenta_cobranza) return;
-        if (!docsByCuenta[d.id_cuenta_cobranza]) docsByCuenta[d.id_cuenta_cobranza] = { total: 0, completos: 0 };
-        docsByCuenta[d.id_cuenta_cobranza].total++;
-        // id_estatus_verificacion = 2 es "Validado" en la mayoría de los schemas
-        if (d.id_estatus_verificacion && d.id_estatus_verificacion >= 2) {
-          docsByCuenta[d.id_cuenta_cobranza].completos++;
+        const tipoNombre: string = d.tipos_documento?.nombre ?? '';
+        if (!tipoNombre) return;
+        const norm = normTipoDoc(tipoNombre);
+        if (!DOCS_OBLIGATORIOS_NORM.includes(norm as any)) return;
+        const key = `${d.id_cuenta_cobranza}__${norm}`;
+        const fecha = d.fecha_actualizacion ?? '';
+        const ex = latestDocByKey[key];
+        // Reemplazar si este doc es más reciente (fecha mayor, o mismo fecha pero id mayor)
+        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+          latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
         }
+      });
+
+      const docsByCuenta: Record<number, { total: number; completos: number }> = {};
+      cuentaIds.forEach(id => {
+        let cumplidos = 0;
+        for (const norm of DOCS_OBLIGATORIOS_NORM) {
+          const latest = latestDocByKey[`${id}__${norm}`];
+          if (latest && latest.estatusId === 2) cumplidos++; // 2 = Validado
+        }
+        docsByCuenta[id] = { total: DOCS_OBLIGATORIOS_FISICA.length, completos: cumplidos };
       });
 
       // Paso 5: Construir filas
@@ -497,8 +600,8 @@ export function ExpedientesDashboard() {
           const cuenta = cuentaByProp[p.id];
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
-          const estatusExpediente = mapEstatusPropiedad(p.id_estatus_disponibilidad);
-          const docStats = docsByCuenta[cuenta.id] || { total: 0, completos: 0 };
+          const docStats = docsByCuenta[cuenta.id] || { total: DOCS_OBLIGATORIOS_FISICA.length, completos: 0 };
+          const estatusExpediente = deriveEstatusExpediente(p.id_estatus_disponibilidad, docStats.completos);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
             cuentaId: cuenta.id,
@@ -748,7 +851,7 @@ export function ExpedientesDashboard() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60">
-                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Documentos', 'Actualizado'].map(h => (
+                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Docs obligatorios', 'Actualizado'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>

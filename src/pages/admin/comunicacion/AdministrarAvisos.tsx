@@ -42,6 +42,7 @@ interface Aviso {
   modo_trigger?: string | null;
   payload_postmark?: any;
   tipos_pago_notificables?: number[] | null;
+  filtros_destinatario?: { modelos?: string[]; pisos?: string[] } | null;
 }
 
 interface AvisoProyectoRow {
@@ -323,6 +324,8 @@ export default function AdministrarAvisos() {
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
   const [postmarkTemplateId, setPostmarkTemplateId] = useState<string>("36978552");
   const [selectedProyectos, setSelectedProyectos] = useState<string[]>([]);
+  const [selectedModelos, setSelectedModelos] = useState<string[]>([]);
+  const [selectedPisos, setSelectedPisos] = useState<string[]>([]);
   const [proyectosPublicados, setProyectosPublicados] = useState<ProyectoPublicado[]>([]);
   const [proyectosPorAviso, setProyectosPorAviso] = useState<Record<number, { nombres: string[]; ids: number[] }>>({});
   const [mensajesWhatsapp, setMensajesWhatsapp] = useState<string[]>(["", "", ""]);
@@ -451,6 +454,7 @@ export default function AdministrarAvisos() {
     setNombre(""); setAsunto(""); setMensajeHtml(""); setTipoEnvio("manual");
     setCronExpression(""); setCronError(""); setActivo(true); setSelectedRoles([]); setDestinatarios([]);
     setPostmarkTemplateId("36978552"); setSelectedProyectos(proyectosPublicados.map((p) => p.nombre));
+    setSelectedModelos([]); setSelectedPisos([]);
     setMensajesWhatsapp(["", "", ""]);
     setModoTrigger('cron');
     setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
@@ -516,6 +520,8 @@ export default function AdministrarAvisos() {
             .filter(Boolean)
         : proyectosPublicados.map((proyecto) => proyecto.nombre)
     );
+    setSelectedModelos(Array.isArray(aviso.filtros_destinatario?.modelos) ? aviso.filtros_destinatario!.modelos! : []);
+    setSelectedPisos(Array.isArray(aviso.filtros_destinatario?.pisos) ? aviso.filtros_destinatario!.pisos! : []);
 
     // Load existing event trigger config (single row per aviso in V1)
     const { data: trigData } = await supabase
@@ -653,6 +659,7 @@ export default function AdministrarAvisos() {
       modo_trigger: tipoEnvio === 'automatico' ? modoTrigger : 'cron',
       payload_postmark: payloadPostmark,
       tipos_pago_notificables: tiposPagoNotificables.length > 0 ? tiposPagoNotificables : DEFAULT_TIPOS_PAGO,
+      filtros_destinatario: { modelos: selectedModelos, pisos: selectedPisos },
     };
 
     let avisoId: number;
@@ -1206,6 +1213,10 @@ export default function AdministrarAvisos() {
                 selectedProyectos={selectedProyectos}
                 onSelectedProyectosChange={setSelectedProyectos}
                 availableProjectOptions={proyectosPublicados.map((proyecto) => proyecto.nombre)}
+                selectedModelos={selectedModelos}
+                onSelectedModelosChange={setSelectedModelos}
+                selectedPisos={selectedPisos}
+                onSelectedPisosChange={setSelectedPisos}
               />
             </div>
 
