@@ -42,6 +42,9 @@ export interface ComisionExterna {
   modelo_nombre: string;
   numero_departamento: string;
   producto_nombre: string;
+  /** Razón social o nombre comercial de la entidad dueña de la propiedad
+   *  (desarrollador). Cadena vacía si la propiedad no tiene dueño asignado. */
+  entidad_duena: string;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -145,7 +148,7 @@ export function useComisionesExternas() {
         ? await supabase
             .from("cuentas_cobranza")
             .select(
-              "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
+              "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
             )
             .in("id", cuentaIds)
         : { data: [] as Array<any>, error: null };
@@ -159,6 +162,7 @@ export function useComisionesExternas() {
             {
               id: idNum,
               idOferta: c.id_oferta as number | null,
+              idPropiedad: (c.id_propiedad as number | null) ?? null,
               precioFinal: Number(c.precio_final) || 0,
               porcentajeVenta: Number(c.porcentaje_comision_venta) || 0,
               fechaCompra: c.fecha_compra as string | null,
@@ -188,26 +192,56 @@ export function useComisionesExternas() {
         (ofertas || []).map((o) => [o.id, { idPropiedad: o.id_propiedad, idProducto: o.id_producto }]),
       );
 
+      // id_propiedad puede venir de cuentas_cobranza directo o de la oferta.
       const propiedadIds = Array.from(
-        new Set(
-          (ofertas || [])
+        new Set([
+          ...Array.from(cuentaMap.values())
+            .map((c) => c.idPropiedad)
+            .filter((v): v is number => v != null),
+          ...(ofertas || [])
             .map((o) => o.id_propiedad)
             .filter((v): v is number => v != null),
-        ),
+        ]),
       );
 
       const { data: propiedades, error: prErr } = propiedadIds.length
         ? await supabase
             .from("propiedades")
-            .select("id, numero_propiedad, id_edificio_modelo")
+            .select("id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno")
             .in("id", propiedadIds)
-        : { data: [] as Array<{ id: number; numero_propiedad: string | null; id_edificio_modelo: number | null }>, error: null };
+        : { data: [] as Array<{ id: number; numero_propiedad: string | null; id_edificio_modelo: number | null; id_entidad_relacionada_dueno: number | null }>, error: null };
       if (prErr) throw prErr;
 
       const propiedadMap = new Map(
         (propiedades || []).map((p) => [
           p.id,
-          { numero: p.numero_propiedad ?? "", idEdificioModelo: p.id_edificio_modelo },
+          {
+            numero: p.numero_propiedad ?? "",
+            idEdificioModelo: p.id_edificio_modelo,
+            idEntidadDueno: p.id_entidad_relacionada_dueno,
+          },
+        ]),
+      );
+
+      // Entidad dueña (desarrollador) — entidades_relacionadas → personas
+      const entidadDuenoIds = Array.from(
+        new Set(
+          (propiedades || [])
+            .map((p) => p.id_entidad_relacionada_dueno)
+            .filter((v): v is number => v != null),
+        ),
+      );
+      const { data: entidadesDuenas, error: entDError } = entidadDuenoIds.length
+        ? await (supabase as any)
+            .from("entidades_relacionadas")
+            .select("id, id_persona, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+            .in("id", entidadDuenoIds)
+        : { data: [] as any[], error: null };
+      if (entDError) throw entDError;
+      const entidadDuenoMap = new Map<number, string>(
+        ((entidadesDuenas || []) as Array<{ id: number; personas: { nombre_legal: string | null; nombre_comercial: string | null } | null }>).map((e) => [
+          e.id,
+          e.personas?.nombre_comercial || e.personas?.nombre_legal || "",
         ]),
       );
 
@@ -344,7 +378,12 @@ export function useComisionesExternas() {
 
         const cuenta = c.id_cuenta_cobranza != null ? cuentaMap.get(c.id_cuenta_cobranza) : undefined;
         const oferta = cuenta?.idOferta != null ? ofertaMap.get(cuenta.idOferta) : undefined;
-        const prop = oferta?.idPropiedad != null ? propiedadMap.get(oferta.idPropiedad) : undefined;
+        // Fallback: cc.id_propiedad cuando la oferta no la trae.
+        const idPropResolved = cuenta?.idPropiedad ?? oferta?.idPropiedad ?? null;
+        const prop = idPropResolved != null ? propiedadMap.get(idPropResolved) : undefined;
+        const entidadDuena = prop?.idEntidadDueno != null
+          ? entidadDuenoMap.get(prop.idEntidadDueno) ?? ""
+          : "";
         const em = prop?.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
         const edif = em?.idEdificio != null ? edificioMap.get(em.idEdificio) : undefined;
         const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";
@@ -409,6 +448,7 @@ export function useComisionesExternas() {
           modelo_nombre: modeloNombre,
           numero_departamento: prop?.numero ?? "",
           producto_nombre: producto?.nombre ?? "",
+          entidad_duena: entidadDuena,
         };
       });
     },

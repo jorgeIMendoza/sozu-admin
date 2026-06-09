@@ -359,12 +359,68 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   // (Externos y Dispersiones internas no tienen comprador; matchean solo por folio y No. Depa.)
   const [search, setSearch] = useState("");
   const searchQuery = search.trim().toLowerCase();
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
+  // Filtros globales que aplican a las 4 secciones. `"__all__"` indica
+  // "sin filtro" (todas las opciones). Mantener un valor centinela en lugar
+  // de cadena vacía evita el warning de shadcn/ui Select sobre items con
+  // value="".
+  const ALL = "__all__";
+  const [proyectoFilter, setProyectoFilter] = useState<string>(ALL);
+  const [entidadFilter, setEntidadFilter] = useState<string>(ALL);
+  const resetPages = () => {
     setPageFacturasSozu(0);
     setPageCobros(0);
     setPageExternos(0);
     setPageDispersiones(0);
+  };
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    resetPages();
+  };
+  const handleProyectoChange = (value: string) => {
+    setProyectoFilter(value);
+    resetPages();
+  };
+  const handleEntidadChange = (value: string) => {
+    setEntidadFilter(value);
+    resetPages();
+  };
+  const limpiarFiltros = () => {
+    setSearch("");
+    setProyectoFilter(ALL);
+    setEntidadFilter(ALL);
+    resetPages();
+  };
+  const hayFiltrosActivos =
+    !!search || proyectoFilter !== ALL || entidadFilter !== ALL;
+
+  // Opciones de los filtros — unión de valores presentes en los 4 datasets.
+  const proyectoOptions = useMemo(() => {
+    const s = new Set<string>();
+    (facturasSozu ?? []).forEach((f) => f.proyecto_nombre && s.add(f.proyecto_nombre));
+    (cobros ?? []).forEach((c) => c.proyecto_nombre && s.add(c.proyecto_nombre));
+    (comisionesExternasAll ?? []).forEach((c) => c.proyecto_nombre && s.add(c.proyecto_nombre));
+    (dispersionesInternas ?? []).forEach((d) => d.proyecto_nombre && s.add(d.proyecto_nombre));
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
+  }, [facturasSozu, cobros, comisionesExternasAll, dispersionesInternas]);
+  const entidadOptions = useMemo(() => {
+    const s = new Set<string>();
+    (facturasSozu ?? []).forEach((f) => f.entidad_duena && s.add(f.entidad_duena));
+    (cobros ?? []).forEach((c) => c.entidad_duena && s.add(c.entidad_duena));
+    (comisionesExternasAll ?? []).forEach((c) => c.entidad_duena && s.add(c.entidad_duena));
+    (dispersionesInternas ?? []).forEach((d) => d.entidad_duena && s.add(d.entidad_duena));
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
+  }, [facturasSozu, cobros, comisionesExternasAll, dispersionesInternas]);
+
+  // Predicate compartido — aplica los 2 filtros sobre cualquier fila que
+  // exponga `proyecto_nombre` y `entidad_duena` (todas las secciones lo
+  // hacen tras esta iteración).
+  const matchFiltros = (row: {
+    proyecto_nombre?: string | null;
+    entidad_duena?: string | null;
+  }) => {
+    if (proyectoFilter !== ALL && (row.proyecto_nombre ?? "") !== proyectoFilter) return false;
+    if (entidadFilter !== ALL && (row.entidad_duena ?? "") !== entidadFilter) return false;
+    return true;
   };
 
   const sortBy = <T extends { dias_desde_autorizacion: number }>(rows: T[], dir: SortDir) => {
@@ -385,12 +441,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     });
   }, [facturasSozu, sortFacturasSozu]);
   const facturasSozuVisible = useMemo(() => {
-    if (!searchQuery) return facturasSozuSorted;
     return facturasSozuSorted.filter((f) => {
+      if (!matchFiltros(f)) return false;
+      if (!searchQuery) return true;
       const fields = [f.folio_cuenta, f.cliente_nombre, f.numero_departamento];
       return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
     });
-  }, [facturasSozuSorted, searchQuery]);
+  }, [facturasSozuSorted, searchQuery, proyectoFilter, entidadFilter]);
   const facturasSozuTotal = facturasSozu?.length ?? 0;
   const facturasSozuVisibleCount = facturasSozuVisible.length;
   const facturasSozuTotalPages = Math.max(1, Math.ceil(facturasSozuVisibleCount / PAGE_SIZE));
@@ -413,12 +470,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     });
   }, [cobros, sortCobros]);
   const cobrosVisible = useMemo(() => {
-    if (!searchQuery) return cobrosSorted;
     return cobrosSorted.filter((c) => {
+      if (!matchFiltros(c)) return false;
+      if (!searchQuery) return true;
       const fields = [c.folio_cuenta, c.comprador_nombre, c.numero_departamento];
       return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
     });
-  }, [cobrosSorted, searchQuery]);
+  }, [cobrosSorted, searchQuery, proyectoFilter, entidadFilter]);
   const cobrosTotal = cobros?.length ?? 0;
   const cobrosVisibleCount = cobrosVisible.length;
   const cobrosTotalPages = Math.max(1, Math.ceil(cobrosVisibleCount / PAGE_SIZE));
@@ -444,12 +502,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   }, [externosFiltrados, sortExternos]);
   // Externos no tienen comprador en el dataset: matchean por folio (No. Cuenta) y No. Depa.
   const externosVisible = useMemo(() => {
-    if (!searchQuery) return externosSorted;
     return externosSorted.filter((p) => {
+      if (!matchFiltros(p)) return false;
+      if (!searchQuery) return true;
       const fields = [formatCuentaFolio(p), p.numero_departamento];
       return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
     });
-  }, [externosSorted, searchQuery]);
+  }, [externosSorted, searchQuery, proyectoFilter, entidadFilter]);
   const externosTotal = externosFiltrados.length;
   const externosVisibleCount = externosVisible.length;
   const externosTotalPages = Math.max(1, Math.ceil(externosVisibleCount / PAGE_SIZE));
@@ -469,12 +528,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   }, [dispersionesInternas, sortDispersiones]);
   // Dispersiones internas no tienen comprador en el dataset: matchean por folio y No. Depa.
   const dispersionesInternasVisible = useMemo(() => {
-    if (!searchQuery) return dispersionesInternasSorted;
     return dispersionesInternasSorted.filter((d) => {
+      if (!matchFiltros(d)) return false;
+      if (!searchQuery) return true;
       const fields = [d.folio_cuenta, d.numero_departamento];
       return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
     });
-  }, [dispersionesInternasSorted, searchQuery]);
+  }, [dispersionesInternasSorted, searchQuery, proyectoFilter, entidadFilter]);
   const dispersionesInternasTotal = dispersionesInternas?.length ?? 0;
   const dispersionesInternasVisibleCount = dispersionesInternasVisible.length;
   const dispersionesInternasTotalPages = Math.max(
@@ -505,9 +565,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
         action={<Badge variant="outline">Datos demo</Badge>}
       />
 
-      {/* ─── Buscador global ─── */}
-      <div className="mb-6">
-        <div className="relative max-w-md">
+      {/* ─── Buscador + filtros globales ─── */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-[320px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
@@ -528,6 +588,53 @@ export default function PortalAdministracionBandejaEjecucionPage() {
             </button>
           )}
         </div>
+
+        <Select value={proyectoFilter} onValueChange={handleProyectoChange}>
+          <SelectTrigger
+            className="h-9 w-full sm:w-[200px] text-xs"
+            aria-label="Filtrar por proyecto"
+          >
+            <SelectValue placeholder="Todos los proyectos" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[320px]">
+            <SelectItem value={ALL}>Todos los proyectos</SelectItem>
+            {proyectoOptions.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={entidadFilter} onValueChange={handleEntidadChange}>
+          <SelectTrigger
+            className="h-9 w-full sm:w-[240px] text-xs"
+            aria-label="Filtrar por entidad dueña"
+          >
+            <SelectValue placeholder="Todas las entidades dueñas" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[320px]">
+            <SelectItem value={ALL}>Todas las entidades dueñas</SelectItem>
+            {entidadOptions.map((e) => (
+              <SelectItem key={e} value={e}>
+                {e}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hayFiltrosActivos && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs text-muted-foreground"
+            onClick={limpiarFiltros}
+          >
+            <X className="h-3.5 w-3.5 mr-1" />
+            Limpiar
+          </Button>
+        )}
       </div>
 
       {/* ─── KPIs ─── */}
@@ -620,8 +727,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : facturasSozuPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                {searchQuery
-                  ? "Sin resultados que coincidan con la búsqueda."
+                {hayFiltrosActivos
+                  ? "Sin resultados que coincidan con los filtros."
                   : "No hay facturas SOZU pendientes de generar."}
               </div>
             ) : (
@@ -756,8 +863,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : cobrosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                {searchQuery
-                  ? "Sin resultados que coincidan con la búsqueda."
+                {hayFiltrosActivos
+                  ? "Sin resultados que coincidan con los filtros."
                   : "Sin cobros pendientes de gestión."}
               </div>
             ) : (
@@ -892,8 +999,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : externosPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                {searchQuery
-                  ? "Sin resultados que coincidan con la búsqueda."
+                {hayFiltrosActivos
+                  ? "Sin resultados que coincidan con los filtros."
                   : "No hay pagos a externos pendientes de ejecutar."}
               </div>
             ) : (
@@ -1040,8 +1147,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               </div>
             ) : dispersionesInternasPage.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                {searchQuery
-                  ? "Sin resultados que coincidan con la búsqueda."
+                {hayFiltrosActivos
+                  ? "Sin resultados que coincidan con los filtros."
                   : "No hay dispersiones internas pendientes."}
               </div>
             ) : (
@@ -1065,18 +1172,23 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                   <TableBody>
                     {dispersionesInternasPage.map((d) => {
                       const isAprobado = d.estado_aprobacion === "aprobado";
+                      const isRechazado = d.estado_aprobacion === "rechazado";
                       const isParcial = d.estado_aprobacion === "parcial";
                       const isPendiente = d.estado_aprobacion === "pendiente";
                       const estatusBadgeClass = isAprobado
                         ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
-                        : isParcial
-                          ? "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40"
-                          : "border-muted-foreground/40 text-muted-foreground bg-muted/40";
+                        : isRechazado
+                          ? "border-red-400 text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/40"
+                          : isParcial
+                            ? "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40"
+                            : "border-muted-foreground/40 text-muted-foreground bg-muted/40";
                       const estatusLabel = isAprobado
                         ? "Aprobado"
-                        : isParcial
-                          ? `Parcial · ${d.comisionistas_aprobados} aprobados / ${d.comisionistas_pendientes_aprobacion} pendientes`
-                          : "Pendiente aprobación AD";
+                        : isRechazado
+                          ? "Rechazado"
+                          : isParcial
+                            ? `Parcial · ${d.comisionistas_aprobados} aprobados / ${d.comisionistas_pendientes_aprobacion} pendientes`
+                            : "Pendiente aprobación AD";
                       return (
                         <TableRow key={d.id_cuenta_cobranza}>
                           <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
@@ -1126,13 +1238,13 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                               className="h-8"
                               onClick={() => setSelected({ tipo: "dispersion_interna", data: d })}
                               aria-label={
-                                isPendiente
+                                isPendiente || isRechazado
                                   ? `Ver detalle ${d.folio_cuenta}`
                                   : `Ejecutar dispersión ${d.folio_cuenta}`
                               }
                             >
                               <Eye className="h-3.5 w-3.5 mr-1" />
-                              {isPendiente ? "Ver detalle" : "Ejecutar dispersión"}
+                              {isPendiente || isRechazado ? "Ver detalle" : "Ejecutar dispersión"}
                             </Button>
                           </TableCell>
                         </TableRow>
