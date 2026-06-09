@@ -158,7 +158,7 @@ export function useFacturasPorPagar() {
         ? await supabase
             .from("cuentas_cobranza")
             .select(
-              "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
+              "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
             )
             .in("id", cuentaIds)
         : { data: [] as Array<any>, error: null };
@@ -172,6 +172,7 @@ export function useFacturasPorPagar() {
             {
               id: idNum,
               idOferta: c.id_oferta as number | null,
+              idPropiedad: (c.id_propiedad as number | null) ?? null,
               precioFinal: Number(c.precio_final) || 0,
               porcentajeVenta: Number(c.porcentaje_comision_venta) || 0,
               fechaCompra: c.fecha_compra as string | null,
@@ -201,12 +202,20 @@ export function useFacturasPorPagar() {
         (ofertas || []).map((o) => [o.id, { idPropiedad: o.id_propiedad, idProducto: o.id_producto }]),
       );
 
+      // id_propiedad puede venir directamente de cuentas_cobranza (cuentas
+      // creadas sin oferta o con oferta sin propiedad) — fallback a la
+      // propiedad de la oferta cuando exista. Sin esto, todo el waterfall
+      // (proyecto / modelo / no. depto) queda vacío en la tabla del Portal
+      // Administración.
       const propiedadIds = Array.from(
-        new Set(
-          (ofertas || [])
+        new Set([
+          ...Array.from(cuentaMap.values())
+            .map((c) => c.idPropiedad)
+            .filter((v): v is number => v != null),
+          ...(ofertas || [])
             .map((o) => o.id_propiedad)
             .filter((v): v is number => v != null),
-        ),
+        ]),
       );
 
       const { data: propiedades, error: prErr } = propiedadIds.length
@@ -357,7 +366,9 @@ export function useFacturasPorPagar() {
 
         const cuenta = c.id_cuenta_cobranza != null ? cuentaMap.get(c.id_cuenta_cobranza) : undefined;
         const oferta = cuenta?.idOferta != null ? ofertaMap.get(cuenta.idOferta) : undefined;
-        const prop = oferta?.idPropiedad != null ? propiedadMap.get(oferta.idPropiedad) : undefined;
+        // Fallback: cuenta.idPropiedad cuando la oferta no la trae.
+        const idPropResolved = cuenta?.idPropiedad ?? oferta?.idPropiedad ?? null;
+        const prop = idPropResolved != null ? propiedadMap.get(idPropResolved) : undefined;
         const em = prop?.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
         const edif = em?.idEdificio != null ? edificioMap.get(em.idEdificio) : undefined;
         const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";
