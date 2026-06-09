@@ -25,6 +25,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Firma': 'text-emerald-700 bg-emerald-50 border-emerald-200',
   'Registro público': 'text-emerald-700 bg-emerald-50 border-emerald-200',
   'Entrega escritura': 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  'En escrituración': 'text-violet-700 bg-violet-50 border-violet-200',
   'Escriturado': 'text-blue-700 bg-blue-50 border-blue-200',
   'Entregado': 'text-teal-700 bg-teal-50 border-teal-200',
   'En demanda': 'text-orange-700 bg-orange-50 border-orange-200',
@@ -50,6 +51,7 @@ interface RowData {
   valorEscritura: number;
   tieneBodega: boolean;
   tieneCajon: boolean;
+  tieneEscritura: boolean;
   // resto
   banco: string;
   notaria: string;
@@ -313,11 +315,11 @@ export function ExpedientesTable() {
       // Paso 3: Cuentas de cobranza — tomar la más reciente por propiedad
       const { data: cuentas } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, id_notario, fecha_actualizacion, precio_final')
+        .select('id, id_propiedad, id_notario, fecha_actualizacion, precio_final, numero_escritura')
         .eq('activo', true)
         .in('id_propiedad', propIds);
 
-      const cuentaByProp: Record<number, { id: number; id_propiedad: number; id_notario: number | null; fecha_actualizacion: string; precio_final: number }> = {};
+      const cuentaByProp: Record<number, { id: number; id_propiedad: number; id_notario: number | null; fecha_actualizacion: string; precio_final: number; numero_escritura: string | null }> = {};
       (cuentas || []).forEach(c => {
         const existing = cuentaByProp[c.id_propiedad];
         if (!existing || c.fecha_actualizacion > existing.fecha_actualizacion) {
@@ -473,12 +475,15 @@ export function ExpedientesTable() {
           tieneCajon:  cajonByProp[p.id]  ?? false,
           banco: '—',
           notaria,
-          etapa: p.id_estatus_disponibilidad === 7
+          tieneEscritura: !!(cuenta?.numero_escritura),
+          etapa: cuenta?.numero_escritura
             ? 'Escriturado'
             : p.id_estatus_disponibilidad === 8
             ? 'Entregado'
             : p.id_estatus_disponibilidad === 11
             ? 'En demanda'
+            : p.id_estatus_disponibilidad === 7
+            ? 'En escrituración'
             : '—',
           avance: null,
           sla: '—',
@@ -499,7 +504,9 @@ export function ExpedientesTable() {
   const filteredData = useMemo(() => {
     return allRows.filter(row => {
       if (filtroEtapa === 'Escriturado') {
-        if (row.estatusId !== 7) return false;
+        if (!row.tieneEscritura) return false;
+      } else if (filtroEtapa === 'En escrituración') {
+        if (row.estatusId !== 7 || row.tieneEscritura) return false;
       } else if (filtroEtapa === 'En demanda') {
         if (row.estatusId !== 11) return false;
       } else if (filtroEtapa === 'Entregado') {
@@ -561,9 +568,10 @@ export function ExpedientesTable() {
             className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg py-2 pl-3 pr-8 outline-none hover:bg-slate-50 cursor-pointer appearance-none min-w-max"
           >
             <option value="Todas">Etapa: Todas</option>
+            <option value="En escrituración">En escrituración</option>
             <option value="Escriturado">Escriturado</option>
-            <option value="En demanda">En demanda</option>
             <option value="Entregado">Entregado</option>
+            <option value="En demanda">En demanda</option>
             <option value="Borrador">Borrador</option>
             <option value="Firma">Firma</option>
             <option value="Registro público">Registro público</option>
