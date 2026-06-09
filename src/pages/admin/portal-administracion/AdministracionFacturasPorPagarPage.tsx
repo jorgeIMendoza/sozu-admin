@@ -112,7 +112,7 @@ export default function AdministracionFacturasPorPagarPage() {
   const [selected, setSelected] = useState<FacturaPorPagar | null>(null);
   const [page, setPage] = useState(0);
 
-  const { data: facturas = [], isLoading, error } = useFacturasPorPagar();
+  const { data: facturas = [], isLoading, error, refetch, isFetching } = useFacturasPorPagar();
 
   const proyectoOptions = useMemo(
     () =>
@@ -360,8 +360,34 @@ export default function AdministracionFacturasPorPagarPage() {
             <Loader2 className="h-4 w-4 animate-spin" /> Cargando facturas…
           </div>
         ) : error ? (
-          <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
-            Error al cargar facturas: {(error as Error).message}
+          <div className="py-12 text-center space-y-3">
+            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto" />
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {isNetworkError(error)
+                  ? "No se pudo conectar con la base de datos."
+                  : "Error al cargar facturas."}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
+                {errorMessageFromUnknown(error)}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="h-8"
+            >
+              {isFetching ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  Reintentando…
+                </>
+              ) : (
+                "Reintentar"
+              )}
+            </Button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-12 text-center space-y-3">
@@ -554,4 +580,29 @@ export default function AdministracionFacturasPorPagarPage() {
       )}
     </>
   );
+}
+
+function errorMessageFromUnknown(err: unknown): string {
+  if (!err) return "Error desconocido.";
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (parts.length > 0) return parts.join(" — ");
+  }
+  return "Error desconocido.";
+}
+
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (typeof err === "object" && err !== null) {
+    const e = err as { name?: string; message?: string };
+    if (e.name === "TypeError") return true;
+    if (typeof e.message === "string" && /failed to fetch|network/i.test(e.message)) {
+      return true;
+    }
+  }
+  return false;
 }

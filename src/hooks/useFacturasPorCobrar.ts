@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-import { fetchAllRows } from "@/utils/supabasePagination";
+import { fetchAllRows, fetchInBatches } from "@/utils/supabasePagination";
 
 export type EstadoFacturaPorCobrar =
   | "timbrada_pendiente"
@@ -110,13 +110,16 @@ export function useFacturasPorCobrar() {
         new Set(cuentas.map((c) => c.id_oferta).filter((v): v is number => v != null)),
       );
 
-      const { data: ofertas, error: ofertasError } = ofertaIds.length
-        ? await supabase
+      // IN(...) batcheado para evitar "TypeError: Failed to fetch" cuando la
+      // lista de IDs hace que el URL exceda los ~8 KB de PostgREST.
+      const ofertas = (await fetchInBatches<{ id: number; id_propiedad: number | null; id_producto: number | null }>(
+        ofertaIds,
+        (batch) =>
+          supabase
             .from("ofertas")
             .select("id, id_propiedad, id_producto")
-            .in("id", ofertaIds)
-        : { data: [] as Array<{ id: number; id_propiedad: number | null; id_producto: number | null }>, error: null };
-      if (ofertasError) throw ofertasError;
+            .in("id", batch as number[]),
+      )) ?? [];
 
       const ofertaMap = new Map<number, { idPropiedad: number | null; idProducto: number | null }>();
       (ofertas || []).forEach((o) => {
@@ -137,13 +140,17 @@ export function useFacturasPorCobrar() {
         ]),
       );
 
-      const { data: propiedades, error: propsError } = propiedadIds.length
-        ? await supabase
-            .from("propiedades")
-            .select("id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno")
-            .in("id", propiedadIds)
-        : { data: [] as Array<{ id: number; numero_propiedad: string | null; id_edificio_modelo: number | null; id_entidad_relacionada_dueno: number | null }>, error: null };
-      if (propsError) throw propsError;
+      const propiedades = await fetchInBatches<{
+        id: number;
+        numero_propiedad: string | null;
+        id_edificio_modelo: number | null;
+        id_entidad_relacionada_dueno: number | null;
+      }>(propiedadIds, (batch) =>
+        supabase
+          .from("propiedades")
+          .select("id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno")
+          .in("id", batch as number[]),
+      );
 
       const propiedadMap = new Map(
         (propiedades || []).map((p) => [
@@ -164,13 +171,14 @@ export function useFacturasPorCobrar() {
         ),
       );
 
-      const { data: edificiosModelos, error: emError } = edificioModeloIds.length
-        ? await supabase
+      const edificiosModelos = await fetchInBatches<{ id: number; id_edificio: number | null; id_modelo: number | null }>(
+        edificioModeloIds,
+        (batch) =>
+          supabase
             .from("edificios_modelos")
             .select("id, id_edificio, id_modelo")
-            .in("id", edificioModeloIds)
-        : { data: [] as Array<{ id: number; id_edificio: number | null; id_modelo: number | null }>, error: null };
-      if (emError) throw emError;
+            .in("id", batch as number[]),
+      );
 
       const emMap = new Map(
         (edificiosModelos || []).map((em) => [
@@ -244,13 +252,14 @@ export function useFacturasPorCobrar() {
         ),
       );
 
-      const { data: productos, error: prodError } = productoIds.length
-        ? await (supabase as any)
-            .from("productos_servicios")
-            .select("id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)")
-            .in("id", productoIds)
-        : { data: [] as any[], error: null };
-      if (prodError) throw prodError;
+      const productos = await fetchInBatches<any>(productoIds, (batch) =>
+        (supabase as any)
+          .from("productos_servicios")
+          .select(
+            "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+          )
+          .in("id", batch as number[]),
+      );
 
       const productoMap = new Map<number, { nombre: string; categoria: string }>(
         ((productos || []) as Array<{ id: number; nombre: string | null; categorias_producto: { nombre: string | null } | null }>).map((p) => [
