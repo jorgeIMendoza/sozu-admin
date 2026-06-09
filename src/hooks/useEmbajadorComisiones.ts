@@ -16,6 +16,7 @@ export type EmbComisionStatus =
 
 export interface EmbComision {
   id_cuenta_cobranza: number;
+  referralId?: string;       // set for referral-sourced entries
   porcentaje_comision: number;
   aprobada: boolean;
   pagada: boolean;
@@ -29,6 +30,12 @@ export interface EmbComision {
   cuenta_cobranza_label: string;
   factura_url: string | null;
 }
+
+const REF_STATUS_MAP: Record<string, EmbComisionStatus> = {
+  generada:  'en_revision',
+  autorizada: 'programada',
+  pagada:    'pagada',
+};
 
 export function useEmbajadorComisiones(email?: string | null) {
   const query = useQuery({
@@ -148,7 +155,7 @@ export function useEmbajadorComisiones(email?: string | null) {
         if (f.id_cuenta_cobranza) facturaUrlMap.set(f.id_cuenta_cobranza, f.url || '');
       });
 
-      return comisionistas.map((c: any): EmbComision => {
+      const comisionistasResult: EmbComision[] = comisionistas.map((c: any): EmbComision => {
         const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
         const precioFinal = cuenta?.precio_final || 0;
         const montoComision = precioFinal * (c.porcentaje_comision || 0) / 100;
@@ -179,14 +186,74 @@ export function useEmbajadorComisiones(email?: string | null) {
           factura_url: facturaUrl,
         };
       });
+
+      // ── Referral-sourced commissions (embajadores_referidos.estatus_comision) ──
+      const { data: refRows } = await (supabase as any)
+        .from('embajadores_referidos')
+        .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes')
+        .eq('email_asesor', email)
+        .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false });
+
+      const referralCommissions: EmbComision[] = [];
+      if (refRows && refRows.length > 0) {
+        // Waterfall: entidades_relacionadas → personas for client names
+        const erIds = refRows.map((r: any) => r.id_entidad_relacionada).filter(Boolean);
+        const clientNameMap = new Map<number, string>();
+        if (erIds.length > 0) {
+          const { data: ers } = await (supabase as any)
+            .from('entidades_relacionadas').select('id, id_persona').in('id', erIds);
+          const personaIds = (ers || []).map((er: any) => er.id_persona).filter(Boolean);
+          if (personaIds.length > 0) {
+            const { data: personas } = await (supabase as any)
+              .from('personas').select('id, nombre_legal').in('id', personaIds);
+            const pMap = new Map((personas || []).map((p: any) => [p.id, p.nombre_legal as string]));
+            (ers || []).forEach((er: any) => clientNameMap.set(er.id, pMap.get(er.id_persona) ?? 'Referido'));
+          }
+        }
+
+        // Ids of comisionistas already shown (avoid duplicates when comisionistas exists)
+        const existingReferralIds = new Set<string>();
+
+        for (const r of refRows as any[]) {
+          const refId = String(r.id);
+          if (existingReferralIds.has(refId)) continue;
+          const clientName = clientNameMap.get(r.id_entidad_relacionada) ?? 'Referido';
+          const s = r.estatus_comision as string;
+          referralCommissions.push({
+            id_cuenta_cobranza: 0,
+            referralId: refId,
+            porcentaje_comision: 0,
+            aprobada: s === 'autorizada' || s === 'pagada',
+            pagada: s === 'pagada',
+            url_evidencia_pago: null,
+            proyecto: clientName,
+            propiedad: '',
+            productoNombre: r.producto_interes || '',
+            precio_final: r.monto_venta || 0,
+            monto_comision: r.monto_comision || 0,
+            status: REF_STATUS_MAP[s] ?? 'en_revision',
+            cuenta_cobranza_label: `Referido · ${clientName}`,
+            factura_url: null,
+          });
+        }
+      }
+
+      // Comisionistas takes precedence (formal records); referral entries fill the gap
+      return [...comisionistasResult, ...referralCommissions];
     },
   });
 
   const comisiones = query.data ?? [];
   const totals = {
-    generada: comisiones.reduce((s, c) => s + c.monto_comision, 0),
-    autorizada: comisiones.filter((c) => c.aprobada).reduce((s, c) => s + c.monto_comision, 0),
-    pagada: comisiones.filter((c) => c.pagada).reduce((s, c) => s + c.monto_comision, 0),
+    generada:  comisiones.reduce((s, c) => s + c.monto_comision, 0),
+    autorizada: comisiones
+      .filter((c) => c.aprobada || ['factura_requerida', 'programada'].includes(c.status))
+      .reduce((s, c) => s + c.monto_comision, 0),
+    pagada: comisiones
+      .filter((c) => c.pagada || c.status === 'pagada')
+      .reduce((s, c) => s + c.monto_comision, 0),
   };
 
   return { comisiones, totals, isLoading: query.isLoading, refetch: query.refetch };

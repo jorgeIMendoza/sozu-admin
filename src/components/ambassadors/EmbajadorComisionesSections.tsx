@@ -92,7 +92,7 @@ export function EmbajadorComisionesSection({ email }: { email?: string | null })
           <p className="text-sm text-muted-foreground text-center py-8">Aún no tienes comisiones generadas.</p>
         ) : (
           <div className="space-y-2.5">
-            {comisiones.map((c, i) => <ComisionRow key={`${c.id_cuenta_cobranza}-${i}`} c={c} />)}
+            {comisiones.map((c, i) => <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c} />)}
           </div>
         )}
       </Card>
@@ -168,7 +168,7 @@ export function EmbajadorPagosSection({ email, idPersona }: { email?: string | n
         ) : (
           <div className="space-y-2.5">
             {pagos.map((c, i) => (
-              <ComisionRow key={`${c.id_cuenta_cobranza}-${i}`} c={c}>
+              <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c}>
                 {c.status === 'factura_requerida' && email && idPersona && (
                   <FacturaUploadButton
                     cuentaId={c.id_cuenta_cobranza}
