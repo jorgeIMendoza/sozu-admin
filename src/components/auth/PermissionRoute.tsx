@@ -141,6 +141,21 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Portal CRM Sozu: mismo patrón coarse — basta tener permiso sobre cualquier
+  // submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-crm')) {
+    let tieneAccesoCrm = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-crm')) {
+        tieneAccesoCrm = true;
+        break;
+      }
+    }
+    return tieneAccesoCrm
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Check if current path is allowed
   const currentPath = location.pathname;
   

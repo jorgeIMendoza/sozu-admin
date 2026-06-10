@@ -174,6 +174,11 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-embajador/registrar-referido',
   '/admin/portal-embajador/comisiones',
   '/admin/portal-embajador/perfil',
+  // Portal CRM Sozu
+  '/admin/portal-crm/dashboard',
+  '/admin/portal-crm/alertas',
+  '/admin/portal-crm/tracking-health',
+  '/admin/portal-crm/conversion-events',
 ]);
 
 export function isValidRoute(route: string): boolean {
