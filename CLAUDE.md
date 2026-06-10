@@ -510,3 +510,89 @@ IDENTITY` (no es necesario y confunde). Sólo aplica a `GENERATED ALWAYS`.
     SELECT column_name, is_identity, identity_generation
     FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = '<tabla>';
+
+---
+
+## Menús y Submenús → Sistema de Roles y Permisos
+
+Los menús y submenús **no son solo navegación**: son la base del sistema de roles y
+permisos. Un menú/submenú que no está dado de alta en la BD **no existe** para el
+control de acceso y no aparece para ningún rol.
+
+### Regla obligatoria
+
+**Cada vez que el usuario solicite (o se cree en el front) un nuevo menú o submenú**
+— un nuevo portal, una nueva sección, una nueva ruta en `App.tsx` protegida por
+`PermissionRoute` — Claude **SIEMPRE** debe generar, además del código React, los
+`INSERT` correspondientes a estas tablas y guardarlos en `Ejecuciones_manuales/`
+(según la convención de "Archivos de Ejecución Manual"). Avisar al usuario qué
+archivo se creó/actualizó. No se da por terminada la tarea de UI hasta entregar
+también los inserts de permisos.
+
+### Modelo de datos
+
+```
+menus (id IDENTITY ALWAYS, nombre, orden=100, activo)
+  └─ submenus (id IDENTITY ALWAYS, menu_id, nombre, vista_front_end, orden=100, activo, solo_usuarioa=false)
+       ├─ submenus_permisos_disponibles (submenu_id, permiso_id, activo)  ← qué acciones OFRECE el submenú
+       └─ submenus_permisos (submenu_id, permiso_id, rol_id, activo)      ← qué rol TIENE cada permiso (lo hace visible/usable)
+```
+
+- `submenus.vista_front_end` = ruta del front (debe existir como `<Route>` en `App.tsx`).
+- `solo_usuarioa=true` marca el submenú como exclusivo de "Usuario A" (se pinta en azul en el sidebar; ver `useDynamicMenus`).
+- `submenus_permisos_disponibles` define el catálogo de permisos posibles del submenú.
+- `submenus_permisos` es la asignación efectiva por rol. **Sin al menos una fila aquí, el submenú no aparece para ese rol.**
+
+**Catálogo `permisos` (permiso_id):**
+`1`=leer · `2`=crear · `3`=actualizar · `4`=eliminar · `5`=aprobar · `6`=exportar · `8`=generar_oferta
+
+**Roles (rol_id):** `1`=Super Admin · `2`=Admin Cobranza · `3`=Agente Interno · `4`=Inmobiliaria · `23`=Cliente
+(consultar `SELECT id, nombre FROM roles WHERE activo=true` para roles nuevos como "Admin Condominio").
+
+### Plantilla de INSERT (respeta IDENTITY ALWAYS — id se autogenera)
+
+`menus` y `submenus` son `GENERATED ALWAYS` → **nunca** fijar `id`. Encadenar con
+CTEs `RETURNING` para obtener los ids generados sin hardcodearlos:
+
+```sql
+-- Nuevo menú + submenú(s) + permisos disponibles + asignación a roles
+BEGIN;
+
+WITH nuevo_menu AS (
+  -- Omitir este CTE si el submenú cuelga de un menú existente y usar
+  -- (SELECT id FROM menus WHERE nombre='...') más abajo.
+  INSERT INTO public.menus (nombre, orden, activo)
+  VALUES ('Portal Ejemplo', 200, true)
+  RETURNING id
+),
+nuevos_submenus AS (
+  INSERT INTO public.submenus (menu_id, nombre, vista_front_end, orden, activo, solo_usuarioa)
+  SELECT m.id, v.nombre, v.ruta, v.orden, true, false
+  FROM nuevo_menu m
+  CROSS JOIN (VALUES
+    ('Dashboard',     '/admin/portal-ejemplo/dashboard', 10),
+    ('Configuración', '/admin/portal-ejemplo/config',    20)
+  ) AS v(nombre, ruta, orden)
+  RETURNING id
+),
+-- Permisos DISPONIBLES del submenú (mínimo leer=1; agregar 2,3,4… según la vista)
+disp AS (
+  INSERT INTO public.submenus_permisos_disponibles (submenu_id, permiso_id, activo)
+  SELECT s.id, p.permiso_id, true
+  FROM nuevos_submenus s
+  CROSS JOIN (VALUES (1),(2),(3),(4)) AS p(permiso_id)
+  RETURNING submenu_id
+)
+-- ASIGNACIÓN a roles (lo que hace VISIBLE el submenú). Mínimo Super Admin (1).
+INSERT INTO public.submenus_permisos (submenu_id, permiso_id, rol_id, activo)
+SELECT s.id, p.permiso_id, r.rol_id, true
+FROM nuevos_submenus s
+CROSS JOIN (VALUES (1),(2),(3),(4)) AS p(permiso_id)
+CROSS JOIN (VALUES (1)) AS r(rol_id);  -- añadir más rol_id según a quién deba aparecer
+
+COMMIT;
+```
+
+> Solo submenú en menú existente: reemplazar el CTE `nuevo_menu` por
+> `(SELECT id FROM menus WHERE nombre = 'Portal Existente')` como `menu_id`.
+> Verificar siempre que cada `vista_front_end` tenga su `<Route>` en `App.tsx`.

@@ -198,7 +198,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
       <AcquisitionPaymentSheet
         open={showPaySheet}
         onClose={() => setShowPaySheet(false)}
-        cuentaId={property.id}
+        cuentaId={Number(property.id)}
         propertyLabel={propertyLabel}
       />
     </div>

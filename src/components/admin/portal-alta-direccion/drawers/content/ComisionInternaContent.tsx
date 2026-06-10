@@ -26,6 +26,7 @@ import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Decision = "pendiente" | "aprobado" | "rechazado";
 
@@ -51,6 +52,7 @@ export function ComisionInternaContent({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { registrarActualizacion } = useActivityLogger();
+  const { user } = useAuth();
 
   // Decisión individual por comisionista (email como key)
   const [decisiones, setDecisiones] = useState<Record<string, Decision>>({});
@@ -159,6 +161,54 @@ export function ComisionInternaContent({
           "rechazar_dispersion_comision_interna",
         );
       }
+
+      // 3) Persistir la decisión a nivel cuenta para que la Bandeja de
+      //    Validaciones sepa si la fila debe seguir visible:
+      //    - "Autorizado": todos los comisionistas internos aprobados →
+      //      la fila debe DESAPARECER del listado de Alta Dirección.
+      //    - "Rechazado": al menos un comisionista rechazado (parcial o
+      //      total) → la fila PERMANECE visible con el badge actualizado.
+      //    El DDL puede no estar aplicado todavía (ver
+      //    Ejecuciones_manuales/autorizacion_comision_sozu.md); en ese caso
+      //    PostgREST devuelve 42703 y silenciamos para no bloquear el flujo
+      //    de aprobación, que sigue siendo válido en BD via `comisionistas`.
+      const nuevoEstatus: "Autorizado" | "Rechazado" =
+        rechazados.length === 0 ? "Autorizado" : "Rechazado";
+      const notasRechazo = rechazados.length
+        ? rechazados
+            .map((c) => `${c.email}: ${notas[c.email] || "(sin nota)"}`)
+            .join(" | ")
+        : null;
+
+      // Intentamos UPDATE escalonado: primero con todas las columnas auxiliares;
+      // si alguna no existe (42703 — DDL parcial), reintentamos sólo con la
+      // columna core `estatus_autorizacion_comision_interna`. Si esa tampoco
+      // existe, silenciamos: el flujo en `comisionistas` ya quedó persistido.
+      const updateCuenta = async (payload: Record<string, unknown>) =>
+        await (supabase as any)
+          .from("cuentas_cobranza")
+          .update(payload)
+          .eq("id", cuentaId);
+
+      const payloadCompleto: Record<string, unknown> = {
+        estatus_autorizacion_comision_interna: nuevoEstatus,
+        fecha_autorizacion_comision_interna: new Date().toISOString(),
+        email_autoriza_comision_interna: user?.email ?? null,
+      };
+      if (notasRechazo != null) {
+        payloadCompleto.notas_rechazo_comision_interna = notasRechazo;
+      }
+
+      let respAuth = await updateCuenta(payloadCompleto);
+      if (respAuth.error && respAuth.error.code === "42703") {
+        // Reintento minimalista — sólo la columna core.
+        respAuth = await updateCuenta({
+          estatus_autorizacion_comision_interna: nuevoEstatus,
+        });
+      }
+      if (respAuth.error && respAuth.error.code !== "42703") {
+        throw respAuth.error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bandeja-comisionistas-pendientes"] });
@@ -178,7 +228,7 @@ export function ComisionInternaContent({
     onError: (err: unknown) => {
       toast({
         title: "Error al guardar",
-        description: err instanceof Error ? err.message : "No se pudo guardar las decisiones.",
+        description: pgErrorMessage(err) ?? "No se pudo guardar las decisiones.",
         variant: "destructive",
       });
     },
@@ -657,4 +707,23 @@ function DocRow({
       </div>
     </div>
   );
+}
+
+/**
+ * Extrae el mensaje real del error. supabase-js devuelve PostgrestError
+ * como objeto plano (`{ message, details, hint, code }`) — `err instanceof
+ * Error` falla y el mensaje se pierde. Este helper cubre los shapes comunes
+ * (Error, PostgrestError, AuthError, string).
+ */
+function pgErrorMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (parts.length > 0) return parts.join(" — ");
+  }
+  return null;
 }

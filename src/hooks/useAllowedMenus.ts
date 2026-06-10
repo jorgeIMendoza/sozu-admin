@@ -11,6 +11,7 @@ export function useAllowedMenus() {
   const { profile, isLoading: isAuthLoading, user, permissionVersion } = useAuth();
   const [allowedPaths, setAllowedPaths] = useState<Set<string>>(new Set());
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Ref para evitar mostrar spinner en recargas subsecuentes
   const hasLoadedOnce = useRef(false);
@@ -29,6 +30,7 @@ export function useAllowedMenus() {
       if (!hasLoadedOnce.current) {
         setIsLoadingPermissions(true);
       }
+      setError(null);
       // Get all submenus where user has 'leer' permission
       // First get the 'leer' permission id
       const { data: permisoData } = await supabase
@@ -52,6 +54,7 @@ export function useAllowedMenus() {
 
       if (permisosError) {
         console.error('Error fetching permissions:', permisosError);
+        setError(permisosError.message || 'No se pudieron cargar los permisos');
         setAllowedPaths(new Set());
         return;
       }
@@ -72,6 +75,7 @@ export function useAllowedMenus() {
 
       if (submenusError) {
         console.error('Error fetching submenus:', submenusError);
+        setError(submenusError.message || 'No se pudieron cargar los submenús');
         setAllowedPaths(new Set());
         return;
       }
@@ -87,6 +91,7 @@ export function useAllowedMenus() {
       hasLoadedOnce.current = true;
     } catch (err) {
       console.error('Error in fetchAllowedMenus:', err);
+      setError((err as Error)?.message || 'Error inesperado al cargar permisos');
       // Solo limpiar paths si nunca hemos cargado exitosamente
       if (!hasLoadedOnce.current) {
         setAllowedPaths(new Set());
@@ -111,6 +116,7 @@ export function useAllowedMenus() {
     if (isSuperAdmin) {
       setAllowedPaths(new Set(['*']));
       setIsLoadingPermissions(false);
+      setError(null);
       return;
     }
 
@@ -149,5 +155,7 @@ export function useAllowedMenus() {
     allowedPaths,
     isLoading,
     isSuperAdmin,
+    error,
+    refetch: fetchAllowedMenus,
   };
 }

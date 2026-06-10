@@ -49,6 +49,9 @@ Ejecuciones_manuales/*
 !public/*.png
 bundle*.js
 
+# Archivos temporales de Vite (transpilación del config)
+vite.config.ts.timestamp-*.mjs
+
 # Lock files de otros package managers (solo pnpm)
 package-lock.json
 bun.lock

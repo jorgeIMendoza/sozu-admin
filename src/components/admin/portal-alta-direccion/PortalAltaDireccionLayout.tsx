@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarCheck,
@@ -6,6 +6,7 @@ import {
   Briefcase,
   Percent,
   ArrowLeft,
+  ArrowLeftRight,
   LogOut,
   Menu,
   Inbox,
@@ -19,6 +20,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
@@ -35,6 +37,7 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/comisiones-internas",
   "/admin/portal-alta-direccion/historico-comercial",
   "/admin/portal-alta-direccion/analisis-cobranza",
+  "/admin/portal-alta-direccion/ingresos-egresos",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -81,6 +84,12 @@ const navGroups: NavGroup[] = [
       { label: "Análisis de Cobranza", path: "/admin/portal-alta-direccion/analisis-cobranza", icon: Banknote },
     ],
   },
+  {
+    label: "Finanzas",
+    items: [
+      { label: "Ingresos y Egresos", path: "/admin/portal-alta-direccion/ingresos-egresos", icon: ArrowLeftRight },
+    ],
+  },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
   // ocultada en esta fase. Las rutas siguen vivas en App.tsx por URL directa.
 ];
@@ -89,8 +98,28 @@ export const PortalAltaDireccionLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const { isPathAllowed } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Filtra el menú según los permisos (submenus_permisos) de la BD.
+  // Super Admin ve todo (isPathAllowed devuelve true para todas las rutas).
+  const visibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => {
+        const items = group.items
+          .map((item) => {
+            if (isParent(item)) {
+              const children = item.children.filter((c) => isPathAllowed(c.path));
+              return children.length ? { ...item, children } : null;
+            }
+            return isPathAllowed(item.path) ? item : null;
+          })
+          .filter(Boolean) as NavItem[];
+        return items.length ? { ...group, items } : null;
+      })
+      .filter(Boolean) as NavGroup[];
+  }, [isPathAllowed]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -142,7 +171,7 @@ export const PortalAltaDireccionLayout = () => {
       </div>
 
       <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               {group.label}

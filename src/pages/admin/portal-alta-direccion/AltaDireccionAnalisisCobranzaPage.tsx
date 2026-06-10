@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Wallet,
   Hourglass,
@@ -27,6 +27,7 @@ import {
 } from "recharts";
 import { PageHeader, Kpi, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { Badge } from "@/components/ui/badge";
+import { RefreshButton } from "@/components/admin/portal-alta-direccion/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -90,10 +91,18 @@ const BUCKET_COLORS: Record<string, string> = {
   "+90": "hsl(0, 84%, 60%)",     // rojo
 };
 
+// Defaults iniciales que aceleran la carga: con un proyecto seleccionado
+// `fetchCobranzaBase` filtra server-side y trae sólo las cuentas del
+// proyecto (~100 vs ~1500). El tipo Propiedad y el desarrollador Tallwood
+// se aplican client-side sobre ese subset reducido.
+const DEFAULT_PROYECTO_NOMBRE = "Daiku";
+const DEFAULT_DESARROLLADOR_NOMBRE = "Tallwood";
+const DEFAULT_TIPO: TipoCobranza = "Propiedad";
+
 export default function AltaDireccionAnalisisCobranzaPage() {
   const [periodo, setPeriodo] = useState<PeriodoCobranza>("ultimos_3_meses");
   const [idProyecto, setIdProyecto] = useState<number | null>(null);
-  const [tipo, setTipo] = useState<TipoCobranza | "todos">("todos");
+  const [tipo, setTipo] = useState<TipoCobranza | "todos">(DEFAULT_TIPO);
   const [idDesarrollador, setIdDesarrollador] = useState<number | null>(null);
   const [rango, setRango] = useState<DateRange | undefined>(undefined);
   const [rangoOpen, setRangoOpen] = useState(false);
@@ -114,6 +123,30 @@ export default function AltaDireccionAnalisisCobranzaPage() {
 
   const proyectos = useProyectosFiltro();
   const desarrolladoresLista = useDesarrolladoresFiltro();
+
+  // Resolución de defaults: en la primera carga, cuando las listas de
+  // proyectos/desarrolladores llegan, fijamos Daiku y Tallwood como
+  // valores iniciales. Sólo aplica una vez — si el usuario cambia el
+  // filtro a otra cosa (incluido "Todos"), no se sobrescribe.
+  const proyectoDefaultApliedRef = useRef(false);
+  const desarrolladorDefaultApliedRef = useRef(false);
+  useEffect(() => {
+    if (proyectoDefaultApliedRef.current) return;
+    const list = proyectos.data;
+    if (!list || list.length === 0) return;
+    const daiku = list.find((p) => p.nombre.toLowerCase() === DEFAULT_PROYECTO_NOMBRE.toLowerCase());
+    if (daiku) setIdProyecto(daiku.id);
+    proyectoDefaultApliedRef.current = true;
+  }, [proyectos.data]);
+  useEffect(() => {
+    if (desarrolladorDefaultApliedRef.current) return;
+    const list = desarrolladoresLista.data;
+    if (!list || list.length === 0) return;
+    const tallwood = list.find((d) => d.nombre.toLowerCase() === DEFAULT_DESARROLLADOR_NOMBRE.toLowerCase());
+    if (tallwood) setIdDesarrollador(tallwood.id);
+    desarrolladorDefaultApliedRef.current = true;
+  }, [desarrolladoresLista.data]);
+
   const kpis = useAnalisisCobranzaKpis(periodo, filtros);
   const aging = useAgingCobranza(periodo, filtros);
   const agingDetalle = useAgingCobranzaDetalle(periodo, filtros);
@@ -206,13 +239,16 @@ export default function AltaDireccionAnalisisCobranzaPage() {
         title="Análisis de Cobranza"
         description="Salud financiera del flujo entrante"
         action={
-          <Badge
-            variant="outline"
-            className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800"
-          >
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            Datos en vivo
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800"
+            >
+              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              Datos en vivo
+            </Badge>
+            <RefreshButton keyPrefixes={["cobranza-base", "cobranza-aging-detalle", "proyectos-filtro-con-cuentas"]} />
+          </div>
         }
       />
 

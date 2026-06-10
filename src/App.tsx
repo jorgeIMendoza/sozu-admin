@@ -12,6 +12,7 @@ import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationCon
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
 import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
+import { CrmImpersonationProvider } from "@/contexts/CrmImpersonationContext";
 import { AmbassadorsProvider } from "@/store/AmbassadorsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
@@ -222,6 +223,7 @@ const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/po
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
 const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionHistoricoComercialPage"));
 const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
+const AltaDireccionIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionIngresosEgresosPage"));
 
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
@@ -280,6 +282,62 @@ const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flo
 const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
 const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
 
+// Portal CRM Sozu
+const CrmDashboard         = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmDashboard })));
+const CrmAlertas           = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmAlertas })));
+const CrmTrackingHealth    = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmTrackingHealth })));
+const CrmConversionEvents  = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmConversionEvents })));
+
+// Portal CRM Sozu · Fase 2 (módulo CRM)
+const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
+const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
+const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
+const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
+const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
+const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
+const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmRouting })));
+const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAutomationRules })));
+const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmEscalations })));
+const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmLeadIntelligence })));
+const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAgentPerformance })));
+const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSalesOperations })));
+
+// Portal CRM Sozu — Fase 3 (Inteligencia de marketing)
+const CrmCampaigns         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCampaigns })));
+const CrmAudiences         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAudiences })));
+const CrmAttribution       = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAttribution })));
+const CrmCreatives         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCreatives })));
+const CrmUtms              = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmUtms })));
+const CrmMarketingAbTests  = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingAbTests })));
+const CrmLandingPages      = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmLandingPages })));
+const CrmForms             = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmForms })));
+const CrmAdIntegrations    = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAdIntegrations })));
+const CrmBudget            = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmBudget })));
+
+// Portal CRM Sozu — Fase 4 (Dirección · Inteligencia de ingresos)
+const CrmExecutiveKpis     = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmExecutiveKpis })));
+const CrmForecast          = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmForecast })));
+const CrmPipelineReview    = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmPipelineReview })));
+const CrmRevenueOps        = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmRevenueOps })));
+const CrmCohorts           = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmCohorts })));
+const CrmChurn             = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmChurn })));
+const CrmReporting         = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmReporting })));
+
+// Portal CRM Sozu — Fase 5 (Operación)
+const CrmUnifiedInbox      = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmUnifiedInbox })));
+const CrmQueues            = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmQueues })));
+const CrmSlaMonitor        = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmSlaMonitor })));
+
+// Portal CRM Sozu — Fase 6 (Configuración)
+const CrmSettingsUsers           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsUsers })));
+const CrmSettingsRoles           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsRoles })));
+const CrmSettingsPipelineStages  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelineStages })));
+const CrmSettingsCustomFields    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsCustomFields })));
+const CrmSettingsWebhooks        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsWebhooks })));
+const CrmSettingsGoogleCallback  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsGoogleCallback })));
+const CrmSettingsMetaCallback    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsMetaCallback })));
+const CrmSettingsAuditLog        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsAuditLog })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -327,6 +385,7 @@ const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
 const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
+const isCrmSubdomain = matchPortal('crm');
 
 // Determine portal context from subdomain for login page branding
 const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
@@ -357,6 +416,7 @@ const App = () => (
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
             <EmbajadorImpersonationProvider>
+            <CrmImpersonationProvider>
            <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
@@ -728,6 +788,60 @@ const App = () => (
                   {/* Administrar Jurídico — menú admin principal */}
                   <Route path="juridico/administrar" element={<JuridicoAdministrar />} />
 
+                  {/* Portal CRM Sozu */}
+                  <Route path="portal-crm/dashboard" element={<CrmDashboard />} />
+                  <Route path="portal-crm/alertas" element={<CrmAlertas />} />
+                  <Route path="portal-crm/tracking-health" element={<CrmTrackingHealth />} />
+                  <Route path="portal-crm/conversion-events" element={<CrmConversionEvents />} />
+                  <Route path="portal-crm/crm/contacts" element={<CrmContacts />} />
+                  <Route path="portal-crm/crm/contacts/:contactId" element={<CrmContactDetail />} />
+                  <Route path="portal-crm/crm/deals" element={<CrmDeals />} />
+                  <Route path="portal-crm/crm/appointments" element={<CrmAppointments />} />
+                  <Route path="portal-crm/crm/tasks" element={<CrmTasks />} />
+                  <Route path="portal-crm/crm/sequences" element={<CrmSequences />} />
+                  <Route path="portal-crm/crm/routing" element={<CrmRouting />} />
+                  <Route path="portal-crm/crm/automation-rules" element={<CrmAutomationRules />} />
+                  <Route path="portal-crm/crm/escalations" element={<CrmEscalations />} />
+                  <Route path="portal-crm/crm/lead-intelligence" element={<CrmLeadIntelligence />} />
+                  <Route path="portal-crm/crm/agent-performance" element={<CrmAgentPerformance />} />
+                  <Route path="portal-crm/crm/sales-operations" element={<CrmSalesOperations />} />
+
+                  {/* Portal CRM Sozu — Inteligencia de marketing */}
+                  <Route path="portal-crm/marketing/campaigns"     element={<CrmCampaigns />} />
+                  <Route path="portal-crm/marketing/audiences"     element={<CrmAudiences />} />
+                  <Route path="portal-crm/marketing/attribution"   element={<CrmAttribution />} />
+                  <Route path="portal-crm/marketing/creatives"     element={<CrmCreatives />} />
+                  <Route path="portal-crm/marketing/utms"          element={<CrmUtms />} />
+                  <Route path="portal-crm/marketing/ab-tests"      element={<CrmMarketingAbTests />} />
+                  <Route path="portal-crm/marketing/landing-pages" element={<CrmLandingPages />} />
+                  <Route path="portal-crm/marketing/forms"         element={<CrmForms />} />
+                  <Route path="portal-crm/marketing/integrations"  element={<CrmAdIntegrations />} />
+                  <Route path="portal-crm/marketing/budget"        element={<CrmBudget />} />
+
+                  {/* Portal CRM Sozu — Dirección · Inteligencia de ingresos */}
+                  <Route path="portal-crm/revenue/executive-kpis"  element={<CrmExecutiveKpis />} />
+                  <Route path="portal-crm/revenue/forecast"        element={<CrmForecast />} />
+                  <Route path="portal-crm/revenue/pipeline-review" element={<CrmPipelineReview />} />
+                  <Route path="portal-crm/revenue/revenue-ops"     element={<CrmRevenueOps />} />
+                  <Route path="portal-crm/revenue/cohorts"         element={<CrmCohorts />} />
+                  <Route path="portal-crm/revenue/churn"           element={<CrmChurn />} />
+                  <Route path="portal-crm/revenue/reporting"       element={<CrmReporting />} />
+
+                  {/* Portal CRM Sozu — Operación */}
+                  <Route path="portal-crm/operations/inbox"   element={<CrmUnifiedInbox />} />
+                  <Route path="portal-crm/operations/queues"  element={<CrmQueues />} />
+                  <Route path="portal-crm/operations/sla"     element={<CrmSlaMonitor />} />
+
+                  {/* Portal CRM Sozu — Configuración */}
+                  <Route path="portal-crm/settings/users"                       element={<CrmSettingsUsers />} />
+                  <Route path="portal-crm/settings/roles"                       element={<CrmSettingsRoles />} />
+                  <Route path="portal-crm/settings/pipeline-stages"             element={<CrmSettingsPipelineStages />} />
+                  <Route path="portal-crm/settings/custom-fields"               element={<CrmSettingsCustomFields />} />
+                  <Route path="portal-crm/settings/webhooks"                    element={<CrmSettingsWebhooks />} />
+                  <Route path="portal-crm/settings/connections/google/callback" element={<CrmSettingsGoogleCallback />} />
+                  <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
+                  <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
@@ -750,6 +864,7 @@ const App = () => (
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
                   <Route path="portal-alta-direccion/historico-comercial" element={<AltaDireccionHistoricoComercial />} />
                   <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
+                  <Route path="portal-alta-direccion/ingresos-egresos" element={<AltaDireccionIngresosEgresos />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
@@ -816,6 +931,7 @@ const App = () => (
               )}
             </Suspense>
             </AmbassadorsProvider>
+            </CrmImpersonationProvider>
             </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>

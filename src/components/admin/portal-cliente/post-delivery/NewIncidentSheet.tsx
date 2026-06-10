@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Camera, AlertTriangle, Plus, ShieldCheck, Check } from "lucide-react";
+import { Camera, AlertTriangle, Plus, ShieldCheck, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   useWarrantyForCuenta,

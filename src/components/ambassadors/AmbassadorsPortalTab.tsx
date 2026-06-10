@@ -420,19 +420,30 @@ export default function AmbassadorsPortalTab() {
                       : <span className="text-muted-foreground">Pendiente</span>}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      {r.assignedAdvisorPhone && (
-                        <a href={`https://wa.me/${r.assignedAdvisorPhone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                           onClick={(e) => e.stopPropagation()}>
-                          <Button size="icon" variant="ghost" className="h-7 w-7"><MessageCircle className="h-3.5 w-3.5" /></Button>
+                    <div className="flex flex-col gap-1 text-xs">
+                      {r.phone && (
+                        <a
+                          href={`https://wa.me/${r.phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>{r.phone}</span>
                         </a>
                       )}
-                      {r.assignedAdvisorEmail && (
-                        <a href={`mailto:${r.assignedAdvisorEmail}`} onClick={(e) => e.stopPropagation()}>
-                          <Button size="icon" variant="ghost" className="h-7 w-7"><Mail className="h-3.5 w-3.5" /></Button>
+                      {r.email && (
+                        <a
+                          href={`mailto:${r.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Mail className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>{r.email}</span>
                         </a>
                       )}
-                      {!r.assignedAdvisorPhone && !r.assignedAdvisorEmail && <span className="text-xs text-muted-foreground">—</span>}
+                      {!r.phone && !r.email && <span className="text-muted-foreground">—</span>}
                     </div>
                   </TableCell>
                   <TableCell>

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchInBatches } from "@/utils/supabasePagination";
 
 /**
  * Hook que entrega las cuentas de cobranza con al menos una comisión interna
@@ -25,7 +26,11 @@ import { supabase } from "@/integrations/supabase/client";
  *                      * (iva_incluido ? 1.16 : 1)
  */
 
-export type EstadoAprobacionDispersion = "aprobado" | "parcial" | "pendiente";
+export type EstadoAprobacionDispersion =
+  | "aprobado"
+  | "rechazado"
+  | "parcial"
+  | "pendiente";
 
 export type DispersionInternaPendiente = {
   id_cuenta_cobranza: number;
@@ -36,6 +41,9 @@ export type DispersionInternaPendiente = {
   modelo_nombre: string | null;
   producto_nombre: string | null;
   numero_departamento: string | null;
+  /** Razón social o nombre comercial de la entidad dueña de la propiedad
+   *  (desarrollador). null si no hay propiedad o no tiene dueño asignado. */
+  entidad_duena: string | null;
   precio_final: number;
   iva_incluido: boolean;
   /** Suma de comisionistas aprobados-no-pagados (con IVA si aplica). */
@@ -109,22 +117,41 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
 
   // 2) Cuentas de cobranza candidatas — sólo las que tienen comisionistas
   //    pendientes y cumplen los filtros base.
+  //    Intentamos traer `estatus_autorizacion_comision_interna` para que el
+  //    estado_aprobacion refleje la decisión de Alta Dirección (fuente de
+  //    verdad). Si el DDL no está aplicado (42703), recaemos al SELECT sin
+  //    esa columna y el estado se deriva del fallback count-based.
   const cuentasRows: Array<any> = [];
   // Trocear el IN(...) en lotes de 500 para no exceder la longitud de URL.
   const BATCH = 500;
+  const SELECT_WITH_ESTATUS =
+    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra, estatus_autorizacion_comision_interna";
+  const SELECT_LEGACY =
+    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra";
+  let columnaEstatusDisponible = true;
   for (let i = 0; i < ccIds.length; i += BATCH) {
     const slice = ccIds.slice(i, i + BATCH);
-    const { data, error } = (await (supabase as any)
+    let resp = await (supabase as any)
       .from("cuentas_cobranza")
-      .select(
-        `id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra`,
-      )
+      .select(columnaEstatusDisponible ? SELECT_WITH_ESTATUS : SELECT_LEGACY)
       .in("id", slice)
       .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
-      .gt("precio_final", 0)) as any;
-    if (error) throw error;
-    cuentasRows.push(...((data || []) as Array<any>));
+      .gt("precio_final", 0);
+    if (resp.error && resp.error.code === "42703" && columnaEstatusDisponible) {
+      // Columna aún no creada en BD — caemos al SELECT legacy para todos los
+      // batches subsecuentes.
+      columnaEstatusDisponible = false;
+      resp = await (supabase as any)
+        .from("cuentas_cobranza")
+        .select(SELECT_LEGACY)
+        .in("id", slice)
+        .eq("activo", true)
+        .is("id_cuenta_cobranza_padre", null)
+        .gt("precio_final", 0);
+    }
+    if (resp.error) throw resp.error;
+    cuentasRows.push(...((resp.data || []) as Array<any>));
   }
   if (!cuentasRows.length) return [];
 
@@ -134,25 +161,48 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   const ofertaIds = Array.from(
     new Set(cuentasBase.map((c) => c.id_oferta).filter((x): x is number => !!x)),
   );
-  const { data: ofs } = ofertaIds.length
-    ? ((await (supabase as any)
-        .from("ofertas")
-        .select("id, id_propiedad, id_producto")
-        .in("id", ofertaIds)) as any)
-    : { data: [] };
+  const ofs = await fetchInBatches<any>(ofertaIds, (batch) =>
+    (supabase as any)
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto")
+      .in("id", batch as number[]),
+  );
   const ofMap = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
 
-  // 4) Propiedades (estatus_disponibilidad + edificio_modelo).
+  // 4) Propiedades (estatus_disponibilidad + edificio_modelo + entidad dueña).
   const propIdsCc = cuentasBase.map((c) => c.id_propiedad).filter((x: any): x is number => !!x);
   const propIdsOferta = (ofs || []).map((o: any) => o.id_propiedad).filter((x: any): x is number => !!x);
   const propIds = Array.from(new Set([...propIdsCc, ...propIdsOferta]));
-  const { data: props } = propIds.length
-    ? ((await (supabase as any)
-        .from("propiedades")
-        .select("id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad")
-        .in("id", propIds)) as any)
-    : { data: [] };
+  const props = await fetchInBatches<any>(propIds, (batch) =>
+    (supabase as any)
+      .from("propiedades")
+      .select(
+        "id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad, id_entidad_relacionada_dueno",
+      )
+      .in("id", batch as number[]),
+  );
   const propMap = new Map<number, any>((props || []).map((p: any) => [p.id, p]));
+
+  // 4b) Entidad dueña (desarrollador) — entidades_relacionadas → personas
+  const entidadDuenoIds = Array.from(
+    new Set(
+      (props || [])
+        .map((p: any) => p.id_entidad_relacionada_dueno)
+        .filter((v: any): v is number => v != null),
+    ),
+  );
+  const { data: entidadesDuenas } = entidadDuenoIds.length
+    ? ((await (supabase as any)
+        .from("entidades_relacionadas")
+        .select("id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+        .in("id", entidadDuenoIds)) as any)
+    : { data: [] };
+  const entidadDuenoMap = new Map<number, string>(
+    ((entidadesDuenas || []) as Array<any>).map((e) => [
+      e.id,
+      (e.personas?.nombre_comercial || e.personas?.nombre_legal || "") as string,
+    ]),
+  );
 
   // 5) edificios_modelos → modelo + id_edificio
   const emIds = Array.from(
@@ -162,14 +212,12 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
         .filter((x: any): x is number => !!x),
     ),
   );
-  const { data: ems } = emIds.length
-    ? ((await (supabase as any)
-        .from("edificios_modelos")
-        .select(
-          "id, id_edificio, modelos!edificios_modelos_id_modelo_fkey(nombre)",
-        )
-        .in("id", emIds)) as any)
-    : { data: [] };
+  const ems = await fetchInBatches<any>(emIds, (batch) =>
+    (supabase as any)
+      .from("edificios_modelos")
+      .select("id, id_edificio, modelos!edificios_modelos_id_modelo_fkey(nombre)")
+      .in("id", batch as number[]),
+  );
   const emMap = new Map<number, any>((ems || []).map((em: any) => [em.id, em]));
 
   // 6) edificios → proyecto
@@ -207,14 +255,14 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       (ofs || []).map((o: any) => o.id_producto).filter((x: any): x is number => !!x),
     ),
   );
-  const { data: prodsRaw } = productoIds.length
-    ? ((await (supabase as any)
-        .from("productos_servicios")
-        .select(
-          "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
-        )
-        .in("id", productoIds)) as any)
-    : { data: [] };
+  const prodsRaw = await fetchInBatches<any>(productoIds, (batch) =>
+    (supabase as any)
+      .from("productos_servicios")
+      .select(
+        "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+      )
+      .in("id", batch as number[]),
+  );
   const prodMap = new Map<number, any>((prodsRaw || []).map((p: any) => [p.id, p]));
 
   // 8) Composición final + gate de propiedad Vendida.
@@ -249,10 +297,32 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
     const totalBruto = montoAprobados + montoPendientes;
     if (totalBruto <= 0) continue;
 
+    // Source-of-truth: la columna `estatus_autorizacion_comision_interna` en
+    // `cuentas_cobranza`, escrita por Alta Dirección al guardar decisiones.
+    // Si la columna no está disponible (DDL aún no aplicado), recaemos al
+    // count-based legacy para no quedarse sin estado. El count-based puede
+    // dar falsos "aprobado" porque `comisionistas.aprobada=true` es también
+    // el estado inicial de elegibilidad — por eso la columna AD es la
+    // fuente correcta una vez aplicada.
+    const estatusAD = (c.estatus_autorizacion_comision_interna ?? null) as
+      | "Autorizado"
+      | "Rechazado"
+      | "En espera"
+      | null;
     let estado: EstadoAprobacionDispersion;
-    if (agg.countAprobados > 0 && agg.countPendientes === 0) estado = "aprobado";
-    else if (agg.countAprobados === 0 && agg.countPendientes > 0) estado = "pendiente";
-    else estado = "parcial";
+    if (estatusAD === "Autorizado") estado = "aprobado";
+    else if (estatusAD === "Rechazado") estado = "rechazado";
+    else if (estatusAD === "En espera") estado = "pendiente";
+    else {
+      // Fallback pre-DDL.
+      if (agg.countAprobados > 0 && agg.countPendientes === 0) estado = "aprobado";
+      else if (agg.countAprobados === 0 && agg.countPendientes > 0) estado = "pendiente";
+      else estado = "parcial";
+    }
+
+    const entidadDuenaNombre = propiedad?.id_entidad_relacionada_dueno != null
+      ? entidadDuenoMap.get(propiedad.id_entidad_relacionada_dueno) ?? null
+      : null;
 
     result.push({
       id_cuenta_cobranza: c.id,
@@ -263,6 +333,7 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       modelo_nombre: em?.modelos?.nombre ?? null,
       producto_nombre: producto?.nombre ?? null,
       numero_departamento: propiedad?.numero_propiedad ?? null,
+      entidad_duena: entidadDuenaNombre,
       precio_final: precio,
       iva_incluido: !!c.iva_incluido,
       monto_a_dispersar: montoAprobados,

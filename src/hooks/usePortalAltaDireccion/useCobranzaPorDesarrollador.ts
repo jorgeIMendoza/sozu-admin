@@ -31,9 +31,11 @@ export function useCobranzaPorDesarrollador(
   filtros: CobranzaFiltros,
 ): CobranzaPorDesarrolladorResult {
   const query = useQuery({
-    queryKey: ["cobranza-base"],
-    queryFn: fetchCobranzaBase,
-    staleTime: 60_000,
+    queryKey: ["cobranza-base", filtros.idProyecto ?? null],
+    queryFn: () => fetchCobranzaBase({ idProyecto: filtros.idProyecto }),
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: (prev) => prev,
   });
 
   const data = query.data

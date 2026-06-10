@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Check,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -92,6 +94,11 @@ type ValidacionComisionInterna = {
   comision_a_dispersar: number;
   fecha_devengo: string;
   dias_esperando: number;
+  // Decisión de Alta Dirección persistida en
+  // `cuentas_cobranza.estatus_autorizacion_comision_interna` (En espera /
+  // Rechazado). El valor "Autorizado" no llega nunca aquí porque se filtra
+  // del listado al cargarlo.
+  estatus_autorizacion_comision_interna: "En espera" | "Rechazado" | "Autorizado";
   // Útiles para drawer (primer comisionista representativo)
   comisionista_nombre: string;
   comisionista_rol: string;
@@ -567,6 +574,10 @@ type ComisionistaEnriched = {
   dias_desde_aprobacion: number;
   es_externo: boolean;
   estatus_autorizacion_comision_externa: string;
+  /** Estatus de autorización de la dispersión interna persistido en la
+   *  cuenta (`En espera`, `Autorizado`, `Rechazado`). Si la columna aún no
+   *  existe en BD, queda en `En espera` por default. */
+  estatus_autorizacion_comision_interna: "En espera" | "Autorizado" | "Rechazado";
 };
 
 async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
@@ -586,28 +597,38 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
 
   // 2) cuentas_cobranza por id (todas las cuentas referenciadas)
   const ccIds = Array.from(new Set(comisRows.map((r) => r.id_cuenta_cobranza).filter(Boolean)));
-  // El SELECT intenta incluir `estatus_autorizacion_comision_externa`. La
-  // columna existe en dev pero el DDL puede no estar aplicado en prod aún
-  // (ver Ejecuciones_manuales/autorizacion_comision_sozu.md). Si PostgREST
-  // devuelve 400 por columna inexistente, reintentamos sin ella y defaulteamos
-  // a "En espera" — el mismo valor del DDL. Sin este fallback, supabase-js
-  // entrega `data=undefined` silenciosamente y toda la tabla de Comisiones
-  // internas pierde detalle (proyecto/edificio/modelo/precio).
+  // El SELECT intenta incluir las columnas de autorización
+  // `estatus_autorizacion_comision_externa` y
+  // `estatus_autorizacion_comision_interna`. Las columnas existen en dev pero
+  // el DDL puede no estar aplicado en prod aún (ver
+  // Ejecuciones_manuales/autorizacion_comision_sozu.md). Si PostgREST devuelve
+  // 42703 (undefined column), bajamos progresivamente la lista de columnas y
+  // defaulteamos a "En espera" — el mismo valor que tendrá la columna tras el
+  // DDL. Sin este fallback, supabase-js entrega `data=undefined`
+  // silenciosamente y toda la tabla pierde detalle.
+  const SELECT_FULL =
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa, estatus_autorizacion_comision_interna";
+  const SELECT_NO_INTERNA =
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa";
+  const SELECT_NO_AUTORIZACION =
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta";
   let ccs: Array<any> = [];
   if (ccIds.length) {
     let resp = await (supabase as any)
       .from("cuentas_cobranza")
-      .select(
-        "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa"
-      )
+      .select(SELECT_FULL)
       .in("id", ccIds);
     if (resp.error && resp.error.code === "42703") {
       resp = await (supabase as any)
         .from("cuentas_cobranza")
-        .select(
-          "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta"
-        )
+        .select(SELECT_NO_INTERNA)
         .in("id", ccIds);
+      if (resp.error && resp.error.code === "42703") {
+        resp = await (supabase as any)
+          .from("cuentas_cobranza")
+          .select(SELECT_NO_AUTORIZACION)
+          .in("id", ccIds);
+      }
     }
     if (resp.error) throw resp.error;
     ccs = resp.data ?? [];
@@ -848,6 +869,12 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       dias_desde_aprobacion: diasAprob,
       es_externo: esExterno,
       estatus_autorizacion_comision_externa: cc?.estatus_autorizacion_comision_externa ?? "En espera",
+      estatus_autorizacion_comision_interna:
+        (cc?.estatus_autorizacion_comision_interna as
+          | "En espera"
+          | "Autorizado"
+          | "Rechazado"
+          | undefined) ?? "En espera",
     };
   });
 
@@ -899,6 +926,47 @@ const TIPO_EXTERNO_LABEL: Record<ValidacionPagoExterno["agente_tipo"], string> =
   aliado_comercial: "Aliado comercial",
   agente_externo: "Agente externo",
 };
+
+/** Badge del estatus de autorización de la dispersión interna.
+ *  Renderizado en la tabla de Comisiones internas — "Autorizado" no aparece
+ *  porque esas filas ya se filtran del listado. */
+function EstatusAprobacionInternaBadge({
+  value,
+}: {
+  value: "En espera" | "Autorizado" | "Rechazado";
+}) {
+  if (value === "Rechazado") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-red-400 text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/40 whitespace-nowrap"
+      >
+        <X className="h-3 w-3 mr-1" />
+        Rechazada
+      </Badge>
+    );
+  }
+  if (value === "Autorizado") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 whitespace-nowrap"
+      >
+        <Check className="h-3 w-3 mr-1" />
+        Autorizada
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40 whitespace-nowrap"
+    >
+      <Clock className="h-3 w-3 mr-1" />
+      En espera
+    </Badge>
+  );
+}
 
 /* ──────────────────────────────────────────────────────────
    KPI card (clickeable, scrollea a sección)
@@ -1175,8 +1243,14 @@ export default function AltaDireccionBandejaValidacionesPage() {
   // pago no será ejecutable, pero la fila debe ser visible para el Director
   // — el botón "Acción de Pagar" sólo se habilita cuando aplica.
   const internasAgrupadas = useMemo<ValidacionComisionInterna[]>(() => {
+    // Comisionistas internos no pagados. Excluimos cuentas ya autorizadas
+    // por Alta Dirección — ésas salen de la bandeja porque ya no requieren
+    // decisión. Las rechazadas (parciales o totales) permanecen visibles
+    // para que Alta Dirección pueda darles seguimiento.
     const internosRaw = (comisionistasPendientes ?? []).filter(
-      (c) => !c.es_externo,
+      (c) =>
+        !c.es_externo &&
+        c.estatus_autorizacion_comision_interna !== "Autorizado",
     );
     const byCuenta = new Map<number, ComisionistaEnriched[]>();
     internosRaw.forEach((c) => {
@@ -1218,6 +1292,8 @@ export default function AltaDireccionBandejaValidacionesPage() {
         comision_a_dispersar: comisionADispersar,
         fecha_devengo: fechaDevengo,
         dias_esperando: dias,
+        estatus_autorizacion_comision_interna:
+          primero.estatus_autorizacion_comision_interna,
         // representativos para drawer
         comisionista_nombre: primero.nombre_legal || primero.nombre_usuario || primero.email_usuario,
         comisionista_rol: primero.rol_nombre || "Sin rol",
@@ -1632,6 +1708,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                       <TableHead className="text-xs text-right">Precio final</TableHead>
                       <TableHead className="text-xs text-right">Comisión a dispersar</TableHead>
                       <TableHead className="text-xs">Fecha · Antigüedad</TableHead>
+                      <TableHead className="text-xs">Estatus aprobación</TableHead>
                       <TableHead className="text-xs text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1659,6 +1736,11 @@ export default function AltaDireccionBandejaValidacionesPage() {
                         <TableCell className="whitespace-nowrap">
                           <div className="text-xs text-muted-foreground">{c.fecha_devengo}</div>
                           <Antiguedad dias={c.dias_esperando} umbral={5} />
+                        </TableCell>
+                        <TableCell>
+                          <EstatusAprobacionInternaBadge
+                            value={c.estatus_autorizacion_comision_interna}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
