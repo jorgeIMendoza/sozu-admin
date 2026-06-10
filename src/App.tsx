@@ -327,6 +327,16 @@ const CrmUnifiedInbox      = lazyRetry(() => import("./pages/admin/portal-crm/op
 const CrmQueues            = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmQueues })));
 const CrmSlaMonitor        = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmSlaMonitor })));
 
+// Portal CRM Sozu — Fase 6 (Configuración)
+const CrmSettingsUsers           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsUsers })));
+const CrmSettingsRoles           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsRoles })));
+const CrmSettingsPipelineStages  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelineStages })));
+const CrmSettingsCustomFields    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsCustomFields })));
+const CrmSettingsWebhooks        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsWebhooks })));
+const CrmSettingsGoogleCallback  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsGoogleCallback })));
+const CrmSettingsMetaCallback    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsMetaCallback })));
+const CrmSettingsAuditLog        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsAuditLog })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -767,6 +777,16 @@ const App = () => (
                   <Route path="portal-crm/operations/inbox"   element={<CrmUnifiedInbox />} />
                   <Route path="portal-crm/operations/queues"  element={<CrmQueues />} />
                   <Route path="portal-crm/operations/sla"     element={<CrmSlaMonitor />} />
+
+                  {/* Portal CRM Sozu — Configuración */}
+                  <Route path="portal-crm/settings/users"                       element={<CrmSettingsUsers />} />
+                  <Route path="portal-crm/settings/roles"                       element={<CrmSettingsRoles />} />
+                  <Route path="portal-crm/settings/pipeline-stages"             element={<CrmSettingsPipelineStages />} />
+                  <Route path="portal-crm/settings/custom-fields"               element={<CrmSettingsCustomFields />} />
+                  <Route path="portal-crm/settings/webhooks"                    element={<CrmSettingsWebhooks />} />
+                  <Route path="portal-crm/settings/connections/google/callback" element={<CrmSettingsGoogleCallback />} />
+                  <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
+                  <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
