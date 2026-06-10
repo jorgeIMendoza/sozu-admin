@@ -19,6 +19,16 @@ import {
   Sparkles,
   UserCheck,
   BarChart3,
+  Megaphone,
+  Users2,
+  GitBranch,
+  Image as ImageIcon,
+  Link2,
+  FlaskConical,
+  LayoutTemplate,
+  FileInput,
+  Plug,
+  Wallet,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -62,6 +72,21 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Salud de tracking",     path: "/admin/portal-crm/tracking-health",    icon: ShieldCheck },
       { label: "Eventos de conversión", path: "/admin/portal-crm/conversion-events",  icon: Zap },
+    ],
+  },
+  {
+    label: "Inteligencia de marketing",
+    items: [
+      { label: "Campañas",              path: "/admin/portal-crm/marketing/campaigns",      icon: Megaphone },
+      { label: "Audiencias",            path: "/admin/portal-crm/marketing/audiences",      icon: Users2 },
+      { label: "Atribución",            path: "/admin/portal-crm/marketing/attribution",    icon: GitBranch },
+      { label: "Creatividades",         path: "/admin/portal-crm/marketing/creatives",      icon: ImageIcon },
+      { label: "UTMs",                  path: "/admin/portal-crm/marketing/utms",           icon: Link2 },
+      { label: "A/B Tests",             path: "/admin/portal-crm/marketing/ab-tests",       icon: FlaskConical },
+      { label: "Landing pages",         path: "/admin/portal-crm/marketing/landing-pages",  icon: LayoutTemplate },
+      { label: "Formularios",           path: "/admin/portal-crm/marketing/forms",          icon: FileInput },
+      { label: "Integraciones de ads",  path: "/admin/portal-crm/marketing/integrations",   icon: Plug },
+      { label: "Costos y presupuesto",  path: "/admin/portal-crm/marketing/budget",         icon: Wallet },
     ],
   },
 ];

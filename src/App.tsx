@@ -301,6 +301,18 @@ const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/cr
 const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAgentPerformance })));
 const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSalesOperations })));
 
+// Portal CRM Sozu — Fase 3 (Inteligencia de marketing)
+const CrmCampaigns         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCampaigns })));
+const CrmAudiences         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAudiences })));
+const CrmAttribution       = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAttribution })));
+const CrmCreatives         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCreatives })));
+const CrmUtms              = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmUtms })));
+const CrmMarketingAbTests  = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingAbTests })));
+const CrmLandingPages      = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmLandingPages })));
+const CrmForms             = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmForms })));
+const CrmAdIntegrations    = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAdIntegrations })));
+const CrmBudget            = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmBudget })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -715,6 +727,18 @@ const App = () => (
                   <Route path="portal-crm/crm/lead-intelligence" element={<CrmLeadIntelligence />} />
                   <Route path="portal-crm/crm/agent-performance" element={<CrmAgentPerformance />} />
                   <Route path="portal-crm/crm/sales-operations" element={<CrmSalesOperations />} />
+
+                  {/* Portal CRM Sozu — Inteligencia de marketing */}
+                  <Route path="portal-crm/marketing/campaigns"     element={<CrmCampaigns />} />
+                  <Route path="portal-crm/marketing/audiences"     element={<CrmAudiences />} />
+                  <Route path="portal-crm/marketing/attribution"   element={<CrmAttribution />} />
+                  <Route path="portal-crm/marketing/creatives"     element={<CrmCreatives />} />
+                  <Route path="portal-crm/marketing/utms"          element={<CrmUtms />} />
+                  <Route path="portal-crm/marketing/ab-tests"      element={<CrmMarketingAbTests />} />
+                  <Route path="portal-crm/marketing/landing-pages" element={<CrmLandingPages />} />
+                  <Route path="portal-crm/marketing/forms"         element={<CrmForms />} />
+                  <Route path="portal-crm/marketing/integrations"  element={<CrmAdIntegrations />} />
+                  <Route path="portal-crm/marketing/budget"        element={<CrmBudget />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />

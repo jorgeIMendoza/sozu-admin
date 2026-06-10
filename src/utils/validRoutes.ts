@@ -191,6 +191,17 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-crm/crm/lead-intelligence',
   '/admin/portal-crm/crm/agent-performance',
   '/admin/portal-crm/crm/sales-operations',
+  // Portal CRM Sozu — Inteligencia de marketing (Fase 3)
+  '/admin/portal-crm/marketing/campaigns',
+  '/admin/portal-crm/marketing/audiences',
+  '/admin/portal-crm/marketing/attribution',
+  '/admin/portal-crm/marketing/creatives',
+  '/admin/portal-crm/marketing/utms',
+  '/admin/portal-crm/marketing/ab-tests',
+  '/admin/portal-crm/marketing/landing-pages',
+  '/admin/portal-crm/marketing/forms',
+  '/admin/portal-crm/marketing/integrations',
+  '/admin/portal-crm/marketing/budget',
 ]);
 
 export function isValidRoute(route: string): boolean {
