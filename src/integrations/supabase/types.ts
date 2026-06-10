@@ -625,6 +625,7 @@ export type Database = {
           cron_expression: string | null
           fecha_actualizacion: string
           fecha_creacion: string
+          filtros_destinatario: Json
           id: number
           mensaje_html: string
           mensajes_whatsapp: Json | null
@@ -642,6 +643,7 @@ export type Database = {
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          filtros_destinatario?: Json
           id?: never
           mensaje_html: string
           mensajes_whatsapp?: Json | null
@@ -659,6 +661,7 @@ export type Database = {
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          filtros_destinatario?: Json
           id?: never
           mensaje_html?: string
           mensajes_whatsapp?: Json | null
@@ -3341,6 +3344,66 @@ export type Database = {
         }
         Relationships: []
       }
+      cep_audit_log: {
+        Row: {
+          auditado_en: string | null
+          banco_beneficiario: string | null
+          banco_ordenante: string | null
+          clave_rastreo: string | null
+          estado: string
+          fecha_pago: string | null
+          id: number
+          id_pago: number
+          monto: number | null
+          motivo: string | null
+          num_cuenta: string | null
+          url_cep: string
+        }
+        Insert: {
+          auditado_en?: string | null
+          banco_beneficiario?: string | null
+          banco_ordenante?: string | null
+          clave_rastreo?: string | null
+          estado: string
+          fecha_pago?: string | null
+          id?: number
+          id_pago: number
+          monto?: number | null
+          motivo?: string | null
+          num_cuenta?: string | null
+          url_cep: string
+        }
+        Update: {
+          auditado_en?: string | null
+          banco_beneficiario?: string | null
+          banco_ordenante?: string | null
+          clave_rastreo?: string | null
+          estado?: string
+          fecha_pago?: string | null
+          id?: number
+          id_pago?: number
+          monto?: number | null
+          motivo?: string | null
+          num_cuenta?: string | null
+          url_cep?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cep_audit_log_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "pagos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cep_audit_log_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_pago"]
+          },
+        ]
+      }
       citas_calendar_events: {
         Row: {
           activo: boolean
@@ -4005,15 +4068,18 @@ export type Database = {
           contrato_draft: string | null
           email_autoriza_comision: string | null
           email_autoriza_comision_externa: string | null
+          email_autoriza_comision_interna: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
           es_draft_factura_comision: boolean | null
           es_pagada_comision_venta: boolean
           estatus_autorizacion_comision: string
           estatus_autorizacion_comision_externa: string
+          estatus_autorizacion_comision_interna: string
           fecha_actualizacion: string
           fecha_autorizacion_comision: string | null
           fecha_autorizacion_comision_externa: string | null
+          fecha_autorizacion_comision_interna: string | null
           fecha_compra: string | null
           fecha_creacion: string
           fecha_escritura: string | null
@@ -4032,6 +4098,7 @@ export type Database = {
           monto_comision_pagado: number
           notas_rechazo_comision: string | null
           notas_rechazo_comision_externa: string | null
+          notas_rechazo_comision_interna: string | null
           numero_escritura: string | null
           numero_unidad_privativa: string | null
           porcentaje_comision_venta: number
@@ -4051,15 +4118,18 @@ export type Database = {
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
           email_autoriza_comision_externa?: string | null
+          email_autoriza_comision_interna?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
           estatus_autorizacion_comision_externa?: string
+          estatus_autorizacion_comision_interna?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
           fecha_autorizacion_comision_externa?: string | null
+          fecha_autorizacion_comision_interna?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -4078,6 +4148,7 @@ export type Database = {
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
           notas_rechazo_comision_externa?: string | null
+          notas_rechazo_comision_interna?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -4097,15 +4168,18 @@ export type Database = {
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
           email_autoriza_comision_externa?: string | null
+          email_autoriza_comision_interna?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
           estatus_autorizacion_comision_externa?: string
+          estatus_autorizacion_comision_interna?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
           fecha_autorizacion_comision_externa?: string | null
+          fecha_autorizacion_comision_interna?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -4124,6 +4198,7 @@ export type Database = {
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
           notas_rechazo_comision_externa?: string | null
+          notas_rechazo_comision_interna?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -10098,6 +10173,7 @@ export type Database = {
           reporte_id: number
         }[]
       }
+      get_active_projects: { Args: never; Returns: Json }
       get_bandeja_operativa: {
         Args: {
           p_proyecto_id?: number
@@ -10539,12 +10615,27 @@ export type Database = {
         Args: {
           p_excluir_proyectos?: string[]
           p_limit?: number
+          p_metodos?: string[]
           p_proyecto?: string
         }
         Returns: Json
       }
+      get_payments_recibo_for_validation: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_metodos?: string[]
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
+      get_pending_cep_chains: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
       get_pending_payments: {
         Args: {
+          p_banco?: string
           p_excluir_metodos?: string[]
           p_excluir_proyectos?: string[]
           p_limit?: number
@@ -10771,6 +10862,7 @@ export type Database = {
         Args: { p_id_entidad?: number; p_id_proyecto?: number }
         Returns: number
       }
+      save_cep_audit_results: { Args: { p_results: Json }; Returns: Json }
       scan_legacy_urls: {
         Args: never
         Returns: {
@@ -10785,6 +10877,10 @@ export type Database = {
           cuentas_procesadas: number
           mensaje: string
         }[]
+      }
+      update_payment_cep_from_recibo: {
+        Args: { p_updates: Json }
+        Returns: Json
       }
       user_can_access_report: {
         Args: { _reporte_id: number }
