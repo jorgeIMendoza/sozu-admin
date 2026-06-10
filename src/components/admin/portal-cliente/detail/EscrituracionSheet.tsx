@@ -25,8 +25,7 @@ import {
 } from "lucide-react";
 import type { StageInfo, InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import {
-  getEscrituracionData,
-  type EscrituracionData,
+  type AppointmentSlot,
   type ScheduledAppointment,
 } from "@/lib/portal-cliente/escrituracion-data";
 
@@ -43,14 +42,28 @@ const EscrituracionSheet = ({
   open,
   onClose,
 }: EscrituracionSheetProps) => {
-  const data = getEscrituracionData(investment.property.id);
+  const rawNotary = investment.property.notary;
+  const data = rawNotary
+    ? {
+        notary: {
+          name: rawNotary.notaria,
+          notaryName: rawNotary.name,
+          address: rawNotary.address,
+          phone: rawNotary.phone,
+          email: rawNotary.email,
+          mapsUrl: `https://maps.google.com/?q=${encodeURIComponent(rawNotary.address)}`,
+        },
+        costs: { available: false as const, items: [] as { concept: string; amount: number }[], totalAmount: 0, amountPaid: 0, amountPending: 0 },
+        deedDocument: { available: false as const, fileName: undefined as string | undefined },
+        availableSlots: [] as AppointmentSlot[],
+        scheduledAppointment: undefined as ScheduledAppointment | undefined,
+      }
+    : null;
   const [reviewed, setReviewed] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [appointment, setAppointment] = useState<ScheduledAppointment | null>(
-    data?.scheduledAppointment || null
-  );
+  const [appointment, setAppointment] = useState<ScheduledAppointment | null>(null);
 
   if (!data) {
     return (

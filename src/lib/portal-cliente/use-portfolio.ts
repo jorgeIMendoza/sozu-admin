@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage, AdditionalProduct } from "./types";
+import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage, AdditionalProduct, NotaryData } from "./types";
 
 const IMAGE_GRADIENTS = [
   "from-primary/20 via-primary/10 to-accent",
@@ -117,7 +117,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   // 2. Get approved billing accounts (includes clabe_stp for receipt modal)
   const { data: cuentas } = await supabase
     .from("cuentas_cobranza")
-    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp")
+    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
     .in("id_oferta", offerIds)
     .eq("activo", true)
     .eq("es_aprobado", true);
@@ -217,8 +217,9 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     }
   }
 
-  // 3. Parallel: properties + payments + payment schedule + persona
-  const [propiedadesRes, pagosRes, acuerdosRes, personaRes] = await Promise.all([
+  // 3. Parallel: properties + payments + payment schedule + persona + notarios
+  const notarioIds = [...new Set(cuentas.map((c) => (c as Record<string, unknown>).id_notario as number).filter(Boolean))];
+  const [propiedadesRes, pagosRes, acuerdosRes, personaRes, notariosRes] = await Promise.all([
     supabase
       .from("propiedades")
       .select("id, numero_propiedad, numero_piso, m2_interiores, id_estatus_disponibilidad, id_edificio_modelo, id_tipo_propiedad, url_imagen_portada")
@@ -236,12 +237,21 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
       .eq("activo", true)
       .order("orden", { ascending: true }),
     supabase.from("personas").select("nombre_legal, rfc").eq("id", personaId).single(),
+    notarioIds.length
+      ? (supabase as any).from("notarios").select("id, nombre, notaria, telefono, email, direccion").in("id", notarioIds)
+      : Promise.resolve({ data: [] as { id: number; nombre: string; notaria: string; telefono: string; email: string; direccion: string }[] }),
   ]);
 
   const propiedades = propiedadesRes.data ?? [];
   const pagos = pagosRes.data ?? [];
   const acuerdos = acuerdosRes.data ?? [];
   const persona = personaRes.data;
+  const notariosMap: Record<number, NotaryData> = Object.fromEntries(
+    ((notariosRes.data as { id: number; nombre: string; notaria: string; telefono: string; email: string; direccion: string }[]) ?? []).map((n) => [
+      n.id,
+      { name: String(n.nombre ?? ""), notaria: String(n.notaria ?? ""), phone: String(n.telefono ?? ""), email: String(n.email ?? ""), address: String(n.direccion ?? "") },
+    ]),
+  );
 
   // 3.5 Link acuerdos_pago → pagos to get tracking info
   const acuerdoIds = acuerdos.map((a) => a.id as number);
@@ -282,7 +292,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
   // 4. Get edificios_modelos for project chain
   const edificioModeloIds = [...new Set(propiedades.map((p) => p.id_edificio_modelo as number).filter(Boolean))];
-  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId);
+  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap);
 
   const { data: edificiosModelos } = await supabase
     .from("edificios_modelos")
@@ -330,6 +340,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     metodosMap,
     persona,
     productsByPropId,
+    notariosMap,
   );
 }
 
@@ -355,6 +366,7 @@ function buildFromData(
   metodosMap: Record<number, string> = {},
   persona: { nombre_legal: string | null; rfc: string | null } | null = null,
   productsByPropId: Record<number, AdditionalProduct[]> = {},
+  notariosMap: Record<number, NotaryData> = {},
 ): InvestmentProperty[] {
   const propMap = Object.fromEntries(propiedades.map((p) => [p.id as number, p]));
   const emMap = Object.fromEntries(edificiosModelos.map((em) => [em.id as number, em]));
@@ -436,6 +448,7 @@ function buildFromData(
         idPropiedad: cc.id_propiedad as number | undefined,
         clientName: persona?.nombre_legal ?? undefined,
         clientRFC: persona?.rfc ?? undefined,
+        notary: cc.id_notario ? notariosMap[cc.id_notario as number] : undefined,
       },
       financials: {
         initialPrice: Number(cc.precio_final),
