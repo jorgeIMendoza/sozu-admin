@@ -28,6 +28,7 @@ function PatrimonyCard({
 
   return (
     <div
+      data-cta="cliente.patrimonio.ver-propiedad"
       onClick={onClick}
       className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
     >

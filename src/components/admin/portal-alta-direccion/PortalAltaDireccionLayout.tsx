@@ -15,6 +15,9 @@ import {
   ChevronRight,
   TrendingUp,
   Banknote,
+  Activity,
+  BarChart3,
+  MousePointerClick,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -24,6 +27,7 @@ import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
@@ -38,6 +42,9 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/historico-comercial",
   "/admin/portal-alta-direccion/analisis-cobranza",
   "/admin/portal-alta-direccion/ingresos-egresos",
+  "/admin/portal-alta-direccion/mediciones/portales",
+  "/admin/portal-alta-direccion/mediciones/menus",
+  "/admin/portal-alta-direccion/mediciones/ctas",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -88,6 +95,14 @@ const navGroups: NavGroup[] = [
     label: "Finanzas",
     items: [
       { label: "Ingresos y Egresos", path: "/admin/portal-alta-direccion/ingresos-egresos", icon: ArrowLeftRight },
+    ],
+  },
+  {
+    label: "Mediciones",
+    items: [
+      { label: "Uso por portal",         path: "/admin/portal-alta-direccion/mediciones/portales", icon: Activity },
+      { label: "Mapa de calor de menús", path: "/admin/portal-alta-direccion/mediciones/menus",    icon: BarChart3 },
+      { label: "Mapa de calor de CTAs",  path: "/admin/portal-alta-direccion/mediciones/ctas",     icon: MousePointerClick },
     ],
   },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
@@ -270,6 +285,7 @@ export const PortalAltaDireccionLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="alta-direccion">
     <AltaDireccionFiltersProvider>
       <div className="min-h-screen flex">
         <aside
@@ -337,6 +353,7 @@ export const PortalAltaDireccionLayout = () => {
         </div>
       </div>
     </AltaDireccionFiltersProvider>
+    </PortalTrackingProvider>
   );
 };
 

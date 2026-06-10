@@ -100,6 +100,7 @@ const ClienteHistorialPagos = () => {
                   return (
                     <button
                       key={inv.property.id}
+                      data-cta="cliente.historial-pagos.seleccionar-propiedad"
                       onClick={() => setSearchParams({ p: inv.property.id })}
                       className="w-full flex items-center gap-3.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.98] hover:border-primary/30 text-left"
                     >
