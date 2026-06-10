@@ -281,6 +281,12 @@ const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flo
 const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
 const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
 
+// Portal CRM Sozu
+const CrmDashboard         = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmDashboard })));
+const CrmAlertas           = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmAlertas })));
+const CrmTrackingHealth    = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmTrackingHealth })));
+const CrmConversionEvents  = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmConversionEvents })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -312,6 +318,7 @@ const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
 const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
+const isCrmSubdomain = matchPortal('crm');
 
 // Determine portal context from subdomain for login page branding
 const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
@@ -676,6 +683,12 @@ const App = () => (
                   <Route path="notarios/administrar" element={<EscNotarios />} />
                   {/* Administrar Jurídico — menú admin principal */}
                   <Route path="juridico/administrar" element={<JuridicoAdministrar />} />
+
+                  {/* Portal CRM Sozu */}
+                  <Route path="portal-crm/dashboard" element={<CrmDashboard />} />
+                  <Route path="portal-crm/alertas" element={<CrmAlertas />} />
+                  <Route path="portal-crm/tracking-health" element={<CrmTrackingHealth />} />
+                  <Route path="portal-crm/conversion-events" element={<CrmConversionEvents />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
