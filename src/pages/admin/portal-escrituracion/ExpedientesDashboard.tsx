@@ -44,6 +44,7 @@ interface ExpedienteRow {
 
 interface DocItem {
   id: number;
+  idTipoDocumento: number;
   tipoNombre: string;
   estatusNombre: string;
   url: string;
@@ -71,8 +72,28 @@ const TIPO_META: Record<TipoComprador, { label: string; cls: string }> = {
 
 // ─── Documentos obligatorios persona física ───────────────────────────────────
 
-// Nombres normalizados (sin tildes, minúsculas, sin chars especiales)
-// para comparar contra tipos_documento.nombre de BD con tolerancia de variaciones.
+// Grupos de documentos obligatorios.
+// Cada grupo lista todos los id_tipo_documento equivalentes en BD:
+//   6 = Constancia de situación fiscal
+//   8 = Comprobante de domicilio
+//   2 = Frente INE  |  59 = Identificación oficial  (mismo grupo)
+//   5 = CURP
+//   1 = Acta de nacimiento
+const OBLIGATORIO_GRUPOS = [
+  { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
+  { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
+  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59] },
+  { key: 'curp',      label: 'CURP',                           ids: [5] },
+  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
+] as const;
+
+const ALL_OBLIGATORIO_IDS: number[] = OBLIGATORIO_GRUPOS.flatMap(g => [...g.ids]);
+
+// id_tipo_documento → group key
+const ID_TO_GROUP_KEY: Record<number, string> = {};
+OBLIGATORIO_GRUPOS.forEach(g => g.ids.forEach(id => { ID_TO_GROUP_KEY[id] = g.key; }));
+
+// Normalización de nombres para display (panel de detalle)
 function normTipoDoc(s: string): string {
   return (s ?? '')
     .toLowerCase()
@@ -81,16 +102,6 @@ function normTipoDoc(s: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-const DOCS_OBLIGATORIOS_FISICA = [
-  'Constancia de situación fiscal',
-  'Comprobante de domicilio',
-  'CURP',
-  'Frente INE',
-  'Acta de nacimiento',
-] as const;
-
-const DOCS_OBLIGATORIOS_NORM = DOCS_OBLIGATORIOS_FISICA.map(normTipoDoc);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -104,8 +115,8 @@ function deriveEstatusExpediente(
   if (estatusDisponibilidadId === 11) return 'CON_OBSERVACIONES'; // En demanda
   // Escriturado (7) o Entregado (8) → LISTO siempre
   if (estatusDisponibilidadId === 7 || estatusDisponibilidadId === 8) return 'LISTO';
-  // Para el resto: LISTO solo si todos los obligatorios tienen al menos 1 Validado
-  if (docsCompletos >= DOCS_OBLIGATORIOS_FISICA.length) return 'LISTO';
+  // Para el resto: LISTO solo si todos los obligatorios tienen su último doc Validado
+  if (docsCompletos >= OBLIGATORIO_GRUPOS.length) return 'LISTO';
   return 'PENDIENTE';
 }
 
@@ -208,61 +219,68 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void }) {
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
-    queryKey: ['exp-docs', row.cuentaId],
+    queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
+      // Los documentos en BD están vinculados por id_persona, no id_cuenta_cobranza
+      if (!row.personaId) return [];
       const { data } = await supabase
         .from('documentos')
         .select(`
-          id, url, fecha_actualizacion, es_draft,
+          id, id_tipo_documento, url, fecha_creacion, fecha_actualizacion, es_draft,
           tipos_documento:documentos_id_tipo_documento_fkey(nombre),
           estatus_verificacion:documentos_id_estatus_verificacion_fkey(nombre)
         `)
-        .eq('id_cuenta_cobranza', row.cuentaId)
+        .eq('id_persona', row.personaId)
         .eq('activo', true)
         .eq('es_draft', false)
-        .order('fecha_actualizacion', { ascending: false })
+        .order('fecha_creacion', { ascending: false })
         .order('id', { ascending: false });
 
-      const items = (data || []).map((d: any) => ({
+      const items: DocItem[] = (data || []).map((d: any) => ({
         id: d.id,
+        idTipoDocumento: d.id_tipo_documento,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
         url: d.url,
-        fecha: d.fecha_actualizacion,
+        fecha: d.fecha_creacion ?? d.fecha_actualizacion,
         isLatest: false,
         hasOlderValidado: false,
       }));
 
-      // Determinar el doc más reciente por tipo y si hay versión anterior validada
-      const latestIdByTipo: Record<string, number> = {};
-      const tipoGroups: Record<string, typeof items> = {};
+      // isLatest: el más reciente por id_tipo_documento (ya ordenados desc por fecha_creacion/id)
+      const latestIdByTipoId: Record<number, number> = {};
+      const tipoIdGroups: Record<number, DocItem[]> = {};
       items.forEach(d => {
-        if (!tipoGroups[d.tipoNombre]) tipoGroups[d.tipoNombre] = [];
-        tipoGroups[d.tipoNombre].push(d);
+        if (!tipoIdGroups[d.idTipoDocumento]) tipoIdGroups[d.idTipoDocumento] = [];
+        tipoIdGroups[d.idTipoDocumento].push(d);
       });
-      Object.entries(tipoGroups).forEach(([tipo, group]) => {
-        // Ya vienen ordenados desc por fecha/id, el primero es el más reciente
-        latestIdByTipo[tipo] = group[0].id;
+      Object.values(tipoIdGroups).forEach(group => {
+        latestIdByTipoId[group[0].idTipoDocumento] = group[0].id;
       });
 
+      const isValidado = (s: string) =>
+        s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
+
       return items.map(d => {
-        const isLatest = latestIdByTipo[d.tipoNombre] === d.id;
-        const latestId = latestIdByTipo[d.tipoNombre];
-        const isValidado = (s: string) =>
-          s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
-        // Advertencia: doc vigente no está validado pero hay versión anterior que sí
+        const isLatest = latestIdByTipoId[d.idTipoDocumento] === d.id;
+        const latestId = latestIdByTipoId[d.idTipoDocumento];
         const hasOlderValidado = isLatest && !isValidado(d.estatusNombre) &&
-          (tipoGroups[d.tipoNombre] ?? []).some(x => x.id !== latestId && isValidado(x.estatusNombre));
+          (tipoIdGroups[d.idTipoDocumento] ?? []).some(x => x.id !== latestId && isValidado(x.estatusNombre));
         return { ...d, isLatest, hasOlderValidado };
       });
     },
     staleTime: 30_000,
   });
 
-  // Contar obligatorios cumplidos: solo el ÚLTIMO doc por tipo obligatorio es Validado
-  const obligatoriosCumplidos = DOCS_OBLIGATORIOS_NORM.filter(norm => {
-    const latest = checklist.find(d => d.isLatest && normTipoDoc(d.tipoNombre) === norm);
-    return latest && (latest.estatusNombre.toLowerCase().includes('validado') || latest.estatusNombre.toLowerCase().includes('aprobado'));
+  // Contar obligatorios cumplidos: último doc de cada grupo obligatorio en estatus Validado
+  // Grupos: items ya vienen ordenados desc por fecha_creacion → el primero de cada grupo es el vigente
+  const isValidadoNombre = (s: string) =>
+    s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
+
+  const obligatoriosCumplidos = OBLIGATORIO_GRUPOS.filter(grupo => {
+    const grupoItems = checklist.filter(d => (grupo.ids as readonly number[]).includes(d.idTipoDocumento));
+    if (!grupoItems.length) return false;
+    return isValidadoNombre(grupoItems[0].estatusNombre); // [0] = más reciente (desc)
   }).length;
 
   return (
@@ -317,8 +335,8 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos adjuntos</p>
             {checklist.length > 0 && (
               <span className="text-xs text-slate-500">
-                <span className={obligatoriosCumplidos >= DOCS_OBLIGATORIOS_FISICA.length ? 'text-emerald-600 font-semibold' : ''}>
-                  {obligatoriosCumplidos}/{DOCS_OBLIGATORIOS_FISICA.length}
+                <span className={obligatoriosCumplidos >= OBLIGATORIO_GRUPOS.length ? 'text-emerald-600 font-semibold' : ''}>
+                  {obligatoriosCumplidos}/{OBLIGATORIO_GRUPOS.length}
                 </span>
                 {' '}obligatorios
               </span>
@@ -556,41 +574,59 @@ export function ExpedientesDashboard() {
         });
       });
 
-      // Paso 4: Documentos por cuenta — regla "último documento por tipo"
-      // Para cada tipo obligatorio: tomar el doc más reciente (fecha_actualizacion desc,
-      // luego id desc como desempate). LISTO solo si ESE último está VALIDADO (id=2).
+      // Paso 4: Documentos — query por id_persona (relación real en BD)
+      // Verificado: id_cuenta_cobranza es NULL en ~99.9% de documentos obligatorios.
+      // El campo de vinculación real es id_persona → compradores → cuentas_cobranza.
+      // Campo de fecha real para "último cargado": fecha_creacion (fecha_carga no existe en BD).
+      const personaIdsForDocs = [...new Set(Object.values(primerPersonaIdByCuenta))];
+
       const { data: docs } = await (supabase as any)
         .from('documentos')
-        .select('id, id_cuenta_cobranza, id_estatus_verificacion, fecha_actualizacion, tipos_documento:documentos_id_tipo_documento_fkey(nombre)')
-        .in('id_cuenta_cobranza', cuentaIds)
+        .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+        .in('id_persona', personaIdsForDocs)
+        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
         .eq('activo', true)
         .eq('es_draft', false);
 
-      // latestDocByKey: clave = "cuentaId__tipoNorm" → doc más reciente de ese tipo
+      // latestDocByKey: "personaId__grupoKey" → doc más reciente de ese grupo obligatorio
       const latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }> = {};
       (docs || []).forEach((d: any) => {
-        if (!d.id_cuenta_cobranza) return;
-        const tipoNombre: string = d.tipos_documento?.nombre ?? '';
-        if (!tipoNombre) return;
-        const norm = normTipoDoc(tipoNombre);
-        if (!DOCS_OBLIGATORIOS_NORM.includes(norm as any)) return;
-        const key = `${d.id_cuenta_cobranza}__${norm}`;
-        const fecha = d.fecha_actualizacion ?? '';
+        if (!d.id_persona) return;
+        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+        if (!groupKey) return;
+        const key = `${d.id_persona}__${groupKey}`;
+        const fecha = d.fecha_creacion ?? '';
         const ex = latestDocByKey[key];
-        // Reemplazar si este doc es más reciente (fecha mayor, o mismo fecha pero id mayor)
         if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
           latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
         }
       });
 
       const docsByCuenta: Record<number, { total: number; completos: number }> = {};
-      cuentaIds.forEach(id => {
+      cuentaIds.forEach(cuentaId => {
+        const personaId = primerPersonaIdByCuenta[cuentaId];
         let cumplidos = 0;
-        for (const norm of DOCS_OBLIGATORIOS_NORM) {
-          const latest = latestDocByKey[`${id}__${norm}`];
-          if (latest && latest.estatusId === 2) cumplidos++; // 2 = Validado
+        if (personaId) {
+          for (const grupo of OBLIGATORIO_GRUPOS) {
+            const latest = latestDocByKey[`${personaId}__${grupo.key}`];
+            if (latest && latest.estatusId === 2) cumplidos++; // 2 = Validado
+          }
         }
-        docsByCuenta[id] = { total: DOCS_OBLIGATORIOS_FISICA.length, completos: cumplidos };
+        docsByCuenta[cuentaId] = { total: OBLIGATORIO_GRUPOS.length, completos: cumplidos };
+
+        if (process.env.NODE_ENV !== 'production') {
+          const latestRequiredDocs = OBLIGATORIO_GRUPOS.map(g => ({
+            grupo: g.key,
+            doc: personaId ? (latestDocByKey[`${personaId}__${g.key}`] ?? null) : null,
+          }));
+          console.debug('[Expedientes] documentos por cuenta', {
+            cuentaId,
+            personaId: personaId ?? null,
+            latestRequiredDocs,
+            completed: cumplidos,
+            status: cumplidos >= OBLIGATORIO_GRUPOS.length ? 'LISTO' : 'PENDIENTE',
+          });
+        }
       });
 
       // Paso 5: Construir filas
@@ -600,7 +636,7 @@ export function ExpedientesDashboard() {
           const cuenta = cuentaByProp[p.id];
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
-          const docStats = docsByCuenta[cuenta.id] || { total: DOCS_OBLIGATORIOS_FISICA.length, completos: 0 };
+          const docStats = docsByCuenta[cuenta.id] || { total: OBLIGATORIO_GRUPOS.length, completos: 0 };
           const estatusExpediente = deriveEstatusExpediente(p.id_estatus_disponibilidad, docStats.completos);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
