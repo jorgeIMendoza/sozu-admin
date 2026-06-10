@@ -36,6 +36,9 @@ import {
   Layers,
   TrendingDown,
   FileText,
+  Inbox as InboxIcon,
+  ListChecks,
+  Timer,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -106,6 +109,14 @@ const navGroups: NavGroup[] = [
       { label: "Cohorts",          path: "/admin/portal-crm/revenue/cohorts",         icon: Layers },
       { label: "Churn",            path: "/admin/portal-crm/revenue/churn",           icon: TrendingDown },
       { label: "Reportería",       path: "/admin/portal-crm/revenue/reporting",       icon: FileText },
+    ],
+  },
+  {
+    label: "Operación",
+    items: [
+      { label: "Bandeja unificada", path: "/admin/portal-crm/operations/inbox",  icon: InboxIcon },
+      { label: "Colas",             path: "/admin/portal-crm/operations/queues", icon: ListChecks },
+      { label: "Monitor de SLA",    path: "/admin/portal-crm/operations/sla",    icon: Timer },
     ],
   },
 ];
