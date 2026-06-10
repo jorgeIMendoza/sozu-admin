@@ -30,6 +30,7 @@ import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows, fetchInBatches } from "@/utils/supabasePagination";
 import { ExpedienteDrawer } from "@/components/admin/portal-alta-direccion/drawers/ExpedienteDrawer";
 import { VentaParaFacturarContent } from "@/components/admin/portal-alta-direccion/drawers/content/VentaParaFacturarContent";
 import { PagoExternoContent } from "@/components/admin/portal-alta-direccion/drawers/content/PagoExternoContent";
@@ -546,10 +547,19 @@ type ComisionistaEnriched = {
   porcentaje_comision: number;
   fecha_devengo: string;
   fecha_actualizacion: string;
+  // Flag a nivel comisionista — false antes de que Alta Dirección revise.
+  // Usado para diferenciar candidatos pendientes vs ya rechazados.
+  aprobada: boolean;
   // Cuenta
   precio_final: number;
   fecha_compra: string | null;
   es_pagada_comision_venta: boolean;
+  /** URL del PDF de la Factura SOZU al desarrollador. NULL si aún no se
+   *  generó la factura. */
+  url_factura_comision: string | null;
+  /** Si la Factura SOZU es draft (aún no timbrada). Cuando true, la
+   *  comisión interna NO se puede autorizar todavía. */
+  es_draft_factura_comision: boolean;
   proyecto: string;
   numero_propiedad: string;
   edificio_nombre: string;
@@ -581,18 +591,25 @@ type ComisionistaEnriched = {
 };
 
 async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
-  // 1) Comisionistas activos+aprobados+no-pagados
-  const { data: coms, error } = await (supabase as any)
-    .from("comisionistas")
-    .select(
-      "id_cuenta_cobranza, email_usuario, porcentaje_comision, fecha_creacion, fecha_actualizacion"
-    )
-    .eq("activo", true)
-    .eq("aprobada", true)
-    .eq("pagada", false)
-    .limit(5000);
-  if (error) throw error;
-  const comisRows = (coms || []) as Array<any>;
+  // 1) Comisionistas activos no-pagados — INCLUIMOS los que aún no han sido
+  //    revisados por Alta Dirección (aprobada=false): son justo los que la
+  //    bandeja necesita mostrar para que AD decida. Filtrar por aprobada=true
+  //    excluía cuentas válidas. Las que ya fueron RECHAZADAS también vienen
+  //    aquí (aprobada=false) — el filtro de visibilidad correcto se aplica
+  //    a nivel cuenta vía `estatus_autorizacion_comision_interna`.
+  //
+  //    Paginado para superar el cap implícito de PostgREST y soportar más
+  //    de 5000 comisionistas activos sin truncar el dataset.
+  const comisRows = await fetchAllRows<any>((from, to) =>
+    (supabase as any)
+      .from("comisionistas")
+      .select(
+        "id_cuenta_cobranza, email_usuario, porcentaje_comision, aprobada, fecha_creacion, fecha_actualizacion",
+      )
+      .eq("activo", true)
+      .eq("pagada", false)
+      .range(from, to),
+  );
   if (comisRows.length === 0) return [];
 
   // 2) cuentas_cobranza por id (todas las cuentas referenciadas)
@@ -607,55 +624,59 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   // DDL. Sin este fallback, supabase-js entrega `data=undefined`
   // silenciosamente y toda la tabla pierde detalle.
   const SELECT_FULL =
-    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa, estatus_autorizacion_comision_interna";
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, url_factura_comision, es_draft_factura_comision, estatus_autorizacion_comision_externa, estatus_autorizacion_comision_interna";
   const SELECT_NO_INTERNA =
-    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, estatus_autorizacion_comision_externa";
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, url_factura_comision, es_draft_factura_comision, estatus_autorizacion_comision_externa";
   const SELECT_NO_AUTORIZACION =
-    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta";
-  let ccs: Array<any> = [];
-  if (ccIds.length) {
+    "id, precio_final, id_propiedad, id_oferta, fecha_compra, es_pagada_comision_venta, url_factura_comision, es_draft_factura_comision";
+  // Fallback escalonado por columna inexistente (42703) — se decide en el
+  // primer batch y se aplica al resto. Sin esto, un lote distinto podría
+  // intentar columnas que ya sabemos que no existen.
+  let select = SELECT_FULL;
+  const ccs = await fetchInBatches<any>(ccIds, async (batch) => {
     let resp = await (supabase as any)
       .from("cuentas_cobranza")
-      .select(SELECT_FULL)
-      .in("id", ccIds);
+      .select(select)
+      .in("id", batch as number[]);
     if (resp.error && resp.error.code === "42703") {
+      select = select === SELECT_FULL ? SELECT_NO_INTERNA : SELECT_NO_AUTORIZACION;
       resp = await (supabase as any)
         .from("cuentas_cobranza")
-        .select(SELECT_NO_INTERNA)
-        .in("id", ccIds);
-      if (resp.error && resp.error.code === "42703") {
+        .select(select)
+        .in("id", batch as number[]);
+      if (resp.error && resp.error.code === "42703" && select === SELECT_NO_INTERNA) {
+        select = SELECT_NO_AUTORIZACION;
         resp = await (supabase as any)
           .from("cuentas_cobranza")
-          .select(SELECT_NO_AUTORIZACION)
-          .in("id", ccIds);
+          .select(select)
+          .in("id", batch as number[]);
       }
     }
-    if (resp.error) throw resp.error;
-    ccs = resp.data ?? [];
-  }
+    return resp as { data: any[] | null; error: any };
+  });
   const ccById = new Map<number, any>((ccs || []).map((c: any) => [c.id, c]));
 
   // 2b) Ofertas para deducir tipo (Producto/Servicio si id_producto, si no Propiedad)
   const ofertaIds = Array.from(
     new Set((ccs || []).map((c: any) => c.id_oferta).filter(Boolean)),
   );
-  const { data: ofs } = ofertaIds.length
-    ? ((await (supabase as any)
-        .from("ofertas")
-        .select("id, id_propiedad, id_producto")
-        .in("id", ofertaIds)) as any)
-    : { data: [] };
+  const ofs = await fetchInBatches<any>(ofertaIds as number[], (batch) =>
+    (supabase as any)
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto")
+      .in("id", batch as number[]),
+  );
   const ofertaById = new Map<number, any>((ofs || []).map((o: any) => [o.id, o]));
 
   const productoIds = Array.from(
     new Set((ofs || []).map((o: any) => o.id_producto).filter(Boolean)),
   );
-  const { data: prodsRaw } = productoIds.length
-    ? ((await (supabase as any)
-        .from("productos_servicios")
-        .select("id, id_categoria")
-        .in("id", productoIds)) as any)
-    : { data: [] };
+  const prodsRaw = await fetchInBatches<any>(productoIds as number[], (batch) =>
+    (supabase as any)
+      .from("productos_servicios")
+      .select("id, id_categoria")
+      .in("id", batch as number[]),
+  );
   const catIds = Array.from(
     new Set((prodsRaw || []).map((p: any) => p.id_categoria).filter(Boolean)),
   );
@@ -682,12 +703,12 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   const { propMap, proyectoByProp } = await loadProyectosByPropiedades(propIds);
 
   // 3b) estatus_disponibilidad por propiedad
-  const { data: propsEstatus } = propIds.length
-    ? ((await (supabase as any)
-        .from("propiedades")
-        .select("id, id_estatus_disponibilidad, id_edificio_modelo")
-        .in("id", propIds)) as any)
-    : { data: [] };
+  const propsEstatus = await fetchInBatches<any>(propIds as number[], (batch) =>
+    (supabase as any)
+      .from("propiedades")
+      .select("id, id_estatus_disponibilidad, id_edificio_modelo")
+      .in("id", batch as number[]),
+  );
   const estatusByProp = new Map<number, number | null>(
     (propsEstatus || []).map((p: any) => [p.id, p.id_estatus_disponibilidad ?? null]),
   );
@@ -699,12 +720,12 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   const emIdsForBandeja = Array.from(
     new Set(Array.from(emByProp.values()).filter((v): v is number => v != null)),
   );
-  const { data: emsBandeja } = emIdsForBandeja.length
-    ? ((await (supabase as any)
-        .from("edificios_modelos")
-        .select("id, id_edificio, id_modelo")
-        .in("id", emIdsForBandeja)) as any)
-    : { data: [] };
+  const emsBandeja = await fetchInBatches<any>(emIdsForBandeja as number[], (batch) =>
+    (supabase as any)
+      .from("edificios_modelos")
+      .select("id, id_edificio, id_modelo")
+      .in("id", batch as number[]),
+  );
   const emInfoById = new Map<number, { idEdificio: number | null; idModelo: number | null }>(
     (emsBandeja || []).map((em: any) => [
       em.id,
@@ -739,14 +760,14 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   );
 
   // 3c) Documentos de factura externa (id_tipo_documento = 46) por cuenta
-  const { data: docsFactExt } = ccIds.length
-    ? ((await (supabase as any)
-        .from("documentos")
-        .select("id_cuenta_cobranza, url")
-        .in("id_cuenta_cobranza", ccIds)
-        .eq("id_tipo_documento", 46)
-        .eq("activo", true)) as any)
-    : { data: [] };
+  const docsFactExt = await fetchInBatches<any>(ccIds as number[], (batch) =>
+    (supabase as any)
+      .from("documentos")
+      .select("id_cuenta_cobranza, url")
+      .in("id_cuenta_cobranza", batch as number[])
+      .eq("id_tipo_documento", 46)
+      .eq("activo", true),
+  );
   const urlFacturaByCc = new Map<number, string>();
   (docsFactExt || []).forEach((d: any) => {
     if (d.id_cuenta_cobranza != null && d.url && !urlFacturaByCc.has(d.id_cuenta_cobranza)) {
@@ -756,13 +777,13 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
 
   // 4) Usuarios + roles + personas por email
   const emails = Array.from(new Set(comisRows.map((r) => r.email_usuario).filter(Boolean)));
-  const { data: usuarios } = emails.length
-    ? ((await (supabase as any)
-        .from("usuarios")
-        .select("email, nombre, rol_id, id_persona")
-        .in("email", emails)
-        .eq("activo", true)) as any)
-    : { data: [] };
+  const usuarios = await fetchInBatches<any>(emails as string[], (batch) =>
+    (supabase as any)
+      .from("usuarios")
+      .select("email, nombre, rol_id, id_persona")
+      .in("email", batch as string[])
+      .eq("activo", true),
+  );
   const userByEmail = new Map<string, any>((usuarios || []).map((u: any) => [u.email, u]));
 
   const rolIds = Array.from(new Set((usuarios || []).map((u: any) => u.rol_id).filter(Boolean)));
@@ -778,24 +799,24 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   const personaIds = Array.from(
     new Set((usuarios || []).map((u: any) => u.id_persona).filter(Boolean))
   );
-  const { data: persPorId } = personaIds.length
-    ? ((await (supabase as any)
-        .from("personas")
-        .select("id, nombre_legal, rfc")
-        .in("id", personaIds)) as any)
-    : { data: [] };
+  const persPorId = await fetchInBatches<any>(personaIds as number[], (batch) =>
+    (supabase as any)
+      .from("personas")
+      .select("id, nombre_legal, rfc")
+      .in("id", batch as number[]),
+  );
   const personaById = new Map<number, any>((persPorId || []).map((p: any) => [p.id, p]));
 
   // 4b) Personas por EMAIL del comisionista — para detectar inmobiliarias
   //     que están registradas como persona moral pero no necesariamente
   //     como usuario. Este es el criterio principal de "externo" del admin.
-  const { data: persPorEmail } = emails.length
-    ? ((await (supabase as any)
-        .from("personas")
-        .select("email, nombre_legal, rfc, tipo_persona")
-        .in("email", emails)
-        .eq("activo", true)) as any)
-    : { data: [] };
+  const persPorEmail = await fetchInBatches<any>(emails as string[], (batch) =>
+    (supabase as any)
+      .from("personas")
+      .select("email, nombre_legal, rfc, tipo_persona")
+      .in("email", batch as string[])
+      .eq("activo", true),
+  );
   const personaByEmail = new Map<string, any>(
     (persPorEmail || []).map((p: any) => [p.email, p])
   );
@@ -848,9 +869,12 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       porcentaje_comision: pct,
       fecha_devengo: c.fecha_creacion,
       fecha_actualizacion: c.fecha_actualizacion,
+      aprobada: !!c.aprobada,
       precio_final: precio,
       fecha_compra: cc?.fecha_compra ?? null,
       es_pagada_comision_venta: !!cc?.es_pagada_comision_venta,
+      url_factura_comision: (cc?.url_factura_comision as string | null) ?? null,
+      es_draft_factura_comision: !!cc?.es_draft_factura_comision,
       proyecto: proyecto || "Sin proyecto",
       numero_propiedad: prop?.numero_propiedad || "—",
       edificio_nombre: edificioNombre,
@@ -1243,15 +1267,32 @@ export default function AltaDireccionBandejaValidacionesPage() {
   // pago no será ejecutable, pero la fila debe ser visible para el Director
   // — el botón "Acción de Pagar" sólo se habilita cuando aplica.
   const internasAgrupadas = useMemo<ValidacionComisionInterna[]>(() => {
-    // Comisionistas internos no pagados. Excluimos cuentas ya autorizadas
-    // por Alta Dirección — ésas salen de la bandeja porque ya no requieren
-    // decisión. Las rechazadas (parciales o totales) permanecen visibles
-    // para que Alta Dirección pueda darles seguimiento.
-    const internosRaw = (comisionistasPendientes ?? []).filter(
-      (c) =>
-        !c.es_externo &&
-        c.estatus_autorizacion_comision_interna !== "Autorizado",
-    );
+    // Reglas de negocio para que la cuenta sea elegible a autorización
+    // de dispersión interna por Alta Dirección:
+    //
+    //   1. Comisionista INTERNO (no externo, no autorizado todavía).
+    //   2. Propiedad en estatus VENDIDO (id_estatus_disponibilidad = 5).
+    //      Producto/Servicio puro (sin propiedad) también pasa porque
+    //      su id_estatus_disponibilidad llega como null y se considera
+    //      siempre vendido — alineado con el flujo de "Comisión SOZU".
+    //   3. Factura SOZU al desarrollador TIMBRADA (url_factura_comision
+    //      no nula Y es_draft_factura_comision = false).
+    //   4. Pago del desarrollador a SOZU RECIBIDO
+    //      (es_pagada_comision_venta = true).
+    //
+    // Importante: NO se exige factura externa ni pago a externo. No todas
+    // las cuentas tienen comisionistas externos — gating la interna sobre
+    // ese flujo ocultaría cuentas válidas.
+    const internosRaw = (comisionistasPendientes ?? []).filter((c) => {
+      if (c.es_externo) return false;
+      if (c.estatus_autorizacion_comision_interna === "Autorizado") return false;
+      const propVendida =
+        c.id_estatus_disponibilidad == null || c.id_estatus_disponibilidad === 5;
+      const facturaTimbrada =
+        !!c.url_factura_comision && !c.es_draft_factura_comision;
+      const pagoRecibido = c.es_pagada_comision_venta === true;
+      return propVendida && facturaTimbrada && pagoRecibido;
+    });
     const byCuenta = new Map<number, ComisionistaEnriched[]>();
     internosRaw.forEach((c) => {
       const arr = byCuenta.get(c.id_cuenta_cobranza) ?? [];
