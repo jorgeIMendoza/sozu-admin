@@ -1123,7 +1123,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={Users}
           iconColor="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
           title="Dispersiones internas pendientes"
-          description="Cuentas con comisiones internas autorizadas por Dirección — listas para dispersar al equipo SOZU"
+          description="Cuentas con factura SOZU timbrada y pago del desarrollador recibido — la ejecución queda habilitada cuando Alta Dirección autoriza"
           count={dispersionesInternasVisibleCount}
           right={
             <SortToggle
