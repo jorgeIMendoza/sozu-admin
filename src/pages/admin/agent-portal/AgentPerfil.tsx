@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,9 +12,10 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
 import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
-import { 
-  FileText, Receipt, Landmark, GraduationCap, 
-  Check, AlertTriangle, ChevronRight, Loader2, LogOut 
+import {
+  FileText, Receipt, Landmark, GraduationCap,
+  Check, AlertTriangle, ChevronRight, Loader2, LogOut,
+  Camera, Pencil, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import confetti from "canvas-confetti";
@@ -52,6 +53,7 @@ const ACTIVATION_BLOCKS = [
 
 const AgentPerfil = () => {
   const { profile, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const { impersonatedAgentPersonaId, impersonatedAgentName, isImpersonating } = useAgentImpersonation();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
@@ -62,6 +64,76 @@ const AgentPerfil = () => {
   const perfilPerms = permissions['/admin/agent/perfil'];
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
+
+  // Photo & phrase state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editingFrase, setEditingFrase] = useState(false);
+  const [fraseValue, setFraseValue] = useState('');
+  const [savingFrase, setSavingFrase] = useState(false);
+
+  // Fetch foto_perfil_url + frase_perfil from usuarios
+  const { data: perfilExtra } = useQuery({
+    queryKey: ['agent-perfil-extra', profile?.email],
+    queryFn: async () => {
+      if (!profile?.email) return null;
+      const { data } = await (supabase as any)
+        .from('usuarios')
+        .select('foto_perfil_url, frase_perfil')
+        .eq('email', profile.email)
+        .maybeSingle();
+      return data as { foto_perfil_url: string | null; frase_perfil: string | null } | null;
+    },
+    enabled: !!profile?.email,
+    staleTime: 60_000,
+  });
+
+  // Sync fraseValue when data loads (only when not editing)
+  useEffect(() => {
+    if (!editingFrase) setFraseValue(perfilExtra?.frase_perfil || '');
+  }, [perfilExtra, editingFrase]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?.email) return;
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `avatars/${profile.email}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatar')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('avatar').getPublicUrl(path);
+      await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: urlData.publicUrl })
+        .eq('email', profile.email);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', profile.email] });
+    } catch (err) {
+      console.error('Error subiendo foto:', err);
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFraseSave = async () => {
+    if (!profile?.email) return;
+    setSavingFrase(true);
+    try {
+      await (supabase as any)
+        .from('usuarios')
+        .update({ frase_perfil: fraseValue.trim() || null })
+        .eq('email', profile.email);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', profile.email] });
+      setEditingFrase(false);
+    } catch (err) {
+      console.error('Error guardando frase:', err);
+    } finally {
+      setSavingFrase(false);
+    }
+  };
   const sortedTrainingAppointments = [...trainingAppointments].sort((a, b) => {
     const aTime = new Date(`${a.fecha}T${a.hora_inicio || '00:00:00'}`).getTime();
     const bTime = new Date(`${b.fecha}T${b.hora_inicio || '00:00:00'}`).getTime();
@@ -290,9 +362,43 @@ const AgentPerfil = () => {
       <div className="p-4 space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="h-14 w-14 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center text-white font-bold text-lg shrink-0">
-          {(displayName || "A")[0]?.toUpperCase()}
-        </div>
+        {/* Avatar clickeable */}
+        <button
+          type="button"
+          className="relative h-14 w-14 shrink-0 rounded-full group focus:outline-none"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingPhoto || isImpersonating}
+          title="Cambiar foto de perfil"
+        >
+          {perfilExtra?.foto_perfil_url ? (
+            <img
+              src={perfilExtra.foto_perfil_url}
+              alt={displayName || "Avatar"}
+              className="h-14 w-14 rounded-full object-cover"
+            />
+          ) : (
+            <div className="h-14 w-14 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center text-white font-bold text-lg">
+              {(displayName || "A")[0]?.toUpperCase()}
+            </div>
+          )}
+          {/* Overlay cámara */}
+          {!isImpersonating && (
+            <div className="absolute inset-0 rounded-full bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              {uploadingPhoto
+                ? <Loader2 className="h-5 w-5 text-white animate-spin" />
+                : <Camera className="h-5 w-5 text-white" />
+              }
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoUpload}
+          />
+        </button>
+
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold text-[hsl(var(--agent-text))] truncate">
             {displayName || "Agente"}
@@ -307,6 +413,53 @@ const AgentPerfil = () => {
                 {agencyName}
               </span>
             </div>
+          )}
+          {/* Frase editable */}
+          {!isImpersonating && (
+            editingFrase ? (
+              <div className="flex items-center gap-1 mt-1">
+                <input
+                  autoFocus
+                  value={fraseValue}
+                  onChange={e => setFraseValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleFraseSave();
+                    if (e.key === 'Escape') setEditingFrase(false);
+                  }}
+                  maxLength={120}
+                  placeholder="Tu frase..."
+                  className="text-xs text-[hsl(var(--agent-text-secondary))] bg-transparent border-b border-[hsl(var(--agent-primary))] outline-none flex-1 min-w-0"
+                />
+                <button
+                  onClick={handleFraseSave}
+                  disabled={savingFrase}
+                  className="shrink-0 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                >
+                  {savingFrase ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                </button>
+                <button
+                  onClick={() => setEditingFrase(false)}
+                  className="shrink-0 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setFraseValue(perfilExtra?.frase_perfil || ''); setEditingFrase(true); }}
+                className="flex items-center gap-1 mt-1 group/frase max-w-full"
+              >
+                <span className={cn(
+                  "text-xs italic truncate max-w-[220px]",
+                  perfilExtra?.frase_perfil
+                    ? "text-[hsl(var(--agent-text-secondary))]"
+                    : "text-gray-300"
+                )}>
+                  {perfilExtra?.frase_perfil || "Agrega tu frase…"}
+                </span>
+                <Pencil className="h-3 w-3 shrink-0 text-gray-300 group-hover/frase:text-gray-500 transition-colors" />
+              </button>
+            )
           )}
         </div>
       </div>

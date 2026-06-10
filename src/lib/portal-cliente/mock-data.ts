@@ -4,6 +4,7 @@ export type {
   StageStatus,
   StageInfo,
   PropertyData,
+  NotaryData,
   FinancialData,
   MaintenanceData,
   PaymentRecord,
