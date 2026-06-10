@@ -39,7 +39,6 @@ import {
   Inbox as InboxIcon,
   ListChecks,
   Timer,
-  Settings as SettingsIcon,
   UserCog,
   KeyRound,
   SlidersHorizontal,
@@ -47,6 +46,7 @@ import {
   Webhook,
   Plug2,
   FileClock,
+  RefreshCw,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -55,6 +55,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -147,7 +149,7 @@ export const PortalCRMLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isPathAllowed, isLoading: isLoadingPerms } = useAllowedMenus();
+  const { isPathAllowed, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
 
   // Filtrar grupos/items por permisos reales de la BD (submenus_permisos).
   // Mientras cargan los permisos no mostramos nada para evitar parpadeos.
@@ -194,7 +196,47 @@ export const PortalCRMLayout = () => {
       </div>
 
       <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
-        {visibleGroups.map((group) => (
+        {isLoadingPerms && (
+          <div className="space-y-4 px-1">
+            {[0, 1, 2].map((g) => (
+              <div key={g} className="space-y-1.5">
+                <Skeleton className="h-3 w-24 mx-1.5" />
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-8 w-full rounded-lg" />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isLoadingPerms && permsError && (
+          <div className="mx-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <p className="text-xs font-semibold">No se pudieron cargar los permisos</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground line-clamp-3">{permsError}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-7 text-xs"
+              onClick={() => refetch()}
+            >
+              <RefreshCw className="h-3 w-3 mr-1.5" /> Reintentar
+            </Button>
+          </div>
+        )}
+
+        {!isLoadingPerms && !permsError && visibleGroups.length === 0 && (
+          <div className="mx-1 rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">
+              Tu rol no tiene submenús habilitados en este portal. Contacta a un
+              administrador para solicitar acceso.
+            </p>
+          </div>
+        )}
+
+        {!isLoadingPerms && !permsError && visibleGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               {group.label}
