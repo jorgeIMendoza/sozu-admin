@@ -17,6 +17,10 @@ graphify-out
 !.env.development
 !.env.example
 
+# Agents
+.agents/
+skills-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
