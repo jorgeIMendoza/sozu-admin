@@ -8,6 +8,17 @@ import {
   ArrowLeft,
   LogOut,
   Menu,
+  Users,
+  Briefcase,
+  Calendar,
+  ListTodo,
+  Workflow,
+  Route as RouteIcon,
+  Cog,
+  AlertTriangle,
+  Sparkles,
+  UserCheck,
+  BarChart3,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -27,6 +38,22 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Panel principal", path: "/admin/portal-crm/dashboard", icon: LayoutDashboard },
       { label: "Alertas",         path: "/admin/portal-crm/alertas",   icon: Bell },
+    ],
+  },
+  {
+    label: "CRM",
+    items: [
+      { label: "Contactos",            path: "/admin/portal-crm/crm/contacts",           icon: Users },
+      { label: "Pipeline",             path: "/admin/portal-crm/crm/deals",              icon: Briefcase },
+      { label: "Citas",                path: "/admin/portal-crm/crm/appointments",       icon: Calendar },
+      { label: "Tareas",               path: "/admin/portal-crm/crm/tasks",              icon: ListTodo },
+      { label: "Secuencias",           path: "/admin/portal-crm/crm/sequences",          icon: Workflow },
+      { label: "Routing de leads",     path: "/admin/portal-crm/crm/routing",            icon: RouteIcon },
+      { label: "Reglas automatización",path: "/admin/portal-crm/crm/automation-rules",   icon: Cog },
+      { label: "Escalaciones",         path: "/admin/portal-crm/crm/escalations",        icon: AlertTriangle },
+      { label: "Lead Intelligence",    path: "/admin/portal-crm/crm/lead-intelligence",  icon: Sparkles },
+      { label: "Perf. de agentes",     path: "/admin/portal-crm/crm/agent-performance",  icon: UserCheck },
+      { label: "Operaciones de ventas",path: "/admin/portal-crm/crm/sales-operations",   icon: BarChart3 },
     ],
   },
   {

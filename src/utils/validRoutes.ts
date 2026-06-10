@@ -179,6 +179,18 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-crm/alertas',
   '/admin/portal-crm/tracking-health',
   '/admin/portal-crm/conversion-events',
+  '/admin/portal-crm/crm/contacts',
+  '/admin/portal-crm/crm/contacts/:contactId',
+  '/admin/portal-crm/crm/deals',
+  '/admin/portal-crm/crm/appointments',
+  '/admin/portal-crm/crm/tasks',
+  '/admin/portal-crm/crm/sequences',
+  '/admin/portal-crm/crm/routing',
+  '/admin/portal-crm/crm/automation-rules',
+  '/admin/portal-crm/crm/escalations',
+  '/admin/portal-crm/crm/lead-intelligence',
+  '/admin/portal-crm/crm/agent-performance',
+  '/admin/portal-crm/crm/sales-operations',
 ]);
 
 export function isValidRoute(route: string): boolean {
