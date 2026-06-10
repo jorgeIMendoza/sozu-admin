@@ -116,18 +116,34 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   const ccIds = Array.from(comAggMap.keys());
 
   // 2) Cuentas de cobranza candidatas — sólo las que tienen comisionistas
-  //    pendientes y cumplen los filtros base.
-  //    Intentamos traer `estatus_autorizacion_comision_interna` para que el
-  //    estado_aprobacion refleje la decisión de Alta Dirección (fuente de
-  //    verdad). Si el DDL no está aplicado (42703), recaemos al SELECT sin
-  //    esa columna y el estado se deriva del fallback count-based.
+  //    pendientes y cumplen los filtros base + las reglas de negocio para
+  //    que Administración pueda ejecutar el pago:
+  //      - Factura SOZU al desarrollador timbrada
+  //        (url_factura_comision NOT NULL Y es_draft_factura_comision = false)
+  //      - Pago del desarrollador a SOZU recibido
+  //        (es_pagada_comision_venta = true)
+  //      - Autorización explícita de Alta Dirección
+  //        (estatus_autorizacion_comision_interna = 'Autorizado')
+  //    Estas tres reglas son las mismas que filtran la sección "Comisiones
+  //    internas" de la Bandeja de Validaciones del Portal Alta Dirección
+  //    para que la cuenta sea elegible a autorización — aquí se exige
+  //    además el flag Autorizado para que sólo lo ya autorizado se
+  //    pueda pagar.
+  //
+  //    Estatus Vendido se gatea más abajo (cruce con `propiedades`); las
+  //    Producto/Servicio puras (sin propiedad) pasan automáticamente.
+  //
+  //    Fallback escalonado por 42703: si la columna AD no existe aún,
+  //    recaemos al SELECT legacy y la decisión de "Aprobado" se deriva
+  //    del count-based (comportamiento previo) — modo degradado para no
+  //    bloquear ambientes pre-DDL.
   const cuentasRows: Array<any> = [];
   // Trocear el IN(...) en lotes de 500 para no exceder la longitud de URL.
   const BATCH = 500;
   const SELECT_WITH_ESTATUS =
-    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra, estatus_autorizacion_comision_interna";
+    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra, url_factura_comision, es_draft_factura_comision, es_pagada_comision_venta, estatus_autorizacion_comision_interna";
   const SELECT_LEGACY =
-    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra";
+    "id, precio_final, iva_incluido, id_oferta, id_propiedad, fecha_compra, url_factura_comision, es_draft_factura_comision, es_pagada_comision_venta";
   let columnaEstatusDisponible = true;
   for (let i = 0; i < ccIds.length; i += BATCH) {
     const slice = ccIds.slice(i, i + BATCH);
@@ -137,10 +153,16 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
       .in("id", slice)
       .eq("activo", true)
       .is("id_cuenta_cobranza_padre", null)
-      .gt("precio_final", 0);
+      .gt("precio_final", 0)
+      // Pago del desarrollador a SOZU recibido + Factura SOZU timbrada (no
+      // draft) son condiciones duras; se filtran en BD para no traer
+      // cuentas que de cualquier forma vamos a descartar.
+      .eq("es_pagada_comision_venta", true)
+      .not("url_factura_comision", "is", null)
+      .eq("es_draft_factura_comision", false);
     if (resp.error && resp.error.code === "42703" && columnaEstatusDisponible) {
-      // Columna aún no creada en BD — caemos al SELECT legacy para todos los
-      // batches subsecuentes.
+      // Columna AD aún no creada en BD — caemos al SELECT legacy para
+      // todos los batches subsecuentes.
       columnaEstatusDisponible = false;
       resp = await (supabase as any)
         .from("cuentas_cobranza")
@@ -148,14 +170,26 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
         .in("id", slice)
         .eq("activo", true)
         .is("id_cuenta_cobranza_padre", null)
-        .gt("precio_final", 0);
+        .gt("precio_final", 0)
+        .eq("es_pagada_comision_venta", true)
+        .not("url_factura_comision", "is", null)
+        .eq("es_draft_factura_comision", false);
     }
     if (resp.error) throw resp.error;
     cuentasRows.push(...((resp.data || []) as Array<any>));
   }
   if (!cuentasRows.length) return [];
 
-  const cuentasBase = cuentasRows;
+  // Gate final: la cuenta sólo es elegible a pago si Alta Dirección ya
+  // autorizó la dispersión. Cuando la columna AD existe, exigimos
+  // `Autorizado`. Cuando no existe (pre-DDL), no podemos verificar y
+  // dejamos pasar para no romper el flujo en ambientes legacy.
+  const cuentasBase = columnaEstatusDisponible
+    ? cuentasRows.filter(
+        (c) => c.estatus_autorizacion_comision_interna === "Autorizado",
+      )
+    : cuentasRows;
+  if (!cuentasBase.length) return [];
 
   // 3) Ofertas → propiedad / producto.
   const ofertaIds = Array.from(
@@ -266,12 +300,17 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   const prodMap = new Map<number, any>((prodsRaw || []).map((p: any) => [p.id, p]));
 
   // 8) Composición final + gate de propiedad Vendida.
+  //    Cuando NO hay propiedad efectiva (Producto/Servicio puros) la
+  //    cuenta se considera siempre vendida — alineado con la lógica de
+  //    Alta Dirección y con la sección "Comisión SOZU" de la Bandeja.
   const result: DispersionInternaPendiente[] = [];
   for (const c of cuentasBase) {
     const oferta = c.id_oferta ? ofMap.get(c.id_oferta) : null;
     const idPropEfectivo: number | null = c.id_propiedad ?? oferta?.id_propiedad ?? null;
     const propiedad = idPropEfectivo ? propMap.get(idPropEfectivo) : null;
-    if (propiedad?.id_estatus_disponibilidad !== 5) continue;
+    const propVendida =
+      idPropEfectivo == null || propiedad?.id_estatus_disponibilidad === 5;
+    if (!propVendida) continue;
 
     const em = propiedad?.id_edificio_modelo ? emMap.get(propiedad.id_edificio_modelo) : null;
     const edificio = em?.id_edificio ? edMap.get(em.id_edificio) : null;

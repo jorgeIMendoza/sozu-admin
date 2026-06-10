@@ -406,6 +406,46 @@ export function ComisionInternaContent({
         </div>
       </Section>
 
+      {/* ─── Validación del Pago del desarrollador a SOZU ───
+           Alta Dirección requiere certeza de que el cobro a SOZU ya se ejecutó
+           antes de autorizar la dispersión interna. Mostramos estado,
+           fecha, monto y la clave de rastreo STP del SPEI. */}
+      <Section title="Pago del desarrollador a SOZU">
+        <PagoStatusRow
+          estado={detalle.pago_sozu.recibido ? "recibido" : "pendiente"}
+          labelOk="Recibido"
+          labelPending="Pendiente"
+          fecha={detalle.pago_sozu.fecha}
+          monto={detalle.pago_sozu.monto}
+          claveRastreo={detalle.pago_sozu.clave_rastreo}
+          fallback="No aplica hasta que la factura SOZU sea timbrada."
+        />
+      </Section>
+
+      {/* ─── Pagos a comisionistas externos ───
+           Sólo aplica cuando la cuenta tiene comisionistas externos
+           (inmobiliarias / agentes externos). No todas las cuentas los
+           tienen — en su ausencia esta sección no se muestra.
+           Mostramos por externo: estado de pago + fecha + monto + evidencia. */}
+      {externos.length > 0 && (
+        <Section title="Pagos a comisionistas externos">
+          <div className="space-y-2">
+            {externos.map((c) => (
+              <PagoExternoRow
+                key={c.email}
+                nombre={c.nombre}
+                rol={c.rol}
+                porcentaje={c.porcentaje}
+                monto={c.monto}
+                pagada={c.pagada}
+                fecha={c.fecha_pago_comision}
+                urlEvidencia={c.url_evidencia_pago}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* ─── Comisionistas internos con acciones ─── */}
       <Section
         title="Comisionistas internos"
@@ -720,6 +760,145 @@ function DocRow({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fila de estado del pago a SOZU. Muestra badge de estado, fecha, monto y
+ * clave de rastreo STP (mono) cuando el pago se ejecutó. Si el pago aún no
+ * llega, muestra el badge "Pendiente" y un fallback explicativo.
+ */
+function PagoStatusRow({
+  estado,
+  labelOk,
+  labelPending,
+  fecha,
+  monto,
+  claveRastreo,
+  fallback,
+}: {
+  estado: "recibido" | "pendiente";
+  labelOk: string;
+  labelPending: string;
+  fecha: string | null;
+  monto: number | null;
+  claveRastreo: string | null;
+  fallback?: string;
+}) {
+  const isOk = estado === "recibido";
+  return (
+    <div className="border border-border rounded-md px-3 py-2 bg-card text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px]",
+              isOk
+                ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                : "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40",
+            )}
+          >
+            {isOk ? labelOk : labelPending}
+          </Badge>
+          {isOk ? (
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              {fecha && (
+                <div>
+                  <span className="text-muted-foreground">Fecha:</span>{" "}
+                  <span className="tabular-nums">{fecha}</span>
+                </div>
+              )}
+              {monto != null && monto > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Monto:</span>{" "}
+                  <span className="tabular-nums font-semibold">{fmtMxn(monto)}</span>
+                </div>
+              )}
+              {claveRastreo && (
+                <div className="col-span-2 mt-0.5">
+                  <span className="text-muted-foreground">Clave rastreo STP:</span>{" "}
+                  <span className="font-mono break-all">{claveRastreo}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            fallback && (
+              <p className="mt-1.5 text-xs text-muted-foreground">{fallback}</p>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fila de pago a un comisionista externo. Muestra nombre + rol + % + monto +
+ * estado de pago (Pagado/Pendiente) + fecha y link a la evidencia
+ * (comprobante) cuando ya se ejecutó.
+ */
+function PagoExternoRow({
+  nombre,
+  rol,
+  porcentaje,
+  monto,
+  pagada,
+  fecha,
+  urlEvidencia,
+}: {
+  nombre: string;
+  rol: string;
+  porcentaje: number;
+  monto: number;
+  pagada: boolean;
+  fecha: string | null;
+  urlEvidencia: string | null;
+}) {
+  return (
+    <div className="border border-border rounded-md px-3 py-2 bg-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{nombre}</p>
+          <p className="text-xs text-muted-foreground">{rol}</p>
+          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+            {porcentaje.toFixed(2)}% · {fmtMxn(monto)}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[10px] shrink-0",
+            pagada
+              ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+              : "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40",
+          )}
+        >
+          {pagada ? "Pagado" : "Pendiente"}
+        </Badge>
+      </div>
+      {pagada && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {fecha ? `Fecha: ${fecha}` : "Sin fecha registrada"}
+          </span>
+          {urlEvidencia ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[10px] px-2"
+              title="Ver evidencia de pago"
+              onClick={() => window.open(urlEvidencia, "_blank")}
+            >
+              <FileText className="h-3 w-3 mr-1" />
+              Ver evidencia
+            </Button>
+          ) : (
+            <span className="text-muted-foreground italic">Sin evidencia</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
