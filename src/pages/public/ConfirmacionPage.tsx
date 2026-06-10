@@ -2,7 +2,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Calendar, FileText, CreditCard, MessageCircle, ArrowRight } from "lucide-react";
 import { useOfertaFlowStore } from "@/lib/offer-flow-store";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 const sozuLogo = "/sozu-logo.png";
 
 const NEXT_STEPS = [
