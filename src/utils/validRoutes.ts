@@ -202,6 +202,14 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-crm/marketing/forms',
   '/admin/portal-crm/marketing/integrations',
   '/admin/portal-crm/marketing/budget',
+  // Portal CRM Sozu — Dirección · Inteligencia de ingresos (Fase 4)
+  '/admin/portal-crm/revenue/executive-kpis',
+  '/admin/portal-crm/revenue/forecast',
+  '/admin/portal-crm/revenue/pipeline-review',
+  '/admin/portal-crm/revenue/revenue-ops',
+  '/admin/portal-crm/revenue/cohorts',
+  '/admin/portal-crm/revenue/churn',
+  '/admin/portal-crm/revenue/reporting',
 ]);
 
 export function isValidRoute(route: string): boolean {

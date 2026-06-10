@@ -313,6 +313,15 @@ const CrmForms             = lazyRetry(() => import("./pages/admin/portal-crm/ma
 const CrmAdIntegrations    = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAdIntegrations })));
 const CrmBudget            = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmBudget })));
 
+// Portal CRM Sozu — Fase 4 (Dirección · Inteligencia de ingresos)
+const CrmExecutiveKpis     = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmExecutiveKpis })));
+const CrmForecast          = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmForecast })));
+const CrmPipelineReview    = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmPipelineReview })));
+const CrmRevenueOps        = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmRevenueOps })));
+const CrmCohorts           = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmCohorts })));
+const CrmChurn             = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmChurn })));
+const CrmReporting         = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmReporting })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -739,6 +748,15 @@ const App = () => (
                   <Route path="portal-crm/marketing/forms"         element={<CrmForms />} />
                   <Route path="portal-crm/marketing/integrations"  element={<CrmAdIntegrations />} />
                   <Route path="portal-crm/marketing/budget"        element={<CrmBudget />} />
+
+                  {/* Portal CRM Sozu — Dirección · Inteligencia de ingresos */}
+                  <Route path="portal-crm/revenue/executive-kpis"  element={<CrmExecutiveKpis />} />
+                  <Route path="portal-crm/revenue/forecast"        element={<CrmForecast />} />
+                  <Route path="portal-crm/revenue/pipeline-review" element={<CrmPipelineReview />} />
+                  <Route path="portal-crm/revenue/revenue-ops"     element={<CrmRevenueOps />} />
+                  <Route path="portal-crm/revenue/cohorts"         element={<CrmCohorts />} />
+                  <Route path="portal-crm/revenue/churn"           element={<CrmChurn />} />
+                  <Route path="portal-crm/revenue/reporting"       element={<CrmReporting />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
