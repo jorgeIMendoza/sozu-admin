@@ -223,7 +223,7 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
     supabase
       .from("propiedades")
       .select(
-        "id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, id_tipo_propiedad, id_entidad_relacionada_dueno, rentado_estancia_corta",
+        "id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, id_tipo_propiedad, id_entidad_relacionada_dueno, rentado_estancia_corta, id_edificio_modelo",
       )
       .in("id_edificio_modelo", chunk as number[])
       .eq("activo", true)
