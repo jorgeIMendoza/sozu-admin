@@ -304,4 +304,4 @@ export class OfertaPdfStorageService {
   }
 }
 
-export const ofertaPdfStorageService = new OfertaPdfStorageService();
+export const offerPdfStorageService = new OfertaPdfStorageService();

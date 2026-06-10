@@ -1190,4 +1190,4 @@ export class OfertaPdfNativeService {
   }
 }
 
-export const ofertaPdfNativeService = new OfertaPdfNativeService();
+export const offerPdfNativeService = new OfertaPdfNativeService();

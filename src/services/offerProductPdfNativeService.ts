@@ -88,7 +88,7 @@ interface GenerateProductPDFData {
   estatus_aprobacion_nombre?: string | null;
 }
 
-export class OfertaProductoPdfNativeService {
+export class OfferProductPdfNativeService {
   async generateOfferPDF(data: GenerateProductPDFData): Promise<{ blob: Blob; filename: string }> {
     const pdf = new jsPDF({
       orientation: "portrait",
@@ -621,4 +621,4 @@ export class OfertaProductoPdfNativeService {
   }
 }
 
-export const ofertaProductoPdfNativeService = new OfertaProductoPdfNativeService();
+export const offerProductPdfNativeService = new OfertaProductoPdfNativeService();

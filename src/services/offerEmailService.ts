@@ -13,7 +13,7 @@ interface SendOfferEmailParams {
 
 /**
  * Verifica si la oferta de propiedad muestra la sección de datos bancarios.
- * Replica la lógica de ofertaPdfNativeService.ts (líneas 791-798).
+ * Replica la lógica de offerPdfNativeService.ts (líneas 791-798).
  */
 async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
   try {
@@ -125,7 +125,7 @@ async function shouldShowBankingForProperty(offerId: number): Promise<boolean> {
 
 /**
  * Verifica si la oferta de producto muestra la sección de datos bancarios.
- * Replica la lógica de ofertaProductoPdfNativeService.ts (líneas 491-495).
+ * Replica la lógica de offerProductPdfNativeService.ts (líneas 491-495).
  */
 async function shouldShowBankingForProduct(offerId: number): Promise<boolean> {
   try {

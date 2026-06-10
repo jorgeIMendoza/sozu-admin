@@ -1,0 +1,497 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { OfertaComercial, PaymentPlan } from "./offer-data";
+import type { Agent } from "./agent-data";
+
+// ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
+
+function toEmbedUrl(url: string): string {
+  if (!url) return url;
+  if (url.includes("/embed/")) return url;
+  const match = url.match(/[?&]v=([^&#]+)/);
+  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  return url;
+}
+
+function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
+  if (!inicio || !entrega) return 0;
+  const start = new Date(inicio).getTime();
+  const end   = new Date(entrega).getTime();
+  const now   = Date.now();
+  if (end <= start) return 0;
+  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+const DEFAULT_MILESTONES = [
+  { phase: "Cimentación",   pct: 5,   done: false },
+  { phase: "Estructura",    pct: 28,  done: false },
+  { phase: "Albañilería",   pct: 55,  done: false },
+  { phase: "Instalaciones", pct: 75,  done: false },
+  { phase: "Acabados",      pct: 90,  done: false },
+  { phase: "Entrega",       pct: 100, done: false },
+];
+
+function applyProgressToMilestones(milestones: typeof DEFAULT_MILESTONES, pct: number) {
+  return milestones.map((m) => ({ ...m, done: pct >= m.pct }));
+}
+
+function fmtDate(ts: string): string {
+  return new Date(ts).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Supabase Pro image transform — only rewrites Supabase Storage object URLs
+// No resize: only format conversion + quality, preserves original dimensions
+function toOptimizedUrl(url: string, _width: number, quality = 80): string {
+  if (!url) return url;
+  const marker = "/storage/v1/object/public/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return url;
+  const base = url.slice(0, idx) + "/storage/v1/render/image/public/" + url.slice(idx + marker.length);
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}quality=${quality}&format=webp`;
+}
+
+// ── Payment plan calculator ──────────────────────────────────────────────────
+
+function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
+  return esquemas.map((e) => {
+    const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
+    const finalPrice  = listPrice * (1 + pctDesc / 100);
+    const pctEnganche = Number(e.porcentaje_enganche ?? 0);
+    const pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
+    const pctEntrega  = Number(e.porcentaje_entrega ?? 0);
+    const nMensual    = Number(e.numero_mensualidades ?? 0);
+
+    const downPaymentAmount   = finalPrice * (pctEnganche / 100);
+    const installmentsTotal   = finalPrice * (pctMensual / 100);
+    const monthlyAmount       = nMensual > 0 ? installmentsTotal / nMensual : 0;
+    const finalPaymentAmount  = finalPrice * (pctEntrega / 100);
+
+    return {
+      id: String(e.id),
+      name: e.nombre ?? `Plan ${e.orden ?? e.id}`,
+      type: nMensual > 0 ? "escalonado" : "standard",
+      finalPrice,
+      discountPct:    pctDesc < 0 ? Math.abs(pctDesc) : undefined,
+      discountAmount: pctDesc < 0 ? Math.abs(listPrice - finalPrice) : undefined,
+      downPaymentPct: pctEnganche,
+      downPaymentAmount,
+      installments: nMensual > 0
+        ? { count: nMensual, monthlyAmount, endDate: "" }
+        : undefined,
+      installmentsPct: pctMensual,
+      finalPaymentPct: pctEntrega,
+      finalPaymentAmount,
+    } as PaymentPlan;
+  });
+}
+
+// ── Main fetch ────────────────────────────────────────────────────────────────
+
+export interface OfferWithAgent {
+  offer: OfertaComercial;
+  agent: Agent | null;
+}
+
+async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | null> {
+  const numId = parseInt(ofertaId, 10);
+  if (isNaN(numId)) return null;
+
+  // 1. Oferta base
+  const { data: oferta } = await supabase
+    .from("ofertas")
+    .select("id, id_propiedad, id_esquema_pago_seleccionado, fecha_generacion, email_creador, activo, mostrar_piso_en_oferta, mostrar_precio_m2_en_oferta, id_persona_lead")
+    .eq("id", numId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (!oferta) return null;
+
+  const propiedadId = oferta.id_propiedad;
+
+  // 2. Propiedad
+  const { data: propiedad } = await supabase
+    .from("propiedades")
+    .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, id_vista, url_imagen_portada")
+    .eq("id", propiedadId)
+    .maybeSingle();
+
+  if (!propiedad) return null;
+
+  // 3. Edificio_modelo → modelo + edificio → proyectoId
+  const { data: emData } = await supabase
+    .from("edificios_modelos")
+    .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(id, nombre, id_proyecto), modelos:edificios_modelos_id_modelo_fkey(id, nombre, numero_recamaras, numero_completo_banos, numero_medio_bano, plano_arquitectonico, url_imagen_portada)")
+    .eq("id", propiedad.id_edificio_modelo)
+    .maybeSingle();
+
+  const edificio = (emData as any)?.edificios;
+  const modelo   = (emData as any)?.modelos;
+  const proyectoId: number = edificio?.id_proyecto;
+
+  if (!proyectoId) return null;
+
+  // 4. Todo lo del proyecto en paralelo — esquemas filtrados por proyecto
+  const [
+    { data: proyecto },
+    { data: multimedias },
+    { data: videos },
+    { data: amenidadesProyecto },
+    { data: vista },
+    { data: esquemas },
+  ] = await Promise.all([
+    supabase
+      .from("proyectos")
+      .select("id, nombre, descripcion, direccion, latitud, longitud, url_logo, precio_m2_actual, fecha_lanzamiento, fecha_entrega, fecha_entrega_proyecto, id_estatus_proyecto, fecha_actualizacion, url_imagen_portada")
+      .eq("id", proyectoId)
+      .maybeSingle(),
+    supabase
+      .from("multimedias_proyecto")
+      .select("url")
+      .eq("id_proyecto", proyectoId)
+      .eq("es_imagen", true)
+      .eq("activo", true)
+      .order("id", { ascending: false })
+      .limit(20),
+    supabase
+      .from("videos_youtube")
+      .select("id, nombre, link, fecha_creacion")
+      .eq("id_proyecto", proyectoId)
+      .eq("activo", true)
+      .order("id", { ascending: false })
+      .limit(5),
+    supabase
+      .from("amenidades_proyectos")
+      .select("amenidades:amenidades_proyectos_id_amenidad_fkey(id, nombre, url)")
+      .eq("id_proyecto", proyectoId)
+      .eq("activo", true),
+    propiedad.id_vista
+      ? supabase.from("vistas").select("nombre").eq("id", propiedad.id_vista).maybeSingle()
+      : Promise.resolve({ data: null }),
+    // Esquemas filtrados por proyecto (no todos los esquemas de la BD)
+    supabase
+      .from("esquemas_pago")
+      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden")
+      .eq("id_proyecto", proyectoId)
+      .eq("activo", true)
+      .order("orden", { ascending: true }),
+  ]);
+
+  if (!proyecto) return null;
+
+  // 5. Campos opcionales + agente — todos en paralelo para evitar waterfall
+  //    (05062026_ofertas_schema_marketing_presencia.md)
+  //    Si las columnas no existen en DB, estas queries retornan null y se usan fallbacks
+  const modeloId = modelo?.id;
+  const [
+    { data: proyectoMkt },
+    { data: modeloExtra },
+    { data: showroom },
+    { data: agentUser },
+    { data: leadPersona },
+    { data: multimediasModelo },
+  ] = await Promise.all([
+    supabase
+      .from("proyectos")
+      .select("url_sitio_web, instagram_handle, facebook_handle, youtube_handle, slogan")
+      .eq("id", proyectoId)
+      .maybeSingle(),
+    modeloId
+      ? supabase
+          .from("modelos")
+          .select("url_tour_360, highlights")
+          .eq("id", modeloId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("showrooms_proyecto")
+      .select("nombre, descripcion_direccion, horarios, latitud, longitud")
+      .eq("id_proyecto", proyectoId)
+      .limit(1)
+      .maybeSingle(),
+    // Agente: busca persona por email del creador de la oferta en el mismo batch
+    oferta.email_creador
+      ? supabase
+          .from("usuarios")
+          .select("id_persona, personas:id_persona(id, nombre_legal, email, telefono, clave_pais_telefono)")
+          .eq("email", oferta.email_creador)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    // Prospecto lead: email vinculado a la oferta (no expuesto en URL)
+    (oferta as any).id_persona_lead
+      ? supabase
+          .from("personas")
+          .select("email")
+          .eq("id", (oferta as any).id_persona_lead)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    // Imágenes del modelo: planos y vistas de propiedad
+    modeloId
+      ? (supabase as any)
+          .from("multimedias_modelo")
+          .select("url, ver_como_imagen_de_propiedad, ver_como_ubicacion_en_oferta")
+          .eq("id_modelo", modeloId)
+          .eq("activo", true)
+          .order("id", { ascending: true })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Model media: floor plan + property images
+  const modeloMediaRows: any[] = (multimediasModelo as any[]) ?? [];
+  const floorPlanRow = modeloMediaRows.find((m) => m.ver_como_ubicacion_en_oferta && m.url);
+  const floorPlanUrl: string | undefined = floorPlanRow?.url
+    ? toOptimizedUrl(floorPlanRow.url, 1200, 85)
+    : (modelo?.plano_arquitectonico ? toOptimizedUrl(modelo.plano_arquitectonico, 1200, 85) : undefined);
+  const modeloPropertyImages: string[] = modeloMediaRows
+    .filter((m) => m.ver_como_imagen_de_propiedad && m.url)
+    .map((m) => toOptimizedUrl(m.url, 1200, 80));
+
+  // Construir agentId y datos del agente a partir del resultado paralelo
+  const agentPersona = (agentUser as any)?.personas ?? null;
+  let agentId = "AGT-SOZU";
+  if ((agentUser as any)?.id_persona) agentId = `AGT-${(agentUser as any).id_persona}`;
+
+  // 6. Construcción — misma lógica que construction-progress-data.ts
+  const videoRows = (videos ?? []) as any[];
+  const fotoRows  = (multimedias ?? []) as any[];
+  const latestVideo = videoRows[0];
+
+  const globalProgress = calcProgressFromDates(
+    (proyecto as any).fecha_lanzamiento,
+    (proyecto as any).fecha_entrega_proyecto ?? (proyecto as any).fecha_entrega,
+  );
+
+  const milestones = applyProgressToMilestones(DEFAULT_MILESTONES, globalProgress);
+
+  const constructionPhotos = fotoRows.slice(0, 6).map((f: any) => ({
+    src: toOptimizedUrl(f.url, 800, 75),
+    alt: `${(proyecto as any).nombre}`,
+  }));
+
+  const lastUpdatedRaw = latestVideo?.fecha_creacion ?? (proyecto as any).fecha_actualizacion;
+  const lastUpdated = lastUpdatedRaw ? fmtDate(lastUpdatedRaw) : undefined;
+
+  // 7. Galería principal — portada primero, luego modelo, luego proyecto
+  const portadaRaw: string | undefined =
+    (propiedad as any).url_imagen_portada || (modelo as any)?.url_imagen_portada || undefined;
+
+  const proyectoGalleryUrls: string[] = fotoRows
+    .map((m: any) => toOptimizedUrl(m.url, 1200, 80))
+    .filter(Boolean);
+  if (proyectoGalleryUrls.length === 0 && (proyecto as any).url_imagen_portada) {
+    proyectoGalleryUrls.push(toOptimizedUrl((proyecto as any).url_imagen_portada, 1200, 80));
+  }
+
+  // Model property images excluding portada to avoid duplicate
+  const modeloGalleryImages: string[] = modeloMediaRows
+    .filter((m) => m.ver_como_imagen_de_propiedad && m.url && m.url !== portadaRaw)
+    .map((m) => toOptimizedUrl(m.url, 1200, 80));
+
+  const galleryUrls: string[] = [
+    ...(portadaRaw ? [toOptimizedUrl(portadaRaw, 1200, 80)] : []),
+    ...modeloGalleryImages,
+    ...proyectoGalleryUrls,
+  ].filter(Boolean);
+
+  // 8. Amenidades
+  const amenidadesNames: string[] = (amenidadesProyecto ?? [])
+    .map((ap: any) => ap.amenidades?.nombre)
+    .filter(Boolean);
+
+  // 9. Esquemas de pago
+  const listPrice    = Number(propiedad.precio_lista ?? 0);
+  const filteredEsqs = oferta.id_esquema_pago_seleccionado
+    ? (esquemas ?? []).filter((e: any) => e.id === oferta.id_esquema_pago_seleccionado)
+    : (esquemas ?? []).filter((e: any) => !e.es_manual).slice(0, 6);
+  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice);
+
+  // 10. Expiración (7 días desde generación)
+  // Vigencia siempre 7 días — calculado en código, sin campo en DB
+  const validUntilDate = new Date(oferta.fecha_generacion);
+  validUntilDate.setDate(validUntilDate.getDate() + 7);
+
+  const entregaFecha = (proyecto as any).fecha_entrega_proyecto
+    ?? (proyecto as any).fecha_entrega
+    ?? null;
+
+  const area = Number(propiedad.m2_interiores ?? 0) + Number(propiedad.m2_exteriores ?? 0);
+
+  const offer = {
+    id: String(numId),
+    shortLink: `/oferta/${numId}`,
+    propertyId: String(propiedadId),
+    property: {
+      projectName:    (proyecto as any).nombre ?? "",
+      buildingName:   edificio?.nombre ?? "",
+      unitModel:      modelo?.nombre ?? "",
+      unitNumber:     propiedad.numero_propiedad ?? "",
+      level:          oferta.mostrar_piso_en_oferta ? (propiedad.numero_piso ?? undefined) : undefined,
+      view:           (vista as any)?.nombre ?? undefined,
+      area:           area > 0 ? `${area.toFixed(1)} m²` : undefined,
+      bedrooms:       Number(modelo?.numero_recamaras ?? 0),
+      bathrooms:      Number(modelo?.numero_completo_banos ?? 0),
+      halfBathrooms:  Number(modelo?.numero_medio_bano ?? 0),
+      parkingSpots:   1,
+      parkingType:    "incluido",
+      hasBalcony:     false,
+      listPrice,
+      pricePerM2:     oferta.mostrar_precio_m2_en_oferta
+        ? Number((proyecto as any).precio_m2_actual ?? 0)
+        : undefined,
+    },
+    estimatedDelivery:       entregaFecha ? new Date(entregaFecha).toISOString() : undefined,
+    // highlights: del modelo (JSONB text[]) — fallback [] si columna aún no existe
+    highlights:              Array.isArray((modeloExtra as any)?.highlights)
+                               ? (modeloExtra as any).highlights
+                               : [],
+    gallery:                 galleryUrls,
+    galleryCaptions:         galleryUrls.map(() => ""),
+    videoUrl:                undefined,
+    floorPlanUrl,
+    materialsPaletteUrl:     undefined,
+    constructionProgress:    globalProgress,
+    constructionLastUpdated: lastUpdated,
+    constructionVideoUrl:    latestVideo ? toEmbedUrl(latestVideo.link) : undefined,
+    constructionVideoTitle:  latestVideo?.nombre ?? undefined,
+    constructionPhotos,
+    constructionMilestones:  milestones,
+    constructionDescription: undefined,
+    amenities:               amenidadesNames,
+    amenitiesEnriched:       [],
+    location: {
+      address: (proyecto as any).direccion ?? "",
+      lat:     Number((proyecto as any).latitud ?? 0),
+      lng:     Number((proyecto as any).longitud ?? 0),
+      nearby:  [],
+    },
+    paymentPlans,
+    prospectEmail: (leadPersona as any)?.email ?? undefined,
+    generatedAt: oferta.fecha_generacion ?? new Date().toISOString(),
+    generatedBy: oferta.email_creador ?? "SOZU",
+    agentId,
+    validUntil: validUntilDate.toISOString(),
+    status: "active",
+    // development: siempre presente si hay proyecto — fallbacks para campos opcionales
+    development: {
+      website:        (proyectoMkt as any)?.url_sitio_web ?? undefined,
+      tagline:        (proyectoMkt as any)?.slogan ?? undefined,
+      logoUrl:        (proyecto as any).url_logo ?? undefined,
+      logoUrlInverse: undefined,
+      legalName:      (proyecto as any).nombre,
+      socials: ((proyectoMkt as any)?.instagram_handle ||
+                (proyectoMkt as any)?.facebook_handle  ||
+                (proyectoMkt as any)?.youtube_handle)
+        ? {
+            instagram: (proyectoMkt as any)?.instagram_handle ?? undefined,
+            facebook:  (proyectoMkt as any)?.facebook_handle  ?? undefined,
+            youtube:   (proyectoMkt as any)?.youtube_handle   ?? undefined,
+          }
+        : undefined,
+      showroom: (showroom as any)?.descripcion_direccion
+        ? {
+            address:          (showroom as any).descripcion_direccion,
+            googleMapsUrl:    undefined,
+            googleMapsEmbedUrl: undefined,
+            schedule:         (showroom as any).horarios
+              ? [{ daysLabel: "Horarios", hours: (showroom as any).horarios }]
+              : [],
+          }
+        : undefined,
+    },
+    // tour360: del modelo — fallback undefined muestra card "próximamente"
+    tour360: (modeloExtra as any)?.url_tour_360
+      ? {
+          provider:         "kuula" as const,
+          embedUrl:         (modeloExtra as any).url_tour_360,
+          fallbackUrl:      (modeloExtra as any).url_tour_360,
+          durationEstimate: "8-12 minutos",
+        }
+      : undefined,
+    parkingSlots:        [],
+    parkingLevelLayouts: [],
+  } as unknown as OfertaComercial;
+
+  // Construir Agent inline — datos ya disponibles — datos ya disponibles del batch paralelo
+  const agent: Agent | null = agentPersona
+    ? (() => {
+        const firstName = (agentPersona.nombre_legal ?? "").split(" ")[0];
+        const phone = agentPersona.telefono
+          ? `${agentPersona.clave_pais_telefono ?? "+52"} ${agentPersona.telefono}`
+          : "";
+        const whatsapp = agentPersona.telefono
+          ? `${(agentPersona.clave_pais_telefono ?? "+52").replace("+", "")}${agentPersona.telefono.replace(/\s/g, "")}`
+          : "";
+        return {
+          id: agentId,
+          fullName: agentPersona.nombre_legal ?? "",
+          firstName,
+          title: "Asesor SOZU",
+          photoUrl: "",
+          phone,
+          email: agentPersona.email ?? "",
+          whatsapp,
+          brokerage: "SOZU",
+          isAllied: false,
+        } as Agent;
+      })()
+    : null;
+
+  return { offer, agent };
+}
+
+// ── Agent from DB ─────────────────────────────────────────────────────────────
+
+async function fetchAgentFromDB(agentId: string): Promise<Agent | null> {
+  // agentId format: "AGT-{persona_id}"
+  const personaId = parseInt(agentId.replace("AGT-", ""), 10);
+  if (isNaN(personaId)) return null;
+
+  const { data: persona } = await supabase
+    .from("personas")
+    .select("id, nombre_legal, email, telefono, clave_pais_telefono")
+    .eq("id", personaId)
+    .maybeSingle();
+
+  if (!persona) return null;
+
+  const firstName = (persona.nombre_legal ?? "").split(" ")[0];
+  const phone = persona.telefono
+    ? `${persona.clave_pais_telefono ?? "+52"} ${persona.telefono}`
+    : "";
+  const whatsapp = persona.telefono
+    ? `${(persona.clave_pais_telefono ?? "+52").replace("+", "")}${persona.telefono.replace(/\s/g, "")}`
+    : "";
+
+  return {
+    id: agentId,
+    fullName: persona.nombre_legal ?? "",
+    firstName,
+    title: "Asesor SOZU",
+    photoUrl: "",
+    phone,
+    email: persona.email ?? "",
+    whatsapp,
+    brokerage: "SOZU",
+    isAllied: false,
+  } as Agent;
+}
+
+export function useAgentFromDB(agentId: string) {
+  return useQuery({
+    queryKey: ["agent-db", agentId],
+    queryFn:  () => fetchAgentFromDB(agentId),
+    enabled:  !!agentId && agentId.startsWith("AGT-") && !agentId.startsWith("AGT-SOZU"),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useOfferFromDB(ofertaId: string) {
+  return useQuery({
+    queryKey: ["oferta-db", ofertaId],
+    queryFn:  () => fetchOfertaFromDB(ofertaId),
+    enabled:  !!ofertaId && !isNaN(parseInt(ofertaId, 10)),
+    staleTime: 5 * 60 * 1000,
+  });
+}

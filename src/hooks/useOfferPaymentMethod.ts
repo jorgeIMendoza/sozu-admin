@@ -50,7 +50,7 @@ export interface FormaPagoOferta {
   totalPendiente: number;
 }
 
-export function useFormaPagoOferta(idCuentaCobranza: number | null | undefined) {
+export function useOfferPaymentMethod(idCuentaCobranza: number | null | undefined) {
   return useQuery<FormaPagoOferta | null>({
     queryKey: ["forma_pago_oferta", idCuentaCobranza],
     enabled: !!idCuentaCobranza,

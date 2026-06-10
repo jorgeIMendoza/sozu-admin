@@ -82,4 +82,4 @@ export class OfertaPdfEdgeFunctionService {
 }
 
 // Export a singleton instance for convenience
-export const ofertaPdfEdgeFunctionService = new OfertaPdfEdgeFunctionService();
+export const offerPdfEdgeFunctionService = new OfertaPdfEdgeFunctionService();
