@@ -180,16 +180,15 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   }
   if (!cuentasRows.length) return [];
 
-  // Gate final: la cuenta sólo es elegible a pago si Alta Dirección ya
-  // autorizó la dispersión. Cuando la columna AD existe, exigimos
-  // `Autorizado`. Cuando no existe (pre-DDL), no podemos verificar y
-  // dejamos pasar para no romper el flujo en ambientes legacy.
-  const cuentasBase = columnaEstatusDisponible
-    ? cuentasRows.filter(
-        (c) => c.estatus_autorizacion_comision_interna === "Autorizado",
-      )
-    : cuentasRows;
-  if (!cuentasBase.length) return [];
+  // Las 3 reglas de negocio (Vendido + Factura SOZU timbrada + Pago
+  // recibido) ya quedaron aplicadas arriba. Aquí NO se filtra por
+  // `estatus_autorizacion_comision_interna` — el Admin debe poder VER
+  // todas las cuentas elegibles, incluyendo las que Alta Dirección aún
+  // no autoriza, para saber qué viene en el pipeline. La columna
+  // `estado_aprobacion` (Aprobado / Rechazado / Pendiente AD) marca cuáles
+  // están listas para ejecutar y cuáles no — y la UI cambia la CTA entre
+  // "Ejecutar dispersión" y "Ver detalle" según corresponda.
+  const cuentasBase = cuentasRows;
 
   // 3) Ofertas → propiedad / producto.
   const ofertaIds = Array.from(
