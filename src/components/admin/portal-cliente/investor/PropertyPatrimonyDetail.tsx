@@ -52,7 +52,7 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
   const deliveredAt = property.fechaEscritura ?? "2024-05-15";
 
   // Real maintenance data from Supabase
-  const { data: propDetalle, isLoading: loadingMaint } = useClientePropiedadDetalle(property.id);
+  const { data: propDetalle, isLoading: loadingMaint } = useClientePropiedadDetalle(Number(property.id));
   const [showMaintSheet, setShowMaintSheet] = useState(false);
 
   const clabe = propDetalle?.mantenimientoClabeStp ?? null;

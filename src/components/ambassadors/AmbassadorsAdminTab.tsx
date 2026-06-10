@@ -448,7 +448,7 @@ export function ReferralFormDialog({
         estatus_asignacion: adv ? 'asignado' : 'sin_asignar',
         fecha_asignacion: adv ? new Date().toISOString() : null,
         audit_trail: [{ timestamp: new Date().toISOString(), actor: 'admin', type: 'creado' }],
-      });
+      } as any);
       if (refError) throw refError;
 
       toast.success('Referido registrado');
