@@ -214,6 +214,15 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-crm/operations/inbox',
   '/admin/portal-crm/operations/queues',
   '/admin/portal-crm/operations/sla',
+  // Portal CRM Sozu — Configuración (Fase 6)
+  '/admin/portal-crm/settings/users',
+  '/admin/portal-crm/settings/roles',
+  '/admin/portal-crm/settings/pipeline-stages',
+  '/admin/portal-crm/settings/custom-fields',
+  '/admin/portal-crm/settings/webhooks',
+  '/admin/portal-crm/settings/connections/google/callback',
+  '/admin/portal-crm/settings/connections/meta/callback',
+  '/admin/portal-crm/settings/audit-log',
 ]);
 
 export function isValidRoute(route: string): boolean {

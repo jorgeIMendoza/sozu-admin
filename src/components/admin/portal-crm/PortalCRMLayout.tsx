@@ -39,6 +39,14 @@ import {
   Inbox as InboxIcon,
   ListChecks,
   Timer,
+  Settings as SettingsIcon,
+  UserCog,
+  KeyRound,
+  SlidersHorizontal,
+  ListTree,
+  Webhook,
+  Plug2,
+  FileClock,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -117,6 +125,19 @@ const navGroups: NavGroup[] = [
       { label: "Bandeja unificada", path: "/admin/portal-crm/operations/inbox",  icon: InboxIcon },
       { label: "Colas",             path: "/admin/portal-crm/operations/queues", icon: ListChecks },
       { label: "Monitor de SLA",    path: "/admin/portal-crm/operations/sla",    icon: Timer },
+    ],
+  },
+  {
+    label: "Configuración",
+    items: [
+      { label: "Usuarios CRM",          path: "/admin/portal-crm/settings/users",                       icon: UserCog },
+      { label: "Roles y permisos CRM",  path: "/admin/portal-crm/settings/roles",                       icon: KeyRound },
+      { label: "Etapas del pipeline",   path: "/admin/portal-crm/settings/pipeline-stages",             icon: ListTree },
+      { label: "Campos personalizados", path: "/admin/portal-crm/settings/custom-fields",               icon: SlidersHorizontal },
+      { label: "Webhooks",              path: "/admin/portal-crm/settings/webhooks",                    icon: Webhook },
+      { label: "Callback OAuth Google", path: "/admin/portal-crm/settings/connections/google/callback", icon: Plug2 },
+      { label: "Callback OAuth Meta",   path: "/admin/portal-crm/settings/connections/meta/callback",   icon: Plug2 },
+      { label: "Log de auditoría",      path: "/admin/portal-crm/settings/audit-log",                   icon: FileClock },
     ],
   },
 ];
