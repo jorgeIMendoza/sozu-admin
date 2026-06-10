@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
@@ -133,6 +134,7 @@ export const PortalInmobiliariaLayout = () => {
   const userInitials = profile?.email ? profile.email.substring(0, 2).toUpperCase() : "U";
 
   return (
+    <PortalTrackingProvider portal="inmobiliarias">
     <div className="inmob-portal min-h-screen flex">
       {/* ── Sidebar (desktop) ── */}
       <aside
@@ -309,5 +311,6 @@ export const PortalInmobiliariaLayout = () => {
         </main>
       </div>
     </div>
+    </PortalTrackingProvider>
   );
 };

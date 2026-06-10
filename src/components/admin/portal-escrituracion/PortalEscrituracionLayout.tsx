@@ -21,6 +21,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -151,6 +152,7 @@ export const PortalEscrituracionLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="escrituracion">
     <div className="min-h-screen flex">
       <aside
         className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30"
@@ -213,6 +215,7 @@ export const PortalEscrituracionLayout = () => {
         </main>
       </div>
     </div>
+    </PortalTrackingProvider>
   );
 };
 

@@ -76,7 +76,9 @@ const GroupSection = ({
       {!collapsed && (
         <div className="space-y-2">
           {docs.map((doc) => (
-            <DocumentListItem key={doc.id} document={doc} onClick={() => onSelectDoc(doc.id)} />
+            <div key={doc.id} data-cta="cliente.documentos.abrir">
+              <DocumentListItem document={doc} onClick={() => onSelectDoc(doc.id)} />
+            </div>
           ))}
         </div>
       )}
@@ -105,6 +107,7 @@ const EmptyState = ({
     </p>
     {hasFilters && (
       <button
+        data-cta="cliente.documentos.limpiar-filtros"
         onClick={onClearFilters}
         className="mt-4 text-sm text-primary font-semibold hover:underline"
       >

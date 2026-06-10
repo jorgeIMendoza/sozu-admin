@@ -43,6 +43,7 @@ const ClienteNotificaciones = () => {
           </div>
           {unreadCount > 0 && (
             <button
+              data-cta="cliente.notificaciones.marcar-todas-leidas"
               onClick={() => markAllAsRead.mutate()}
               className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline flex-shrink-0"
             >
@@ -54,6 +55,7 @@ const ClienteNotificaciones = () => {
 
         <div className="flex gap-2">
           <button
+            data-cta="cliente.notificaciones.filtrar-todas"
             onClick={() => setFilter("all")}
             className={`h-9 px-4 rounded-full text-xs font-medium border transition-colors ${
               filter === "all"
@@ -64,6 +66,7 @@ const ClienteNotificaciones = () => {
             Todas ({all.length})
           </button>
           <button
+            data-cta="cliente.notificaciones.filtrar-no-leidas"
             onClick={() => setFilter("unread")}
             className={`h-9 px-4 rounded-full text-xs font-medium border transition-colors ${
               filter === "unread"
@@ -128,7 +131,7 @@ const NotificationRow = ({
         !n.read ? "border-l-2 border-l-primary" : ""
       }`}
     >
-      <button onClick={onClick} className="w-full text-left flex items-start gap-3 p-4 pr-10">
+      <button data-cta="cliente.notificaciones.abrir" onClick={onClick} className="w-full text-left flex items-start gap-3 p-4 pr-10">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${typeInfo.iconBg}`}>
           <Icon className="w-4 h-4" />
         </div>
@@ -147,6 +150,7 @@ const NotificationRow = ({
         </div>
       </button>
       <button
+        data-cta="cliente.notificaciones.descartar"
         onClick={onDismiss}
         aria-label="Descartar"
         className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCobranzaImpersonation } from "@/contexts/CobranzaImpersonationContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { CobranzaImpersonationSelector } from "./CobranzaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
 import sozuLogoBlack from "@/assets/sozu-logo-black.png";
@@ -223,6 +224,7 @@ export const PortalCobranzaLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="cobranza">
     <div className="min-h-screen flex">
       {/* Desktop Sidebar */}
       <aside
@@ -295,5 +297,6 @@ export const PortalCobranzaLayout = () => {
         </main>
       </div>
     </div>
+    </PortalTrackingProvider>
   );
 };
