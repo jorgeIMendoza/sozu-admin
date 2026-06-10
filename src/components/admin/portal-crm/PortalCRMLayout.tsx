@@ -57,6 +57,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { CrmImpersonationSelector } from "./CrmImpersonationSelector";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -352,6 +353,7 @@ export const PortalCRMLayout = () => {
         </header>
 
         <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
+          <CrmImpersonationSelector />
           <Outlet />
         </main>
       </div>
