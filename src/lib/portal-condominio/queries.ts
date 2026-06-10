@@ -78,6 +78,7 @@ interface PropRow {
   id_tipo_propiedad: number | null;
   id_entidad_relacionada_dueno: number | null;
   rentado_estancia_corta: boolean | null;
+  id_edificio_modelo: number | null;
 }
 interface AcuerdoRow {
   id: number;
