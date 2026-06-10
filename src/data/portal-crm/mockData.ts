@@ -145,3 +145,219 @@ export const MOCK_CONVERSION_EVENTS: ConversionEvent[] = [
 ];
 
 export const CRM_ORG_NAME = "SOZU · Demo";
+
+// =================================================================
+// Fase 2 · CRM (contactos, deals, citas, tareas, secuencias, etc.)
+// =================================================================
+
+export const LEAD_STATUS_LABEL: Record<string, string> = {
+  new: "Nuevo",
+  working: "En trabajo",
+  nurturing: "Nurturing",
+  qualified: "Calificado",
+  unqualified: "No calificado",
+  recycled: "Reciclado",
+};
+
+export const LIFECYCLE_LABEL: Record<string, string> = {
+  lead: "Lead",
+  qualified: "Calificado",
+  appointment: "Cita",
+  reservation: "Reserva",
+  contract: "Contrato",
+  customer: "Cliente",
+  lost: "Perdido",
+};
+
+export const DEAL_STAGES: { id: CrmDeal["deal_stage"]; label: string; tone: string }[] = [
+  { id: "lead",        label: "Lead",        tone: "bg-slate-500/15 text-slate-700 dark:text-slate-300" },
+  { id: "qualified",   label: "Calificado",  tone: "bg-blue-500/15 text-blue-700 dark:text-blue-300" },
+  { id: "proposal",    label: "Propuesta",   tone: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300" },
+  { id: "negotiation", label: "Negociación", tone: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  { id: "won",         label: "Ganado",      tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
+  { id: "lost",        label: "Perdido",     tone: "bg-rose-500/15 text-rose-700 dark:text-rose-300" },
+];
+
+export const DEVELOPMENTS = [
+  { id: "dv1", name: "Vivenza · CDMX" },
+  { id: "dv2", name: "Reserva 360 · GDL" },
+  { id: "dv3", name: "Altea · QRO" },
+];
+
+export const CRM_OWNERS = [
+  { id: "u1", name: "Karla Ríos",    email: "karla@sozu.com" },
+  { id: "u2", name: "Miguel Castro", email: "miguel@sozu.com" },
+  { id: "u3", name: "Paola Téllez",  email: "paola@sozu.com" },
+];
+
+export interface CrmContactFull extends CrmContact {
+  development_id: string | null;
+  lead_status: string;
+  contact_owner: string | null;
+  last_activity_at: string | null;
+  next_task_at: string | null;
+  lead_score: number;
+}
+
+export const MOCK_CONTACTS_FULL: CrmContactFull[] = MOCK_CONTACTS.map((c, i) => ({
+  ...c,
+  development_id: ["dv1","dv2","dv1","dv3","dv1","dv2"][i] ?? null,
+  lead_status:    ["new","working","qualified","new","qualified","nurturing"][i] ?? "new",
+  contact_owner:  ["u1","u2","u1",null,"u3","u2"][i] ?? null,
+  last_activity_at: daysAgo(i * 0.7),
+  next_task_at: i % 2 === 0 ? daysAgo(-1 - i) : null,
+  lead_score: [82, 65, 91, 22, 88, 45][i] ?? 50,
+}));
+
+export const leadScoreColor = (s: number) =>
+  s >= 80 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+  : s >= 50 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+  : "bg-rose-500/15 text-rose-700 dark:text-rose-300";
+
+// ------------------------- Citas -------------------------------------------
+export interface CrmAppointment {
+  id: string;
+  contact_id: string;
+  development_id: string | null;
+  appointment_type: "call" | "video" | "showroom" | "site_visit";
+  scheduled_at: string;
+  status: "scheduled" | "attended" | "no_show" | "rescheduled" | "cancelled";
+  assigned_to: string | null;
+}
+export const APPT_STATUS_LABEL: Record<string, string> = {
+  scheduled: "Agendada", attended: "Asistió", no_show: "No show",
+  rescheduled: "Reprogramada", cancelled: "Cancelada",
+};
+export const APPT_TYPE_LABEL: Record<string, string> = {
+  call: "Llamada", video: "Videollamada", showroom: "Showroom", site_visit: "Visita en obra",
+};
+export const MOCK_APPOINTMENTS: CrmAppointment[] = [
+  { id: "ap1", contact_id: "c1", development_id: "dv1", appointment_type: "showroom",  scheduled_at: daysAgo(-1),   status: "scheduled", assigned_to: "u1" },
+  { id: "ap2", contact_id: "c2", development_id: "dv2", appointment_type: "video",     scheduled_at: daysAgo(-0.3), status: "scheduled", assigned_to: "u2" },
+  { id: "ap3", contact_id: "c3", development_id: "dv1", appointment_type: "site_visit",scheduled_at: daysAgo(0.5),  status: "attended",  assigned_to: "u1" },
+  { id: "ap4", contact_id: "c5", development_id: "dv1", appointment_type: "showroom",  scheduled_at: daysAgo(2),    status: "attended",  assigned_to: "u3" },
+  { id: "ap5", contact_id: "c4", development_id: "dv3", appointment_type: "call",      scheduled_at: daysAgo(4),    status: "no_show",   assigned_to: "u2" },
+];
+
+// ------------------------- Tareas ------------------------------------------
+export interface CrmTask {
+  id: string;
+  title: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  due_at: string;
+  status: "open" | "done" | "overdue";
+  priority: "low" | "medium" | "high";
+  owner_id: string | null;
+}
+export const MOCK_TASKS: CrmTask[] = [
+  { id: "t1", title: "Llamada de bienvenida",       contact_id: "c1", deal_id: null, due_at: daysAgo(-0.5), status: "open",    priority: "high",   owner_id: "u1" },
+  { id: "t2", title: "Enviar brochure Reserva 360", contact_id: "c2", deal_id: "d2", due_at: daysAgo(-1),   status: "open",    priority: "medium", owner_id: "u2" },
+  { id: "t3", title: "Follow-up post visita",       contact_id: "c3", deal_id: "d3", due_at: daysAgo(1),    status: "overdue", priority: "high",   owner_id: "u1" },
+  { id: "t4", title: "Confirmar contrato",          contact_id: "c5", deal_id: "d4", due_at: daysAgo(2),    status: "done",    priority: "high",   owner_id: "u3" },
+  { id: "t5", title: "Recuperar lead frío",         contact_id: "c4", deal_id: null, due_at: daysAgo(-3),   status: "open",    priority: "low",    owner_id: "u2" },
+];
+
+// ------------------------- Secuencias --------------------------------------
+export interface CrmSequence {
+  id: string; name: string; channel: "email" | "whatsapp" | "mixto";
+  steps: number; enrolled: number; active: boolean; reply_rate: number;
+}
+export const MOCK_SEQUENCES: CrmSequence[] = [
+  { id: "sq1", name: "Bienvenida Vivenza",        channel: "email",    steps: 5, enrolled: 124, active: true,  reply_rate: 0.21 },
+  { id: "sq2", name: "Re-enganche frío 30d",      channel: "whatsapp", steps: 3, enrolled:  58, active: true,  reply_rate: 0.34 },
+  { id: "sq3", name: "Post visita showroom",      channel: "mixto",    steps: 4, enrolled:  42, active: true,  reply_rate: 0.41 },
+  { id: "sq4", name: "Cerrado perdido · win-back",channel: "email",    steps: 6, enrolled:  91, active: false, reply_rate: 0.08 },
+];
+
+// ------------------------- Routing -----------------------------------------
+export interface CrmRoutingRule {
+  id: string; name: string; criteria: string; assign_to: string;
+  priority: number; active: boolean;
+}
+export const MOCK_ROUTING_RULES: CrmRoutingRule[] = [
+  { id: "r1", name: "Round robin general",       criteria: "Cualquier fuente",            assign_to: "Equipo comercial", priority: 100, active: true },
+  { id: "r2", name: "Meta Ads → Karla",          criteria: "source_platform = meta_ads",  assign_to: "Karla Ríos",       priority: 10,  active: true },
+  { id: "r3", name: "Google Ads · GDL → Miguel", criteria: "source = google · dev = GDL", assign_to: "Miguel Castro",    priority: 20,  active: true },
+  { id: "r4", name: "Score >= 80 → Paola",       criteria: "lead_score >= 80",            assign_to: "Paola Téllez",     priority: 5,   active: true },
+];
+
+// ------------------------- Automatización ----------------------------------
+export interface CrmAutomationRule {
+  id: string; name: string; trigger: string; action: string; active: boolean; runs_30d: number;
+}
+export const MOCK_AUTOMATION_RULES: CrmAutomationRule[] = [
+  { id: "au1", name: "Asignar tarea al alta",          trigger: "Contacto creado",            action: "Crear tarea 'Primera llamada' a 1h", active: true, runs_30d: 312 },
+  { id: "au2", name: "Enrolar Bienvenida",             trigger: "Lifecycle = lead",           action: "Enrolar en secuencia 'Bienvenida Vivenza'", active: true, runs_30d: 287 },
+  { id: "au3", name: "Notificar pipeline > 3M",        trigger: "Deal value > 3,000,000 MXN", action: "Notificar a director comercial",      active: true, runs_30d: 14 },
+  { id: "au4", name: "Escalar sin follow-up 48h",      trigger: "Sin actividad 48h",          action: "Crear escalación crítica",            active: true, runs_30d: 41 },
+  { id: "au5", name: "Cerrar perdido tras 90d frío",   trigger: "Sin actividad 90d",          action: "Mover a 'lost' + win-back",           active: false, runs_30d: 0 },
+];
+
+// ------------------------- Escalaciones ------------------------------------
+export interface CrmEscalation {
+  id: string; contact_id: string; reason: string; severity: "critical" | "warning";
+  age_hours: number; assigned_to: string | null; status: "open" | "resolved";
+  created_at: string;
+}
+export const MOCK_ESCALATIONS: CrmEscalation[] = [
+  { id: "es1", contact_id: "c1", reason: "Sin follow-up >48h",      severity: "critical", age_hours: 54, assigned_to: "u1",  status: "open",     created_at: daysAgo(2) },
+  { id: "es2", contact_id: "c3", reason: "Cita reprogramada 2x",    severity: "warning",  age_hours: 30, assigned_to: "u1",  status: "open",     created_at: daysAgo(1.2) },
+  { id: "es3", contact_id: "c4", reason: "Sin propietario asignado",severity: "warning",  age_hours: 72, assigned_to: null,  status: "open",     created_at: daysAgo(3) },
+  { id: "es4", contact_id: "c5", reason: "Deal sin próxima tarea",  severity: "critical", age_hours: 96, assigned_to: "u3",  status: "resolved", created_at: daysAgo(4) },
+];
+
+// ------------------------- Lead Intelligence -------------------------------
+export interface LeadIntelRow {
+  contact_id: string; full_name: string; lead_score: number;
+  intent: "alto" | "medio" | "bajo"; signals: string[];
+  recommended_action: string;
+}
+export const MOCK_LEAD_INTEL: LeadIntelRow[] = [
+  { contact_id: "c3", full_name: "Carla Méndez",  lead_score: 91, intent: "alto",  signals: ["3 visitas a oferta", "Descargó brochure", "Respondió WhatsApp"], recommended_action: "Agendar visita en obra esta semana" },
+  { contact_id: "c5", full_name: "Elena Vargas",  lead_score: 88, intent: "alto",  signals: ["Cita asistida", "Solicitó plan de pagos"],                       recommended_action: "Enviar propuesta formal" },
+  { contact_id: "c1", full_name: "Andrea Robles", lead_score: 82, intent: "alto",  signals: ["Click en CTA Meta", "Llenó formulario"],                          recommended_action: "Primera llamada de calificación" },
+  { contact_id: "c2", full_name: "Bruno Sánchez", lead_score: 65, intent: "medio", signals: ["Open email x2"],                                                  recommended_action: "Reenviar comparativo de modelos" },
+  { contact_id: "c6", full_name: "Fernanda Soto", lead_score: 45, intent: "medio", signals: ["Vio página de precios"],                                          recommended_action: "Nurturing 30 días" },
+  { contact_id: "c4", full_name: "Diego Ortiz",   lead_score: 22, intent: "bajo",  signals: ["Sin actividad reciente"],                                         recommended_action: "Mover a win-back" },
+];
+
+// ------------------------- Agent performance -------------------------------
+export interface AgentPerfRow {
+  owner_id: string; name: string;
+  contacts: number; appointments: number; deals_open: number; deals_won: number;
+  pipeline: number; revenue_won: number; response_min: number;
+}
+export const MOCK_AGENT_PERF: AgentPerfRow[] = [
+  { owner_id: "u1", name: "Karla Ríos",    contacts: 84, appointments: 22, deals_open: 18, deals_won: 6, pipeline:  9_200_000, revenue_won: 12_300_000, response_min: 14 },
+  { owner_id: "u2", name: "Miguel Castro", contacts: 67, appointments: 17, deals_open: 12, deals_won: 4, pipeline:  6_800_000, revenue_won:  8_950_000, response_min: 28 },
+  { owner_id: "u3", name: "Paola Téllez",  contacts: 71, appointments: 26, deals_open: 21, deals_won: 9, pipeline: 11_500_000, revenue_won: 15_700_000, response_min:  9 },
+];
+
+// ------------------------- Sales operations --------------------------------
+export interface SalesOpsKpi { label: string; value: string; hint?: string }
+export const MOCK_SALES_OPS: { kpis: SalesOpsKpi[]; pipelineByStage: { stage: string; count: number; value: number }[]; conversionFunnel: { step: string; value: number }[] } = {
+  kpis: [
+    { label: "Tasa de conversión Lead → Cita", value: "23.4%", hint: "vs 19.8% mes previo" },
+    { label: "Velocidad promedio del deal",    value: "38 d",  hint: "Lead → Contrato" },
+    { label: "Ticket promedio",                value: "$2.87M",hint: "Cerrado ganado · 30d" },
+    { label: "SLA primer contacto",            value: "92%",   hint: "< 30 min" },
+  ],
+  pipelineByStage: DEAL_STAGES.map((s) => {
+    const ds = MOCK_DEALS.filter((d) => d.deal_stage === s.id);
+    return { stage: s.label, count: ds.length, value: ds.reduce((x, d) => x + d.value, 0) };
+  }),
+  conversionFunnel: [
+    { step: "Leads",         value: 412 },
+    { step: "Calificados",   value: 184 },
+    { step: "Citas",         value:  96 },
+    { step: "Propuestas",    value:  47 },
+    { step: "Reservas",      value:  22 },
+    { step: "Contratos",     value:  14 },
+  ],
+};
+
+// ------------------------- Helpers de lookup -------------------------------
+export const contactById      = (id: string) => MOCK_CONTACTS_FULL.find((c) => c.id === id);
+export const ownerName        = (id: string | null) => CRM_OWNERS.find((o) => o.id === id)?.name ?? "Sin asignar";
+export const developmentName  = (id: string | null) => DEVELOPMENTS.find((d) => d.id === id)?.name ?? "—";
