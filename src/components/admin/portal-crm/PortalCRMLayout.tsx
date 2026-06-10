@@ -29,6 +29,13 @@ import {
   FileInput,
   Plug,
   Wallet,
+  Target,
+  LineChart as LineChartIcon,
+  Activity,
+  Briefcase as BriefcaseIcon,
+  Layers,
+  TrendingDown,
+  FileText,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -87,6 +94,18 @@ const navGroups: NavGroup[] = [
       { label: "Formularios",           path: "/admin/portal-crm/marketing/forms",          icon: FileInput },
       { label: "Integraciones de ads",  path: "/admin/portal-crm/marketing/integrations",   icon: Plug },
       { label: "Costos y presupuesto",  path: "/admin/portal-crm/marketing/budget",         icon: Wallet },
+    ],
+  },
+  {
+    label: "Dirección · Inteligencia de ingresos",
+    items: [
+      { label: "KPIs ejecutivos",  path: "/admin/portal-crm/revenue/executive-kpis",  icon: Target },
+      { label: "Forecast",         path: "/admin/portal-crm/revenue/forecast",        icon: LineChartIcon },
+      { label: "Pipeline review",  path: "/admin/portal-crm/revenue/pipeline-review", icon: BriefcaseIcon },
+      { label: "Revenue ops",      path: "/admin/portal-crm/revenue/revenue-ops",     icon: Activity },
+      { label: "Cohorts",          path: "/admin/portal-crm/revenue/cohorts",         icon: Layers },
+      { label: "Churn",            path: "/admin/portal-crm/revenue/churn",           icon: TrendingDown },
+      { label: "Reportería",       path: "/admin/portal-crm/revenue/reporting",       icon: FileText },
     ],
   },
 ];
