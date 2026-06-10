@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -70,6 +71,15 @@ export const PortalCRMLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isPathAllowed, isLoading: isLoadingPerms } = useAllowedMenus();
+
+  // Filtrar grupos/items por permisos reales de la BD (submenus_permisos).
+  // Mientras cargan los permisos no mostramos nada para evitar parpadeos.
+  const visibleGroups = isLoadingPerms
+    ? []
+    : navGroups
+        .map((g) => ({ ...g, items: g.items.filter((i) => isPathAllowed(i.path)) }))
+        .filter((g) => g.items.length > 0);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -80,7 +90,7 @@ export const PortalCRMLayout = () => {
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const currentSection =
-    navGroups
+    visibleGroups
       .flatMap((g) => g.items)
       .find((i) => isActive(i.path))?.label || "Panel principal";
 
@@ -108,7 +118,7 @@ export const PortalCRMLayout = () => {
       </div>
 
       <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               {group.label}
