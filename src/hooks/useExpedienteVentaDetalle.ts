@@ -14,6 +14,8 @@ export interface ComisionistaDetalle {
   aprobada: boolean;
   pagada: boolean;
   url_evidencia_pago: string | null;
+  /** Fecha del pago al comisionista (YYYY-MM-DD) — null si aún no se ha pagado. */
+  fecha_pago_comision: string | null;
 }
 
 export type EstadoTimelineStep =
@@ -113,6 +115,17 @@ export interface ExpedienteVentaDetalle {
   estatus_pago: EstatusPagoFacturaDetalle;
   fecha_pago_comision: string | null;
   notas_rechazo_comision: string | null;
+  /** Datos del pago RECIBIDO POR SOZU del desarrollador (paso 12). Útiles
+   *  para que Alta Dirección valide que el cobro se ejecutó antes de
+   *  autorizar la dispersión interna. */
+  pago_sozu: {
+    /** True si `cuentas_cobranza.es_pagada_comision_venta = true`. */
+    recibido: boolean;
+    fecha: string | null;
+    monto: number | null;
+    /** Clave de rastreo STP del SPEI del desarrollador a SOZU. */
+    clave_rastreo: string | null;
+  };
   /** Desglose financiero del expediente — alimenta el panel "Estado de
    *  pagos" del Ciclo de Venta (Portal Alta Dirección / Administración). */
   financial_breakdown: {
@@ -158,7 +171,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: cuenta, error: ccErr } = await supabase
         .from("cuentas_cobranza")
         .select(
-          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion, estatus_autorizacion_comision, notas_rechazo_comision, valor_uma",
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, monto_comision_pagado, clave_rastreo_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion, estatus_autorizacion_comision, notas_rechazo_comision, valor_uma",
         )
         .eq("id", cuentaId)
         .maybeSingle();
@@ -506,6 +519,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           usuario?.rolId === AGENTE_INMOBILIARIO_ROL_ID && !esDominioInterno(c.email_usuario);
         const esExterno = esInmobiliariaExterna || esAgenteExterno;
         const pct = Number(c.porcentaje_comision) || 0;
+        const fechaPago = (c as any).fecha_pago_comision as string | null | undefined;
         return {
           email: c.email_usuario ?? "",
           nombre: persona?.nombre || usuario?.nombre || c.email_usuario || "",
@@ -516,6 +530,9 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           aprobada: !!c.aprobada,
           pagada: !!c.pagada,
           url_evidencia_pago: (c as any).url_evidencia_pago ?? null,
+          fecha_pago_comision: fechaPago
+            ? new Date(fechaPago).toISOString().slice(0, 10)
+            : null,
         };
       });
 
@@ -1083,6 +1100,18 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
           : null,
         notas_rechazo_comision: (cuenta as any)?.notas_rechazo_comision ?? null,
+        pago_sozu: {
+          recibido: !!(cuenta as any)?.es_pagada_comision_venta,
+          fecha: (cuenta as any)?.fecha_pago_comision
+            ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
+            : null,
+          monto:
+            (cuenta as any)?.monto_comision_pagado != null
+              ? Number((cuenta as any).monto_comision_pagado)
+              : null,
+          clave_rastreo:
+            ((cuenta as any)?.clave_rastreo_comision_venta as string | null) ?? null,
+        },
         financial_breakdown: financialBreakdown,
       };
     },
