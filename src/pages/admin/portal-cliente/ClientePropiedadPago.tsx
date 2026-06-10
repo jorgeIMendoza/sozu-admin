@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Info, ShieldCheck, Loader2 } from "lucide-react";
 import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
-import { fmtMXN as fmt } from "@/lib/clienteMockData";
+import { fmtMXN as fmt } from "@/lib/utils";
 import { toast } from "sonner";
 
 const ClientePropiedadPago = () => {

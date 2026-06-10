@@ -36,6 +36,7 @@ export interface PropertyData {
   address?: string;
   fechaEscritura?: string;
   projectId?: number;
+  idPropiedad?: number;
   clientName?: string;
   clientRFC?: string;
 }

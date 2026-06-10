@@ -17,7 +17,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   Home,
-  CalendarCheck,
   CheckCircle2,
   Clock,
   FileText,
@@ -28,18 +27,16 @@ import {
   PenTool,
   Calendar,
   MapPin,
-  Phone,
   Hash,
   ChevronLeft,
   Plus,
   Image as ImageIcon,
 } from "lucide-react";
-import type { StageInfo, InvestmentProperty } from "@/lib/portal-cliente/mock-data";
+import type { StageInfo, InvestmentProperty } from "@/lib/portal-cliente/types";
 import {
-  getEntregaData,
+  useEntregaData,
   defectCategories,
   unitLocations,
-  type EntregaAppointment,
   type DefectTicket,
 } from "@/lib/portal-cliente/entrega-data";
 
@@ -60,12 +57,12 @@ const ticketStatusConfig: Record<string, { label: string; bg: string; text: stri
 };
 
 const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) => {
-  const data = getEntregaData(investment.property.id);
+  const { data, isLoading } = useEntregaData(
+    investment.property.idPropiedad,
+    investment.property.projectId,
+  );
 
   const [view, setView] = useState<EntregaView>("main");
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [appointment, setAppointment] = useState<EntregaAppointment | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
 
@@ -76,7 +73,8 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
   const [signatureData, setSignatureData] = useState<string | null>(null);
 
   // Tickets
-  const [tickets, setTickets] = useState<DefectTicket[]>([]);
+  const [localTickets, setLocalTickets] = useState<DefectTicket[]>([]);
+  const tickets = [...(data?.tickets ?? []), ...localTickets];
   const [ticketCategory, setTicketCategory] = useState("");
   const [ticketLocation, setTicketLocation] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
@@ -124,40 +122,20 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
     setIsDrawing(false);
   }, []);
 
-  if (!data) {
+  if (isLoading) {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden">
           <div className="flex flex-col items-center text-center pt-8 pb-4 gap-4">
-            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center animate-pulse">
               <Home className="w-7 h-7 text-muted-foreground" />
             </div>
-            <div>
-              <h2 className="text-lg font-display font-bold text-foreground">Entrega pendiente</h2>
-              <p className="text-sm text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
-                La información de entrega estará disponible cuando tu unidad esté lista para este proceso.
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">Cargando información de entrega…</p>
           </div>
         </SheetContent>
       </Sheet>
     );
   }
-
-  const { availableSlots } = data;
-  const selectedSlot = availableSlots.find((s) => s.date === selectedDate);
-
-  const handleSchedule = () => {
-    if (!selectedDate || !selectedTime) return;
-    const slot = availableSlots.find((s) => s.date === selectedDate);
-    setAppointment({
-      date: slot?.displayDate || selectedDate,
-      time: selectedTime,
-      location: investment.property.location,
-      contactName: "Arq. Carolina Vega",
-      contactPhone: "+52 33 1234 5678",
-    });
-  };
 
 
   const clearSignature = () => {
@@ -181,7 +159,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
     if (!ticketCategory || !ticketDescription || !ticketLocation) return;
     const newTicket: DefectTicket = {
       id: `ticket-${Date.now()}`,
-      folio: `INC-${String(tickets.length + 1).padStart(4, "0")}`,
+      folio: `INC-${String(localTickets.length + 1).padStart(4, "0")}`,
       category: ticketCategory,
       description: ticketDescription,
       location: ticketLocation,
@@ -189,7 +167,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
       status: "abierto",
       createdAt: new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }),
     };
-    setTickets([newTicket, ...tickets]);
+    setLocalTickets([newTicket, ...localTickets]);
     setTicketCategory("");
     setTicketLocation("");
     setTicketDescription("");
@@ -633,63 +611,8 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
           </div>
         </SheetHeader>
 
-        {/* ── 1. Schedule appointment ── */}
-        {!appointment ? (
-          <section className="mt-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Agenda tu entrega
-            </h3>
-
-            <div className="space-y-2 mb-3">
-              <p className="text-xs text-muted-foreground">Selecciona fecha disponible</p>
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-                {availableSlots.map((slot) => (
-                  <button
-                    key={slot.date}
-                    onClick={() => { setSelectedDate(slot.date); setSelectedTime(null); }}
-                    className={`flex-shrink-0 px-3.5 py-2 rounded-xl border text-xs font-medium transition-all ${
-                      selectedDate === slot.date
-                        ? "border-primary bg-primary/5 text-primary ring-1 ring-primary/20"
-                        : "border-border text-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    {slot.displayDate}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {selectedSlot && (
-              <div className="space-y-2 animate-fade-in">
-                <p className="text-xs text-muted-foreground">Selecciona horario</p>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedSlot.times.map((time) => (
-                    <button
-                      key={time}
-                      onClick={() => setSelectedTime(time)}
-                      className={`px-4 py-2 rounded-lg border text-xs font-medium transition-all ${
-                        selectedTime === time
-                          ? "border-primary bg-primary/5 text-primary ring-1 ring-primary/20"
-                          : "border-border text-foreground hover:border-primary/30"
-                      }`}
-                    >
-                      {time} hrs
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <Button
-              disabled={!selectedDate || !selectedTime}
-              className="w-full mt-5 rounded-xl h-12 text-sm font-semibold gap-2"
-              onClick={handleSchedule}
-            >
-              <CalendarCheck className="w-4 h-4" />
-              Confirmar cita de entrega
-            </Button>
-          </section>
-        ) : (
+        {/* ── 1. Appointment ── */}
+        {data?.scheduledAppointment ? (
           <>
             {/* ── Appointment summary ── */}
             <section className="mt-4">
@@ -699,16 +622,17 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
               <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-sm font-medium text-foreground">{appointment.date} — {appointment.time} hrs</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {data.scheduledAppointment.date}
+                    {data.scheduledAppointment.time ? ` — ${data.scheduledAppointment.time} hrs` : ""}
+                  </span>
                 </div>
-                <div className="flex items-start gap-2.5">
-                  <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-xs text-muted-foreground leading-relaxed">{appointment.location}</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-xs text-muted-foreground">{appointment.contactName} · {appointment.contactPhone}</span>
-                </div>
+                {data.scheduledAppointment.location && (
+                  <div className="flex items-start gap-2.5">
+                    <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground leading-relaxed">{data.scheduledAppointment.location}</span>
+                  </div>
+                )}
               </div>
 
               <Button
@@ -716,7 +640,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
                 className="w-full mt-3 rounded-xl h-10 text-xs gap-2"
                 onClick={() =>
                   window.open(
-                    `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Entrega+${investment.property.projectName}+${investment.property.unitNumber}&location=${encodeURIComponent(appointment.location)}`,
+                    `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Entrega+${investment.property.projectName}+${investment.property.unitNumber}&location=${encodeURIComponent(data.scheduledAppointment!.location)}`,
                     "_blank"
                   )
                 }
@@ -757,24 +681,37 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
               </div>
             </section>
 
-            {/* ── Tickets summary ── */}
-            {tickets.length > 0 && (
-              <section className="mt-5">
-                <button
-                  onClick={() => setView("tickets")}
-                  className="w-full p-3.5 rounded-xl border border-border hover:bg-muted/20 transition-colors flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-warning" />
-                    <span className="text-sm font-medium text-foreground">
-                      {tickets.length} incidencia{tickets.length !== 1 ? "s" : ""} registrada{tickets.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <span className="text-xs text-primary font-medium">Ver todas →</span>
-                </button>
-              </section>
-            )}
           </>
+        ) : (
+          <section className="mt-6 flex flex-col items-center text-center gap-3 py-4">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Cita pendiente de agendar</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                SOZU coordinará la fecha y hora de entrega contigo.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* ── Tickets summary (always visible) ── */}
+        {tickets.length > 0 && (
+          <section className="mt-5">
+            <button
+              onClick={() => setView("tickets")}
+              className="w-full p-3.5 rounded-xl border border-border hover:bg-muted/20 transition-colors flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-warning" />
+                <span className="text-sm font-medium text-foreground">
+                  {tickets.length} incidencia{tickets.length !== 1 ? "s" : ""} registrada{tickets.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <span className="text-xs text-primary font-medium">Ver todas →</span>
+            </button>
+          </section>
         )}
       </SheetContent>
     </Sheet>

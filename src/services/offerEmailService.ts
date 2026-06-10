@@ -350,9 +350,10 @@ export async function sendMultipleOffersEmailDirect(params: {
   recipientEmail?: string;
   recipientName?: string;
   preGeneratedAttachments?: { base64: string; filename: string; offerId: number; tipo: string }[];
+  reservationLink?: string;
 }): Promise<void> {
   try {
-    let { offerIds, propertyNumber, recipientEmail, recipientName, preGeneratedAttachments } = params;
+    let { offerIds, propertyNumber, recipientEmail, recipientName, preGeneratedAttachments, reservationLink } = params;
 
     if (!offerIds.length) return;
 
@@ -402,6 +403,7 @@ export async function sendMultipleOffersEmailDirect(params: {
       recipientEmail,
       recipientName: recipientName || '',
       propertyNumber: propertyNumber || '',
+      ...(reservationLink ? { reservationLink } : {}),
     };
 
     // Priorizar PDFs ya persistidos en Storage para evitar payloads grandes en mobile/iPhone.

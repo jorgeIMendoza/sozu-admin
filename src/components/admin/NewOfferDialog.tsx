@@ -88,10 +88,7 @@ const baseProspectSchema = z.object({
   nombre_completo: z.string().min(1, "El nombre completo es requerido"),
   email: z.string().email("Email inválido"),
   clave_pais_telefono: z.string().min(1, "Selecciona el código de país"),
-  telefono: z.string()
-    .min(10, "El teléfono debe tener exactamente 10 dígitos")
-    .max(10, "El teléfono debe tener exactamente 10 dígitos")
-    .regex(/^[0-9]{10}$/, "El teléfono debe contener solo números y tener exactamente 10 dígitos"),
+  telefono: z.string().optional(),
   rfc: z.string()
     .optional()
     .refine((val) => {
@@ -132,6 +129,7 @@ const formSchema = z.object({
   mode: z.enum(["precargada", "manual"]).default("precargada"),
   selectedPersonId: z.number().optional(),
   ...baseProspectSchema.shape,
+  digital: z.boolean().default(false),
   // Opciones de visualización en PDF
   mostrar_piso_en_oferta: z.boolean().default(true),
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
@@ -143,6 +141,20 @@ const formSchema = z.object({
   numero_mensualidades: z.string().optional(),
   numero_pagos_enganche: z.string().optional(),
   porcentaje_descuento_aumento: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (!data.digital) {
+    const tel = data.telefono ?? "";
+    if (tel.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono es requerido", path: ["telefono"] });
+    } else if (!/^[0-9]{10}$/.test(tel)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
+    }
+  } else {
+    const tel = data.telefono ?? "";
+    if (tel.length > 0 && !/^[0-9]{10}$/.test(tel)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
+    }
+  }
 }).refine((data) => {
   if (data.mode === "manual") {
     // Validate required fields for manual mode
@@ -192,9 +204,10 @@ interface NewOfferDialogProps {
   onTrackFillIntent?: () => void;
   hideBankingInPdf?: boolean;
   forceLight?: boolean; // Force light mode on dialog (for agent portal on mobile)
+  enableDigitalOffer?: boolean;
 }
 
-export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId, onTrackSubmit, onTrackFillIntent, hideBankingInPdf = false, forceLight = false }: NewOfferDialogProps) {
+export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = false, hideManualMode = false, hidePdfOptions = false, customTrigger, preSelectedSchemeId, onTrackSubmit, onTrackFillIntent, hideBankingInPdf = false, forceLight = false, enableDigitalOffer = false }: NewOfferDialogProps) {
   const fillIntentTracked = React.useRef(false);
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -965,7 +978,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         leadRfc: data.rfc || null
       };
     },
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       // Registrar actividad de generación de oferta
       registrarGeneracionOferta({
         id_oferta: result.offerId,
@@ -1117,6 +1130,39 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           description: "Los PDFs se generaron correctamente, pero no se pudo completar el envío por correo.",
           variant: "destructive",
         });
+      }
+
+      if (variables.data.digital) {
+        try {
+          const { data: apartado, error: aptError } = await (supabase as any)
+            .from('apartados_provisionales')
+            .insert({ email: result.leadEmail, id_oferta: result.offerId })
+            .select('id')
+            .single();
+          if (aptError) throw aptError;
+          const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
+          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
+          await sendMultipleOffersEmailDirect({
+            offerIds: allOfferIdsForEmail,
+            propertyNumber,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+            reservationLink,
+          });
+          toast({
+            title: "Oferta digital enviada",
+            description: `Link de apartado enviado a ${result.leadEmail}`,
+          });
+        } catch (digitalErr: any) {
+          console.error('Error en flujo oferta digital:', digitalErr);
+          toast({
+            title: "Oferta generada",
+            description: digitalErr?.code === '42P01'
+              ? "DDL apartados_provisionales pendiente de ejecutar en BD."
+              : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
+            variant: "destructive",
+          });
+        }
       }
 
       setSendEmailOnGenerate(false);
@@ -2446,10 +2492,21 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
+                onClick={() => form.setValue('digital', false)}
                 className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
               </button>
+              {enableDigitalOffer && (
+                <button
+                  type="button"
+                  disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
+                  onClick={() => { form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
+                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {createOfferMutation.isPending ? "Generando..." : "Generar Oferta Digital"}
+                </button>
+              )}
             </div>
           </form>
         </Form>
