@@ -190,10 +190,10 @@ export default function AmbassadorsPortalTab() {
               Recomienda nuestros proyectos inmobiliarios y nosotros hacemos el resto.
             </p>
             <div className="flex flex-col sm:flex-row gap-2.5 mt-1">
-              <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto shadow-sm">
+              <Button data-cta="embajadores.referidos.abrir-registrar" onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto shadow-sm">
                 <Plus className="h-4 w-4 mr-1.5" /> Registrar nuevo referido
               </Button>
-              <Button variant="outline" size="lg" onClick={() => setShowHowItWorks(true)} className="w-full sm:w-auto">
+              <Button data-cta="embajadores.referidos.ver-como-funciona" variant="outline" size="lg" onClick={() => setShowHowItWorks(true)} className="w-full sm:w-auto">
                 Ver cómo funciona <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
               </Button>
             </div>

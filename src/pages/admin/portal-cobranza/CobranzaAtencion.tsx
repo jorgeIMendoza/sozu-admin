@@ -606,7 +606,13 @@ export default function InboxPage() {
               <div className="px-5 py-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Avisos enviados</p>
-                  <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setShowAvisoModal(true)}>
+                  <Button
+                    data-cta="cobranza.atencion.enviar-aviso"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => setShowAvisoModal(true)}
+                  >
                     <Send className="w-3 h-3 mr-1" strokeWidth={1.75} />Enviar aviso
                   </Button>
                 </div>
