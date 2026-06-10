@@ -178,7 +178,7 @@ function classifyOffer(oferta: OfertaCard): string {
   return 'nuevas';
 }
 
-export default function WorkflowOfertas() {
+export default function WorkflowOffers() {
   const { profile } = useAuth();
   const [ofertas, setOfertas] = useState<OfertaCard[]>([]);
   const [loading, setLoading] = useState(true);

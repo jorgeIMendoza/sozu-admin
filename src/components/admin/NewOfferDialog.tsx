@@ -1005,7 +1005,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       
       // Generate PDFs client-side and download
       let allOfferIdsForEmail: number[] = [];
-      const emailServicePromise = import('@/services/ofertaEmailService');
+      const emailServicePromise = import('@/services/offerEmailService');
       try {
         const allOfferIds = [result.offerId];
         for (const productOffer of result.productOffersResults.createdOffers) {

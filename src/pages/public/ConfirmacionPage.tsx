@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { CheckCircle2, Calendar, FileText, CreditCard, MessageCircle, ArrowRight } from "lucide-react";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
 const sozuLogo = "/sozu-logo.png";
 
 const MOCK_AGENT = {
@@ -30,7 +30,7 @@ const NEXT_STEPS = [
 ];
 
 export default function ConfirmacionPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { holdData, prospectData } = useOfertaFlowStore();
 
@@ -143,7 +143,7 @@ export default function ConfirmacionPage() {
               href={`https://wa.me/${MOCK_AGENT.whatsapp}?text=${waMessage}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
             >
               <MessageCircle className="w-4 h-4" />
               Escribir a mi asesor
@@ -153,7 +153,7 @@ export default function ConfirmacionPage() {
           {/* Back to offer */}
           <div className="text-center pb-6">
             <Link
-              to={`/oferta/${ofertaId}`}
+              to={`/oferta/${offerId}`}
               className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
             >
               ← Volver a la oferta
