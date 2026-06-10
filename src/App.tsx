@@ -322,6 +322,11 @@ const CrmCohorts           = lazyRetry(() => import("./pages/admin/portal-crm/re
 const CrmChurn             = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmChurn })));
 const CrmReporting         = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmReporting })));
 
+// Portal CRM Sozu — Fase 5 (Operación)
+const CrmUnifiedInbox      = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmUnifiedInbox })));
+const CrmQueues            = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmQueues })));
+const CrmSlaMonitor        = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmSlaMonitor })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -757,6 +762,11 @@ const App = () => (
                   <Route path="portal-crm/revenue/cohorts"         element={<CrmCohorts />} />
                   <Route path="portal-crm/revenue/churn"           element={<CrmChurn />} />
                   <Route path="portal-crm/revenue/reporting"       element={<CrmReporting />} />
+
+                  {/* Portal CRM Sozu — Operación */}
+                  <Route path="portal-crm/operations/inbox"   element={<CrmUnifiedInbox />} />
+                  <Route path="portal-crm/operations/queues"  element={<CrmQueues />} />
+                  <Route path="portal-crm/operations/sla"     element={<CrmSlaMonitor />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />

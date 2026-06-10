@@ -210,6 +210,10 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-crm/revenue/cohorts',
   '/admin/portal-crm/revenue/churn',
   '/admin/portal-crm/revenue/reporting',
+  // Portal CRM Sozu — Operación (Fase 5)
+  '/admin/portal-crm/operations/inbox',
+  '/admin/portal-crm/operations/queues',
+  '/admin/portal-crm/operations/sla',
 ]);
 
 export function isValidRoute(route: string): boolean {
