@@ -12,6 +12,7 @@ import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationCon
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
 import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
+import { CrmImpersonationProvider } from "@/contexts/CrmImpersonationContext";
 import { AmbassadorsProvider } from "@/store/AmbassadorsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
@@ -399,6 +400,7 @@ const App = () => (
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
             <EmbajadorImpersonationProvider>
+            <CrmImpersonationProvider>
            <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
@@ -877,6 +879,7 @@ const App = () => (
               )}
             </Suspense>
             </AmbassadorsProvider>
+            </CrmImpersonationProvider>
             </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>
