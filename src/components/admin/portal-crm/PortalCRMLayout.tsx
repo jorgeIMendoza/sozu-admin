@@ -39,7 +39,6 @@ import {
   Inbox as InboxIcon,
   ListChecks,
   Timer,
-  Settings as SettingsIcon,
   UserCog,
   KeyRound,
   SlidersHorizontal,
