@@ -133,6 +133,7 @@ function derivePld(
   precioFinal: number,
   clienteNombre: string,
   clienteRfc: string | null,
+  clienteCurp: string | null,
   valorUma: number,
 ): {
   pldStatus: PldStatus;
@@ -177,8 +178,9 @@ function derivePld(
   const hasSinCR    = pagos.some(p => !p.clave_rastreo);
   const hasSinCep   = pagos.some(p => p.clave_rastreo && !p.url_cep);
 
-  const clienteNorm    = normalizarTexto(clienteNombre);
-  const clienteRfcNorm = normalizarRfc(clienteRfc);
+  const clienteNorm     = normalizarTexto(clienteNombre);
+  const clienteRfcNorm  = normalizarRfc(clienteRfc);
+  const clienteCurpNorm = normalizarRfc(clienteCurp);
 
   // ── Regla 1: Nombre ordenante ≠ nombre cliente → PRECAUCIÓN ──────────────
   const seenNombre = new Set<string>();
@@ -199,34 +201,32 @@ function derivePld(
   }
   const hasNombreDistinto = pagosNombreDistinto.length > 0;
 
-  // ── Regla 2: RFC ordenante ≠ RFC cliente → BLOQUEO ───────────────────────
-  // ── Regla 4: CEP sin RFC (solo CURP) → alerta informativa ────────────────
-  // ── Regla 5: Comprador sin RFC registrado → alerta informativa ────────────
+  // ── Regla 2: RFC/CURP ordenante ≠ RFC/CURP cliente → BLOQUEO ────────────
+  // Compara el valor del CEP contra RFC Y CURP del comprador.
+  // Si coincide con cualquiera → sin alerta. Si no coincide → BLOQUEO.
   const seenRfc = new Set<string>();
   const pagosRfcDistinto: OrdenanteDistinto[] = [];
-  let hasCepSinRfc   = false;
-  // Comprador sin RFC: aplica si hay al menos un pago con identidad en CEP
-  const hasBuyerSinRfc = !clienteRfcNorm && pagos.some(p => p.clave_rastreo && (p.rfc_ordenante || p.curp_ordenante));
+  // ── Regla 5: Comprador sin RFC ni CURP registrado → alerta informativa ────
+  const hasBuyerSinRfc = !clienteRfcNorm && !clienteCurpNorm &&
+    pagos.some(p => p.clave_rastreo && (p.rfc_ordenante || p.curp_ordenante));
 
   for (const p of pagos) {
     if (!p.clave_rastreo) continue;
 
-    // CEP tiene CURP pero no RFC → alerta informativa, no bloqueo
-    if (p.curp_ordenante && !p.rfc_ordenante) {
-      hasCepSinRfc = true;
-      continue;
-    }
+    // Valor de identidad en el CEP (RFC o CURP, cualquiera que haya)
+    const rawCepVal = p.rfc_ordenante ?? p.curp_ordenante;
+    if (!rawCepVal) continue; // Sin identidad en CEP → no aplicable
 
-    // Sin RFC en CEP → no aplicable para esta regla
-    if (!p.rfc_ordenante) continue;
+    // Comprador sin RFC ni CURP → no se puede verificar, no bloquear
+    if (!clienteRfcNorm && !clienteCurpNorm) continue;
 
-    // Comprador sin RFC → no se puede comparar automáticamente, no bloquear
-    if (!clienteRfcNorm) continue;
+    const cepNorm = normalizarRfc(rawCepVal);
+    const matchesRfc  = !!clienteRfcNorm  && cepNorm === clienteRfcNorm;
+    const matchesCurp = !!clienteCurpNorm && cepNorm === clienteCurpNorm;
 
-    // Comparar RFC CEP (clasificado) vs RFC comprador
-    if (normalizarRfc(p.rfc_ordenante) === clienteRfcNorm) continue; // coincide → sin alerta
+    if (matchesRfc || matchesCurp) continue; // coincide con RFC o CURP → sin alerta
 
-    const key = normalizarRfc(p.rfc_ordenante);
+    const key = cepNorm;
     if (!seenRfc.has(key)) {
       seenRfc.add(key);
       pagosRfcDistinto.push({
@@ -271,7 +271,7 @@ function derivePld(
     hasNombreDistinto, pagosNombreDistinto,
     hasRfcDistinto,    pagosRfcDistinto,
     hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
-    hasCepSinRfc, hasBuyerSinRfc,
+    hasCepSinRfc: false, hasBuyerSinRfc,
     hasOrdenanteDistinto, pagosOrdenanteDistinto,
     escrituraBloqueada, totalPagado,
   };
@@ -294,7 +294,7 @@ function buildAlerts(rows: PldRow[]): PldAlert[] {
       });
     });
 
-    // Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente
+    // Regla 2 — BLOQUEO: RFC/CURP ordenante ≠ RFC/CURP cliente
     r.pagosRfcDistinto.forEach((p, idx) => {
       alerts.push({
         id: `rfc-${r.cuentaId}-${idx}`,
@@ -302,8 +302,8 @@ function buildAlerts(rows: PldRow[]): PldAlert[] {
         unidad: r.unidad, cliente: r.clienteNombre,
         tipo: 'RFC_DISTINTO',
         severidad: 'CRITICA',
-        titulo: 'Bloqueo — RFC ordenante diferente',
-        descripcion: `El RFC en el CEP "${p.rfc_ordenante}" no coincide con el RFC del comprador "${r.clienteRfc ?? '—'}". Posible evasión fiscal.`,
+        titulo: 'Bloqueo — RFC/CURP ordenante diferente',
+        descripcion: `RFC/CURP CEP: "${p.rfc_ordenante ?? p.curp_ordenante ?? '—'}". RFC Comprador: "${r.clienteRfc ?? '—'}". CURP Comprador: "${r.clienteCurp ?? '—'}". Posible evasión fiscal. Cuenta: ${r.cuentaLabel} · Unidad ${r.unidad} · Pago ID ${p.pagoId}.`,
         fecha: r.fechaActualizacion,
       });
     });
@@ -344,8 +344,8 @@ function buildAlerts(rows: PldRow[]): PldAlert[] {
         unidad: r.unidad, cliente: r.clienteNombre,
         tipo: 'RFC_COMPRADOR_NO_REGISTRADO',
         severidad: 'MEDIA',
-        titulo: 'RFC del comprador no registrado',
-        descripcion: `El comprador "${r.clienteNombre}" no tiene RFC registrado en el sistema. No es posible verificar automáticamente la identidad en el CEP. No se marca evasión fiscal.`,
+        titulo: 'RFC/CURP del comprador no registrado',
+        descripcion: `El comprador "${r.clienteNombre}" no tiene RFC ni CURP registrado en el sistema. No es posible verificar automáticamente la identidad en el CEP.`,
         fecha: r.fechaActualizacion,
       });
     }
@@ -487,7 +487,7 @@ function AlertCard({ alert }: { alert: PldAlert }) {
 
 // ─── Block Banner ─────────────────────────────────────────────────────────────
 
-function BlockBanner({ count }: { count: number }) {
+function BlockBanner({ count, onVerDetalles }: { count: number; onVerDetalles: () => void }) {
   if (!count) return null;
   return (
     <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-2xl px-5 py-3.5">
@@ -497,16 +497,204 @@ function BlockBanner({ count }: { count: number }) {
           {count} {count === 1 ? 'escritura bloqueada' : 'escrituras bloqueadas'} por PLD
         </p>
         <p className="text-xs text-red-600 mt-0.5">
-          RFC de ordenante diferente al cliente y/o límite de efectivo excedido. No es posible avanzar el proceso notarial hasta resolver.
+          RFC/CURP de ordenante diferente al cliente y/o límite de efectivo excedido. No es posible avanzar el proceso notarial hasta resolver.
         </p>
       </div>
       <button
-        onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+        onClick={onVerDetalles}
         className="text-xs font-semibold text-red-700 bg-white border border-red-200 rounded-xl px-3 py-1.5 hover:bg-red-50 transition-colors shrink-0"
       >
         Ver detalles
       </button>
     </div>
+  );
+}
+
+// ─── CEP Viewer ───────────────────────────────────────────────────────────────
+
+function CepViewer({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden" style={{ height: '85vh' }}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 shrink-0">
+          <p className="text-sm font-bold text-slate-900">Comprobante Electrónico de Pago (CEP)</p>
+          <div className="flex items-center gap-2">
+            <a
+              href={url}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3 h-3" /> Descargar
+            </a>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <iframe src={url} className="w-full h-full border-0" title="CEP" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Block Details Modal ───────────────────────────────────────────────────────
+
+function BlockDetailsModal({
+  bloqueadas,
+  alerts,
+  onClose,
+}: {
+  bloqueadas: PldRow[];
+  alerts: PldAlert[];
+  onClose: () => void;
+}) {
+  const [cepUrl, setCepUrl] = useState<string | null>(null);
+
+  const handleVerCep = (url: string | null | undefined) => {
+    if (url) {
+      setCepUrl(url);
+    } else {
+      toast.info('No hay CEP adjunto para este pago');
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-red-200 bg-red-50 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-800">
+                  {bloqueadas.length} {bloqueadas.length === 1 ? 'escritura bloqueada' : 'escrituras bloqueadas'} por PLD
+                </p>
+                <p className="text-xs text-red-600 mt-0.5">RFC/CURP distinto y/o límite de efectivo excedido</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-700 hover:bg-red-100 transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {bloqueadas.map(row => {
+              const rowAlerts = alerts.filter(a => a.cuentaId === row.cuentaId);
+              // Pagos que originaron el bloqueo: RFC/CURP distinto + efectivo excedido
+              const pagosBloqueoRfc = row.pagosRfcDistinto;
+              const pagosEfectivo   = row.hasEfectivoExcedido
+                ? row.pagos.filter(p => p.id_metodos_pago === 1)
+                : [];
+
+              return (
+                <div key={row.cuentaId} className="border border-red-200 rounded-2xl overflow-hidden">
+                  {/* Cuenta header */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-red-50/70 border-b border-red-100">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900">{row.cuentaLabel}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">
+                        {row.proyectoNombre} · Unidad {row.unidad} · {row.clienteNombre}
+                      </p>
+                      {(row.clienteRfc || row.clienteCurp) && (
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {row.clienteRfc ? `RFC: ${row.clienteRfc}` : ''}
+                          {row.clienteRfc && row.clienteCurp ? ' · ' : ''}
+                          {row.clienteCurp ? `CURP: ${row.clienteCurp}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-1 rounded-lg shrink-0 ml-3">BLOQUEADO</span>
+                  </div>
+
+                  {/* Alertas activas */}
+                  {rowAlerts.length > 0 && (
+                    <div className="px-4 py-3 border-b border-red-100 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Alertas activas</p>
+                      {rowAlerts.map(a => (
+                        <div key={a.id} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold">{a.titulo}</p>
+                            <p className="text-red-600 opacity-80 mt-0.5">{a.descripcion}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Pagos RFC/CURP distinto */}
+                  {pagosBloqueoRfc.length > 0 && (
+                    <div className="px-4 py-3 border-b border-red-100 space-y-2">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Pagos con RFC/CURP distinto</p>
+                      {pagosBloqueoRfc.map(p => {
+                        const pagoInfo = row.pagos.find(pi => pi.id === p.pagoId);
+                        const rfcCurpCep = p.rfc_ordenante ?? p.curp_ordenante;
+                        return (
+                          <div key={p.pagoId} className="flex items-center justify-between bg-white border border-red-100 rounded-xl px-3 py-2.5 gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-slate-900 tabular-nums">{fmtMxn(p.monto)}</p>
+                              <p className="text-xs text-slate-500">{fmtDate(p.fecha_pago)}</p>
+                              {p.clave_rastreo && (
+                                <p className="text-[10px] font-mono text-slate-400 truncate">CR: {p.clave_rastreo}</p>
+                              )}
+                              {rfcCurpCep && (
+                                <p className="text-[11px] text-red-600 font-mono">CEP: {rfcCurpCep}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleVerCep(pagoInfo?.url_cep)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 shrink-0 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" /> Ver CEP
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Pagos en efectivo */}
+                  {pagosEfectivo.length > 0 && (
+                    <div className="px-4 py-3 space-y-2">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Pagos en efectivo (límite excedido)</p>
+                      {pagosEfectivo.map(p => (
+                        <div key={p.id} className="flex items-center justify-between bg-white border border-orange-100 rounded-xl px-3 py-2.5 gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-900 tabular-nums">{fmtMxn(p.monto)}</p>
+                            <p className="text-xs text-slate-500">{fmtDate(p.fecha_pago)} · Efectivo</p>
+                          </div>
+                          <button
+                            onClick={() => handleVerCep(p.url_cep)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 shrink-0 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" /> Ver CEP
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {cepUrl && <CepViewer url={cepUrl} onClose={() => setCepUrl(null)} />}
+    </>
   );
 }
 
@@ -576,15 +764,14 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
               </div>
             ))}
 
-            {/* Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente */}
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasRfcDistinto ? 'bg-red-50 text-red-700 border border-red-200' : row.clienteRfc ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-500'}`}>
+            {/* Regla 2 — BLOQUEO: RFC/CURP ordenante ≠ RFC/CURP cliente */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${row.hasRfcDistinto ? 'bg-red-50 text-red-700 border border-red-200' : (row.clienteRfc || row.clienteCurp) ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-500'}`}>
               {row.hasRfcDistinto ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-              <span><strong>RFC CEP</strong> {row.hasRfcDistinto ? '🔴 BLOQUEO — RFC no coincide' : row.clienteRfc ? '✓ RFC verificado' : '— Sin RFC del cliente'}</span>
+              <span><strong>RFC/CURP CEP</strong> {row.hasRfcDistinto ? '🔴 BLOQUEO — no coincide' : (row.clienteRfc || row.clienteCurp) ? '✓ verificado' : '— Sin RFC ni CURP del cliente'}</span>
             </div>
             {row.pagosRfcDistinto.map(pod => (
               <div key={pod.pagoId} className="ml-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs space-y-0.5">
-                <p className="font-semibold text-red-800">RFC CEP: {pod.rfc_ordenante ?? '—'}</p>
-                {pod.curp_ordenante && <p className="text-red-700">CURP CEP: {pod.curp_ordenante}</p>}
+                <p className="font-semibold text-red-800">RFC/CURP CEP: {pod.rfc_ordenante ?? pod.curp_ordenante ?? '—'}</p>
                 <p className="text-slate-600">RFC Comprador: {row.clienteRfc ?? '—'}</p>
                 {row.clienteCurp && <p className="text-slate-500">CURP Comprador: {row.clienteCurp}</p>}
                 <p className="text-slate-400 font-mono text-[10px]">CR: {pod.clave_rastreo}</p>
@@ -633,9 +820,13 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                 const nombreCoincide = p.nombre_ordenante
                   ? normalizarTexto(p.nombre_ordenante) === normalizarTexto(row.clienteNombre)
                   : true;
-                // rfcCoincide: solo compara cuando ambos lados tienen RFC (no CURP)
-                const rfcCoincide = !!(row.clienteRfc && p.rfc_ordenante &&
-                  normalizarRfc(p.rfc_ordenante) === normalizarRfc(row.clienteRfc));
+                // rfcCoincide: compara el RFC/CURP del CEP contra RFC y CURP del comprador
+                const rawCepValPago = p.rfc_ordenante ?? p.curp_ordenante;
+                const cepNormPago   = normalizarRfc(rawCepValPago);
+                const rfcCoincide = !!rawCepValPago && (
+                  (!!row.clienteRfc  && cepNormPago === normalizarRfc(row.clienteRfc)) ||
+                  (!!row.clienteCurp && cepNormPago === normalizarRfc(row.clienteCurp))
+                );
                 const isOrdenanteDistinto = !!p.clave_rastreo && !!p.nombre_ordenante && !nombreCoincide && !rfcCoincide;
                 return (
                   <div key={p.id} className={`rounded-xl border p-3 ${isOrdenanteDistinto ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-slate-50'}`}>
@@ -657,16 +848,15 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
                       {/* Datos de auditoría PLD */}
                       {(p.rfc_ordenante || p.curp_ordenante || row.clienteRfc || row.clienteCurp) && (
                         <div className="text-[11px] text-slate-500 space-y-0.5 border-t border-slate-100 pt-1 mt-1">
-                          {p.rfc_ordenante  && (
-                            <p><span className="font-semibold">RFC CEP:</span>{' '}
+                          {(p.rfc_ordenante || p.curp_ordenante) && (
+                            <p><span className="font-semibold">RFC/CURP CEP:</span>{' '}
                               <span className={rfcCoincide ? 'text-emerald-600' : 'text-red-600'}>
-                                {p.rfc_ordenante}{rfcCoincide ? ' ✓' : ''}
+                                {p.rfc_ordenante ?? p.curp_ordenante}{rfcCoincide ? ' ✓' : ''}
                               </span>
                             </p>
                           )}
-                          {p.curp_ordenante && <p><span className="font-semibold">CURP CEP:</span> {p.curp_ordenante}</p>}
-                          {row.clienteRfc   && <p><span className="font-semibold">RFC Comprador:</span> {row.clienteRfc}</p>}
-                          {row.clienteCurp  && <p><span className="font-semibold">CURP Comprador:</span> {row.clienteCurp}</p>}
+                          {row.clienteRfc  && <p><span className="font-semibold">RFC Comprador:</span> {row.clienteRfc}</p>}
+                          {row.clienteCurp && <p><span className="font-semibold">CURP Comprador:</span> {row.clienteCurp}</p>}
                         </div>
                       )}
                       <div className="flex items-center gap-2">
@@ -751,6 +941,7 @@ export function PldDashboard() {
   const [page, setPage]                 = useState(0);
   const [selected, setSelected]         = useState<PldRow | null>(null);
   const [showAlerts, setShowAlerts]     = useState(true);
+  const [showBlockDetails, setShowBlockDetails] = useState(false);
 
   useEffect(() => { setPage(0); setSelected(null); }, [proyectoId, activeFilter, search, filtroStatus, filtroRiesgo]);
 
@@ -920,7 +1111,7 @@ export function PldDashboard() {
             hasCepSinRfc, hasBuyerSinRfc,
             hasOrdenanteDistinto, pagosOrdenanteDistinto,
             escrituraBloqueada, totalPagado,
-          } = derivePld(pagos, cuenta.precio_final, clienteNombre, clienteRfc, valorUma);
+          } = derivePld(pagos, cuenta.precio_final, clienteNombre, clienteRfc, clienteCurp, valorUma);
           return {
             cuentaId: cuenta.id,
             cuentaLabel: `CC-${String(cuenta.id).padStart(6, '0')}`,
@@ -1055,7 +1246,9 @@ export function PldDashboard() {
       </div>
 
       {/* ── Block Banner ─────────────────────────────────────────────────── */}
-      {!loadingRows && kpis.bloqueados > 0 && <BlockBanner count={kpis.bloqueados} />}
+      {!loadingRows && kpis.bloqueados > 0 && (
+        <BlockBanner count={kpis.bloqueados} onVerDetalles={() => setShowBlockDetails(true)} />
+      )}
 
       {/* ── KPI Cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1312,6 +1505,15 @@ export function PldDashboard() {
         {/* Detail Panel */}
         {selected && <DetailPanel row={selected} onClose={() => setSelected(null)} />}
       </div>
+
+      {/* Block Details Modal */}
+      {showBlockDetails && (
+        <BlockDetailsModal
+          bloqueadas={rows.filter(r => r.escrituraBloqueada)}
+          alerts={alerts}
+          onClose={() => setShowBlockDetails(false)}
+        />
+      )}
     </div>
   );
 }
