@@ -1,4 +1,4 @@
-import type { Agent } from "@/lib/offer-types";
+import type { Agent } from "@/lib/offers/agent-data";
 
 interface Props {
   agent: Agent;

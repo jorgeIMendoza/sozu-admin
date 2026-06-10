@@ -19,7 +19,7 @@ interface Props {
   title?: string;
 }
 
-export default function OfertaFlowShell({ children, currentStep, onBack, title }: Props) {
+export default function OfferFlowShell({ children, currentStep, onBack, title }: Props) {
   const navigate = useNavigate();
 
   const handleBack = () => {
