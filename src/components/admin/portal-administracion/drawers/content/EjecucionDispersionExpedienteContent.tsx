@@ -333,8 +333,48 @@ export function EjecucionDispersionExpedienteContent({
         }
       >
         {internos.length > 0 && (
-          <ul className="space-y-2">
-            {internos.map((c) => {
+          <>
+            {/* Totales de la dispersión — desglose % total y monto total
+                que se va a dispersar al equipo interno, más el monto ya
+                pagado (informativo) y el aprobado pendiente (lo accionable). */}
+            {(() => {
+              const pctTotal = internos.reduce((s, c) => s + c.porcentaje, 0);
+              const pagadoTotal = internos
+                .filter((c) => estadoDe(c) === "pagada")
+                .reduce((s, c) => s + c.monto, 0);
+              return (
+                <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-sm space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Total a dispersar ({internos.length}{" "}
+                      {internos.length === 1 ? "comisionista" : "comisionistas"})
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {pctTotal.toFixed(2)}% · {fmtMxn(totalDispersar)}
+                    </span>
+                  </div>
+                  {(montoAprobadoPendiente > 0 || pagadoTotal > 0) && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Aprobado pendiente · Pagado
+                      </span>
+                      <span className="tabular-nums">
+                        <span className="text-amber-700 dark:text-amber-300 font-medium">
+                          {fmtMxn(montoAprobadoPendiente)}
+                        </span>
+                        {" · "}
+                        <span className="text-blue-700 dark:text-blue-300 font-medium">
+                          {fmtMxn(pagadoTotal)}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <ul className="space-y-2">
+              {internos.map((c) => {
               const estado = estadoDe(c);
               const puedeEjecutar = estado === "aprobado";
               const enConfirmacion = confirmando === c.email;
@@ -413,7 +453,8 @@ export function EjecucionDispersionExpedienteContent({
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </>
         )}
       </Section>
 

@@ -447,6 +447,21 @@ export function ComisionInternaContent({
               </div>
             )}
 
+            {/* Totales de la dispersión (sumatoria de % y monto) — útiles
+                para que Alta Dirección vea de un vistazo cuánto se va a
+                dispersar al equipo interno y qué fracción del precio
+                representa. */}
+            <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Total a dispersar ({internos.length}{" "}
+                {internos.length === 1 ? "comisionista" : "comisionistas"})
+              </span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {internos.reduce((s, c) => s + c.porcentaje, 0).toFixed(2)}% ·{" "}
+                {fmtMxn(totalDispersar)}
+              </span>
+            </div>
+
             <ul className="space-y-2">
               {internos.map((c) => {
                 const decision: Decision = decisiones[c.email] ?? "pendiente";
