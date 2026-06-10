@@ -938,14 +938,14 @@ export default function MisPropiedades() {
     try {
       setDownloadingOfferId(offer.id);
       
-      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      const { offerPdfStorageService } = await import('@/services/offerPdfStorageService');
       
       // Check if URL already exists
-      const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
+      const existingUrl = await offerPdfStorageService.getExistingUrl(offer.id);
       
       if (existingUrl) {
         // Validar que los datos críticos no hayan cambiado
-        const validation = await ofertaPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
+        const validation = await offerPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
         
         if (validation.wasInvalidated) {
           // URL fue invalidada, regenerar PDF
@@ -961,7 +961,7 @@ export default function MisPropiedades() {
           });
           
           const filename = existingUrl.split('/').pop() || `oferta-${offer.id}.pdf`;
-          await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+          await offerPdfStorageService.downloadFromUrl(existingUrl, filename);
           
           toast({
             title: "PDF descargado",
@@ -1493,7 +1493,7 @@ export default function MisPropiedades() {
                                     disabled={!offer.url}
                                      title={!offer.url ? 'Descarga la oferta primero' : 'Reenviar oferta por correo'}
                                     onClick={async () => {
-                                      const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                      const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
                                       sendOfferEmailDirect({
                                         offerId: offer.id,
                                         propertyNumber: offer.numero_propiedad || '',
@@ -1634,7 +1634,7 @@ export default function MisPropiedades() {
                                 disabled={!offer.url}
                                 title={!offer.url ? 'Descarga la oferta primero' : 'Reenviar oferta por correo'}
                                 onClick={async () => {
-                                  const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                  const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
                                   sendOfferEmailDirect({
                                     offerId: offer.id,
                                     propertyNumber: selectedPropertyForOffers?.numero_departamento || '',

@@ -518,7 +518,7 @@ export default function Pagos() {
       setLoadingDownload(cuenta.id);
 
       // Import storage service
-      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      const { offerPdfStorageService } = await import('@/services/offerPdfStorageService');
 
       // Get the offer data for this account
       const {
@@ -558,7 +558,7 @@ export default function Pagos() {
       
       if (existingUrl) {
         // Validar que los datos críticos no hayan cambiado
-        const validation = await ofertaPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offerData.id_oferta);
+        const validation = await offerPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offerData.id_oferta);
         
         if (validation.wasInvalidated) {
           // URL fue invalidada, regenerar PDF
@@ -574,7 +574,7 @@ export default function Pagos() {
           });
           
           const filename = existingUrl.split('/').pop() || `oferta-${offerData.id_oferta}.pdf`;
-          await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+          await offerPdfStorageService.downloadFromUrl(existingUrl, filename);
           
           toast({
             title: "PDF descargado",

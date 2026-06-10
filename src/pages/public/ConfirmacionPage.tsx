@@ -1,12 +1,9 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Calendar, FileText, CreditCard, MessageCircle, ArrowRight } from "lucide-react";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
+import { supabase } from "@/lib/supabase";
 const sozuLogo = "/sozu-logo.png";
-
-const MOCK_AGENT = {
-  nombre: "Ramón Escobar",
-  whatsapp: "523310137670",
-};
 
 const NEXT_STEPS = [
   {
@@ -30,9 +27,43 @@ const NEXT_STEPS = [
 ];
 
 export default function ConfirmacionPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { holdData, prospectData } = useOfertaFlowStore();
+  const [agentData, setAgentData] = useState<{ nombre: string; whatsapp: string } | null>(null);
+
+  useEffect(() => {
+    if (!offerId) return;
+    (async () => {
+      const { data: oferta } = await supabase
+        .from("ofertas")
+        .select("email_creador")
+        .eq("id", offerId)
+        .single();
+      if (!oferta?.email_creador) return;
+
+      const { data: usuario } = await supabase
+        .from("usuarios")
+        .select("id_persona")
+        .eq("email", oferta.email_creador)
+        .single();
+      if (!usuario?.id_persona) return;
+
+      const { data: persona } = await supabase
+        .from("personas")
+        .select("nombre_legal, telefono, clave_pais_telefono")
+        .eq("id", usuario.id_persona)
+        .single();
+      if (!persona?.nombre_legal) return;
+
+      const countryCode = (persona.clave_pais_telefono ?? "+52").replace("+", "");
+      const phone = (persona.telefono ?? "").replace(/\s/g, "");
+      setAgentData({
+        nombre: persona.nombre_legal,
+        whatsapp: phone ? `${countryCode}${phone}` : "",
+      });
+    })();
+  }, [offerId]);
 
   const folio = holdData?.folio ?? "PRE-XXXXXX";
   const expiresAt = holdData?.expiresAt
@@ -42,7 +73,7 @@ export default function ConfirmacionPage() {
     : "—";
 
   const waMessage = encodeURIComponent(
-    `Hola ${MOCK_AGENT.nombre}, acabo de pre-apartar una unidad. Mi folio es ${folio}. ¿Puedes guiarme en los siguientes pasos?`
+    `Hola ${agentData?.nombre ?? "asesor"}, acabo de pre-apartar una unidad. Mi folio es ${folio}. ¿Puedes guiarme en los siguientes pasos?`
   );
 
   return (
@@ -136,24 +167,27 @@ export default function ConfirmacionPage() {
               </h2>
             </div>
             <p className="text-[13px] text-muted-foreground leading-relaxed">
-              Tu asesor <span className="font-semibold text-foreground">{MOCK_AGENT.nombre}</span> está
-              disponible por WhatsApp para acompañarte en cada paso.
+              Tu asesor{agentData?.nombre ? (
+                <> <span className="font-semibold text-foreground">{agentData.nombre}</span></>
+              ) : null}{" "}está disponible por WhatsApp para acompañarte en cada paso.
             </p>
-            <a
-              href={`https://wa.me/${MOCK_AGENT.whatsapp}?text=${waMessage}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Escribir a mi asesor
-            </a>
+            {agentData?.whatsapp && (
+              <a
+                href={`https://wa.me/${agentData.whatsapp}?text=${waMessage}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Escribir a mi asesor
+              </a>
+            )}
           </div>
 
           {/* Back to offer */}
           <div className="text-center pb-6">
             <Link
-              to={`/oferta/${ofertaId}`}
+              to={`/oferta/${offerId}`}
               className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
             >
               ← Volver a la oferta

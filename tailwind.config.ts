@@ -23,6 +23,8 @@ export default {
       colors: {
         border: "hsl(var(--border))",
         "border-light": "hsl(var(--border-light, 220 14% 96%))",
+        "border-soft": "hsl(var(--border-soft))",
+        "border-subtle": "hsl(var(--border-subtle))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",

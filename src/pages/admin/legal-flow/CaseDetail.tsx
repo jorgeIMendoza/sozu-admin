@@ -29,7 +29,7 @@ import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
 import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
 import { useCompradoresFullDetail, type CompradorFullDetail } from '@/hooks/useCompradoresFullDetail';
-import { useFormaPagoOferta, type FormaPagoOferta } from '@/hooks/useFormaPagoOferta';
+import { useOfferPaymentMethod, type FormaPagoOferta } from '@/hooks/useOfferPaymentMethod';
 import {
   useBitacoraCuentaCobranza,
   useAppendBitacoraEntry,
@@ -977,7 +977,7 @@ function FormaPagoDrawer({
   idCuentaCobranza: number | null | undefined;
   folioCuenta: string | null;
 }) {
-  const { data: forma, isLoading, error } = useFormaPagoOferta(open ? idCuentaCobranza : null);
+  const { data: forma, isLoading, error } = useOfferPaymentMethod(open ? idCuentaCobranza : null);
   const fmt = (n: number) =>
     n > 0
       ? n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 })

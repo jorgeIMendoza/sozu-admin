@@ -433,6 +433,7 @@ function buildFromData(
         image: proyecto?.url_imagen_portada ? String(proyecto.url_imagen_portada) : undefined,
         fechaEscritura: cc.fecha_escritura ? String(cc.fecha_escritura) : undefined,
         projectId: edificio?.id_proyecto as number | undefined,
+        idPropiedad: cc.id_propiedad as number | undefined,
         clientName: persona?.nombre_legal ?? undefined,
         clientRFC: persona?.rfc ?? undefined,
       },
