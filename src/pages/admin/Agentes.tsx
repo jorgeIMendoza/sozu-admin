@@ -298,7 +298,7 @@ function AgenteAvatarDialog({
     setUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `avatars/${agente.email}/${Date.now()}.${ext}`;
+      const path = `avatars/${agente.email}/avatar.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('avatar')
         .upload(path, file, { upsert: true });
@@ -432,7 +432,7 @@ function AgenteAvatarDialog({
                   value={fraseValue}
                   onChange={e => setFraseValue(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleFraseSave(); }}
-                  maxLength={120}
+                  maxLength={250}
                   placeholder="Ej: Especialista en bienes raíces residenciales"
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -444,7 +444,7 @@ function AgenteAvatarDialog({
                   {savingFrase ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">{fraseValue.length}/120 caracteres</p>
+              <p className="text-xs text-muted-foreground">{fraseValue.length}/250 caracteres</p>
             </div>
           </div>
         )}

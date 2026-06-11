@@ -52,12 +52,15 @@ const ACTIVATION_BLOCKS = [
 ];
 
 const AgentPerfil = () => {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, user } = useAuth();
   const queryClient = useQueryClient();
-  const { impersonatedAgentPersonaId, impersonatedAgentName, isImpersonating } = useAgentImpersonation();
+  const { impersonatedAgentPersonaId, impersonatedAgentName, impersonatedAgentEmail, isImpersonating } = useAgentImpersonation();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const displayName = isImpersonating ? impersonatedAgentName : profile?.nombre;
+  const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
+  const loggedInEmail = user?.email || profile?.email;
+  const canEdit = !!loggedInEmail && !!agentEmail && loggedInEmail === agentEmail;
   const { steps, completedCount, totalSteps, percentage, isLoading, missingByStep } = useAgentOnboardingStatus(personaId);
   const { appointments: trainingAppointments = [] } = useAgentTrainingAppointments(personaId);
   const { permissions } = useAgentPortalPermissions();
@@ -74,17 +77,17 @@ const AgentPerfil = () => {
 
   // Fetch foto_perfil_url + frase_perfil from usuarios
   const { data: perfilExtra } = useQuery({
-    queryKey: ['agent-perfil-extra', profile?.email],
+    queryKey: ['agent-perfil-extra', agentEmail],
     queryFn: async () => {
-      if (!profile?.email) return null;
+      if (!agentEmail) return null;
       const { data } = await (supabase as any)
         .from('usuarios')
-        .select('foto_perfil_url, frase_perfil')
-        .eq('email', profile.email)
+        .select('foto_perfil_url, frase_perfil, roles:rol_id(nombre)')
+        .eq('email', agentEmail)
         .maybeSingle();
-      return data as { foto_perfil_url: string | null; frase_perfil: string | null } | null;
+      return data as { foto_perfil_url: string | null; frase_perfil: string | null; roles?: { nombre: string } | null } | null;
     },
-    enabled: !!profile?.email,
+    enabled: !!agentEmail,
     staleTime: 60_000,
   });
 
@@ -95,11 +98,11 @@ const AgentPerfil = () => {
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile?.email) return;
+    if (!file || !agentEmail) return;
     setUploadingPhoto(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `avatars/${profile.email}/${Date.now()}.${ext}`;
+      const path = `avatars/${agentEmail}/avatar.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('avatar')
         .upload(path, file, { upsert: true });
@@ -108,8 +111,8 @@ const AgentPerfil = () => {
       await (supabase as any)
         .from('usuarios')
         .update({ foto_perfil_url: urlData.publicUrl })
-        .eq('email', profile.email);
-      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', profile.email] });
+        .eq('email', agentEmail);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
     } catch (err) {
       console.error('Error subiendo foto:', err);
     } finally {
@@ -119,14 +122,14 @@ const AgentPerfil = () => {
   };
 
   const handleFraseSave = async () => {
-    if (!profile?.email) return;
+    if (!agentEmail) return;
     setSavingFrase(true);
     try {
       await (supabase as any)
         .from('usuarios')
         .update({ frase_perfil: fraseValue.trim() || null })
-        .eq('email', profile.email);
-      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', profile.email] });
+        .eq('email', agentEmail);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
       setEditingFrase(false);
     } catch (err) {
       console.error('Error guardando frase:', err);
@@ -359,109 +362,124 @@ const AgentPerfil = () => {
           </div>
         </div>
       )}
-      <div className="p-4 space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        {/* Avatar clickeable */}
-        <button
-          type="button"
-          className="relative h-14 w-14 shrink-0 rounded-full group focus:outline-none"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadingPhoto || isImpersonating}
-          title="Cambiar foto de perfil"
-        >
-          {perfilExtra?.foto_perfil_url ? (
-            <img
-              src={perfilExtra.foto_perfil_url}
-              alt={displayName || "Avatar"}
-              className="h-14 w-14 rounded-full object-cover"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center text-white font-bold text-lg">
-              {(displayName || "A")[0]?.toUpperCase()}
-            </div>
-          )}
-          {/* Overlay cámara */}
-          {!isImpersonating && (
-            <div className="absolute inset-0 rounded-full bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-              {uploadingPhoto
-                ? <Loader2 className="h-5 w-5 text-white animate-spin" />
-                : <Camera className="h-5 w-5 text-white" />
-              }
-            </div>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoUpload}
-          />
-        </button>
-
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-[hsl(var(--agent-text))] truncate">
-            {displayName || "Agente"}
-          </h1>
-          <p className="text-sm text-[hsl(var(--agent-text-secondary))]">
-            {profile?.rol_nombre || "Agente Inmobiliario"}
-          </p>
-          {agencyName && (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-medium text-[hsl(var(--agent-text-secondary))]">
-                {agencyName}
-              </span>
-            </div>
-          )}
-          {/* Frase editable */}
-          {!isImpersonating && (
-            editingFrase ? (
-              <div className="flex items-center gap-1 mt-1">
-                <input
-                  autoFocus
-                  value={fraseValue}
-                  onChange={e => setFraseValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleFraseSave();
-                    if (e.key === 'Escape') setEditingFrase(false);
-                  }}
-                  maxLength={120}
-                  placeholder="Tu frase..."
-                  className="text-xs text-[hsl(var(--agent-text-secondary))] bg-transparent border-b border-[hsl(var(--agent-primary))] outline-none flex-1 min-w-0"
-                />
-                <button
-                  onClick={handleFraseSave}
-                  disabled={savingFrase}
-                  className="shrink-0 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
-                >
-                  {savingFrase ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                </button>
-                <button
-                  onClick={() => setEditingFrase(false)}
-                  className="shrink-0 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-w-2xl mx-auto">
+      {/* Profile Card */}
+      <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-4 sm:p-5">
+        <div className="flex items-start gap-4">
+          {/* Avatar */}
+          <button
+            type="button"
+            className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--agent-primary))] focus-visible:ring-offset-2"
+            onClick={() => canEdit && fileInputRef.current?.click()}
+            disabled={uploadingPhoto || !canEdit}
+            title={canEdit ? "Cambiar foto de perfil" : undefined}
+            aria-label={canEdit ? "Cambiar foto de perfil" : "Foto de perfil"}
+          >
+            {perfilExtra?.foto_perfil_url ? (
+              <img
+                src={perfilExtra.foto_perfil_url}
+                alt={displayName || "Avatar"}
+                className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover"
+              />
             ) : (
-              <button
-                onClick={() => { setFraseValue(perfilExtra?.frase_perfil || ''); setEditingFrase(true); }}
-                className="flex items-center gap-1 mt-1 group/frase max-w-full"
-              >
-                <span className={cn(
-                  "text-xs italic truncate max-w-[220px]",
-                  perfilExtra?.frase_perfil
-                    ? "text-[hsl(var(--agent-text-secondary))]"
-                    : "text-gray-300"
-                )}>
-                  {perfilExtra?.frase_perfil || "Agrega tu frase…"}
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center text-white font-bold text-xl">
+                {(displayName || "A")[0]?.toUpperCase()}
+              </div>
+            )}
+            {canEdit && (
+              <div className="absolute inset-0 rounded-full bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-150">
+                {uploadingPhoto
+                  ? <Loader2 className="h-5 w-5 text-white animate-spin" />
+                  : <Camera className="h-5 w-5 text-white" />
+                }
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoUpload}
+            />
+          </button>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0 pt-0.5">
+            <h1 className="text-lg sm:text-xl font-bold text-[hsl(var(--agent-text))] leading-tight">
+              {displayName || "Agente"}
+            </h1>
+            <p className="text-sm text-[hsl(var(--agent-text-secondary))] mt-0.5">
+              {(perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || "Agente Inmobiliario"}
+            </p>
+            {agencyName && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-xs font-medium text-[hsl(var(--agent-text-secondary))]">
+                  {agencyName}
                 </span>
-                <Pencil className="h-3 w-3 shrink-0 text-gray-300 group-hover/frase:text-gray-500 transition-colors" />
-              </button>
-            )
-          )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Frase — visible para todos, editable solo si canEdit */}
+        {(canEdit || perfilExtra?.frase_perfil) && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            {canEdit ? (
+              editingFrase ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={fraseValue}
+                    onChange={e => setFraseValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleFraseSave();
+                      if (e.key === 'Escape') setEditingFrase(false);
+                    }}
+                    maxLength={250}
+                    placeholder="Escribe tu frase profesional…"
+                    className="flex-1 min-w-0 text-sm text-[hsl(var(--agent-text-secondary))] bg-transparent border-b border-[hsl(var(--agent-primary))] outline-none py-0.5"
+                  />
+                  <button
+                    onClick={handleFraseSave}
+                    disabled={savingFrase}
+                    aria-label="Guardar frase"
+                    className="shrink-0 h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50 flex items-center justify-center transition-colors"
+                  >
+                    {savingFrase ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                  </button>
+                  <button
+                    onClick={() => setEditingFrase(false)}
+                    aria-label="Cancelar"
+                    className="shrink-0 h-8 w-8 rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 flex items-center justify-center transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setFraseValue(perfilExtra?.frase_perfil || ''); setEditingFrase(true); }}
+                  className="group/frase flex items-start gap-2 w-full text-left min-h-[32px]"
+                  aria-label="Editar frase de perfil"
+                >
+                  <p className={cn(
+                    "flex-1 text-sm italic leading-snug",
+                    perfilExtra?.frase_perfil
+                      ? "text-[hsl(var(--agent-text-secondary))]"
+                      : "text-gray-300"
+                  )}>
+                    {perfilExtra?.frase_perfil || "Agrega tu frase profesional…"}
+                  </p>
+                  <Pencil className="h-3.5 w-3.5 shrink-0 mt-0.5 text-gray-300 group-hover/frase:text-[hsl(var(--agent-primary))] transition-colors" />
+                </button>
+              )
+            ) : (
+              <p className="text-sm italic text-[hsl(var(--agent-text-secondary))] leading-snug">
+                "{perfilExtra!.frase_perfil}"
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Progress Steps */}
@@ -663,7 +681,7 @@ const AgentPerfil = () => {
             track({ page: 'agent_perfil', elementId: 'btn_cerrar_sesion', elementLabel: 'Cerrar sesión' });
             signOut();
           }}
-          className="w-full rounded-xl border border-destructive/20 bg-destructive/5 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center gap-2"
+          className="w-full sm:max-w-xs mx-auto rounded-xl border border-destructive/20 bg-destructive/5 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center gap-2"
         >
           <LogOut className="h-4 w-4" />
           Cerrar sesión
