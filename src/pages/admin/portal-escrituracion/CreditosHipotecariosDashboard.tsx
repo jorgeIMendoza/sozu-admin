@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -80,6 +81,19 @@ const fmtDate = (s: string | null) => {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
 
 // ─── Meta maps ────────────────────────────────────────────────────────────────
 
@@ -323,6 +337,7 @@ function DetailPanel({
   updatingVobo: boolean;
   updatingPayment: boolean;
 }) {
+  const navigate = useNavigate();
   const isBlocked = row.escrituraBloqueada;
   const canScheduleFirma = row.voboStatus === 'APROBADO' && !isBlocked;
   const canMarkPaid = !isBlocked;
@@ -483,31 +498,50 @@ function DetailPanel({
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones rápidas</p>
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: 'Programar firma', Icon: CalendarDays, disabled: !canScheduleFirma },
-              { label: 'Agregar nota',    Icon: FileText,     disabled: false },
-              { label: 'Descargar exp.',  Icon: Download,     disabled: false },
-              { label: 'Ver documentos',  Icon: Eye,          disabled: false },
-            ].map(({ label, Icon, disabled }) => (
-              <button
-                key={label}
-                disabled={disabled}
-                onClick={() => {
-                  if (disabled && label === 'Programar firma') {
-                    toast.warning(
-                      row.voboStatus !== 'APROBADO'
-                        ? 'Se requiere VoBo aprobado para programar firma'
-                        : 'Escritura bloqueada por PLD'
-                    );
-                  } else {
-                    toast.info('Funcionalidad pendiente de conectar al backend');
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              disabled={!canScheduleFirma}
+              onClick={() => toast.warning(
+                row.voboStatus !== 'APROBADO'
+                  ? 'Se requiere VoBo aprobado para programar la firma'
+                  : 'Escritura bloqueada por PLD'
+              )}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <CalendarDays className="w-3.5 h-3.5 shrink-0" />Programar firma
+            </button>
+            <button
+              onClick={() => toast.info('Las notas se registran en el perfil del comprador dentro del módulo de Expedientes.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />Agregar nota
+            </button>
+            <button
+              onClick={() => downloadCsv(
+                `credito_${row.cuentaLabel}_${row.clienteNombre.replace(/\s+/g, '_')}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito','Fecha firma'],
+                [[
+                  row.cuentaLabel,
+                  row.proyectoNombre,
+                  row.unidad,
+                  row.clienteNombre,
+                  row.bancoNombre,
+                  VOBO_META[row.voboStatus]?.label ?? row.voboStatus,
+                  BANK_PAYMENT_META[row.bankPaymentStatus]?.label ?? row.bankPaymentStatus,
+                  RECONCILIATION_META[row.reconciliationStatus]?.label ?? row.reconciliationStatus,
+                  fmtMxn(row.mortgageCreditAmount),
+                  fmtDate(row.fechaCitaFirma),
+                ]],
+              )}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />Descargar exp.
+            </button>
+            <button
+              onClick={() => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${row.cuentaId}`)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5 shrink-0" />Ver documentos
+            </button>
           </div>
         </div>
       </div>
@@ -897,14 +931,31 @@ export function CreditosHipotecariosDashboard() {
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => toast.info('Los créditos hipotecarios se asignan desde el módulo de Cobranza al configurar el esquema de pago.')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             Nuevo crédito
           </button>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => downloadCsv(
+              `creditos_hipotecarios_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+              ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito hipotecario','Escritura','Diferencia','Fecha firma'],
+              filtered.map(r => [
+                r.cuentaLabel,
+                r.proyectoNombre,
+                r.unidad,
+                r.clienteNombre,
+                r.bancoNombre,
+                VOBO_META[r.voboStatus]?.label ?? r.voboStatus,
+                BANK_PAYMENT_META[r.bankPaymentStatus]?.label ?? r.bankPaymentStatus,
+                RECONCILIATION_META[r.reconciliationStatus]?.label ?? r.reconciliationStatus,
+                fmtMxn(r.mortgageCreditAmount),
+                fmtMxn(r.escrituraValue),
+                fmtMxn(r.difference),
+                fmtDate(r.fechaCitaFirma),
+              ]),
+            )}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm hover:bg-slate-50 transition-colors"
           >
             <Download className="w-4 h-4" />

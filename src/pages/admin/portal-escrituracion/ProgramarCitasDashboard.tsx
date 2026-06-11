@@ -840,7 +840,7 @@ function DetailPanel({ cita, onClose, onConfirm, onCancel, onComplete, updating 
             <XCircle className="w-3.5 h-3.5 shrink-0" />Cancelar
           </button>
           <button className="col-span-2 flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-            onClick={() => toast.info('Envío de recordatorio pendiente de conectar')}>
+            onClick={() => toast.info(`Recordatorio para ${cita.clienteNombre} — el envío automático requiere configurar el flujo "citaRecordatorio" en N8N y conectarlo con la Edge Function enviar-notificacion.`)}>
             <Bell className="w-3.5 h-3.5 shrink-0" />Enviar recordatorio
           </button>
         </div>

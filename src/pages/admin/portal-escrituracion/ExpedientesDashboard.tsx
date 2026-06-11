@@ -133,6 +133,19 @@ function deriveTipo(compradores: CompradoresData[]): TipoComprador {
 const fmtMxn = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -223,6 +236,71 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   onClose: () => void;
   onEditComprador: (personaId: number) => void;
 }) {
+  const qcPanel = useQueryClient();
+  const [markingListo, setMarkingListo] = useState(false);
+
+  async function handleMarcarListo() {
+    if (!row.personaId) {
+      toast.error('No se encontró el identificador del comprador para este expediente.');
+      return;
+    }
+    setMarkingListo(true);
+    try {
+      const { data: docs, error } = await supabase
+        .from('documentos')
+        .select('id, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+        .eq('id_persona', row.personaId)
+        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+        .eq('activo', true)
+        .eq('es_draft', false);
+
+      if (error) throw error;
+
+      // Último doc por grupo (misma lógica que el query principal)
+      const latestByGroup: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+      (docs || []).forEach((d: any) => {
+        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+        if (!groupKey) return;
+        const fecha = d.fecha_creacion ?? '';
+        const ex = latestByGroup[groupKey];
+        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+          latestByGroup[groupKey] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+        }
+      });
+
+      const ESTATUS_LABEL: Record<number, string> = { 1: 'Pendiente', 3: 'Rechazado', 4: 'Expirado' };
+      const faltantes: string[] = [];
+      const noValidados: string[] = [];
+
+      for (const grupo of OBLIGATORIO_GRUPOS) {
+        const latest = latestByGroup[grupo.key];
+        if (!latest) {
+          faltantes.push(grupo.label);
+        } else if (latest.estatusId !== 2) {
+          noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
+        }
+      }
+
+      if (faltantes.length > 0 || noValidados.length > 0) {
+        const partes: string[] = [];
+        if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
+        if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
+        toast.error(`No se puede marcar como listo. ${partes.join('. ')}.`);
+        return;
+      }
+
+      await Promise.all([
+        qcPanel.invalidateQueries({ queryKey: ['expedientes-real', row.proyectoId] }),
+        qcPanel.invalidateQueries({ queryKey: ['exp-docs-persona', row.personaId] }),
+      ]);
+      toast.success('Expediente marcado como listo correctamente.');
+    } catch {
+      toast.error('No fue posible actualizar el expediente. Intenta nuevamente.');
+    } finally {
+      setMarkingListo(false);
+    }
+  }
+
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
     queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
@@ -404,20 +482,50 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones rápidas</p>
           <div className="grid grid-cols-2 gap-2">
-            {([
-              { label: 'Subir documento', Icon: Plus },
-              { label: 'Marcar listo',    Icon: CheckCircle2 },
-              { label: 'Observación',     Icon: AlertTriangle },
-              { label: 'Descargar',       Icon: Download },
-            ] as const).map(({ label, Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              onClick={() => toast.info('Para subir documentos, edita el perfil del comprador usando el botón de edición en la sección Compradores.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />Subir documento
+            </button>
+            <button
+              onClick={handleMarcarListo}
+              disabled={markingListo}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {markingListo
+                ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              }
+              Marcar listo
+            </button>
+            <button
+              onClick={() => toast.info('Las observaciones se registran desde el perfil del comprador. Usa el botón de edición en la sección Compradores.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />Observación
+            </button>
+            <button
+              onClick={() => downloadCsv(
+                `expediente_${row.cuentaLabel}_${row.clienteNombre.replace(/\s+/g, '_')}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                [[
+                  row.cuentaLabel,
+                  row.proyectoNombre,
+                  row.unidad,
+                  row.clienteNombre,
+                  TIPO_META[row.tipoComprador]?.label ?? row.tipoComprador,
+                  ESTATUS_META[row.estatusExpediente]?.label ?? row.estatusExpediente,
+                  String(row.docsCompletos),
+                  String(row.docsTotal),
+                  fmtMxn(row.precioFinal),
+                  row.fechaActualizacion ? new Date(row.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]],
+              )}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />Descargar
+            </button>
           </div>
         </div>
       </div>
@@ -785,7 +893,7 @@ export function ExpedientesDashboard() {
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => toast.info('Los expedientes se generan automáticamente al asociar un comprador a una cuenta de cobranza.')}
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl font-medium text-sm transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" /> Nuevo expediente
@@ -887,7 +995,22 @@ export function ExpedientesDashboard() {
               <option value="CON_OBSERVACIONES">Con observaciones</option>
             </select>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => downloadCsv(
+                `expedientes_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                filtered.map(r => [
+                  r.cuentaLabel,
+                  r.proyectoNombre,
+                  r.unidad,
+                  r.clienteNombre,
+                  TIPO_META[r.tipoComprador]?.label ?? r.tipoComprador,
+                  ESTATUS_META[r.estatusExpediente]?.label ?? r.estatusExpediente,
+                  String(r.docsCompletos),
+                  String(r.docsTotal),
+                  fmtMxn(r.precioFinal),
+                  r.fechaActualizacion ? new Date(r.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]),
+              )}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors ml-auto"
             >
               <Download className="w-4 h-4" /> Exportar

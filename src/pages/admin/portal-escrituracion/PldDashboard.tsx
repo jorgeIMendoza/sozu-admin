@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -384,6 +385,19 @@ const fmtMxn = (n: number) =>
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function Shimmer({ className = '' }: { className?: string }) {
@@ -701,6 +715,7 @@ function BlockDetailsModal({
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
 
 function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
+  const navigate = useNavigate();
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
       {/* Header */}
@@ -889,20 +904,30 @@ function DetailPanel({ row, onClose }: { row: PldRow; onClose: () => void }) {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones PLD</p>
           <div className="grid grid-cols-2 gap-2">
-            {([
-              { label: 'Revisar expediente', Icon: Eye },
-              { label: 'Aprobar PLD',        Icon: ShieldCheck },
-              { label: 'Solicitar docs',     Icon: FileText },
-              { label: 'Desbloquear',        Icon: Unlock },
-            ] as const).map(({ label, Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              onClick={() => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${row.cuentaId}`)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5 shrink-0" />Revisar expediente
+            </button>
+            <button
+              onClick={() => toast.info('El estatus PLD es derivado automáticamente. Para aprobar, asegúrate de que todos los documentos obligatorios estén validados y los pagos sean trazables.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />Aprobar PLD
+            </button>
+            <button
+              onClick={() => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${row.cuentaId}`)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />Solicitar docs
+            </button>
+            <button
+              onClick={() => toast.info('El desbloqueo técnico de PLD en BD está pendiente de activar. Ver Ejecuciones_manuales/pld_enforcement_real.md')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Unlock className="w-3.5 h-3.5 shrink-0" />Desbloquear
+            </button>
           </div>
         </div>
       </div>
@@ -1218,7 +1243,25 @@ export function PldDashboard() {
             <RefreshCw className="w-4 h-4" /> Evaluar riesgos
           </button>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => downloadCsv(
+              `pld_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+              ['Cuenta','Proyecto','Unidad','Cliente','RFC','CURP','Estatus PLD','Riesgo','Total pagado','Precio final','Bloqueado','# Pagos','Última actualización'],
+              filtered.map(r => [
+                r.cuentaLabel,
+                r.proyectoNombre,
+                r.unidad,
+                r.clienteNombre,
+                r.clienteRfc ?? '',
+                r.clienteCurp ?? '',
+                PLD_STATUS_META[r.pldStatus]?.label ?? r.pldStatus,
+                RISK_META[r.riesgo]?.label ?? r.riesgo,
+                fmtMxn(r.totalPagado),
+                fmtMxn(r.precioFinal),
+                r.escrituraBloqueada ? 'Sí' : 'No',
+                String(r.numPagos),
+                fmtDate(r.fechaActualizacion),
+              ]),
+            )}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
           >
             <Download className="w-4 h-4" /> Exportar
@@ -1378,7 +1421,7 @@ export function PldDashboard() {
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => toast.info('Los expedientes PLD se generan automáticamente al registrar una cuenta de cobranza. Evalúa los riesgos con el botón "Evaluar riesgos".')}
               className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl font-medium text-sm transition-colors shadow-sm"
             >
               <Plus className="w-4 h-4" /> Nuevo expediente
