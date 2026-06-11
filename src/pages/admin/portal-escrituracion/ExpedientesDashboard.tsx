@@ -223,6 +223,71 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   onClose: () => void;
   onEditComprador: (personaId: number) => void;
 }) {
+  const qcPanel = useQueryClient();
+  const [markingListo, setMarkingListo] = useState(false);
+
+  async function handleMarcarListo() {
+    if (!row.personaId) {
+      toast.error('No se encontró el identificador del comprador para este expediente.');
+      return;
+    }
+    setMarkingListo(true);
+    try {
+      const { data: docs, error } = await supabase
+        .from('documentos')
+        .select('id, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+        .eq('id_persona', row.personaId)
+        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+        .eq('activo', true)
+        .eq('es_draft', false);
+
+      if (error) throw error;
+
+      // Último doc por grupo (misma lógica que el query principal)
+      const latestByGroup: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+      (docs || []).forEach((d: any) => {
+        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+        if (!groupKey) return;
+        const fecha = d.fecha_creacion ?? '';
+        const ex = latestByGroup[groupKey];
+        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+          latestByGroup[groupKey] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+        }
+      });
+
+      const ESTATUS_LABEL: Record<number, string> = { 1: 'Pendiente', 3: 'Rechazado', 4: 'Expirado' };
+      const faltantes: string[] = [];
+      const noValidados: string[] = [];
+
+      for (const grupo of OBLIGATORIO_GRUPOS) {
+        const latest = latestByGroup[grupo.key];
+        if (!latest) {
+          faltantes.push(grupo.label);
+        } else if (latest.estatusId !== 2) {
+          noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
+        }
+      }
+
+      if (faltantes.length > 0 || noValidados.length > 0) {
+        const partes: string[] = [];
+        if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
+        if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
+        toast.error(`No se puede marcar como listo. ${partes.join('. ')}.`);
+        return;
+      }
+
+      await Promise.all([
+        qcPanel.invalidateQueries({ queryKey: ['expedientes-real', row.proyectoId] }),
+        qcPanel.invalidateQueries({ queryKey: ['exp-docs-persona', row.personaId] }),
+      ]);
+      toast.success('Expediente marcado como listo correctamente.');
+    } catch {
+      toast.error('No fue posible actualizar el expediente. Intenta nuevamente.');
+    } finally {
+      setMarkingListo(false);
+    }
+  }
+
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
     queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
@@ -404,20 +469,35 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones rápidas</p>
           <div className="grid grid-cols-2 gap-2">
-            {([
-              { label: 'Subir documento', Icon: Plus },
-              { label: 'Marcar listo',    Icon: CheckCircle2 },
-              { label: 'Observación',     Icon: AlertTriangle },
-              { label: 'Descargar',       Icon: Download },
-            ] as const).map(({ label, Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />Subir documento
+            </button>
+            <button
+              onClick={handleMarcarListo}
+              disabled={markingListo}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {markingListo
+                ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              }
+              Marcar listo
+            </button>
+            <button
+              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />Observación
+            </button>
+            <button
+              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />Descargar
+            </button>
           </div>
         </div>
       </div>
