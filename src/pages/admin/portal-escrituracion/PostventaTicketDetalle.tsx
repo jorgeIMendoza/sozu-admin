@@ -814,21 +814,47 @@ export function PostventaDetalle() {
     refetchActividad();
   }
 
-  function handleSubirEvidenciaInicial(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    // TODO: upload to Supabase Storage + INSERT postventa_evidencias
-    toast.info(`${files.length} archivo(s) seleccionados. Subida a Storage pendiente de implementar.`);
-    if (fileInputInicialRef.current) fileInputInicialRef.current.value = '';
+  async function subirEvidencias(files: File[], tipoEvidencia: 'inicial' | 'reparacion'): Promise<void> {
+    let subidos = 0;
+    for (const file of files) {
+      const path = `postventa/${numericId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file);
+      if (uploadError) { toast.error(`Error al subir "${file.name}": ${uploadError.message}`); continue; }
+      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+      const { error: insertError } = await (supabase as any).from('postventa_evidencias').insert({
+        id_postventa_ticket: numericId,
+        url: publicUrl,
+        tipo_evidencia: tipoEvidencia,
+        nombre: file.name,
+        tipo_archivo: file.type || 'application/octet-stream',
+        subido_por: profile?.email ?? 'admin',
+      });
+      if (insertError) { toast.error(`Error al registrar evidencia: ${insertError.message}`); continue; }
+      subidos++;
+    }
+    if (subidos > 0) {
+      await insertLog(
+        tipoEvidencia === 'inicial' ? 'EVIDENCIA_INICIAL' : 'EVIDENCIA_REPARACION',
+        `${subidos} archivo(s) de evidencia ${tipoEvidencia} subido(s)`,
+      );
+      refetchEvidencias();
+      toast.success(`${subidos} evidencia(s) subida(s) correctamente.`);
+    }
   }
 
-  function handleSubirEvidenciaReparacion(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleSubirEvidenciaInicial(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
+    if (fileInputInicialRef.current) fileInputInicialRef.current.value = '';
     if (files.length === 0) return;
-    setEvidreparacionFiles((prev) => [...prev, ...files]);
-    // TODO: upload to Supabase Storage + INSERT postventa_evidencias
-    toast.info(`${files.length} archivo(s) seleccionados. Subida a Storage pendiente de implementar.`);
+    await subirEvidencias(files, 'inicial');
+  }
+
+  async function handleSubirEvidenciaReparacion(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
     if (fileInputReparacionRef.current) fileInputReparacionRef.current.value = '';
+    if (files.length === 0) return;
+    setEvidreparacionFiles(prev => [...prev, ...files]);
+    await subirEvidencias(files, 'reparacion');
   }
 
   function handleEscalar() {

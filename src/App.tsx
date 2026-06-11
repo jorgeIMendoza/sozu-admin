@@ -224,6 +224,7 @@ const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/po
 const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionHistoricoComercialPage"));
 const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
 const AltaDireccionIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionIngresosEgresosPage"));
+const AltaDireccionForecastIngresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionForecastIngresosPage"));
 const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesPortalesPage"));
 const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
 const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
@@ -880,6 +881,7 @@ const App = () => (
                   <Route path="portal-alta-direccion/historico-comercial" element={<AltaDireccionHistoricoComercial />} />
                   <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
                   <Route path="portal-alta-direccion/ingresos-egresos" element={<AltaDireccionIngresosEgresos />} />
+                  <Route path="portal-alta-direccion/forecast-ingresos" element={<AltaDireccionForecastIngresos />} />
                   <Route path="portal-alta-direccion/mediciones/portales" element={<MedicionesPortales />} />
                   <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
                   <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
