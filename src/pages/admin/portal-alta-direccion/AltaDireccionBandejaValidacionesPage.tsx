@@ -1546,6 +1546,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
+                            data-cta="alta-direccion.bandeja.revisar-venta-facturar"
                             size="sm"
                             variant="outline"
                             className="h-8"
@@ -1678,6 +1679,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
+                          data-cta="alta-direccion.bandeja.revisar-pago-externo"
                           size="sm"
                           variant="outline"
                           className="h-8"
@@ -1785,6 +1787,7 @@ export default function AltaDireccionBandejaValidacionesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
+                            data-cta="alta-direccion.bandeja.revisar-comision-interna"
                             size="sm"
                             variant="outline"
                             className="h-8"

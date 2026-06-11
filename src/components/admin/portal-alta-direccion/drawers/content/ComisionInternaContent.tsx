@@ -461,11 +461,18 @@ export function ComisionInternaContent({
           <>
             {!readOnly && (
               <div className="flex items-center gap-2 mb-3">
-                <Button size="sm" variant="outline" className="h-8" onClick={aprobarTodos}>
+                <Button
+                  data-cta="alta-direccion.comision-interna.aprobar-todos"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={aprobarTodos}
+                >
                   <Check className="h-3.5 w-3.5 mr-1" />
                   Aprobar todos
                 </Button>
                 <Button
+                  data-cta="alta-direccion.comision-interna.rechazar-todos"
                   size="sm"
                   variant="outline"
                   className="h-8 border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
@@ -476,6 +483,7 @@ export function ComisionInternaContent({
                 </Button>
                 {(resumen.aprobados > 0 || resumen.rechazados > 0) && (
                   <Button
+                    data-cta="alta-direccion.comision-interna.limpiar-seleccion"
                     size="sm"
                     variant="ghost"
                     className="h-8 text-xs text-muted-foreground"
@@ -629,6 +637,7 @@ export function ComisionInternaContent({
                     Cancelar
                   </Button>
                   <Button
+                    data-cta="alta-direccion.comision-interna.guardar-decisiones"
                     size="sm"
                     disabled={!puedeGuardar || guardarMutation.isPending}
                     onClick={() => guardarMutation.mutate()}

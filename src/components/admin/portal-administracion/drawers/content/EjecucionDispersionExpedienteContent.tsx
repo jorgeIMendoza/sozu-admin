@@ -426,6 +426,7 @@ export function EjecucionDispersionExpedienteContent({
                       {confirmandoTodos ? (
                         <div className="flex items-center gap-1">
                           <Button
+                            data-cta="admin.dispersion.confirmar-bulk"
                             size="sm"
                             className="h-7 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                             disabled={isPendingBulk}
@@ -452,6 +453,7 @@ export function EjecucionDispersionExpedienteContent({
                         </div>
                       ) : (
                         <Button
+                          data-cta="admin.dispersion.ejecutar-todos"
                           size="sm"
                           variant="outline"
                           className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
@@ -535,6 +537,7 @@ export function EjecucionDispersionExpedienteContent({
                           </div>
                         ) : (
                           <Button
+                            data-cta="admin.dispersion.ejecutar-individual"
                             size="sm"
                             variant="outline"
                             className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"

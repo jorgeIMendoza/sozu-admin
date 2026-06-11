@@ -983,11 +983,11 @@ export default function InmobAgentes() {
           <p className="text-sm text-muted-foreground">Gestión y rendimiento de los agentes de tu inmobiliaria</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setIsBulkUploadOpen(true)}>
+          <Button data-cta="inmobiliarias.agentes.carga-masiva" variant="outline" size="sm" onClick={() => setIsBulkUploadOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Carga masiva
           </Button>
-          <Button size="sm" onClick={() => setIsAddAgentOpen(true)}>
+          <Button data-cta="inmobiliarias.agentes.abrir-agregar" size="sm" onClick={() => setIsAddAgentOpen(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
             Agregar agente
           </Button>
@@ -1142,7 +1142,7 @@ export default function InmobAgentes() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddAgentOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddAgent} disabled={addingAgent || !newAgentName || !newAgentEmail}>
+            <Button data-cta="inmobiliarias.agentes.registrar" onClick={handleAddAgent} disabled={addingAgent || !newAgentName || !newAgentEmail}>
               {addingAgent ? "Registrando…" : "Registrar agente"}
             </Button>
           </DialogFooter>

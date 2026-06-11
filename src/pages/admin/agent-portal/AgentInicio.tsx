@@ -384,6 +384,7 @@ const AgentInicio = () => {
       {inicioPerms.canCreate && (
         <div className="grid grid-cols-2 gap-3">
           <button
+            data-cta="agentes.inicio.nuevo-prospecto"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_nuevo_prospecto', elementLabel: 'Nuevo prospecto' });
               setAddProspectoOpen(true);
@@ -396,6 +397,7 @@ const AgentInicio = () => {
             <span className="text-xs font-medium text-[hsl(var(--agent-text))]">Nuevo prospecto</span>
           </button>
           <button
+            data-cta="agentes.inicio.agendar-cita"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita' });
               setAgendarCitaOpen(true);

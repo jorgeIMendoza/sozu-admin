@@ -800,6 +800,11 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                                 </Badge>
                               )}
                               <Button
+                                data-cta={
+                                  f.estado_factura === "draft"
+                                    ? "admin.bandeja.validar-factura-sozu"
+                                    : "admin.bandeja.generar-factura-sozu"
+                                }
                                 size="sm"
                                 variant="outline"
                                 className="h-8"
@@ -943,6 +948,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
+                            data-cta="admin.bandeja.ejecutar-cobro"
                             size="sm"
                             variant="outline"
                             className="h-8"
@@ -1084,6 +1090,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
+                              data-cta="admin.bandeja.ejecutar-pago-externo"
                               size="sm"
                               variant="outline"
                               className="h-8"
@@ -1233,6 +1240,11 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
+                              data-cta={
+                                isPendiente || isRechazado
+                                  ? "admin.bandeja.ver-detalle-dispersion"
+                                  : "admin.bandeja.ejecutar-dispersion"
+                              }
                               size="sm"
                               variant="outline"
                               className="h-8"
