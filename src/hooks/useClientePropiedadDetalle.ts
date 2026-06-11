@@ -52,6 +52,7 @@ export interface PropiedadDetalle {
   unidad: string;
   numeroPiso: number | null;
   idEdificio: number | null;
+  totalPisos: number | null;
   precioFinal: number;
   totalPaid: number;
   pending: number;
@@ -84,6 +85,16 @@ export interface PropiedadDetalle {
   planoUbicacionUrl: string | null;
   planoUbicacionRegiones: any[];
   numeroDepa: string;
+}
+
+// Transforms Supabase Cloud Storage URLs to WebP via Pro image render API.
+// Only applies to *.supabase.co (cloud Pro feature — self-hosted VPS doesn't support it).
+// Blocks api.sozu.com. Passes other URLs unchanged.
+function toWebP(url: string | null, quality = 80): string | null {
+  if (!url || url.includes("api.sozu.com")) return null;
+  if (!url.includes(".supabase.co/storage/v1/object/public/")) return url;
+  const base = url.split("?")[0];
+  return `${base.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/")}?format=webp&quality=${quality}`;
 }
 
 export function useClientePropiedadDetalle(cuentaId: number | null | undefined) {
@@ -175,7 +186,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 5. Building/project info
       const { data: emData } = await supabase
         .from("edificios_modelos")
-        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada, id_estatus_proyecto)), modelos:edificios_modelos_id_modelo_fkey(nombre, plano_arquitectonico)")
+        .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(nombre, numero_pisos, id_proyecto, proyectos:edificios_id_proyecto_fkey!inner(id, nombre, precio_m2_actual, direccion, fecha_entrega, url_imagen_portada, id_estatus_proyecto)), modelos:edificios_modelos_id_modelo_fkey(nombre, plano_arquitectonico)")
         .eq("id", propiedad.id_edificio_modelo)
         .maybeSingle();
 
@@ -187,6 +198,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       const precioM2Actual = proj?.precio_m2_actual || 0;
       const idEdificio = emData?.id_edificio || null;
       const numeroPiso = propiedad.numero_piso ? Number(propiedad.numero_piso) : null;
+      const totalPisos = (emData as any)?.edificios?.numero_pisos ? Number((emData as any)?.edificios?.numero_pisos) : null;
 
       // Fetch floor plan for this level
       let planoUbicacionUrl: string | null = null;
@@ -448,7 +460,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         proyecto: proj?.nombre || "Proyecto",
         edificio: ed?.nombre || "",
         modelo: modeloNombre,
-        planoArquitectonico: planoArqUrl,
+        planoArquitectonico: toWebP(planoArqUrl),
         unidad: propiedad.numero_propiedad || "",
         precioFinal,
         totalPaid,
@@ -481,7 +493,8 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         ultimosPagos,
         numeroPiso,
         idEdificio,
-        planoUbicacionUrl,
+        totalPisos,
+        planoUbicacionUrl: toWebP(planoUbicacionUrl),
         planoUbicacionRegiones,
         numeroDepa,
       };

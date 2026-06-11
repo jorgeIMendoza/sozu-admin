@@ -26,6 +26,8 @@ import { getPropertyImage } from "@/lib/portal-cliente/property-images";
 import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
+import FichaTecnicaSection from "./FichaTecnicaSection";
+import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
@@ -64,6 +66,8 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const currentStageIdx = Math.max(0, STAGES.findIndex((s) => s.id === activeStage?.id));
   const currentStage = STAGES[currentStageIdx];
   const stageInfo = getStageInfo(activeStage?.id ?? "preventa");
+
+  const { data: propDetalle, isLoading: loadingFicha } = useClientePropiedadDetalle(Number(property.id));
 
   const [showPaySheet, setShowPaySheet] = useState(false);
   const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
@@ -188,6 +192,17 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
           {/* 6 · Documentos */}
           <PropertyDocuments propertyId={property.id} />
+
+          {/* 7 · Ficha técnica */}
+          {loadingFicha ? (
+            <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
+              <div className="h-3 w-32 bg-muted rounded" />
+              <div className="h-3 w-48 bg-muted rounded" />
+              <div className="h-40 bg-muted rounded-xl" />
+            </div>
+          ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
+            <FichaTecnicaSection propDetalle={propDetalle} />
+          ) : null}
 
           {/* Agente (mobile only — desktop shows in right col) */}
           <div className="md:hidden">

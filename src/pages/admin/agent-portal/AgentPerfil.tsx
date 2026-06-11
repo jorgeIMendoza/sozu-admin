@@ -15,8 +15,11 @@ import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/ho
 import {
   FileText, Receipt, Landmark, GraduationCap,
   Check, AlertTriangle, ChevronRight, Loader2, LogOut,
-  Camera, Pencil, X
+  Camera, Pencil, X, Trash2, Upload
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import confetti from "canvas-confetti";
 
@@ -71,6 +74,10 @@ const AgentPerfil = () => {
   // Photo & phrase state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [editingFrase, setEditingFrase] = useState(false);
   const [fraseValue, setFraseValue] = useState('');
   const [savingFrase, setSavingFrase] = useState(false);
@@ -96,28 +103,97 @@ const AgentPerfil = () => {
     if (!editingFrase) setFraseValue(perfilExtra?.frase_perfil || '');
   }, [perfilExtra, editingFrase]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !agentEmail) return;
+    if (!file) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Extract storage path from public URL — works for both self-hosted and Supabase cloud
+  const getAvatarStoragePath = (publicUrl: string): string | null => {
+    const marker = '/storage/v1/object/public/avatar/';
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.substring(idx + marker.length).split('?')[0];
+  };
+
+  const handlePhotoConfirm = async () => {
+    if (!pendingFile || !agentEmail) return;
     setUploadingPhoto(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
+      const ext = (pendingFile.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `avatars/${agentEmail}/avatar.${ext}`;
+
+      // Delete old file if extension changed (avoid orphans)
+      if (perfilExtra?.foto_perfil_url) {
+        const oldPath = getAvatarStoragePath(perfilExtra.foto_perfil_url);
+        if (oldPath && oldPath !== path) {
+          await supabase.storage.from('avatar').remove([oldPath]);
+        }
+      }
+
       const { error: uploadError } = await supabase.storage
         .from('avatar')
-        .upload(path, file, { upsert: true });
+        .upload(path, pendingFile, { upsert: true, cacheControl: '3600' });
       if (uploadError) throw uploadError;
+
       const { data: urlData } = supabase.storage.from('avatar').getPublicUrl(path);
+      // Strip ?t=timestamp that Supabase JS adds for cache-busting on upsert
+      const cleanUrl = urlData.publicUrl.split('?')[0];
+
       await (supabase as any)
         .from('usuarios')
-        .update({ foto_perfil_url: urlData.publicUrl })
+        .update({ foto_perfil_url: cleanUrl })
         .eq('email', agentEmail);
       queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
+      closePhotoModal();
     } catch (err) {
       console.error('Error subiendo foto:', err);
     } finally {
       setUploadingPhoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const closePhotoModal = () => {
+    setShowPhotoModal(false);
+    setPendingFile(null);
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!agentEmail) return;
+    setDeletingPhoto(true);
+    try {
+      // Delete from bucket: parse path from stored URL to avoid RLS/encoding issues with list()
+      if (perfilExtra?.foto_perfil_url) {
+        const storagePath = getAvatarStoragePath(perfilExtra.foto_perfil_url);
+        if (storagePath) {
+          await supabase.storage.from('avatar').remove([storagePath]);
+        } else {
+          // Fallback: list folder and remove all
+          const { data: files } = await supabase.storage
+            .from('avatar')
+            .list(`avatars/${agentEmail}`);
+          if (files?.length) {
+            await supabase.storage
+              .from('avatar')
+              .remove(files.map(f => `avatars/${agentEmail}/${f.name}`));
+          }
+        }
+      }
+      await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: null })
+        .eq('email', agentEmail);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
+      setShowPhotoModal(false);
+    } catch (err) {
+      console.error('Error eliminando foto:', err);
+    } finally {
+      setDeletingPhoto(false);
     }
   };
 
@@ -370,8 +446,8 @@ const AgentPerfil = () => {
           <button
             type="button"
             className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--agent-primary))] focus-visible:ring-offset-2"
-            onClick={() => canEdit && fileInputRef.current?.click()}
-            disabled={uploadingPhoto || !canEdit}
+            onClick={() => canEdit && setShowPhotoModal(true)}
+            disabled={!canEdit}
             title={canEdit ? "Cambiar foto de perfil" : undefined}
             aria-label={canEdit ? "Cambiar foto de perfil" : "Foto de perfil"}
           >
@@ -388,19 +464,9 @@ const AgentPerfil = () => {
             )}
             {canEdit && (
               <div className="absolute inset-0 rounded-full bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-150">
-                {uploadingPhoto
-                  ? <Loader2 className="h-5 w-5 text-white animate-spin" />
-                  : <Camera className="h-5 w-5 text-white" />
-                }
+                <Camera className="h-5 w-5 text-white" />
               </div>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoUpload}
-            />
           </button>
 
           {/* Info */}
@@ -481,6 +547,135 @@ const AgentPerfil = () => {
           </div>
         )}
       </div>
+
+      {/* Hidden file input (outside any button) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
+      {/* Photo modal — phase 1: options / phase 2: preview & confirm */}
+      <Dialog open={showPhotoModal} onOpenChange={(open) => { if (!open) closePhotoModal(); }}>
+        <DialogContent
+          style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}
+          className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[360px] p-0 overflow-hidden rounded-2xl border-0 shadow-2xl [&>button]:text-white/80 [&>button:hover]:text-white"
+        >
+          {!pendingFile ? (
+            /* ── Phase 1: Options ── */
+            <>
+              {/* Colored header */}
+              <div className="bg-[hsl(var(--agent-primary))] px-5 pt-5 sm:pt-7 pb-6 sm:pb-8 flex flex-col items-center gap-2">
+                <DialogTitle className="text-[14px] sm:text-[15px] font-semibold text-white text-center tracking-wide uppercase opacity-80">
+                  Foto de perfil
+                </DialogTitle>
+                <div className="mt-2 sm:mt-3 relative">
+                  {perfilExtra?.foto_perfil_url ? (
+                    <img
+                      src={perfilExtra.foto_perfil_url}
+                      alt={displayName || "Avatar"}
+                      className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl"
+                    />
+                  ) : (
+                    <div className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-2xl sm:text-3xl ring-[3px] ring-white/40 shadow-xl">
+                      {(displayName || "A")[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[13px] sm:text-sm font-medium text-white/90 leading-none">{displayName || "Agente"}</p>
+              </div>
+
+              {/* Actions */}
+              <div className="px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-1">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-[hsl(var(--agent-primary))]/10 hover:bg-[hsl(var(--agent-primary))]/15 active:bg-[hsl(var(--agent-primary))]/20 transition-colors cursor-pointer"
+                >
+                  <div className="h-8 w-8 rounded-full bg-[hsl(var(--agent-primary))]/15 flex items-center justify-center shrink-0">
+                    <Upload className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[hsl(var(--agent-primary))]">
+                      {perfilExtra?.foto_perfil_url ? 'Cambiar foto' : 'Cargar foto'}
+                    </p>
+                    <p className="text-[11px] text-[hsl(var(--agent-primary))]/60 mt-0.5">JPG, PNG o WebP</p>
+                  </div>
+                </button>
+
+                {perfilExtra?.foto_perfil_url && (
+                  <button
+                    onClick={handlePhotoDelete}
+                    disabled={deletingPhoto}
+                    className="flex items-center gap-3 w-full rounded-xl px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-red-50 hover:bg-red-100 active:bg-red-200 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                      {deletingPhoto
+                        ? <Loader2 className="h-4 w-4 text-red-500 animate-spin" />
+                        : <Trash2 className="h-4 w-4 text-red-500" />
+                      }
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-red-700">Eliminar foto</p>
+                      <p className="text-[11px] text-red-400 mt-0.5">Vuelves a mostrar tus iniciales</p>
+                    </div>
+                  </button>
+                )}
+
+                <button
+                  onClick={closePhotoModal}
+                  className="mt-0.5 w-full rounded-xl px-4 min-h-[44px] text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors text-center cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            /* ── Phase 2: Preview & confirm ── */
+            <>
+              {/* Colored header with preview */}
+              <div className="bg-[hsl(var(--agent-primary))] px-5 pt-5 sm:pt-7 pb-6 sm:pb-8 flex flex-col items-center gap-2">
+                <DialogTitle className="text-[14px] sm:text-[15px] font-semibold text-white text-center tracking-wide uppercase opacity-80">
+                  Vista previa
+                </DialogTitle>
+                <div className="mt-2 sm:mt-3 relative">
+                  <div className="absolute -inset-2 rounded-full bg-white/10 animate-pulse" />
+                  <img
+                    src={previewUrl!}
+                    alt="Vista previa"
+                    className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl relative z-10"
+                  />
+                </div>
+                <p className="text-[12px] sm:text-[13px] text-white/70 text-center leading-snug">
+                  Así se verá tu foto de perfil
+                </p>
+              </div>
+
+              <div className="px-3 sm:px-4 pb-4 sm:pb-5 pt-3 sm:pt-4 flex flex-col gap-2">
+                <button
+                  onClick={handlePhotoConfirm}
+                  disabled={uploadingPhoto}
+                  className="w-full rounded-xl min-h-[52px] text-sm font-semibold bg-[hsl(var(--agent-primary))] hover:opacity-90 active:opacity-80 text-white transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploadingPhoto ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</>
+                  ) : (
+                    <><Check className="h-4 w-4" strokeWidth={2.5} /> Guardar foto</>
+                  )}
+                </button>
+                <button
+                  onClick={() => { setPendingFile(null); if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); } }}
+                  disabled={uploadingPhoto}
+                  className="w-full rounded-xl min-h-[44px] text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  Volver
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Progress Steps */}
       <div className="rounded-xl bg-white p-4 border border-gray-100 shadow-sm space-y-3">
