@@ -133,6 +133,19 @@ function deriveTipo(compradores: CompradoresData[]): TipoComprador {
 const fmtMxn = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -470,7 +483,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones rápidas</p>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => toast.info('Para subir documentos, edita el perfil del comprador usando el botón de edición en la sección Compradores.')}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
             >
               <Plus className="w-3.5 h-3.5 shrink-0" />Subir documento
@@ -487,13 +500,28 @@ function DetailPanel({ row, onClose, onEditComprador }: {
               Marcar listo
             </button>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => toast.info('Las observaciones se registran desde el perfil del comprador. Usa el botón de edición en la sección Compradores.')}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
             >
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />Observación
             </button>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => downloadCsv(
+                `expediente_${row.cuentaLabel}_${row.clienteNombre.replace(/\s+/g, '_')}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                [[
+                  row.cuentaLabel,
+                  row.proyectoNombre,
+                  row.unidad,
+                  row.clienteNombre,
+                  TIPO_META[row.tipoComprador]?.label ?? row.tipoComprador,
+                  ESTATUS_META[row.estatusExpediente]?.label ?? row.estatusExpediente,
+                  String(row.docsCompletos),
+                  String(row.docsTotal),
+                  fmtMxn(row.precioFinal),
+                  row.fechaActualizacion ? new Date(row.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]],
+              )}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
             >
               <Download className="w-3.5 h-3.5 shrink-0" />Descargar
@@ -865,7 +893,7 @@ export function ExpedientesDashboard() {
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => toast.info('Los expedientes se generan automáticamente al asociar un comprador a una cuenta de cobranza.')}
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl font-medium text-sm transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" /> Nuevo expediente
@@ -967,7 +995,22 @@ export function ExpedientesDashboard() {
               <option value="CON_OBSERVACIONES">Con observaciones</option>
             </select>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => downloadCsv(
+                `expedientes_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                filtered.map(r => [
+                  r.cuentaLabel,
+                  r.proyectoNombre,
+                  r.unidad,
+                  r.clienteNombre,
+                  TIPO_META[r.tipoComprador]?.label ?? r.tipoComprador,
+                  ESTATUS_META[r.estatusExpediente]?.label ?? r.estatusExpediente,
+                  String(r.docsCompletos),
+                  String(r.docsTotal),
+                  fmtMxn(r.precioFinal),
+                  r.fechaActualizacion ? new Date(r.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]),
+              )}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors ml-auto"
             >
               <Download className="w-4 h-4" /> Exportar
