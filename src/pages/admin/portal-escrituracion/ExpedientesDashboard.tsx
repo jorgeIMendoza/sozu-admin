@@ -443,7 +443,7 @@ export function ExpedientesDashboard() {
   const [filtroTipo, setFiltroTipo]       = useState<TipoComprador | 'TODOS'>('TODOS');
   const [filtroEstatus, setFiltroEstatus] = useState<EstatusExpediente | 'TODOS'>('TODOS');
   const [page, setPage]                   = useState(0);
-  const [selected, setSelected]           = useState<ExpedienteRow | null>(null);
+  const [selectedId, setSelectedId]       = useState<number | null>(null);
   const [editingPersonaId, setEditingPersonaId] = useState<number | null>(null);
   const [isEditPersonaOpen, setIsEditPersonaOpen] = useState(false);
   const qc = useQueryClient();
@@ -536,7 +536,9 @@ export function ExpedientesDashboard() {
         .from('compradores')
         .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
         .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true);
+        .eq('activo', true)
+        .order('porcentaje_copropiedad', { ascending: false })
+        .order('id_persona', { ascending: true });
 
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
       const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null }> = {};
@@ -662,6 +664,12 @@ export function ExpedientesDashboard() {
     staleTime: 30_000,
   });
 
+  // selectedRow siempre refleja el estado actual de rows (nunca stale)
+  const selectedRow = useMemo(
+    () => rows.find(r => r.cuentaId === selectedId) ?? null,
+    [rows, selectedId],
+  );
+
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     const fisicas   = rows.filter(r => r.tipoComprador === 'PERSONA_FISICA');
@@ -730,7 +738,7 @@ export function ExpedientesDashboard() {
   // ── Proyecto selector ─────────────────────────────────────────────────────
   const handleProyecto = (id: number) => {
     const p = proyectos.find(x => x.id === id);
-    if (p) { setProyectoId(p.id); setProyectoNombre(p.nombre); setSelected(null); }
+    if (p) { setProyectoId(p.id); setProyectoNombre(p.nombre); setSelectedId(null); }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -896,11 +904,11 @@ export function ExpedientesDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paged.map(row => {
-                    const isSelected = selected?.cuentaId === row.cuentaId;
+                    const isSelected = selectedId === row.cuentaId;
                     return (
                       <tr
                         key={row.cuentaId}
-                        onClick={() => setSelected(isSelected ? null : row)}
+                        onClick={() => setSelectedId(isSelected ? null : row.cuentaId)}
                         className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-emerald-50/40' : ''}`}
                       >
                         <td className="px-5 py-4 whitespace-nowrap">
@@ -991,8 +999,8 @@ export function ExpedientesDashboard() {
         </div>
 
         {/* ── Detail Panel ──────────────────────────────────────────────── */}
-        {selected && (
-          <DetailPanel row={selected} onClose={() => setSelected(null)} />
+        {selectedRow && (
+          <DetailPanel row={selectedRow} onClose={() => setSelectedId(null)} />
         )}
       </div>
 
