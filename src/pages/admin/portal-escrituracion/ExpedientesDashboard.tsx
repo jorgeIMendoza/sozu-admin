@@ -7,7 +7,7 @@ import {
   Search, Plus, Download, Loader2, X, RefreshCw,
   CheckCircle2, Clock, AlertTriangle, XCircle,
   User, Users, Globe, Building2, Home,
-  ChevronDown, FileText,
+  ChevronDown, FileText, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,6 +17,7 @@ type TipoComprador = 'PERSONA_FISICA' | 'PERSONA_MORAL' | 'COPROPIEDAD' | 'EXTRA
 type EstatusExpediente = 'LISTO' | 'PENDIENTE' | 'EN_REVISION' | 'CON_OBSERVACIONES' | 'VENCIDO';
 
 interface CompradoresData {
+  id_persona: number;
   nombre: string;
   rfc: string | null;
   porcentaje: number;
@@ -217,7 +218,11 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void }) {
+function DetailPanel({ row, onClose, onEditComprador }: {
+  row: ExpedienteRow;
+  onClose: () => void;
+  onEditComprador: (personaId: number) => void;
+}) {
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
     queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
@@ -315,15 +320,23 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Compradores</p>
             <div className="space-y-1.5">
               {row.compradores.map((c, i) => (
-                <div key={i} className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onEditComprador(c.id_persona)}
+                  className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-xl px-3 py-2.5 cursor-pointer transition-colors group text-left"
+                >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{c.nombre}</p>
                     {c.rfc && <p className="text-xs text-slate-500 font-mono">{c.rfc}</p>}
                   </div>
-                  {c.porcentaje < 100 && (
-                    <span className="text-xs text-slate-500 font-semibold ml-2 shrink-0">{c.porcentaje}%</span>
-                  )}
-                </div>
+                  <div className="flex items-center gap-2 ml-2 shrink-0">
+                    {c.porcentaje < 100 && (
+                      <span className="text-xs text-slate-500 font-semibold">{c.porcentaje}%</span>
+                    )}
+                    <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                  </div>
+                </button>
               ))}
             </div>
           </div>
@@ -568,6 +581,7 @@ export function ExpedientesDashboard() {
           primerPersonaIdByCuenta[c.id_cuenta_cobranza] = c.id_persona; // primer comprador
         }
         comprsByCuenta[c.id_cuenta_cobranza].push({
+          id_persona: c.id_persona,
           nombre: p?.nombre_legal ?? '—',
           rfc: p?.rfc ?? null,
           porcentaje: c.porcentaje_copropiedad,
@@ -728,6 +742,10 @@ export function ExpedientesDashboard() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expedientes-real', proyectoId] });
+      if (editingPersonaId) {
+        qc.invalidateQueries({ queryKey: ['expedientes-persona-edit', editingPersonaId] });
+        qc.invalidateQueries({ queryKey: ['exp-docs-persona', editingPersonaId] });
+      }
       setIsEditPersonaOpen(false);
       setEditingPersonaId(null);
       toast.success('Comprador actualizado correctamente.');
@@ -1000,7 +1018,14 @@ export function ExpedientesDashboard() {
 
         {/* ── Detail Panel ──────────────────────────────────────────────── */}
         {selectedRow && (
-          <DetailPanel row={selectedRow} onClose={() => setSelectedId(null)} />
+          <DetailPanel
+            row={selectedRow}
+            onClose={() => setSelectedId(null)}
+            onEditComprador={personaId => {
+              setEditingPersonaId(personaId);
+              setIsEditPersonaOpen(true);
+            }}
+          />
         )}
       </div>
 
