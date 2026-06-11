@@ -83,7 +83,11 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const addNote = useBankStore((s) => s.addNote);
   const assignLead = useBankStore((s) => s.assignLead);
   const agent = useCurrentBankAgent();
-  const agents = useBankAgentsStore((s) => (agent ? s.agentsByBank(agent.bankId, { onlyActive: true }) : []));
+  const allAgents = useBankAgentsStore((s) => s.agents);
+  const agents = useMemo(
+    () => (agent ? allAgents.filter((a) => a.bankId === agent.bankId && a.active) : []),
+    [allAgents, agent?.bankId],
+  );
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
 
@@ -377,7 +381,11 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
 // ============================== EQUIPO ==============================
 export function BancosEquipo() {
   const agent = useCurrentBankAgent();
-  const agentsForBank = useBankAgentsStore((s) => (agent ? s.agentsByBank(agent.bankId) : []));
+  const allAgents = useBankAgentsStore((s) => s.agents);
+  const agentsForBank = useMemo(
+    () => (agent ? allAgents.filter((a) => a.bankId === agent.bankId) : []),
+    [allAgents, agent?.bankId],
+  );
   const createAgent = useBankAgentsStore((s) => s.createAgent);
   const updateAgent = useBankAgentsStore((s) => s.updateAgent);
   const deactivateAgent = useBankAgentsStore((s) => s.deactivateAgent);
