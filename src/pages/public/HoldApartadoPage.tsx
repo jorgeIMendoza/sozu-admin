@@ -98,12 +98,12 @@ export default function HoldApartadoPage() {
           data.clientSecret,
           {
             payment_method: {
-              card: {
+              card: ({
                 number: cardDigits,
                 exp_month: parseInt(expiryMonth ?? "12", 10),
                 exp_year: 2000 + parseInt(expiryYear ?? "28", 10),
                 cvc,
-              },
+              } as any),
               billing_details: { name: holderName.trim() },
             },
           }

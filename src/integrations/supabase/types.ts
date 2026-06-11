@@ -6309,6 +6309,7 @@ export type Database = {
           descripcion: string | null
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          highlights: Json | null
           id: number
           id_proyecto: number | null
           nombre: string
@@ -6317,12 +6318,14 @@ export type Database = {
           numero_recamaras: number | null
           plano_arquitectonico: string | null
           url_imagen_portada: string | null
+          url_tour_360: string | null
         }
         Insert: {
           activo?: boolean | null
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre: string
@@ -6331,12 +6334,14 @@ export type Database = {
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
           url_imagen_portada?: string | null
+          url_tour_360?: string | null
         }
         Update: {
           activo?: boolean | null
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre?: string
@@ -6345,6 +6350,7 @@ export type Database = {
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
           url_imagen_portada?: string | null
+          url_tour_360?: string | null
         }
         Relationships: [
           {
@@ -7559,6 +7565,115 @@ export type Database = {
           },
         ]
       }
+      portal_eventos: {
+        Row: {
+          cta_nombre: string | null
+          email_usuario: string | null
+          fecha_creacion: string
+          id: number
+          id_menu: number | null
+          id_sesion: string | null
+          id_submenu: number | null
+          id_usuario: string | null
+          metadatos: Json | null
+          portal: string
+          ruta: string | null
+          tipo_evento: string
+        }
+        Insert: {
+          cta_nombre?: string | null
+          email_usuario?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_menu?: number | null
+          id_sesion?: string | null
+          id_submenu?: number | null
+          id_usuario?: string | null
+          metadatos?: Json | null
+          portal: string
+          ruta?: string | null
+          tipo_evento: string
+        }
+        Update: {
+          cta_nombre?: string | null
+          email_usuario?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_menu?: number | null
+          id_sesion?: string | null
+          id_submenu?: number | null
+          id_usuario?: string | null
+          metadatos?: Json | null
+          portal?: string
+          ruta?: string | null
+          tipo_evento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_eventos_id_menu_fkey"
+            columns: ["id_menu"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_eventos_id_sesion_fkey"
+            columns: ["id_sesion"]
+            isOneToOne: false
+            referencedRelation: "portal_sesiones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_eventos_id_submenu_fkey"
+            columns: ["id_submenu"]
+            isOneToOne: false
+            referencedRelation: "submenus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_sesiones: {
+        Row: {
+          activo: boolean
+          email_usuario: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: string
+          id_usuario: string
+          portal: string
+          sesion_fin: string | null
+          sesion_inicio: string
+          ultima_actividad: string
+          user_agent: string | null
+        }
+        Insert: {
+          activo?: boolean
+          email_usuario: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_usuario: string
+          portal: string
+          sesion_fin?: string | null
+          sesion_inicio?: string
+          ultima_actividad?: string
+          user_agent?: string | null
+        }
+        Update: {
+          activo?: boolean
+          email_usuario?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_usuario?: string
+          portal?: string
+          sesion_fin?: string | null
+          sesion_inicio?: string
+          ultima_actividad?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       postventa_categorias_garantia: {
         Row: {
           activo: boolean
@@ -8313,6 +8428,7 @@ export type Database = {
           direccion_id_estado: number | null
           direccion_id_municipio: number | null
           direccion_id_pais: string | null
+          facebook_handle: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           fecha_entrega: string | null
@@ -8323,6 +8439,7 @@ export type Database = {
           id: number
           id_estatus_proyecto: number | null
           id_tipo_uso: number | null
+          instagram_handle: string | null
           latitud: number | null
           longitud: number | null
           monto_garantia_renta: number
@@ -8334,9 +8451,12 @@ export type Database = {
           nombre_firmante_recibos: string | null
           precio_m2_actual: number
           publicar: boolean | null
+          slogan: string | null
           url_firma_recibos: string | null
           url_imagen_portada: string | null
           url_logo: string | null
+          url_sitio_web: string | null
+          youtube_handle: string | null
         }
         Insert: {
           activo?: boolean
@@ -8346,6 +8466,7 @@ export type Database = {
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          facebook_handle?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_entrega?: string | null
@@ -8356,6 +8477,7 @@ export type Database = {
           id?: number
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
+          instagram_handle?: string | null
           latitud?: number | null
           longitud?: number | null
           monto_garantia_renta?: number
@@ -8367,9 +8489,12 @@ export type Database = {
           nombre_firmante_recibos?: string | null
           precio_m2_actual?: number
           publicar?: boolean | null
+          slogan?: string | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
+          url_sitio_web?: string | null
+          youtube_handle?: string | null
         }
         Update: {
           activo?: boolean
@@ -8379,6 +8504,7 @@ export type Database = {
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          facebook_handle?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_entrega?: string | null
@@ -8389,6 +8515,7 @@ export type Database = {
           id?: number
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
+          instagram_handle?: string | null
           latitud?: number | null
           longitud?: number | null
           monto_garantia_renta?: number
@@ -8400,9 +8527,12 @@ export type Database = {
           nombre_firmante_recibos?: string | null
           precio_m2_actual?: number
           publicar?: boolean | null
+          slogan?: string | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
+          url_sitio_web?: string | null
+          youtube_handle?: string | null
         }
         Relationships: [
           {
@@ -9780,6 +9910,8 @@ export type Database = {
           email_confirmado: boolean
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          foto_perfil_url: string | null
+          frase_perfil: string | null
           id_notario: number | null
           id_persona: number | null
           nombre: string
@@ -9798,6 +9930,8 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          foto_perfil_url?: string | null
+          frase_perfil?: string | null
           id_notario?: number | null
           id_persona?: number | null
           nombre: string
@@ -9816,6 +9950,8 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          foto_perfil_url?: string | null
+          frase_perfil?: string | null
           id_notario?: number | null
           id_persona?: number | null
           nombre?: string
@@ -10103,6 +10239,35 @@ export type Database = {
       }
     }
     Functions: {
+      accesos_por_cta: {
+        Args: {
+          p_desde?: string
+          p_hasta?: string
+          p_id_submenu?: number
+          p_portal: string
+        }
+        Returns: {
+          clicks: number
+          cta_nombre: string
+          id_submenu: number
+          submenu_nombre: string
+          ultimo_click: string
+          usuarios_unicos: number
+        }[]
+      }
+      accesos_por_menu: {
+        Args: { p_desde?: string; p_hasta?: string; p_portal: string }
+        Returns: {
+          accesos: number
+          id_menu: number
+          id_submenu: number
+          menu_nombre: string
+          submenu_nombre: string
+          ultimo_acceso: string
+          usuarios_unicos: number
+          vista_front_end: string
+        }[]
+      }
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
       agent_claim_or_reactivate_prospect_project:
         | {
@@ -10155,6 +10320,10 @@ export type Database = {
       check_sat_notification_conditions: {
         Args: { p_cuenta_cobranza_id: number }
         Returns: boolean
+      }
+      close_portal_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
       }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
@@ -10862,6 +11031,23 @@ export type Database = {
         Args: { p_id_entidad?: number; p_id_proyecto?: number }
         Returns: number
       }
+      register_portal_session: {
+        Args: { p_portal: string; p_user_agent?: string }
+        Returns: string
+      }
+      registrar_evento_portal: {
+        Args: {
+          p_cta_nombre?: string
+          p_id_menu?: number
+          p_id_submenu?: number
+          p_metadatos?: Json
+          p_portal: string
+          p_ruta?: string
+          p_session_id: string
+          p_tipo_evento: string
+        }
+        Returns: number
+      }
       save_cep_audit_results: { Args: { p_results: Json }; Returns: Json }
       scan_legacy_urls: {
         Args: never
@@ -10877,6 +11063,10 @@ export type Database = {
           cuentas_procesadas: number
           mensaje: string
         }[]
+      }
+      touch_portal_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
       }
       update_payment_cep_from_recibo: {
         Args: { p_updates: Json }
@@ -10895,7 +11085,40 @@ export type Database = {
         Args: { _email: string; _rol_id: number }
         Returns: boolean
       }
+      usuarios_actividad_por_portal: {
+        Args: { p_desde?: string; p_hasta?: string; p_portal: string }
+        Returns: {
+          dias_desde_ultima_actividad: number
+          duracion_total_min: number
+          email_usuario: string
+          esta_online: boolean
+          id_usuario: string
+          nombre_usuario: string
+          primera_sesion: string
+          total_sesiones: number
+          ultima_actividad: string
+        }[]
+      }
+      usuarios_online_por_portal: {
+        Args: { p_minutos_inactividad?: number }
+        Returns: {
+          portal: string
+          sesiones_activas: number
+          usuarios_online: number
+        }[]
+      }
       validar_mensajes_whatsapp: { Args: { _mensajes: Json }; Returns: boolean }
+      visitas_historicas_por_portal: {
+        Args: { p_desde?: string; p_hasta?: string }
+        Returns: {
+          duracion_promedio_min: number
+          portal: string
+          primera_sesion: string
+          total_sesiones: number
+          ultima_sesion: string
+          usuarios_unicos: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
