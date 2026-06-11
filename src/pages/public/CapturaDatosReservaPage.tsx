@@ -131,7 +131,7 @@ export default function CapturaDatosReservaPage() {
           .eq("id", personaExisting.id);
         personaId = personaExisting.id;
       } else {
-        const { data: newPersona, error: insertError } = await supabase
+        const { data: newPersona, error: insertError } = await (supabase as any)
           .from("personas")
           .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, es_draft: true, activo: true })
           .select("id")
@@ -148,7 +148,7 @@ export default function CapturaDatosReservaPage() {
 
       // UPSERT entidades_relacionadas como Prospecto (id_tipo_entidad=7) si hay proyecto
       if (apartado.id_oferta && personaId) {
-        const { data: oferta } = await supabase
+        const { data: oferta } = await (supabase as any)
           .from("ofertas")
           .select("id_proyecto")
           .eq("id", apartado.id_oferta)

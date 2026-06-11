@@ -38,7 +38,7 @@ export default function ConfirmacionPage() {
       const { data: oferta } = await supabase
         .from("ofertas")
         .select("email_creador")
-        .eq("id", offerId)
+        .eq("id", Number(offerId))
         .single();
       if (!oferta?.email_creador) return;
 
