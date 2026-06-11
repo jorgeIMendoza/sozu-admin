@@ -8,7 +8,7 @@ interface ParkingSectionProps {
 }
 
 const FORMAT_LABELS: Record<ParkingSlot["format"], { label: string; color: string }> = {
-  bateria: {
+  standard: {
     label: "BATERÍA",
     color: "bg-primary/10 text-primary border border-primary/30",
   },
