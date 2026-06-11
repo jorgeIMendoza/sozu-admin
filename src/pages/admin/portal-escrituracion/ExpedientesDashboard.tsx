@@ -256,12 +256,12 @@ function DetailPanel({ row, onClose, onEditComprador }: {
 
       if (error) throw error;
 
-      // Último doc por grupo (misma lógica que el query principal)
+      // Último doc por grupo — misma lógica y mismo sentinel que el query principal
       const latestByGroup: Record<string, { id: number; estatusId: number; fecha: string }> = {};
       (docs || []).forEach((d: any) => {
         const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
         if (!groupKey) return;
-        const fecha = d.fecha_creacion ?? '';
+        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
         const ex = latestByGroup[groupKey];
         if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
           latestByGroup[groupKey] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
@@ -289,8 +289,22 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         return;
       }
 
+      // Actualización optimista: tabla y panel reflejan LISTO inmediatamente
+      qcPanel.setQueryData(
+        ['expedientes-dashboard', row.proyectoId],
+        (old: ExpedienteRow[] | undefined) => {
+          if (!old) return old;
+          return old.map(r =>
+            r.cuentaId === row.cuentaId
+              ? { ...r, docsCompletos: OBLIGATORIO_GRUPOS.length, estatusExpediente: 'LISTO' as EstatusExpediente }
+              : r,
+          );
+        },
+      );
+
+      // Invalida con la key correcta para refetch en background
       await Promise.all([
-        qcPanel.invalidateQueries({ queryKey: ['expedientes-real', row.proyectoId] }),
+        qcPanel.invalidateQueries({ queryKey: ['expedientes-dashboard', row.proyectoId] }),
         qcPanel.invalidateQueries({ queryKey: ['exp-docs-persona', row.personaId] }),
       ]);
       toast.success('Expediente marcado como listo correctamente.');
@@ -713,13 +727,14 @@ export function ExpedientesDashboard() {
         .eq('es_draft', false);
 
       // latestDocByKey: "personaId__grupoKey" → doc más reciente de ese grupo obligatorio
+      // Null fecha_creacion → sentinel '9999' para que sea NULLS FIRST igual que PostgreSQL DESC
       const latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }> = {};
       (docs || []).forEach((d: any) => {
         if (!d.id_persona) return;
         const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
         if (!groupKey) return;
         const key = `${d.id_persona}__${groupKey}`;
-        const fecha = d.fecha_creacion ?? '';
+        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
         const ex = latestDocByKey[key];
         if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
           latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
