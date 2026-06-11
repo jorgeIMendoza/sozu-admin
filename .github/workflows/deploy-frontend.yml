@@ -148,22 +148,23 @@ jobs:
           FIREBASE_CLI_PREVIEWS: hostingchannels
 
       - name: Autenticar a Google Cloud (Firestore dev)
-        if: success()
+        if: always()
         continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_GCP_DEV }}
 
       - name: Configurar gcloud (notify)
-        if: success()
+        if: always()
         continue-on-error: true
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Notificar deploy listo (WhatsApp)
-        if: success()
+        if: always()
         continue-on-error: true
         env:
           ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'PROD' || 'DEV' }}
+          STATUS: ${{ job.status }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FIRESTORE_PROJECT: sozu-admin-dev
           N8N_WEBHOOK: https://automatizacion-n8n.fbqqbe.easypanel.host/webhook/manda_notificacion
