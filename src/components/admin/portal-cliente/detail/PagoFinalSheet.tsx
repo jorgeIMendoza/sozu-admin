@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sheet,
   SheetContent,
@@ -95,6 +97,8 @@ const toneIcon = (tone: StatusTone) => {
 
 import MortgageBankSelector from "./MortgageBankSelector";
 
+const PREFERRED_BANK_IDS: Record<string, number> = { BBVA: 1, Santander: 2, Banorte: 3 };
+
 const PagoFinalSheet = ({
   stage,
   investment,
@@ -103,6 +107,8 @@ const PagoFinalSheet = ({
   onViewPaymentInstructions,
 }: PagoFinalSheetProps) => {
   const { financials, property } = investment;
+  const cuentaId = Number(property.id);
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<PaymentMethod>(null);
   const [process, setProcess] = useState<MortgageProcess | null>(null);
@@ -128,14 +134,19 @@ const PagoFinalSheet = ({
     onClose();
   };
 
-  const handlePropiosAction = () => {
+  const handlePropiosAction = async () => {
+    await (supabase as any)
+      .from('cuentas_cobranza')
+      .update({ tipo_financiamiento: 'RECURSOS_PROPIOS' })
+      .eq('id', cuentaId);
+    queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     if (onViewPaymentInstructions) {
       onClose();
       setTimeout(() => onViewPaymentInstructions(), 200);
     }
   };
 
-  const handleConfirmMortgage = (choice: MortgageChoice) => {
+  const handleConfirmMortgage = async (choice: MortgageChoice) => {
     const newProcess: MortgageProcess = {
       propertyId: property.id,
       declaredAt: new Date().toISOString(),
@@ -145,6 +156,25 @@ const PagoFinalSheet = ({
     };
     saveMortgageProcess(newProcess);
     setProcess(newProcess);
+
+    await (supabase as any)
+      .from('cuentas_cobranza')
+      .update({ tipo_financiamiento: 'CREDITO_HIPOTECARIO' })
+      .eq('id', cuentaId);
+
+    if (choice.type === 'preferred') {
+      const bankId = PREFERRED_BANK_IDS[choice.bankId];
+      if (bankId) {
+        await (supabase as any)
+          .from('creditos_hipotecarios')
+          .upsert(
+            { id_cuenta_cobranza: cuentaId, id_banco: bankId, monto_credito: 0 },
+            { onConflict: 'id_cuenta_cobranza' },
+          );
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     setStep(choice.type === "preferred" ? "prequalification" : "status");
   };
 

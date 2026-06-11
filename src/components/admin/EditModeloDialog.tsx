@@ -56,6 +56,8 @@ interface Modelo {
   id_proyecto?: number | null;
   plano_arquitectonico?: string | null;
   url_imagen_portada?: string | null;
+  url_tour_360?: string | null;
+  highlights?: any;
 }
 
 interface EditModeloDialogProps {
@@ -69,6 +71,10 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const [planoUrl, setPlanoUrl] = useState<string | null>(modelo.plano_arquitectonico || null);
   const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>(modelo.url_imagen_portada || "");
+  const [tour360Url, setTour360Url] = useState<string>(modelo.url_tour_360 || "");
+  const [highlightsText, setHighlightsText] = useState<string>(
+    Array.isArray(modelo.highlights) ? modelo.highlights.join('\n') : (modelo.highlights ? JSON.stringify(modelo.highlights) : "")
+  );
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -100,9 +106,11 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
         id_proyecto: parseInt(values.id_proyecto),
         plano_arquitectonico: planoUrl,
         url_imagen_portada: imagenPortadaUrl || null,
+        url_tour_360: tour360Url || null,
+        highlights: highlightsText.trim() ? highlightsText.split('\n').map(s => s.trim()).filter(Boolean) : null,
       };
 
-      const { error: modeloError } = await supabase
+      const { error: modeloError } = await (supabase as any)
         .from("modelos")
         .update(modeloData)
         .eq("id", modelo.id);
@@ -268,6 +276,26 @@ export const EditModeloDialog = ({ modelo, onModeloUpdated, proyectos }: EditMod
               value={imagenPortadaUrl}
               onChange={(url) => setImagenPortadaUrl(url)}
             />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Render / Tour 360°</label>
+              <Input
+                placeholder="https://..."
+                value={tour360Url}
+                onChange={(e) => setTour360Url(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Lights / Highlights</label>
+              <Textarea
+                placeholder={"Alberca\nGimnasio\nRooftop"}
+                value={highlightsText}
+                onChange={(e) => setHighlightsText(e.target.value)}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">Un highlight por línea</p>
+            </div>
 
             <PlanoArquitectonicoUpload
               currentUrl={planoUrl}

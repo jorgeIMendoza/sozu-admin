@@ -3,6 +3,7 @@ import { ArrowLeft, Download, Filter, ChevronDown, Copy, CheckCircle2, Clock, Sh
 import type { InvestmentProperty } from "@/lib/offers/mock-data";
 import { getPropertyStatus } from "@/lib/offers/mock-data";
 import { usePaymentPlan, type PropertyPaymentPlan } from "@/lib/offers/payment-data";
+import { buildPaymentPlanFromInvestment } from "@/lib/portal-cliente/payment-plan-builder";
 import { toast } from "sonner";
 import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptModal";
 import { buildReceiptFromInstallment, buildReceiptFromPaymentRecord } from "@/lib/offers/receipt-utils";
@@ -64,7 +65,8 @@ const currentPeriod = () => {
 const AccountStatementView = ({ investment, onBack }: AccountStatementViewProps) => {
   const { property, financials } = investment;
   const status = getPropertyStatus(investment);
-  const paymentPlan = usePaymentPlan(property.id);
+  const mockPlan = usePaymentPlan(property.id);
+  const paymentPlan = useMemo(() => buildPaymentPlanFromInvestment(investment) ?? mockPlan, [investment, mockPlan]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState("Todos");
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -144,7 +146,7 @@ const AccountStatementView = ({ investment, onBack }: AccountStatementViewProps)
             <div className="flex justify-between">
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</p>
-                <p className="text-xs font-semibold text-foreground mt-0.5">Alejandro García</p>
+                <p className="text-xs font-semibold text-foreground mt-0.5">{property.clientName ?? "—"}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Periodo</p>

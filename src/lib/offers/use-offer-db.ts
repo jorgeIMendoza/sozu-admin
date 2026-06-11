@@ -213,7 +213,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     oferta.email_creador
       ? supabase
           .from("usuarios")
-          .select("id_persona, personas:id_persona(id, nombre_legal, email, telefono, clave_pais_telefono)")
+          .select("id_persona, foto_perfil_url, frase_perfil, personas:id_persona(id, nombre_legal, email, telefono, clave_pais_telefono)")
           .eq("email", oferta.email_creador)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -426,7 +426,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           fullName: agentPersona.nombre_legal ?? "",
           firstName,
           title: "Asesor SOZU",
-          photoUrl: "",
+          photoUrl: (agentUser as any)?.foto_perfil_url ?? "",
+          bio: (agentUser as any)?.frase_perfil ?? undefined,
           phone,
           email: agentPersona.email ?? "",
           whatsapp,
