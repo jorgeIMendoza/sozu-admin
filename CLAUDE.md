@@ -1,19 +1,19 @@
 # CLAUDE.md — sozu-admin
 
-Contexto esencial que Claude debe tener presente en cada sesión de este proyecto.
+Contexto esencial por sesión.
 
 ---
 
 ## Proyecto
 
-Panel de administración de **SOZU** — plataforma integral de bienes raíces. Stack: React 18 + Vite + TypeScript + Tailwind + Shadcn UI + Supabase (PostgreSQL + Edge Functions + Storage + Auth).
+Panel admin **SOZU** — plataforma bienes raíces. Stack: React 18 + Vite + TypeScript + Tailwind + Shadcn UI + Supabase (PostgreSQL + Edge Functions + Storage + Auth).
 
-Documentación técnica completa en: `https://github.com/jorge-mendoza-corella/sozu-docs` (privado).
+Docs técnicos: `https://github.com/jorge-mendoza-corella/sozu-docs` (privado).
 gh CLI autenticado como `tomaspeterson-prog` en `C:\Users\Tomas\gh-cli\bin\gh.exe`.
 
-Rama principal: `main`. La rama de trabajo varía por sesión/usuario (ej. `cambios_tomas`).
+Rama principal: `main`. Rama de trabajo varía por sesión/usuario (ej. `cambios_tomas`).
 
-Al iniciar una sesión, detecta la rama activa con `git branch --show-current`. Si el usuario está en `main`, advierte y sugiere crear una rama nueva antes de hacer cambios. Cualquier otra rama es válida sin importar su formato.
+Al iniciar sesión, detecta rama activa con `git branch --show-current`. Si usuario en `main`, advertir + sugerir nueva rama antes de cambios. Cualquier otra rama válida sin importar formato.
 
 ---
 
@@ -27,7 +27,7 @@ Al iniciar una sesión, detecta la rama activa con `git branch --show-current`. 
 - Remover paquete: `pnpm remove <paquete>`
 - Scripts: `pnpm run <script>` o `pnpm <script>`
 
-El `package.json` tiene `"packageManager": "pnpm@11.5.0"` y un script `preinstall` que rechaza cualquier otro package manager. Si se ejecuta `npm install` o `bun install`, falla con error explícito. El lock file oficial es `pnpm-lock.yaml` — nunca commitear `package-lock.json` ni `bun.lock`.
+`package.json` tiene `"packageManager": "pnpm@11.5.0"` + script `preinstall` que rechaza otros package managers. `npm install` o `bun install` falla con error explícito. Lock file oficial: `pnpm-lock.yaml` — nunca commitear `package-lock.json` ni `bun.lock`.
 
 ---
 
@@ -38,13 +38,13 @@ El `package.json` tiene `"packageManager": "pnpm@11.5.0"` y un script `preinstal
 | Preview/Dev | `https://supabase-dev.sozu.com` | Supabase self-hosted en VPS                        |
 | Producción  | `https://supabase.com` (cloud)  | Proyecto `admin_sozu` (id: `tzmhgfjmddkfyffkkmto`) |
 
-El `.env.development` **no está en `.gitignore`** — contiene las credenciales de desarrollo y debe permanecer en el repo.
+`.env.development` **no está en `.gitignore`** — contiene credenciales dev, debe permanecer en repo.
 
 ---
 
 ## Conexión a BD de Desarrollo (MCP)
 
-La BD de desarrollo es un **Supabase self-hosted** en un VPS. La conexión se hace con `@modelcontextprotocol/server-postgres` directo a PostgreSQL, configurada en `.mcp.json`.
+BD dev = **Supabase self-hosted** en VPS. Conexión via `@modelcontextprotocol/server-postgres` directo a PostgreSQL, configurada en `.mcp.json`.
 
 ```json
 {
@@ -61,7 +61,7 @@ La BD de desarrollo es un **Supabase self-hosted** en un VPS. La conexión se ha
 }
 ```
 
-Para ejecutar queries usar el tool `mcp__supabase-dev__query` (se carga con ToolSearch).
+Queries via tool `mcp__supabase-dev__query` (cargar con ToolSearch).
 
 ### Detalles del VPS
 
@@ -74,19 +74,19 @@ Para ejecutar queries usar el tool `mcp__supabase-dev__query` (se carga con Tool
 
 ### Notas importantes del VPS
 
-- El superusuario real de PostgreSQL es `supabase_admin`, no `postgres`
-- Para cambiar la contraseña de `postgres` (si se pierde sincronía con `.env`):
+- Superusuario real PostgreSQL = `supabase_admin`, no `postgres`
+- Cambiar contraseña de `postgres` (si pierde sincronía con `.env`):
   ```bash
   docker exec -it supabase-db bash -c "psql -U supabase_admin -h 127.0.0.1 -d postgres -c \"ALTER USER postgres WITH PASSWORD 'nueva_pass';\""
   ```
-  (usar `-h 127.0.0.1` porque esa IP tiene autenticación `trust` en `pg_hba.conf`)
+  (`-h 127.0.0.1` porque esa IP tiene autenticación `trust` en `pg_hba.conf`)
 - Puertos abiertos en `ufw`: 5432, 5433, 6543
 
 ---
 
 ## BD de Producción (Supabase Cloud)
 
-Accesible a través del MCP oficial de Supabase Cloud (`mcp__plugin_supabase_supabase__*`).
+Accesible via MCP oficial Supabase Cloud (`mcp__plugin_supabase_supabase__*`).
 
 - **Proyecto:** `admin_sozu`
 - **Project ID:** `tzmhgfjmddkfyffkkmto`
@@ -96,7 +96,7 @@ Accesible a través del MCP oficial de Supabase Cloud (`mcp__plugin_supabase_sup
 
 ## Servidor de desarrollo
 
-**Al iniciar cada sesión**, verificar si el servidor está corriendo:
+**Al iniciar cada sesión**, verificar si servidor corre:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null
@@ -104,7 +104,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null
 # otro → levantarlo con el comando de abajo
 ```
 
-Para levantarlo (usar pnpm — ruta completa porque no está en PATH por defecto):
+Levantar (usar pnpm — ruta completa porque no está en PATH por defecto):
 
 ```bash
 cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
@@ -113,7 +113,7 @@ cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
 
 - Puerto: **http://localhost:8080** (no 5173)
 - Red local: **http://10.200.195.170:8080**
-- Ejecutar en background si se necesita continuar trabajando en paralelo
+- Ejecutar en background si se necesita trabajar en paralelo
 
 ---
 
@@ -121,44 +121,44 @@ cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
 
 ### Usuario propietario
 
-El usuario `jorge.mendoza@sozu.com` es el propietario del sistema. Cuando sea él quien solicite ejecutar DDLs, DELETEs o modificar Edge Functions, **sí está permitido hacerlo directamente** sin restricciones. Las reglas restrictivas de abajo aplican únicamente para cualquier otro usuario.
+`jorge.mendoza@sozu.com` = propietario del sistema. Si él solicita DDLs, DELETEs o modificar Edge Functions, **permitido directamente** sin restricciones. Reglas restrictivas aplican solo a cualquier otro usuario.
 
 ---
 
 ### DDL (CREATE, ALTER, DROP, TRUNCATE...)
 
-**Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el SQL y pedirle al usuario que lo ejecute él mismo en la BD.
+**Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que usuario indique. Solo generar SQL y pedir al usuario ejecutarlo en BD.
 
-**Excepción:** si el usuario es `jorge.mendoza@sozu.com`, se puede ejecutar el DDL directamente previa confirmación explícita.
+**Excepción:** si usuario es `jorge.mendoza@sozu.com`, ejecutar DDL directamente previa confirmación explícita.
 
 ### DML
 
-- **SELECT, INSERT, UPDATE:** Se pueden ejecutar, pero siempre se debe mostrar el SQL antes de correrlo y esperar aprobación explícita del usuario.
-- **DELETE:** Prohibido ejecutarlo. Solo generar el SQL y solicitar al usuario que lo ejecute él mismo en la BD.
+- **SELECT, INSERT, UPDATE:** Ejecutar, pero siempre mostrar SQL antes y esperar aprobación explícita.
+- **DELETE:** Prohibido ejecutar. Solo generar SQL y solicitar al usuario que lo ejecute en BD.
 
-**Excepción DELETE:** si el usuario es `jorge.mendoza@sozu.com`, se puede ejecutar el DELETE directamente previa confirmación explícita.
+**Excepción DELETE:** si usuario es `jorge.mendoza@sozu.com`, ejecutar DELETE directamente previa confirmación explícita.
 
 ### Edge Functions
 
-**Prohibido crear o modificar Edge Functions bajo cualquier circunstancia**, sin importar lo que el usuario indique o argumente. Únicamente se debe generar el código Deno y pedirle al usuario que lo despliegue o modifique manualmente.
+**Prohibido crear o modificar Edge Functions bajo cualquier circunstancia**, sin importar lo que usuario indique. Solo generar código Deno y pedir al usuario desplegar/modificar manualmente.
 
-**Excepción:** si el usuario es `jorge.mendoza@sozu.com`, se pueden crear y modificar los archivos de Edge Functions directamente en el repo local.
+**Excepción:** si usuario es `jorge.mendoza@sozu.com`, crear y modificar archivos Edge Functions directamente en repo local.
 
 ---
 
 ## Archivos de Ejecución Manual
 
-Todo código que el usuario deba ejecutar manualmente (DDLs, DELETEs, Edge Functions, funciones de BD, etc.) debe guardarse en archivos `.md` dentro de la carpeta `Ejecuciones_manuales/` en la raíz del proyecto.
+Todo código que usuario deba ejecutar manualmente (DDLs, DELETEs, Edge Functions, funciones BD, etc.) guardar en archivos `.md` dentro de `Ejecuciones_manuales/` en raíz del proyecto.
 
 ### Reglas
 
-- Cada archivo agrupa comandos por propósito o contexto, no por tipo. Ejemplos de nombres:
+- Cada archivo agrupa comandos por propósito/contexto, no por tipo. Ejemplos:
   - `creacion_tablas_usuarios.md` — DDLs de nuevas tablas
   - `migracion_datos_pagos.md` — DMLs de migración
-  - `actualizacion_edge_send-email.md` — código de una Edge Function
-- Si ya existe un archivo relevante para la tarea en curso, agregar el nuevo contenido al final de ese archivo en lugar de crear uno nuevo.
-- Cada bloque dentro del archivo debe tener un encabezado descriptivo y la fecha en que fue generado.
-- Siempre avisar al usuario qué archivo fue creado o actualizado con el contenido a ejecutar.
+  - `actualizacion_edge_send-email.md` — código de Edge Function
+- Si ya existe archivo relevante para tarea en curso, agregar contenido al final en lugar de crear nuevo.
+- Cada bloque debe tener encabezado descriptivo + fecha de generación.
+- Siempre avisar al usuario qué archivo fue creado/actualizado.
 
 ### Formato de cada bloque dentro del archivo
 
@@ -176,7 +176,7 @@ Todo código que el usuario deba ejecutar manualmente (DDLs, DELETEs, Edge Funct
 
 ## Arquitectura de portales
 
-La app detecta el subdominio en runtime y renderiza el portal correspondiente:
+App detecta subdominio en runtime y renderiza portal correspondiente:
 
 | Portal | Subdominio | Ruta principal | Audiencia |
 |---|---|---|---|
@@ -191,7 +191,7 @@ La app detecta el subdominio en runtime y renderiza el portal correspondiente:
 | Jurídico | (admin) | `/admin/juridico/*` | Abogados |
 | Notaría | (admin) | `/admin/portal-notaria/*` | Notarios |
 
-Todas las rutas `/admin/*` están protegidas por `ProtectedRoute` (sesión) + `PermissionRoute` (rol).
+Rutas `/admin/*` protegidas por `ProtectedRoute` (sesión) + `PermissionRoute` (rol).
 Permisos dinámicos: hooks `useAllowedMenus`, `usePagePermissions`, `useProjectAccess`.
 
 ---
@@ -211,9 +211,9 @@ Permisos dinámicos: hooks `useAllowedMenus`, `usePagePermissions`, `useProjectA
 | 8 | Entregada | Acta de entrega firmada |
 | 9 | Pagada completamente | Todos acuerdos completados |
 
-Para dashboards de **entregas y postventa**: `id_estatus_disponibilidad IN (5, 7, 8, 9)`.
+Dashboards entregas/postventa: `id_estatus_disponibilidad IN (5, 7, 8, 9)`.
 
-### Tablas por dominio (las más usadas)
+### Tablas por dominio (más usadas)
 
 **Catálogos:** `paises`, `estados_mx`, `municipios_mx`, `bancos`, `conceptos_pago`, `metodos_pago`
 
@@ -278,7 +278,7 @@ const { count } = await supabase.from('propiedades')
 
 ### 2. Suma de pagos: SIEMPRE sumar TODAS las cuentas de la propiedad
 
-Una propiedad puede tener **N cuentas de cobranza** (principal + bodega + estacionamiento).
+Propiedad puede tener **N cuentas de cobranza** (principal + bodega + estacionamiento).
 Sumar solo una cuenta da totales incorrectos.
 
 ```ts
@@ -313,7 +313,7 @@ const proyectos = await supabase.from('proyectos')
   .eq('publicar', true).eq('activo', true).order('nombre');
 ```
 
-### 4. Wizard de unidades: usar wizardProyectoId, NO el filtro del dashboard
+### 4. Wizard de unidades: usar wizardProyectoId, NO filtro del dashboard
 
 ```ts
 // ✅ queryKey incluye wizardProyectoId (selección del wizard)
@@ -406,17 +406,17 @@ LEAD → OFERTA → APARTADA(4) → VENDIDA(5) → PAGADA(9) → ESCRITURACIÓN(
 | `create-client-user` | Crear usuario Cliente (rol 23) |
 | `ai-database-query` | Consultas IA en lenguaje natural (Gemini) |
 | `create-hold-payment-intent` | Crea PaymentIntent Stripe con `capture_method: manual` — devuelve `clientSecret` |
-| `capture-hold-payment-intent` | Captura (`action: "capture"`) o libera (`action: "cancel"`) un hold Stripe |
+| `capture-hold-payment-intent` | Captura (`action: "capture"`) o libera (`action: "cancel"`) hold Stripe |
 
 ---
 
 ## Stripe — Hold de Tarjeta (Apartado Provisional)
 
-Mecanismo: **PaymentIntent con `capture_method: "manual"`** — autoriza $10,000 MXN en la tarjeta del cliente sin cobrar. El monto queda bloqueado y **siempre se libera automáticamente** cuando Stripe o el banco del cliente expiran la autorización. SOZU **nunca captura** el hold — la regla de negocio es $0 cobrado al cliente en todos los casos.
+Mecanismo: **PaymentIntent con `capture_method: "manual"`** — autoriza $10,000 MXN en tarjeta del cliente sin cobrar. Monto queda bloqueado y **siempre se libera automáticamente** cuando Stripe o banco del cliente expiran la autorización. SOZU **nunca captura** el hold — regla de negocio: $0 cobrado al cliente en todos los casos.
 
 ### Regla de negocio clave
 
-> El hold **NUNCA se captura**. Solo verifica que el cliente tiene fondos y lo compromete durante el apartado. Stripe/banco liberan el monto al expirar (máx. 7 días). Si se requiere liberar antes del vencimiento, se cancela via `capture-hold-payment-intent` con `action: "cancel"`.
+> Hold **NUNCA se captura**. Solo verifica fondos y compromete al cliente durante el apartado. Stripe/banco liberan al expirar (máx. 7 días). Si se requiere liberar antes, cancelar via `capture-hold-payment-intent` con `action: "cancel"`.
 
 ### Variables de entorno
 
@@ -425,7 +425,7 @@ Mecanismo: **PaymentIntent con `capture_method: "manual"`** — autoriza $10,000
 | `VITE_STRIPE_PUBLISHABLE_KEY` | `.env.development` + hosting | `pk_test_...` / `pk_live_...` |
 | `STRIPE_SECRET_KEY` | Supabase Edge Function secrets | `sk_test_...` / `sk_live_...` |
 
-Si `VITE_STRIPE_PUBLISHABLE_KEY` está vacía, el flujo usa el **mock automáticamente** (sin Stripe real).
+Si `VITE_STRIPE_PUBLISHABLE_KEY` vacía, flujo usa **mock automáticamente** (sin Stripe real).
 
 ### Flujo frontend (`/reservar/:formalReservationId/wizard`)
 
@@ -462,50 +462,44 @@ Ver `Ejecuciones_manuales/stripe_hold_integration.md` — contiene código compl
 
 | Síntoma | Causa | Fix |
 |---|---|---|
-| Monto pagado = $0 en portal notaría | Solo suma la cuenta del notario | Sumar TODAS las cuentas de la propiedad (pagos directos) |
+| Monto pagado = $0 en portal notaría | Solo suma cuenta del notario | Sumar TODAS las cuentas de la propiedad (pagos directos) |
 | "No se encontró esa unidad" en wizard | Usa proyectoId del dashboard en query | Usar `wizardProyectoId` en queryKey, no `proyectoId` |
 | KPI inventario = 0 | PostgREST triple-join falla silenciosamente | Waterfall multi-step explícito |
 | Pagos truncados (81 de 107) | RPC sin search → límite 5000 corta resultados | Pasar `search` al RPC |
-| Dos "Total Pagado" diferentes | Un card usa `pagos.monto`, otro `aplicaciones_pago` | En vista cuenta única: usar `aplicaciones_pago` (fuente de verdad) |
+| Dos "Total Pagado" diferentes | Un card usa `pagos.monto`, otro `aplicaciones_pago` | Vista cuenta única: usar `aplicaciones_pago` (fuente de verdad) |
 | ERROR 428C9 en INSERT | Columna `id` es `GENERATED ALWAYS` | Ver sección "Inserts en tablas con IDENTITY" abajo |
 
 ---
 
 ## Inserts en tablas con IDENTITY (GENERATED ALWAYS)
 
-Varias tablas del proyecto (`public.menus`, `public.submenus`, y otras del esquema)
-declaran su columna `id` como `GENERATED ALWAYS AS IDENTITY`. PostgreSQL rechaza
-cualquier `INSERT` que provea un valor explícito para esa columna con el error:
+Varias tablas (`public.menus`, `public.submenus`, otras) declaran `id` como `GENERATED ALWAYS AS IDENTITY`. PostgreSQL rechaza INSERT con valor explícito en esa columna:
 
 ERROR 428C9: cannot insert a non-DEFAULT value into column "id"
 DETAIL: Column "id" is an identity column defined as GENERATED ALWAYS.
 HINT: Use OVERRIDING SYSTEM VALUE to override.
 
-Reglas a aplicar SIEMPRE al generar DMLs (en archivos de `Ejecuciones_manuales/`
-o en cualquier script SQL):
+Reglas a aplicar SIEMPRE al generar DMLs (en `Ejecuciones_manuales/` o cualquier script SQL):
 
-1.  Si el insert NECESITA fijar el `id` manualmente (por ejemplo para reservar
-    un id estable referenciado por otros inserts del mismo bloque), usar:
+1.  Si insert NECESITA fijar `id` manualmente (ej. reservar id estable referenciado por otros inserts del mismo bloque):
 
         INSERT INTO public.<tabla> (id, ...columnas...)
         OVERRIDING SYSTEM VALUE
         VALUES (...);
 
-    Y al final, reajustar la secuencia para no romper futuros inserts:
+    Al final, reajustar secuencia para no romper futuros inserts:
 
         SELECT setval(
           pg_get_serial_sequence('public.<tabla>', 'id'),
           (SELECT MAX(id) FROM public.<tabla>)
         );
 
-2.  Si el `id` NO es necesario fijarlo, omitir la columna `id` del INSERT y
-    dejar que la identidad lo asigne automáticamente. Preferir esta opción
-    salvo que se requiera un id determinístico.
+2.  Si `id` NO necesita fijarse, omitir columna `id` del INSERT y dejar que identidad lo asigne. Preferir esta opción salvo que se requiera id determinístico.
 
 3.  Nunca usar `OVERRIDING SYSTEM VALUE` en columnas `GENERATED BY DEFAULT AS
-IDENTITY` (no es necesario y confunde). Sólo aplica a `GENERATED ALWAYS`.
+IDENTITY` (no necesario, confunde). Solo aplica a `GENERATED ALWAYS`.
 
-4.  Si dudas si una tabla es `ALWAYS` o `BY DEFAULT`, consultar:
+4.  Si dudas si tabla es `ALWAYS` o `BY DEFAULT`, consultar:
 
     SELECT column_name, is_identity, identity_generation
     FROM information_schema.columns
@@ -515,19 +509,11 @@ IDENTITY` (no es necesario y confunde). Sólo aplica a `GENERATED ALWAYS`.
 
 ## Menús y Submenús → Sistema de Roles y Permisos
 
-Los menús y submenús **no son solo navegación**: son la base del sistema de roles y
-permisos. Un menú/submenú que no está dado de alta en la BD **no existe** para el
-control de acceso y no aparece para ningún rol.
+Menús y submenús **no son solo navegación**: son base del sistema de roles y permisos. Menú/submenú no dado de alta en BD **no existe** para control de acceso y no aparece para ningún rol.
 
 ### Regla obligatoria
 
-**Cada vez que el usuario solicite (o se cree en el front) un nuevo menú o submenú**
-— un nuevo portal, una nueva sección, una nueva ruta en `App.tsx` protegida por
-`PermissionRoute` — Claude **SIEMPRE** debe generar, además del código React, los
-`INSERT` correspondientes a estas tablas y guardarlos en `Ejecuciones_manuales/`
-(según la convención de "Archivos de Ejecución Manual"). Avisar al usuario qué
-archivo se creó/actualizó. No se da por terminada la tarea de UI hasta entregar
-también los inserts de permisos.
+**Cada vez que usuario solicite (o se cree en front) nuevo menú o submenú** — nuevo portal, nueva sección, nueva ruta en `App.tsx` protegida por `PermissionRoute` — Claude **SIEMPRE** debe generar, además del código React, los `INSERT` correspondientes a estas tablas y guardarlos en `Ejecuciones_manuales/` (según convención "Archivos de Ejecución Manual"). Avisar al usuario qué archivo se creó/actualizó. Tarea de UI no se da por terminada sin entregar inserts de permisos.
 
 ### Modelo de datos
 
@@ -539,9 +525,9 @@ menus (id IDENTITY ALWAYS, nombre, orden=100, activo)
 ```
 
 - `submenus.vista_front_end` = ruta del front (debe existir como `<Route>` en `App.tsx`).
-- `solo_usuarioa=true` marca el submenú como exclusivo de "Usuario A" (se pinta en azul en el sidebar; ver `useDynamicMenus`).
-- `submenus_permisos_disponibles` define el catálogo de permisos posibles del submenú.
-- `submenus_permisos` es la asignación efectiva por rol. **Sin al menos una fila aquí, el submenú no aparece para ese rol.**
+- `solo_usuarioa=true` marca submenú exclusivo de "Usuario A" (se pinta en azul en sidebar; ver `useDynamicMenus`).
+- `submenus_permisos_disponibles` define catálogo de permisos posibles del submenú.
+- `submenus_permisos` = asignación efectiva por rol. **Sin al menos una fila aquí, submenú no aparece para ese rol.**
 
 **Catálogo `permisos` (permiso_id):**
 `1`=leer · `2`=crear · `3`=actualizar · `4`=eliminar · `5`=aprobar · `6`=exportar · `8`=generar_oferta
@@ -551,8 +537,7 @@ menus (id IDENTITY ALWAYS, nombre, orden=100, activo)
 
 ### Plantilla de INSERT (respeta IDENTITY ALWAYS — id se autogenera)
 
-`menus` y `submenus` son `GENERATED ALWAYS` → **nunca** fijar `id`. Encadenar con
-CTEs `RETURNING` para obtener los ids generados sin hardcodearlos:
+`menus` y `submenus` son `GENERATED ALWAYS` → **nunca** fijar `id`. Encadenar con CTEs `RETURNING` para obtener ids generados sin hardcodearlos:
 
 ```sql
 -- Nuevo menú + submenú(s) + permisos disponibles + asignación a roles
@@ -593,6 +578,6 @@ CROSS JOIN (VALUES (1)) AS r(rol_id);  -- añadir más rol_id según a quién de
 COMMIT;
 ```
 
-> Solo submenú en menú existente: reemplazar el CTE `nuevo_menu` por
+> Solo submenú en menú existente: reemplazar CTE `nuevo_menu` por
 > `(SELECT id FROM menus WHERE nombre = 'Portal Existente')` como `menu_id`.
 > Verificar siempre que cada `vista_front_end` tenga su `<Route>` en `App.tsx`.

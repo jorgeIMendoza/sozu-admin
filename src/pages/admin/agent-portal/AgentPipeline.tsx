@@ -10,7 +10,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Clock, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2 } from "lucide-react";
+import { Loader2, Plus, User, Clock, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -568,6 +568,14 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
                 {formatCurrency(oferta.precio)}
               </span>
             )}
+            <button
+              onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
+              title="Ver oferta pública"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors text-violet-600 hover:bg-violet-50"
+            >
+              <Eye className="h-3 w-3" />
+              Ver
+            </button>
             <button
               onClick={handleSendEmail}
               title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
