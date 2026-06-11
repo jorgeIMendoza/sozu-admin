@@ -44,6 +44,9 @@ interface Modelo {
   numero_medio_bano?: number;
   id_proyecto?: number | null;
   plano_arquitectonico?: string | null;
+  url_imagen_portada?: string | null;
+  url_tour_360?: string | null;
+  highlights?: any;
 }
 
 interface Proyecto {
@@ -135,7 +138,7 @@ export default function Modelos() {
 
       let query = supabase
         .from("modelos")
-        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo, plano_arquitectonico, url_imagen_portada", { count: 'exact' })
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo, plano_arquitectonico, url_imagen_portada, url_tour_360, highlights", { count: 'exact' })
         .eq("activo", true);
 
       // Apply project access filter for non-admin users
@@ -173,7 +176,7 @@ export default function Modelos() {
 
       let query = supabase
         .from("modelos")
-        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo, plano_arquitectonico, url_imagen_portada", { count: 'exact' })
+        .select("id, nombre, descripcion, numero_recamaras, numero_completo_banos, numero_medio_bano, id_proyecto, activo, plano_arquitectonico, url_imagen_portada, url_tour_360, highlights", { count: 'exact' })
         .eq("activo", false);
 
       // Apply filters

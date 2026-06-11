@@ -29,6 +29,7 @@ import PropertyDocuments from "./PropertyDocuments";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
+import PagoFinalSheet from "@/components/admin/portal-cliente/detail/PagoFinalSheet";
 
 interface Props {
   investment: InvestmentProperty;
@@ -65,7 +66,17 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const stageInfo = getStageInfo(activeStage?.id ?? "preventa");
 
   const [showPaySheet, setShowPaySheet] = useState(false);
+  const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
+
+  const handlePay = () => {
+    const sinForma = investment.property.tipoFinanciamiento == null;
+    if (activeStage?.id === 'pago_final' && sinForma) {
+      setShowPagoFinalSheet(true);
+    } else {
+      setShowPaySheet(true);
+    }
+  };
 
   return (
     <div className="pb-24 space-y-5">
@@ -169,7 +180,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
           {/* Precio de compra (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
-            <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
+            <FinancialSideCard investment={investment} onPay={handlePay} />
           </div>
 
           {/* 5 · Cronograma de pagos */}
@@ -187,13 +198,13 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
         {/* ── Right column (desktop only) ── */}
         <div className="hidden md:block space-y-4">
           <AgentSideCard investment={investment} />
-          <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
+          <FinancialSideCard investment={investment} onPay={handlePay} />
           <TechnicalSideCard property={property} />
         </div>
       </div>
 
       {/* Mobile-only sticky CTA */}
-      <AcquisitionStickyCTA investment={investment} onPay={() => setShowPaySheet(true)} />
+      <AcquisitionStickyCTA investment={investment} onPay={handlePay} />
 
       <AcquisitionPaymentSheet
         open={showPaySheet}
@@ -201,6 +212,19 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
         cuentaId={Number(property.id)}
         propertyLabel={propertyLabel}
       />
+
+      {activeStage && (
+        <PagoFinalSheet
+          stage={activeStage}
+          investment={investment}
+          open={showPagoFinalSheet}
+          onClose={() => setShowPagoFinalSheet(false)}
+          onViewPaymentInstructions={() => {
+            setShowPagoFinalSheet(false);
+            setShowPaySheet(true);
+          }}
+        />
+      )}
     </div>
   );
 };

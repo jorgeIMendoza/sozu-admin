@@ -69,6 +69,11 @@ const formSchema = z.object({
       message: "El monto debe ser entre 0 y 5000"
     }),
   monto_garantia_renta: z.string().optional(),
+  slogan: z.string().optional(),
+  url_sitio_web: z.string().optional(),
+  instagram_handle: z.string().optional(),
+  facebook_handle: z.string().optional(),
+  youtube_handle: z.string().optional(),
 }).refine((data) => {
   // Si no es tipo Productos, Servicios o Mantenimientos, id_estatus_proyecto es requerido
   if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10" && data.id_tipo_uso !== "11") {
@@ -123,6 +128,11 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       costo_mantenimiento_m2: "",
       monto_mensual_cuota_extraordinaria: "",
       monto_garantia_renta: "",
+      slogan: "",
+      url_sitio_web: "",
+      instagram_handle: "",
+      facebook_handle: "",
+      youtube_handle: "",
     },
   });
 
@@ -279,9 +289,14 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : 0,
         monto_mensual_cuota_extraordinaria: values.monto_mensual_cuota_extraordinaria ? parseFloat(values.monto_mensual_cuota_extraordinaria) : 0,
         monto_garantia_renta: values.monto_garantia_renta ? parseFloat(values.monto_garantia_renta) : 0,
+        slogan: values.slogan || null,
+        url_sitio_web: values.url_sitio_web || null,
+        instagram_handle: values.instagram_handle || null,
+        facebook_handle: values.facebook_handle || null,
+        youtube_handle: values.youtube_handle || null,
       };
 
-      const { data: newProject, error } = await supabase
+      const { data: newProject, error } = await (supabase as any)
         .from("proyectos")
         .insert(projectData)
         .select()
@@ -1165,6 +1180,77 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                           </FormItem>
                         )}
                       />
+
+                    <div className="mt-4">
+                      <h3 className="text-base font-semibold mb-3">Presencia Digital</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="slogan"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel>Slogan</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Slogan del proyecto" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="url_sitio_web"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel>Sitio Web Oficial</FormLabel>
+                              <FormControl>
+                                <Input placeholder="https://..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="instagram_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Instagram</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@usuario" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="facebook_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Facebook</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@usuario o URL" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="youtube_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>YouTube</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@canal o URL" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-end gap-2 mt-16 pt-6 border-t">

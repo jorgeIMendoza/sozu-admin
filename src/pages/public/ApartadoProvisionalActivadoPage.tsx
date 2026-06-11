@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useOfferById, formatMXN } from "@/lib/offers/offer-data";
-import { useAgentById } from "@/lib/offers/agent-data";
+import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import { supabase } from "@/integrations/supabase/client";
 import PublicShell from "@/components/offer/PublicShell";
 import DevelopmentLogo from "@/components/offer/DevelopmentLogo";
 import {
@@ -26,7 +27,34 @@ const ApartadoProvisionalActivadoPage = () => {
   );
 
   const offer = useOfferById(formalReservation?.offerId ?? "");
-  const agent = useAgentById(offer?.agentId ?? "");
+  const mockAgent = useAgentById(offer?.agentId ?? "");
+  const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
+  const agentOfferId = formalReservation?.offerId;
+  useEffect(() => {
+    if (!agentOfferId) return;
+    (async () => {
+      const { data: oferta } = await supabase
+        .from("ofertas").select("email_creador").eq("id", agentOfferId).single();
+      if (!oferta?.email_creador) return;
+      const { data: usuario } = await supabase
+        .from("usuarios").select("id_persona").eq("email", oferta.email_creador).single();
+      if (!usuario?.id_persona) return;
+      const { data: persona } = await supabase
+        .from("personas").select("nombre_legal, telefono, clave_pais_telefono").eq("id", usuario.id_persona).single();
+      if (!persona?.nombre_legal) return;
+      const countryCode = (persona.clave_pais_telefono ?? "+52").replace("+", "");
+      const rawPhone = (persona.telefono ?? "").replace(/\s/g, "");
+      setAgentFromDB({
+        id: "", fullName: persona.nombre_legal,
+        firstName: persona.nombre_legal.split(" ")[0],
+        title: "", photoUrl: "", email: "",
+        phone: rawPhone ? `${persona.clave_pais_telefono ?? "+52"} ${persona.telefono ?? ""}` : "",
+        whatsapp: rawPhone ? `${countryCode}${rawPhone}` : "",
+        isAllied: true,
+      });
+    })();
+  }, [agentOfferId]);
+  const agent = agentFromDB ?? mockAgent ?? undefined;
 
   useEffect(() => {
     if (formalReservation && formalReservation.status !== "apartado_provisional") {
@@ -78,7 +106,7 @@ const ApartadoProvisionalActivadoPage = () => {
   return (
     <PublicShell
       noFooter
-      agent={agent ?? undefined}
+      agent={agent}
       developmentLogoUrl={offer?.development?.logoUrl ?? offer?.development?.logoUrlInverse}
       developmentName={offer?.property.projectName}
     >

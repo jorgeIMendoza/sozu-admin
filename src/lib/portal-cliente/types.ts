@@ -48,6 +48,7 @@ export interface PropertyData {
   clientName?: string;
   clientRFC?: string;
   notary?: NotaryData;
+  tipoFinanciamiento?: 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null;
 }
 
 export interface FinancialData {

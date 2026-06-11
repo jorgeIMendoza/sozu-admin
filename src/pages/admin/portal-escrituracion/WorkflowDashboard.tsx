@@ -631,6 +631,7 @@ interface EvalData {
   citaFirmaDate: string | null;
   entregaEstatus: string | null;
   entregaFecha: string | null;
+  tipoFinanciamiento?: PaymentMethod;
 }
 
 // ─── Main evaluation function ─────────────────────────────────────────────────
@@ -685,7 +686,7 @@ async function evaluateWorkflow(cuentaId: number, propiedadId: number): Promise<
       .maybeSingle();
     if (cuentaExtra) {
       if (cuentaExtra.tipo_financiamiento) {
-        // payment method stored in account — already known at caller level
+        baseData.tipoFinanciamiento = cuentaExtra.tipo_financiamiento as PaymentMethod;
       }
     }
   } catch (_) {}
@@ -936,7 +937,13 @@ export function WorkflowDashboard() {
     try {
       const evalData = await evaluateWorkflow(unit.cuentaId, unit.propiedadId);
 
-      const steps = buildSteps(pm, {
+      const dbPm = (evalData as any).tipoFinanciamiento as PaymentMethod | undefined;
+      const effectivePm: PaymentMethod = dbPm ?? pm;
+      if (dbPm && dbPm !== pm) {
+        setPaymentMethod(dbPm);
+      }
+
+      const steps = buildSteps(effectivePm, {
         documentCount: (evalData as any).documentCount ?? 0,
         documents: (evalData as any).documents ?? [],
         pagosStatus: (evalData as any).pagosStatus ?? 'PENDIENTE',
@@ -960,7 +967,7 @@ export function WorkflowDashboard() {
         unitCode: unit.unitCode,
         clientName: unit.clientName,
         buyerType: 'PERSONA_FISICA',
-        paymentMethod: pm,
+        paymentMethod: effectivePm,
         overallStatus: blocked.length > 0 ? 'BLOQUEADO' : completed.length === applicable.length ? 'COMPLETO' : 'EN_PROCESO',
         progressPercentage: pct,
         currentStepId: currentStep?.id ?? '1',

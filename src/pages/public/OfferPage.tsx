@@ -48,6 +48,20 @@ const SCROLL_OFFSET = 80;
 
 type DevelopmentSocials = { instagram?: string; facebook?: string; youtube?: string };
 
+function socialHref(base: string, value: string): string {
+  return value.startsWith("http") ? value : `${base}${value}`;
+}
+
+function instagramDisplay(value: string): string {
+  if (!value.startsWith("http")) return `@${value}`;
+  try {
+    const parts = new URL(value).pathname.split("/").filter(Boolean);
+    return parts.length > 0 ? `@${parts[0]}` : value;
+  } catch {
+    return value;
+  }
+}
+
 function DevelopmentSocialLinks({ socials, variant = "desktop" }: {
   socials?: DevelopmentSocials | null;
   variant?: "mobile" | "desktop";
@@ -64,19 +78,19 @@ function DevelopmentSocialLinks({ socials, variant = "desktop" }: {
   return (
     <div className={`flex flex-wrap gap-2${variant === "desktop" ? " mt-4 justify-center" : ""}`}>
       {instagram && (
-        <a href={`https://www.instagram.com/${instagram}/`} target="_blank" rel="noopener noreferrer"
+        <a href={socialHref("https://www.instagram.com/", instagram)} target="_blank" rel="noopener noreferrer"
            className={`${linkBase} text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/30`}>
-          <Instagram className="w-4 h-4" />@{instagram}
+          <Instagram className="w-4 h-4" />{instagramDisplay(instagram)}
         </a>
       )}
       {facebook && (
-        <a href={`https://www.facebook.com/${facebook}`} target="_blank" rel="noopener noreferrer"
+        <a href={socialHref("https://www.facebook.com/", facebook)} target="_blank" rel="noopener noreferrer"
            className={`${linkBase} text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30`}>
           <Facebook className="w-4 h-4" />Facebook
         </a>
       )}
       {youtube && (
-        <a href={`https://www.youtube.com/${youtube}`} target="_blank" rel="noopener noreferrer"
+        <a href={socialHref("https://www.youtube.com/", youtube)} target="_blank" rel="noopener noreferrer"
            className={`${linkBase} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30`}>
           <Youtube className="w-4 h-4" />YouTube
         </a>

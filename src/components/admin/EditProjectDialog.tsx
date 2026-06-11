@@ -59,6 +59,11 @@ const formSchema = z.object({
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
   mostrar_piso_en_oferta: z.boolean().default(true),
   mostrar_seccion_efectivo_en_oferta: z.boolean().default(true),
+  slogan: z.string().optional(),
+  url_sitio_web: z.string().optional(),
+  instagram_handle: z.string().optional(),
+  facebook_handle: z.string().optional(),
+  youtube_handle: z.string().optional(),
 });
 
 interface EditProjectDialogProps {
@@ -109,6 +114,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
       mostrar_precio_m2_en_oferta: true,
       mostrar_piso_en_oferta: true,
       mostrar_seccion_efectivo_en_oferta: true,
+      slogan: "",
+      url_sitio_web: "",
+      instagram_handle: "",
+      facebook_handle: "",
+      youtube_handle: "",
     },
   });
 
@@ -157,7 +167,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
   const { data: project, isLoading: isLoadingProject } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("proyectos")
         .select(`
           id,
@@ -185,6 +195,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
           mostrar_precio_m2_en_oferta,
           mostrar_piso_en_oferta,
           mostrar_seccion_efectivo_en_oferta,
+          slogan,
+          url_sitio_web,
+          instagram_handle,
+          facebook_handle,
+          youtube_handle,
           activo,
           fecha_creacion,
           fecha_actualizacion,
@@ -406,6 +421,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         mostrar_precio_m2_en_oferta: project.mostrar_precio_m2_en_oferta ?? true,
         mostrar_piso_en_oferta: project.mostrar_piso_en_oferta ?? true,
         mostrar_seccion_efectivo_en_oferta: project.mostrar_seccion_efectivo_en_oferta ?? true,
+        slogan: (project as any).slogan || "",
+        url_sitio_web: (project as any).url_sitio_web || "",
+        instagram_handle: (project as any).instagram_handle || "",
+        facebook_handle: (project as any).facebook_handle || "",
+        youtube_handle: (project as any).youtube_handle || "",
       });
       
       setSelectedCountry(project.direccion_id_pais || "");
@@ -443,12 +463,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         mostrar_precio_m2_en_oferta: values.mostrar_precio_m2_en_oferta,
         mostrar_piso_en_oferta: values.mostrar_piso_en_oferta,
         mostrar_seccion_efectivo_en_oferta: values.mostrar_seccion_efectivo_en_oferta,
+        slogan: values.slogan || null,
+        url_sitio_web: values.url_sitio_web || null,
+        instagram_handle: values.instagram_handle || null,
+        facebook_handle: values.facebook_handle || null,
+        youtube_handle: values.youtube_handle || null,
       };
 
       console.log('🔍 [DEBUG] Objeto projectData preparado para enviar:', projectData);
       console.log('🔍 [DEBUG] url_logo en projectData:', projectData.url_logo);
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await (supabase as any)
         .from("proyectos")
         .update(projectData)
         .eq("id", projectId);
@@ -1312,10 +1337,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                             <FormItem>
                               <FormLabel>Monto mensual de garantía de renta</FormLabel>
                               <FormControl>
-                                <Input 
+                                <Input
                                   type="number"
                                   step="0.01"
-                                  placeholder="0.00" 
+                                  placeholder="0.00"
                                   {...field}
                                 />
                               </FormControl>
@@ -1323,6 +1348,77 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                             </FormItem>
                           )}
                         />
+                    </div>
+
+                    <div className="col-span-2 mt-4">
+                      <h3 className="text-base font-semibold mb-3">Presencia Digital</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="slogan"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel>Slogan</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Slogan del proyecto" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="url_sitio_web"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel>Sitio Web Oficial</FormLabel>
+                              <FormControl>
+                                <Input placeholder="https://..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="instagram_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Instagram</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@usuario" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="facebook_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Facebook</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@usuario o URL" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="youtube_handle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>YouTube</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@canal o URL" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     </div>
 
                      <div className="flex justify-end space-x-2">

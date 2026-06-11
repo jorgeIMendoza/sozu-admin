@@ -127,6 +127,23 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
+  // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
+  const tipoFinMap: Record<number, 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null> = {};
+  try {
+    const { data: tfRows } = await (supabase as any)
+      .from('cuentas_cobranza')
+      .select('id, tipo_financiamiento')
+      .in('id', cuentaIds);
+    for (const r of (tfRows ?? [])) {
+      tipoFinMap[r.id as number] = r.tipo_financiamiento ?? null;
+    }
+  } catch (_) {}
+
+  const enrichedCuentas = (cuentas as Record<string, unknown>[]).map(c => ({
+    ...(c as Record<string, unknown>),
+    tipo_financiamiento: tipoFinMap[c.id as number] ?? null,
+  })) as Record<string, unknown>[];
+
   // 2.5 Fetch product offers (id_producto IS NOT NULL) and build additionalProducts per propiedad
   const productsByPropId: Record<number, AdditionalProduct[]> = {};
   {
@@ -292,7 +309,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
   // 4. Get edificios_modelos for project chain
   const edificioModeloIds = [...new Set(propiedades.map((p) => p.id_edificio_modelo as number).filter(Boolean))];
-  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap);
+  if (!edificioModeloIds.length) return buildFromData(enrichedCuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap);
 
   const { data: edificiosModelos } = await supabase
     .from("edificios_modelos")
@@ -327,7 +344,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     : { data: [] };
 
   return buildFromData(
-    cuentas,
+    enrichedCuentas,
     propiedades,
     edificiosModelos ?? [],
     edificios,
@@ -449,6 +466,9 @@ function buildFromData(
         clientName: persona?.nombre_legal ?? undefined,
         clientRFC: persona?.rfc ?? undefined,
         notary: cc.id_notario ? notariosMap[cc.id_notario as number] : undefined,
+        tipoFinanciamiento: cc.tipo_financiamiento
+          ? (String(cc.tipo_financiamiento) as 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO')
+          : null,
       },
       financials: {
         initialPrice: Number(cc.precio_final),
