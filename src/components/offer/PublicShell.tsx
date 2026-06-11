@@ -213,7 +213,7 @@ const PublicShell = ({
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] text-muted-foreground/60 leading-none mb-0.5">Tu asesor</p>
                     <p className="text-[13px] font-semibold text-foreground truncate">
-                      {agent.firstName} {agent.lastName}
+                      {agent.fullName}
                     </p>
                   </div>
                   {agent.phone && (

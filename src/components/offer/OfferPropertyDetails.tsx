@@ -114,7 +114,7 @@ const OfferPropertyDetails = ({ property, parkingSlots, materialsPaletteUrl }: P
                 {property.area && (
                   <IconStat
                     icon={ArrowUpRight}
-                    label={property.area}
+                    label={String(property.area)}
                     badge="m²"
                   />
                 )}
