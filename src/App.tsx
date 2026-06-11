@@ -851,6 +851,12 @@ const App = () => (
                   <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
                   <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
 
+                  {/* Portal Bancos */}
+                  <Route path="portal-bancos/bandeja"  element={<BancosBandeja />} />
+                  <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
+                  <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
+                  <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
