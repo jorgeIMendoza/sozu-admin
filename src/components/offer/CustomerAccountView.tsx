@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   generatePaymentSchedule,
   findNextPendingPayment,
@@ -20,7 +20,8 @@ import {
 import type { OfertaComercial, PreReservation } from "@/lib/offers/offer-data";
 import type { FormalReservation } from "@/lib/offers/formal-reservation-data";
 import { formatMXN, formatPropertyTitle } from "@/lib/offers/offer-data";
-import { useAgentById } from "@/lib/offers/agent-data";
+import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import { supabase } from "@/integrations/supabase/client";
 import PublicShell from "@/components/offer/PublicShell";
 
 interface Props {
@@ -30,7 +31,34 @@ interface Props {
 }
 
 const CustomerAccountView = ({ offer, preReservation, formalReservation }: Props) => {
-  const agent = useAgentById(offer.agentId ?? "");
+  const mockAgent = useAgentById(offer.agentId ?? "");
+  const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
+  const agentOfferId = offer.id;
+  useEffect(() => {
+    if (!agentOfferId) return;
+    (async () => {
+      const { data: oferta } = await supabase
+        .from("ofertas").select("email_creador").eq("id", agentOfferId).single();
+      if (!oferta?.email_creador) return;
+      const { data: usuario } = await supabase
+        .from("usuarios").select("id_persona").eq("email", oferta.email_creador).single();
+      if (!usuario?.id_persona) return;
+      const { data: persona } = await supabase
+        .from("personas").select("nombre_legal, telefono, clave_pais_telefono").eq("id", usuario.id_persona).single();
+      if (!persona?.nombre_legal) return;
+      const countryCode = (persona.clave_pais_telefono ?? "+52").replace("+", "");
+      const rawPhone = (persona.telefono ?? "").replace(/\s/g, "");
+      setAgentFromDB({
+        id: "", fullName: persona.nombre_legal,
+        firstName: persona.nombre_legal.split(" ")[0],
+        title: "", photoUrl: "", email: "",
+        phone: rawPhone ? `${persona.clave_pais_telefono ?? "+52"} ${persona.telefono ?? ""}` : "",
+        whatsapp: rawPhone ? `${countryCode}${rawPhone}` : "",
+        isAllied: true,
+      });
+    })();
+  }, [agentOfferId]);
+  const agent = agentFromDB ?? mockAgent ?? undefined;
   const propertyLabel = formatPropertyTitle(offer.property);
 
   const plan = offer.paymentPlans.find((p) => p.id === formalReservation.selectedPlanId);

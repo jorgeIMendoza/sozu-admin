@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { usePropertyDetailUrlState } from "@/hooks/usePropertyDetailUrlState";
 import PropertyDetailHeader from "./detail/PropertyDetailHeader";
 import FinancialCard from "./detail/FinancialCard";
@@ -28,6 +28,7 @@ import type { SupportContext } from "@/lib/offers/advisor-data";
 import type { InvestmentProperty, StageInfo } from "@/lib/offers/mock-data";
 import { getPropertyStatus } from "@/lib/offers/mock-data";
 import { usePaymentPlan, getNextInstallment, getLastPaidInstallment } from "@/lib/offers/payment-data";
+import { buildPaymentPlanFromInvestment } from "@/lib/portal-cliente/payment-plan-builder";
 import { getConstructionProgress, shouldShowConstructionProgress } from "@/lib/offers/construction-progress-data";
 
 type DetailView = "main" | "technical" | "payment-instructions" | "resale";
@@ -53,8 +54,9 @@ const PropertyDetailView = ({ investment, onBack }: PropertyDetailViewProps) => 
   const isDelivered = status.label === "Entregada";
   const currentStage = stages.find((s) => s.status === "active") || stages[0];
 
-  // STP payment plan
-  const paymentPlan = usePaymentPlan(property.id);
+  // STP payment plan — DB data wins over mock fallback
+  const mockPlan = usePaymentPlan(property.id);
+  const paymentPlan = useMemo(() => buildPaymentPlanFromInvestment(investment) ?? mockPlan, [investment, mockPlan]);
   const nextInstallment = paymentPlan ? getNextInstallment(paymentPlan) : undefined;
   const lastPaid = paymentPlan ? getLastPaidInstallment(paymentPlan) : undefined;
   const isPreventaOrPago = currentStage.id === "preventa" || currentStage.id === "pago_final";

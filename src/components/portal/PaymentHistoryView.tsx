@@ -3,6 +3,7 @@ import { ArrowLeft, Filter, ChevronDown, CheckCircle2, Clock, FileText } from "l
 import type { InvestmentProperty } from "@/lib/offers/mock-data";
 import { getPropertyStatus } from "@/lib/offers/mock-data";
 import { usePaymentPlan } from "@/lib/offers/payment-data";
+import { buildPaymentPlanFromInvestment } from "@/lib/portal-cliente/payment-plan-builder";
 import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptModal";
 import { buildReceiptFromInstallment, buildReceiptFromPaymentRecord, buildReceiptFromMaintenance } from "@/lib/offers/receipt-utils";
 import { fmtMXN as fmt } from "@/lib/utils";
@@ -25,7 +26,8 @@ type UnifiedPayment = {
 const PaymentHistoryView = ({ investment, onBack }: PaymentHistoryViewProps) => {
   const { property, payments, financials } = investment;
   const status = getPropertyStatus(investment);
-  const paymentPlan = usePaymentPlan(property.id);
+  const mockPlan = usePaymentPlan(property.id);
+  const paymentPlan = useMemo(() => buildPaymentPlanFromInvestment(investment) ?? mockPlan, [investment, mockPlan]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState("Todos");
   const [selectedType, setSelectedType] = useState("Todos");
