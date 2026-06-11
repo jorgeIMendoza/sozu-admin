@@ -17,6 +17,7 @@ interface ViewPermissions {
   canCreate: boolean;
   canUpdate: boolean;
   canGenerateOffer: boolean;
+  canGenerateDigitalOffer: boolean;
 }
 
 const DEFAULT: ViewPermissions = {
@@ -24,6 +25,7 @@ const DEFAULT: ViewPermissions = {
   canCreate: false,
   canUpdate: false,
   canGenerateOffer: false,
+  canGenerateDigitalOffer: false,
 };
 
 const ALL_TRUE: ViewPermissions = {
@@ -31,6 +33,7 @@ const ALL_TRUE: ViewPermissions = {
   canCreate: true,
   canUpdate: true,
   canGenerateOffer: true,
+  canGenerateDigitalOffer: true,
 };
 
 const AGENT_PATHS = [
@@ -125,6 +128,7 @@ export function useAgentPortalPermissions() {
           canCreate: names.has('crear'),
           canUpdate: names.has('actualizar'),
           canGenerateOffer: names.has('generar_oferta'),
+          canGenerateDigitalOffer: names.has('generar_oferta_digital'),
         };
       });
 

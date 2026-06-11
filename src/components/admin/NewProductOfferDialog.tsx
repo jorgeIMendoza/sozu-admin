@@ -795,7 +795,7 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
         // Solo enviar por correo si el usuario marcó explícitamente el checkbox.
         // Nunca enviar de forma automática.
         if (sendEmailOnGenerate) {
-          const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+          const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
           await sendOfferEmailDirect({
             offerId: ofertaData.id,
             propertyNumber: propertyNumber || '',

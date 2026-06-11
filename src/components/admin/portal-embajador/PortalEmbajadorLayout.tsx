@@ -2,6 +2,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmbajadorImpersonation } from "@/contexts/EmbajadorImpersonationContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { EmbajadorImpersonationSelector } from "./EmbajadorImpersonationSelector";
@@ -25,6 +26,7 @@ export const PortalEmbajadorLayout = () => {
     .toUpperCase();
 
   return (
+    <PortalTrackingProvider portal="embajadores">
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-30 h-14 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 lg:px-6 gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -81,5 +83,6 @@ export const PortalEmbajadorLayout = () => {
         <Outlet />
       </main>
     </div>
+    </PortalTrackingProvider>
   );
 };

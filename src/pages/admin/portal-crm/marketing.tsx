@@ -219,7 +219,7 @@ export function CrmCampaigns() {
         actions={
           <div className="flex items-center gap-2">
             <MockBadge />
-            <Button size="sm" onClick={() => toast.success("Campaña creada (mock)")}>
+            <Button data-cta="crm.marketing.nueva-campana" size="sm" onClick={() => toast.success("Campaña creada (mock)")}>
               <Plus className="h-4 w-4 mr-1" />Nueva campaña
             </Button>
           </div>

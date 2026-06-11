@@ -20,7 +20,7 @@ import { DrawerActionFooter } from "../DrawerActionFooter";
 import { Section, KV, Timeline, TimelineItem } from "./_shared";
 import type { VentaContext, VentaParaFacturarEntity } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
-import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
+import { OfertaPdfEdgeFunctionService } from "@/services/offerPdfEdgeFunctionService";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";

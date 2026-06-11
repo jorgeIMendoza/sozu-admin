@@ -1064,14 +1064,14 @@ const Propiedades = () => {
       setDownloadingOfferId(offer.id);
       
       // Import storage service
-      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      const { offerPdfStorageService } = await import('@/services/offerPdfStorageService');
       
       // Check if URL already exists
-      const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
+      const existingUrl = await offerPdfStorageService.getExistingUrl(offer.id);
       
       if (existingUrl) {
         // Validar que los datos críticos no hayan cambiado
-        const validation = await ofertaPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
+        const validation = await offerPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
         
         if (validation.wasInvalidated) {
           // URL fue invalidada, regenerar PDF
@@ -1087,7 +1087,7 @@ const Propiedades = () => {
           });
           
           const filename = existingUrl.split('/').pop() || `oferta-${offer.id}.pdf`;
-          await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+          await offerPdfStorageService.downloadFromUrl(existingUrl, filename);
           
           toast({
             title: "PDF descargado",
@@ -6152,7 +6152,7 @@ const Propiedades = () => {
                                         disabled={!offer.url}
                                          title={!offer.url ? 'Descarga la oferta primero' : 'Reenviar oferta por correo'}
                                         onClick={async () => {
-                                          const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                          const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
                                           sendOfferEmailDirect({
                                             offerId: offer.id,
                                             propertyNumber: offer.numero_propiedad || '',
@@ -6573,14 +6573,14 @@ const Propiedades = () => {
                               try {
                                 setDownloadingOfferId(offer.id);
                                 
-                                const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+                                const { offerPdfStorageService } = await import('@/services/offerPdfStorageService');
                                 
                                 // Verificar si ya existe URL guardada
-                                const existingUrl = await ofertaPdfStorageService.getExistingUrl(offer.id);
+                                const existingUrl = await offerPdfStorageService.getExistingUrl(offer.id);
                                 
                                 if (existingUrl) {
                                   // Validar que los datos críticos no hayan cambiado
-                                  const validation = await ofertaPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
+                                  const validation = await offerPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offer.id);
                                   
                                   if (!validation.wasInvalidated) {
                                     // URL válida, descargar directamente
@@ -6589,7 +6589,7 @@ const Propiedades = () => {
                                       description: "Descargando el PDF de la oferta...",
                                     });
                                     const filename = existingUrl.split('/').pop() || `oferta-producto-${offer.id}.pdf`;
-                                    await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+                                    await offerPdfStorageService.downloadFromUrl(existingUrl, filename);
                                     toast({
                                       title: "PDF descargado",
                                       description: "La oferta se ha descargado exitosamente",
@@ -6649,7 +6649,7 @@ const Propiedades = () => {
                                 disabled={!offer.url}
                                 title={!offer.url ? 'Descarga la oferta primero' : 'Reenviar oferta por correo'}
                                 onClick={async () => {
-                                  const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+                                  const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
                                   sendOfferEmailDirect({
                                     offerId: offer.id,
                                     propertyNumber: selectedPropertyForProductOffers?.numero_propiedad || '',

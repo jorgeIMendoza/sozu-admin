@@ -735,7 +735,7 @@ const OFERTAS = [
   { id: "OFR-3004", cliente: "Lucía H.",      unidad: "Daiku C-402",    monto: 5800000, estado: "pendiente" },
 ];
 
-export function AdministracionOfertas() {
+export function AdministracionOffers() {
   const total = OFERTAS.reduce((s, o) => s + o.monto, 0);
   const pend = OFERTAS.filter((o) => o.estado === "pendiente").length;
   return (

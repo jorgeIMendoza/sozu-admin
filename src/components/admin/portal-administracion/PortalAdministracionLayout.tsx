@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AdministracionFiltersProvider } from "@/contexts/AdministracionFiltersContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
@@ -188,6 +189,7 @@ export const PortalAdministracionLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="admin">
     <AdministracionFiltersProvider>
       <div className="min-h-screen flex">
         <aside
@@ -255,6 +257,7 @@ export const PortalAdministracionLayout = () => {
         </div>
       </div>
     </AdministracionFiltersProvider>
+    </PortalTrackingProvider>
   );
 };
 

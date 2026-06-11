@@ -405,6 +405,56 @@ LEAD → OFERTA → APARTADA(4) → VENDIDA(5) → PAGADA(9) → ESCRITURACIÓN(
 | `create-user` | Crear usuario en auth + tabla usuarios |
 | `create-client-user` | Crear usuario Cliente (rol 23) |
 | `ai-database-query` | Consultas IA en lenguaje natural (Gemini) |
+| `create-hold-payment-intent` | Crea PaymentIntent Stripe con `capture_method: manual` — devuelve `clientSecret` |
+| `capture-hold-payment-intent` | Captura (`action: "capture"`) o libera (`action: "cancel"`) un hold Stripe |
+
+---
+
+## Stripe — Hold de Tarjeta (Apartado Provisional)
+
+Mecanismo: **PaymentIntent con `capture_method: "manual"`** — autoriza $10,000 MXN en la tarjeta del cliente sin cobrar. El monto queda bloqueado y **siempre se libera automáticamente** cuando Stripe o el banco del cliente expiran la autorización. SOZU **nunca captura** el hold — la regla de negocio es $0 cobrado al cliente en todos los casos.
+
+### Regla de negocio clave
+
+> El hold **NUNCA se captura**. Solo verifica que el cliente tiene fondos y lo compromete durante el apartado. Stripe/banco liberan el monto al expirar (máx. 7 días). Si se requiere liberar antes del vencimiento, se cancela via `capture-hold-payment-intent` con `action: "cancel"`.
+
+### Variables de entorno
+
+| Variable | Dónde va | Valor |
+|---|---|---|
+| `VITE_STRIPE_PUBLISHABLE_KEY` | `.env.development` + hosting | `pk_test_...` / `pk_live_...` |
+| `STRIPE_SECRET_KEY` | Supabase Edge Function secrets | `sk_test_...` / `sk_live_...` |
+
+Si `VITE_STRIPE_PUBLISHABLE_KEY` está vacía, el flujo usa el **mock automáticamente** (sin Stripe real).
+
+### Flujo frontend (`/reservar/:formalReservationId/wizard`)
+
+```
+ReservarPage → invoke("create-hold-payment-intent") → clientSecret
+             → stripe.confirmCardPayment(clientSecret, { card: { number, exp_month, exp_year, cvc } })
+             → paymentIntent.id guardado como holdAuthorizationId en FormalReservationStore
+```
+
+Archivos clave:
+- `src/pages/public/ReservarPage.tsx` — formulario + lógica Stripe
+- `src/lib/offers/card-hold-processor.ts` — mock fallback + `detectCardBrand`
+- `src/lib/offers/formal-reservation-data.ts` — store Zustand con `HoldData`
+
+### Tarjetas de prueba (test mode)
+
+| Número | Resultado |
+|---|---|
+| `4242 4242 4242 4242` | Autorización exitosa |
+| `4000 0027 6000 3184` | Requiere 3DS (tarjeta mexicana típica) |
+| `4000 0000 0000 9995` | Fondos insuficientes |
+
+### Comisiones
+
+- Hold siempre → **$0** (nunca se captura, Stripe no cobra por autorizaciones que expiran o se cancelan)
+
+### Código de Edge Functions
+
+Ver `Ejecuciones_manuales/stripe_hold_integration.md` — contiene código completo de ambas funciones e instrucciones de deploy en VPS.
 
 ---
 

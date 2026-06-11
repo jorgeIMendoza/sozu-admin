@@ -1,87 +1,146 @@
-import { Bed, Bath, Droplet, Car, Layers, Building2 } from "lucide-react";
-import type { PropertyDetails } from "@/lib/offer-types";
-import { formatMXN } from "@/lib/offer-types";
+import { Bed, Bath, Droplet, Car, Layers, Building2, ArrowUpRight } from "lucide-react";
+import type { PropertyDetails, ParkingSlot } from "@/lib/offers/offer-data";
+import { formatMXN } from "@/lib/offers/offer-data";
 
 interface Props {
   property: PropertyDetails;
+  parkingSlots?: ParkingSlot[];
   materialsPaletteUrl?: string;
 }
 
-function spanishNumber(n: number): string {
+function toOrdinalWord(n: number): string {
   const words = ["Cero", "Una", "Dos", "Tres", "Cuatro", "Cinco", "Seis", "Siete", "Ocho"];
   return words[n] ?? String(n);
 }
 
-const SpecRow = ({ label, value, mono }: { label: string; value: string; mono?: boolean }) => (
-  <div className="flex items-baseline justify-between gap-3 py-2 border-b border-border/60 last:border-0">
-    <span className="text-xs text-muted-foreground">{label}</span>
-    <span className={`text-sm font-medium text-foreground text-right ${mono ? "tabular-nums" : ""}`}>
+function formatParkingLabel(slots?: ParkingSlot[]): string | null {
+  if (!slots || slots.length === 0) return null;
+  if (slots.length === 1) return "1 cajón";
+  return `${slots.length} cajones`;
+}
+
+const SpecRow = ({
+  label,
+  value,
+  mono,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+}) => (
+  <div className="flex items-baseline justify-between gap-3 py-2 border-b border-border/50 last:border-0">
+    <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+    <span
+      className={`text-sm text-right leading-tight ${mono ? "tabular-nums font-bold" : "font-bold"} ${
+        highlight ? "text-primary" : "text-foreground"
+      }`}
+    >
       {value}
     </span>
   </div>
 );
 
-const IconStat = ({ icon: Icon, label }: { icon: React.ElementType; label: string }) => (
-  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-muted/50">
-    <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+const IconStat = ({
+  icon: Icon,
+  label,
+  badge,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  badge?: string;
+}) => (
+  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-muted/50 border border-border/40 relative overflow-hidden">
+    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+      <Icon className="w-3.5 h-3.5 text-primary" />
+    </div>
     <span className="text-xs font-medium text-foreground leading-tight">{label}</span>
+    {badge && (
+      <span className="ml-auto text-[9px] font-semibold text-primary shrink-0">{badge}</span>
+    )}
   </div>
 );
 
-const OfferPropertyDetails = ({ property, materialsPaletteUrl }: Props) => (
-  <div className="rounded-2xl border border-border bg-card p-5 md:p-6">
-    <div className="flex items-center gap-2 mb-5">
-      <Building2 className="w-4 h-4 text-muted-foreground" />
-      <h2 className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">Datos de la propiedad</h2>
-    </div>
+const OfferPropertyDetails = ({ property, parkingSlots, materialsPaletteUrl }: Props) => {
+  const parkingLabel = formatParkingLabel(parkingSlots);
 
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div>
-        <SpecRow label="Proyecto" value={property.projectName} />
-        <SpecRow label="Edificio" value={property.buildingName} />
-        <SpecRow label="Modelo" value={property.unitModel} />
-        <SpecRow label="Número de propiedad" value={property.unitNumber} mono />
-        <SpecRow label="Nivel" value={String(property.level)} mono />
-        <SpecRow label="Vista" value={property.view} />
-        <SpecRow label="Área interior" value={`${property.interiorArea ?? property.area} m²`} mono />
-        {property.exteriorArea && (
-          <SpecRow label="Área exterior" value={`${property.exteriorArea} m²`} mono />
-        )}
-        <SpecRow label="Precio de lista" value={formatMXN(property.listPrice)} mono />
-        <SpecRow label="Precio por m²" value={formatMXN(property.pricePerM2)} mono />
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+
+      {/* Header */}
+      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border bg-muted/20">
+        <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+        <h3 className="text-sm font-semibold">Datos de la propiedad</h3>
       </div>
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-2">
-          <IconStat icon={Bed} label={`${spanishNumber(property.bedrooms)} recámara${property.bedrooms === 1 ? "" : "s"}`} />
-          <IconStat icon={Car} label={`${spanishNumber(property.parkingSpots)} ${property.parkingType.toLowerCase()}`} />
-          <IconStat icon={Bath} label={`${spanishNumber(property.bathrooms)} baño${property.bathrooms === 1 ? "" : "s"}`} />
-          {property.hasBalcony && <IconStat icon={Layers} label="Balcón / terraza" />}
-          {property.halfBathrooms > 0 && (
-            <IconStat
-              icon={Droplet}
-              label={`${spanishNumber(property.halfBathrooms)} sanitario${property.halfBathrooms === 1 ? "" : "s"}`}
-            />
-          )}
-        </div>
+      <div className="p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {materialsPaletteUrl && (
+          {/* Left: spec table */}
           <div>
-            <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground mb-2">
-              Paleta de materiales
+            <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-muted-foreground/60 mb-2">
+              Ficha técnica
             </p>
-            <div className="rounded-xl overflow-hidden border border-border bg-muted">
-              <img
-                src={materialsPaletteUrl}
-                alt="Paleta de materiales"
-                className="w-full aspect-[3/1] object-cover"
-              />
-            </div>
+            <SpecRow label="Proyecto" value={property.projectName} />
+            <SpecRow label="Edificio" value={property.buildingName} />
+            <SpecRow label="Modelo" value={property.unitModel} />
+            <SpecRow label="Número" value={property.unitNumber} mono />
+            <SpecRow label="Nivel" value={`Piso ${property.level}`} mono />
+            {parkingLabel && <SpecRow label="Estacionamiento" value={parkingLabel} />}
+            <SpecRow label="Precio de lista" value={formatMXN(property.listPrice)} mono highlight />
+            <SpecRow label="Precio por m²" value={formatMXN(property.pricePerM2)} mono />
           </div>
-        )}
+
+          {/* Right: icon stats + features + palette */}
+          <div className="space-y-4">
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-muted-foreground/60 mb-2">
+                Características
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <IconStat
+                  icon={Bed}
+                  label={`${toOrdinalWord(property.bedrooms)} recámara${property.bedrooms === 1 ? "" : "s"}`}
+                />
+                <IconStat
+                  icon={Bath}
+                  label={`${toOrdinalWord(property.bathrooms)} baño${property.bathrooms === 1 ? "" : "s"}`}
+                />
+                <IconStat
+                  icon={Car}
+                  label={`${toOrdinalWord(property.parkingSpots)} ${property.parkingType.toLowerCase()}`}
+                />
+                {property.area && (
+                  <IconStat
+                    icon={ArrowUpRight}
+                    label={property.area}
+                    badge="m²"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Materials palette */}
+            {materialsPaletteUrl && (
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-muted-foreground/60 mb-2">
+                  Paleta de materiales
+                </p>
+                <div className="rounded-xl overflow-hidden border border-border bg-muted">
+                  <img
+                    src={materialsPaletteUrl}
+                    alt="Paleta de materiales"
+                    className="w-full aspect-[3/1] object-cover"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default OfferPropertyDetails;

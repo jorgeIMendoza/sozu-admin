@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CondominioProvider, useCondominio } from "@/contexts/CondominioContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 
@@ -119,6 +120,7 @@ const PortalCondominioLayoutInner = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="condominio">
     <div className="min-h-screen flex">
       <aside className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30" style={{ width: 244 }}>
         {sidebar}
@@ -170,6 +172,7 @@ const PortalCondominioLayoutInner = () => {
         </main>
       </div>
     </div>
+    </PortalTrackingProvider>
   );
 };
 

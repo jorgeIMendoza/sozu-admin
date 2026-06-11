@@ -20,6 +20,14 @@ export interface StageInfo {
   details?: Record<string, string>;
 }
 
+export interface NotaryData {
+  name: string;    // notarios.nombre (personal name)
+  notaria: string; // notarios.notaria (office name)
+  phone: string;
+  email: string;
+  address: string;
+}
+
 export interface PropertyData {
   id: string;
   projectName: string;
@@ -36,8 +44,10 @@ export interface PropertyData {
   address?: string;
   fechaEscritura?: string;
   projectId?: number;
+  idPropiedad?: number;
   clientName?: string;
   clientRFC?: string;
+  notary?: NotaryData;
 }
 
 export interface FinancialData {

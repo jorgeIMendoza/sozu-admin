@@ -23,7 +23,7 @@ import { DrawerActionFooter, type DrawerAction } from "../DrawerActionFooter";
 import { Section, KV, Timeline, TimelineItem, StatusCard } from "./_shared";
 import type { PagoExternoEntity, VentaContext } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
-import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
+import { OfertaPdfEdgeFunctionService } from "@/services/offerPdfEdgeFunctionService";
 import { supabase } from "@/integrations/supabase/client";
 
 const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
