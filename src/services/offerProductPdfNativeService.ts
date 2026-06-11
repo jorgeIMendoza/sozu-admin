@@ -621,4 +621,4 @@ export class OfferProductPdfNativeService {
   }
 }
 
-export const offerProductPdfNativeService = new OfertaProductoPdfNativeService();
+export const offerProductPdfNativeService = new OfferProductPdfNativeService();
