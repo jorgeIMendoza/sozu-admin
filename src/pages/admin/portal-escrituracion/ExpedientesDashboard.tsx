@@ -48,6 +48,7 @@ interface DocItem {
   idTipoDocumento: number;
   tipoNombre: string;
   estatusNombre: string;
+  estatusId: number | null;
   url: string;
   fecha: string | null;
   isLatest: boolean;        // es el más reciente cargado de su tipo
@@ -338,6 +339,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         idTipoDocumento: d.id_tipo_documento,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
+        estatusId: d.id_estatus_verificacion ?? null,
         url: d.url,
         fecha: d.fecha_creacion ?? d.fecha_actualizacion,
         isLatest: false,
@@ -369,16 +371,27 @@ function DetailPanel({ row, onClose, onEditComprador }: {
     staleTime: 30_000,
   });
 
-  // Contar obligatorios cumplidos: último doc de cada grupo obligatorio en estatus Validado
-  // Grupos: items ya vienen ordenados desc por fecha_creacion → el primero de cada grupo es el vigente
-  const isValidadoNombre = (s: string) =>
-    s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
-
+  // Contar obligatorios cumplidos: último doc de cada grupo con id_estatus_verificacion === 2 (Validado).
+  // Misma lógica que la tabla — evita divergencia por string matching vs id numérico.
   const obligatoriosCumplidos = OBLIGATORIO_GRUPOS.filter(grupo => {
     const grupoItems = checklist.filter(d => (grupo.ids as readonly number[]).includes(d.idTipoDocumento));
     if (!grupoItems.length) return false;
-    return isValidadoNombre(grupoItems[0].estatusNombre); // [0] = más reciente (desc)
+    return grupoItems[0].estatusId === 2; // [0] = más reciente (desc); 2 = Validado
   }).length;
+
+  // Sincroniza docsCompletos en caché de tabla cuando el panel obtiene datos frescos.
+  useEffect(() => {
+    if (loadingDocs || !checklist.length) return;
+    qcPanel.setQueryData(
+      ['expedientes-dashboard', row.proyectoId],
+      (old: ExpedienteRow[] | undefined) => {
+        if (!old) return old;
+        return old.map(r =>
+          r.cuentaId === row.cuentaId ? { ...r, docsCompletos: obligatoriosCumplidos } : r,
+        );
+      },
+    );
+  }, [obligatoriosCumplidos, loadingDocs, checklist.length, row.cuentaId, row.proyectoId, qcPanel]);
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
@@ -724,20 +737,20 @@ export function ExpedientesDashboard() {
         .in('id_persona', personaIdsForDocs)
         .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
         .eq('activo', true)
-        .eq('es_draft', false);
+        .eq('es_draft', false)
+        .order('fecha_creacion', { ascending: false })
+        .order('id', { ascending: false });
 
       // latestDocByKey: "personaId__grupoKey" → doc más reciente de ese grupo obligatorio
-      // Null fecha_creacion → sentinel '9999' para que sea NULLS FIRST igual que PostgreSQL DESC
-      const latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+      // Docs ya vienen ordenados desc por fecha_creacion, id — tomar el primero encontrado por key.
+      const latestDocByKey: Record<string, { id: number; estatusId: number }> = {};
       (docs || []).forEach((d: any) => {
         if (!d.id_persona) return;
         const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
         if (!groupKey) return;
         const key = `${d.id_persona}__${groupKey}`;
-        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-        const ex = latestDocByKey[key];
-        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-          latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+        if (!latestDocByKey[key]) {
+          latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion };
         }
       });
 
