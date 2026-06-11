@@ -341,6 +341,12 @@ const CrmSettingsGoogleCallback  = lazyRetry(() => import("./pages/admin/portal-
 const CrmSettingsMetaCallback    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsMetaCallback })));
 const CrmSettingsAuditLog        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsAuditLog })));
 
+// Portal Bancos
+const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBandeja })));
+const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
+const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
+const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
@@ -844,6 +850,12 @@ const App = () => (
                   <Route path="portal-crm/settings/connections/google/callback" element={<CrmSettingsGoogleCallback />} />
                   <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
                   <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
+
+                  {/* Portal Bancos */}
+                  <Route path="portal-bancos/bandeja"  element={<BancosBandeja />} />
+                  <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
+                  <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
+                  <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
