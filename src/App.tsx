@@ -341,6 +341,12 @@ const CrmSettingsGoogleCallback  = lazyRetry(() => import("./pages/admin/portal-
 const CrmSettingsMetaCallback    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsMetaCallback })));
 const CrmSettingsAuditLog        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsAuditLog })));
 
+// Portal Bancos
+const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBandeja })));
+const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
+const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
+const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
