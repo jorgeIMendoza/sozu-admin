@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllRows } from "@/utils/supabasePagination";
+import { fetchAllRows, fetchInBatches } from "@/utils/supabasePagination";
 
 export type EstadoFacturaPorPagar =
   | "en_revision"
@@ -97,23 +97,30 @@ export function useFacturasPorPagar() {
         new Set(comisionistas.map((c) => c.email_usuario).filter((v): v is string => !!v)),
       );
 
-      const [
-        { data: usuarios, error: usErr },
-        { data: personas, error: peErr },
-      ] = await Promise.all([
-        emails.length
-          ? supabase.from("usuarios").select("email, nombre, rol_id").in("email", emails)
-          : Promise.resolve({ data: [] as Array<{ email: string; nombre: string | null; rol_id: number | null }>, error: null }),
-        emails.length
-          ? (supabase as any)
-              .from("personas")
-              .select("email, nombre_legal, nombre_comercial, rfc, tipo_persona")
-              .in("email", emails)
-              .eq("activo", true)
-          : Promise.resolve({ data: [] as Array<{ email: string; nombre_legal: string | null; nombre_comercial: string | null; rfc: string | null; tipo_persona: string | null }>, error: null }),
+      // IN(...) sobre emails batcheado: 1500+ emails generan un URL > 8 KB.
+      const [usuarios, personas] = await Promise.all([
+        fetchInBatches<{ email: string; nombre: string | null; rol_id: number | null }>(
+          emails,
+          (batch) =>
+            supabase
+              .from("usuarios")
+              .select("email, nombre, rol_id")
+              .in("email", batch as string[]),
+        ),
+        fetchInBatches<{
+          email: string;
+          nombre_legal: string | null;
+          nombre_comercial: string | null;
+          rfc: string | null;
+          tipo_persona: string | null;
+        }>(emails, (batch) =>
+          (supabase as any)
+            .from("personas")
+            .select("email, nombre_legal, nombre_comercial, rfc, tipo_persona")
+            .in("email", batch as string[])
+            .eq("activo", true),
+        ),
       ]);
-      if (usErr) throw usErr;
-      if (peErr) throw peErr;
 
       const usuariosMap = new Map<string, { nombre: string; rolId: number | null }>();
       (usuarios || []).forEach((u: any) => {
@@ -154,15 +161,16 @@ export function useFacturasPorPagar() {
         ),
       );
 
-      const { data: cuentas, error: ccErr } = cuentaIds.length
-        ? await supabase
-            .from("cuentas_cobranza")
-            .select(
-              "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
-            )
-            .in("id", cuentaIds)
-        : { data: [] as Array<any>, error: null };
-      if (ccErr) throw ccErr;
+      // IN(...) batcheado para evitar "TypeError: Failed to fetch" cuando la
+      // lista de IDs hace que el URL exceda los ~8 KB de PostgREST.
+      const cuentas = await fetchInBatches<any>(cuentaIds, (batch) =>
+        supabase
+          .from("cuentas_cobranza")
+          .select(
+            "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
+          )
+          .in("id", batch as number[]),
+      );
 
       const cuentaMap = new Map(
         (cuentas || []).map((c: any) => {
@@ -172,6 +180,7 @@ export function useFacturasPorPagar() {
             {
               id: idNum,
               idOferta: c.id_oferta as number | null,
+              idPropiedad: (c.id_propiedad as number | null) ?? null,
               precioFinal: Number(c.precio_final) || 0,
               porcentajeVenta: Number(c.porcentaje_comision_venta) || 0,
               fechaCompra: c.fecha_compra as string | null,
@@ -189,33 +198,47 @@ export function useFacturasPorPagar() {
         ),
       );
 
-      const { data: ofertas, error: ofErr } = ofertaIds.length
-        ? await supabase
-            .from("ofertas")
-            .select("id, id_propiedad, id_producto")
-            .in("id", ofertaIds)
-        : { data: [] as Array<{ id: number; id_propiedad: number | null; id_producto: number | null }>, error: null };
-      if (ofErr) throw ofErr;
+      const ofertas = await fetchInBatches<{
+        id: number;
+        id_propiedad: number | null;
+        id_producto: number | null;
+      }>(ofertaIds, (batch) =>
+        supabase
+          .from("ofertas")
+          .select("id, id_propiedad, id_producto")
+          .in("id", batch as number[]),
+      );
 
       const ofertaMap = new Map<number, { idPropiedad: number | null; idProducto: number | null }>(
         (ofertas || []).map((o) => [o.id, { idPropiedad: o.id_propiedad, idProducto: o.id_producto }]),
       );
 
+      // id_propiedad puede venir directamente de cuentas_cobranza (cuentas
+      // creadas sin oferta o con oferta sin propiedad) — fallback a la
+      // propiedad de la oferta cuando exista. Sin esto, todo el waterfall
+      // (proyecto / modelo / no. depto) queda vacío en la tabla del Portal
+      // Administración.
       const propiedadIds = Array.from(
-        new Set(
-          (ofertas || [])
+        new Set([
+          ...Array.from(cuentaMap.values())
+            .map((c) => c.idPropiedad)
+            .filter((v): v is number => v != null),
+          ...(ofertas || [])
             .map((o) => o.id_propiedad)
             .filter((v): v is number => v != null),
-        ),
+        ]),
       );
 
-      const { data: propiedades, error: prErr } = propiedadIds.length
-        ? await supabase
-            .from("propiedades")
-            .select("id, numero_propiedad, id_edificio_modelo")
-            .in("id", propiedadIds)
-        : { data: [] as Array<{ id: number; numero_propiedad: string | null; id_edificio_modelo: number | null }>, error: null };
-      if (prErr) throw prErr;
+      const propiedades = await fetchInBatches<{
+        id: number;
+        numero_propiedad: string | null;
+        id_edificio_modelo: number | null;
+      }>(propiedadIds, (batch) =>
+        supabase
+          .from("propiedades")
+          .select("id, numero_propiedad, id_edificio_modelo")
+          .in("id", batch as number[]),
+      );
 
       const propiedadMap = new Map(
         (propiedades || []).map((p) => [
@@ -232,13 +255,16 @@ export function useFacturasPorPagar() {
         ),
       );
 
-      const { data: edms, error: emErr } = emIds.length
-        ? await supabase
-            .from("edificios_modelos")
-            .select("id, id_edificio, id_modelo")
-            .in("id", emIds)
-        : { data: [] as Array<{ id: number; id_edificio: number | null; id_modelo: number | null }>, error: null };
-      if (emErr) throw emErr;
+      const edms = await fetchInBatches<{
+        id: number;
+        id_edificio: number | null;
+        id_modelo: number | null;
+      }>(emIds, (batch) =>
+        supabase
+          .from("edificios_modelos")
+          .select("id, id_edificio, id_modelo")
+          .in("id", batch as number[]),
+      );
 
       const emMap = new Map(
         (edms || []).map((em) => [em.id, { idEdificio: em.id_edificio, idModelo: em.id_modelo }]),
@@ -303,15 +329,14 @@ export function useFacturasPorPagar() {
         ),
       );
 
-      const { data: productos, error: prodErr } = productoIds.length
-        ? await (supabase as any)
-            .from("productos_servicios")
-            .select(
-              "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
-            )
-            .in("id", productoIds)
-        : { data: [] as any[], error: null };
-      if (prodErr) throw prodErr;
+      const productos = await fetchInBatches<any>(productoIds, (batch) =>
+        (supabase as any)
+          .from("productos_servicios")
+          .select(
+            "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+          )
+          .in("id", batch as number[]),
+      );
 
       const productoMap = new Map<number, { nombre: string; categoria: string }>(
         ((productos || []) as Array<{ id: number; nombre: string | null; categorias_producto: { nombre: string | null } | null }>).map((p) => [
@@ -357,7 +382,9 @@ export function useFacturasPorPagar() {
 
         const cuenta = c.id_cuenta_cobranza != null ? cuentaMap.get(c.id_cuenta_cobranza) : undefined;
         const oferta = cuenta?.idOferta != null ? ofertaMap.get(cuenta.idOferta) : undefined;
-        const prop = oferta?.idPropiedad != null ? propiedadMap.get(oferta.idPropiedad) : undefined;
+        // Fallback: cuenta.idPropiedad cuando la oferta no la trae.
+        const idPropResolved = cuenta?.idPropiedad ?? oferta?.idPropiedad ?? null;
+        const prop = idPropResolved != null ? propiedadMap.get(idPropResolved) : undefined;
         const em = prop?.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
         const edif = em?.idEdificio != null ? edificioMap.get(em.idEdificio) : undefined;
         const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";

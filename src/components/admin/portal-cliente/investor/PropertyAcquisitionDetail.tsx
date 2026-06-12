@@ -26,9 +26,12 @@ import { getPropertyImage } from "@/lib/portal-cliente/property-images";
 import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
+import FichaTecnicaSection from "./FichaTecnicaSection";
+import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
+import PagoFinalSheet from "@/components/admin/portal-cliente/detail/PagoFinalSheet";
 
 interface Props {
   investment: InvestmentProperty;
@@ -64,8 +67,20 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const currentStage = STAGES[currentStageIdx];
   const stageInfo = getStageInfo(activeStage?.id ?? "preventa");
 
+  const { data: propDetalle, isLoading: loadingFicha } = useClientePropiedadDetalle(Number(property.id));
+
   const [showPaySheet, setShowPaySheet] = useState(false);
+  const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
+
+  const handlePay = () => {
+    const sinForma = investment.property.tipoFinanciamiento == null;
+    if (activeStage?.id === 'pago_final' && sinForma) {
+      setShowPagoFinalSheet(true);
+    } else {
+      setShowPaySheet(true);
+    }
+  };
 
   return (
     <div className="pb-24 space-y-5">
@@ -169,7 +184,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
           {/* Precio de compra (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
-            <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
+            <FinancialSideCard investment={investment} onPay={handlePay} />
           </div>
 
           {/* 5 · Cronograma de pagos */}
@@ -177,6 +192,17 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
           {/* 6 · Documentos */}
           <PropertyDocuments propertyId={property.id} />
+
+          {/* 7 · Ficha técnica */}
+          {loadingFicha ? (
+            <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
+              <div className="h-3 w-32 bg-muted rounded" />
+              <div className="h-3 w-48 bg-muted rounded" />
+              <div className="h-40 bg-muted rounded-xl" />
+            </div>
+          ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
+            <FichaTecnicaSection propDetalle={propDetalle} />
+          ) : null}
 
           {/* Agente (mobile only — desktop shows in right col) */}
           <div className="md:hidden">
@@ -187,20 +213,33 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
         {/* ── Right column (desktop only) ── */}
         <div className="hidden md:block space-y-4">
           <AgentSideCard investment={investment} />
-          <FinancialSideCard investment={investment} onPay={() => setShowPaySheet(true)} />
+          <FinancialSideCard investment={investment} onPay={handlePay} />
           <TechnicalSideCard property={property} />
         </div>
       </div>
 
       {/* Mobile-only sticky CTA */}
-      <AcquisitionStickyCTA investment={investment} onPay={() => setShowPaySheet(true)} />
+      <AcquisitionStickyCTA investment={investment} onPay={handlePay} />
 
       <AcquisitionPaymentSheet
         open={showPaySheet}
         onClose={() => setShowPaySheet(false)}
-        cuentaId={property.id}
+        cuentaId={Number(property.id)}
         propertyLabel={propertyLabel}
       />
+
+      {activeStage && (
+        <PagoFinalSheet
+          stage={activeStage}
+          investment={investment}
+          open={showPagoFinalSheet}
+          onClose={() => setShowPagoFinalSheet(false)}
+          onViewPaymentInstructions={() => {
+            setShowPagoFinalSheet(false);
+            setShowPaySheet(true);
+          }}
+        />
+      )}
     </div>
   );
 };

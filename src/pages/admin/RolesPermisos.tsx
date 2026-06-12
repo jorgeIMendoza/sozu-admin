@@ -575,22 +575,29 @@ export default function RolesPermisos() {
   });
 
   // Fetch available permissions per submenu from submenus_permisos_disponibles
+  // Paginado: la tabla supera el límite de 1000 filas de PostgREST y sin esto
+  // los submenús más recientes quedan fuera del set (checkboxes deshabilitados).
   const { data: availablePermissions = new Set<string>() } = useQuery<Set<string>>({
     queryKey: ['available-permissions-per-submenu'],
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await supabase
-        .from('submenus_permisos_disponibles')
-        .select('submenu_id, permiso_id')
-        .eq('activo', true);
-      
-      if (error) throw error;
-      
-      // Create a Set of "submenu_id-permiso_id" combinations that exist
+      const PAGE = 1000;
       const permissionSet = new Set<string>();
-      (data || []).forEach((item: { submenu_id: number; permiso_id: number }) => {
-        permissionSet.add(`${item.submenu_id}-${item.permiso_id}`);
-      });
-      
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('submenus_permisos_disponibles')
+          .select('submenu_id, permiso_id')
+          .eq('activo', true)
+          .range(from, from + PAGE - 1);
+
+        if (error) throw error;
+
+        (data || []).forEach((item: { submenu_id: number; permiso_id: number }) => {
+          permissionSet.add(`${item.submenu_id}-${item.permiso_id}`);
+        });
+
+        if (!data || data.length < PAGE) break;
+      }
+
       return permissionSet;
     },
   });
@@ -605,15 +612,25 @@ export default function RolesPermisos() {
     queryKey: ['role-permisos', selectedRoleId],
     queryFn: async () => {
       if (!selectedRoleId) return [];
-      
-      const { data, error } = await supabase
-        .from('submenus_permisos')
-        .select('submenu_id, permiso_id, rol_id, activo')
-        .eq('rol_id', selectedRoleId)
-        .eq('activo', true);
-      
-      if (error) throw error;
-      return data as SubmenuPermiso[];
+
+      // Paginado: Super Admin ya supera las 1000 asignaciones activas (límite
+      // de PostgREST) y sin esto los permisos de los portales nuevos no se ven.
+      const PAGE = 1000;
+      const rows: SubmenuPermiso[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('submenus_permisos')
+          .select('submenu_id, permiso_id, rol_id, activo')
+          .eq('rol_id', selectedRoleId)
+          .eq('activo', true)
+          .range(from, from + PAGE - 1);
+
+        if (error) throw error;
+        rows.push(...(data as SubmenuPermiso[]));
+        if (!data || data.length < PAGE) break;
+      }
+
+      return rows;
     },
     enabled: !!selectedRoleId,
   });

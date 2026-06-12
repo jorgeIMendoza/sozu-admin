@@ -40,6 +40,8 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
   const [selectedCharacteristicIds, setSelectedCharacteristicIds] = useState<string[]>([]);
   const [planoUrl, setPlanoUrl] = useState<string | null>(null);
   const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>("");
+  const [tour360Url, setTour360Url] = useState<string>("");
+  const [highlightsText, setHighlightsText] = useState<string>("");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -76,9 +78,11 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
         numero_medio_bano: values.numero_medio_bano ? parseInt(values.numero_medio_bano) : null,
         plano_arquitectonico: planoUrl,
         url_imagen_portada: imagenPortadaUrl || null,
+        url_tour_360: tour360Url || null,
+        highlights: highlightsText.trim() ? highlightsText.split('\n').map(s => s.trim()).filter(Boolean) : null,
       };
 
-      const { data: newModelo, error } = await supabase
+      const { data: newModelo, error } = await (supabase as any)
         .from("modelos")
         .insert(modeloData)
         .select()
@@ -108,6 +112,8 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       form.reset();
       setPlanoUrl(null);
       setImagenPortadaUrl("");
+      setTour360Url("");
+      setHighlightsText("");
       setOpen(false);
       onModeloAdded();
     } catch (error) {
@@ -242,6 +248,26 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
               value={imagenPortadaUrl}
               onChange={(url) => setImagenPortadaUrl(url)}
             />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Render / Tour 360°</label>
+              <Input
+                placeholder="https://..."
+                value={tour360Url}
+                onChange={(e) => setTour360Url(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Lights / Highlights</label>
+              <Textarea
+                placeholder={"Alberca\nGimnasio\nRooftop"}
+                value={highlightsText}
+                onChange={(e) => setHighlightsText(e.target.value)}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">Un highlight por línea</p>
+            </div>
 
             <PlanoArquitectonicoUpload
               currentUrl={planoUrl}

@@ -7,7 +7,7 @@ import {
   Search, Plus, Download, Loader2, X, RefreshCw,
   CheckCircle2, Clock, AlertTriangle, XCircle,
   User, Users, Globe, Building2, Home,
-  ChevronDown, FileText,
+  ChevronDown, FileText, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,6 +17,7 @@ type TipoComprador = 'PERSONA_FISICA' | 'PERSONA_MORAL' | 'COPROPIEDAD' | 'EXTRA
 type EstatusExpediente = 'LISTO' | 'PENDIENTE' | 'EN_REVISION' | 'CON_OBSERVACIONES' | 'VENCIDO';
 
 interface CompradoresData {
+  id_persona: number;
   nombre: string;
   rfc: string | null;
   porcentaje: number;
@@ -44,10 +45,14 @@ interface ExpedienteRow {
 
 interface DocItem {
   id: number;
+  idTipoDocumento: number;
   tipoNombre: string;
   estatusNombre: string;
+  estatusId: number | null;
   url: string;
   fecha: string | null;
+  isLatest: boolean;        // es el más reciente cargado de su tipo
+  hasOlderValidado: boolean; // hay versión anterior Validada pero la vigente no lo está
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -67,11 +72,53 @@ const TIPO_META: Record<TipoComprador, { label: string; cls: string }> = {
   EXTRANJERO:     { label: 'Extranjero',     cls: 'bg-amber-50 text-amber-700' },
 };
 
+// ─── Documentos obligatorios persona física ───────────────────────────────────
+
+// Grupos de documentos obligatorios.
+// Cada grupo lista todos los id_tipo_documento equivalentes en BD:
+//   6 = Constancia de situación fiscal
+//   8 = Comprobante de domicilio
+//   2 = Frente INE  |  59 = Identificación oficial  (mismo grupo)
+//   5 = CURP
+//   1 = Acta de nacimiento
+const OBLIGATORIO_GRUPOS = [
+  { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
+  { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
+  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59] },
+  { key: 'curp',      label: 'CURP',                           ids: [5] },
+  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
+] as const;
+
+const ALL_OBLIGATORIO_IDS: number[] = OBLIGATORIO_GRUPOS.flatMap(g => [...g.ids]);
+
+// id_tipo_documento → group key
+const ID_TO_GROUP_KEY: Record<number, string> = {};
+OBLIGATORIO_GRUPOS.forEach(g => g.ids.forEach(id => { ID_TO_GROUP_KEY[id] = g.key; }));
+
+// Normalización de nombres para display (panel de detalle)
+function normTipoDoc(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function mapEstatusPropiedad(id: number): EstatusExpediente {
-  if (id === 7 || id === 8) return 'LISTO';       // Escriturado / Entregado
-  if (id === 11) return 'CON_OBSERVACIONES';       // En demanda
+// Regla: LISTO cuando el ÚLTIMO documento cargado de cada tipo obligatorio
+// está en estatus VALIDADO. Si el último es Expirado/Rechazado/Pendiente,
+// el tipo no se considera cumplido, aunque exista una versión anterior Validada.
+function deriveEstatusExpediente(
+  estatusDisponibilidadId: number,
+  docsCompletos: number,
+): EstatusExpediente {
+  if (estatusDisponibilidadId === 11) return 'CON_OBSERVACIONES'; // En demanda
+  // Escriturado (7) o Entregado (8) → LISTO siempre
+  if (estatusDisponibilidadId === 7 || estatusDisponibilidadId === 8) return 'LISTO';
+  // Para el resto: LISTO solo si todos los obligatorios tienen su último doc Validado
+  if (docsCompletos >= OBLIGATORIO_GRUPOS.length) return 'LISTO';
   return 'PENDIENTE';
 }
 
@@ -86,6 +133,19 @@ function deriveTipo(compradores: CompradoresData[]): TipoComprador {
 
 const fmtMxn = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -172,36 +232,166 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void }) {
+function DetailPanel({ row, onClose, onEditComprador }: {
+  row: ExpedienteRow;
+  onClose: () => void;
+  onEditComprador: (personaId: number) => void;
+}) {
+  const qcPanel = useQueryClient();
+  const [markingListo, setMarkingListo] = useState(false);
+
+  async function handleMarcarListo() {
+    if (!row.personaId) {
+      toast.error('No se encontró el identificador del comprador para este expediente.');
+      return;
+    }
+    setMarkingListo(true);
+    try {
+      const { data: docs, error } = await supabase
+        .from('documentos')
+        .select('id, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+        .eq('id_persona', row.personaId)
+        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+        .eq('activo', true)
+        .eq('es_draft', false);
+
+      if (error) throw error;
+
+      // Último doc por grupo — misma lógica y mismo sentinel que el query principal
+      const latestByGroup: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+      (docs || []).forEach((d: any) => {
+        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+        if (!groupKey) return;
+        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
+        const ex = latestByGroup[groupKey];
+        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+          latestByGroup[groupKey] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+        }
+      });
+
+      const ESTATUS_LABEL: Record<number, string> = { 1: 'Pendiente', 3: 'Rechazado', 4: 'Expirado' };
+      const faltantes: string[] = [];
+      const noValidados: string[] = [];
+
+      for (const grupo of OBLIGATORIO_GRUPOS) {
+        const latest = latestByGroup[grupo.key];
+        if (!latest) {
+          faltantes.push(grupo.label);
+        } else if (latest.estatusId !== 2) {
+          noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
+        }
+      }
+
+      if (faltantes.length > 0 || noValidados.length > 0) {
+        const partes: string[] = [];
+        if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
+        if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
+        toast.error(`No se puede marcar como listo. ${partes.join('. ')}.`);
+        return;
+      }
+
+      // Actualización optimista: tabla y panel reflejan LISTO inmediatamente
+      qcPanel.setQueryData(
+        ['expedientes-dashboard', row.proyectoId],
+        (old: ExpedienteRow[] | undefined) => {
+          if (!old) return old;
+          return old.map(r =>
+            r.cuentaId === row.cuentaId
+              ? { ...r, docsCompletos: OBLIGATORIO_GRUPOS.length, estatusExpediente: 'LISTO' as EstatusExpediente }
+              : r,
+          );
+        },
+      );
+
+      // Invalida con la key correcta para refetch en background
+      await Promise.all([
+        qcPanel.invalidateQueries({ queryKey: ['expedientes-dashboard', row.proyectoId] }),
+        qcPanel.invalidateQueries({ queryKey: ['exp-docs-persona', row.personaId] }),
+      ]);
+      toast.success('Expediente marcado como listo correctamente.');
+    } catch {
+      toast.error('No fue posible actualizar el expediente. Intenta nuevamente.');
+    } finally {
+      setMarkingListo(false);
+    }
+  }
+
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
-    queryKey: ['exp-docs', row.cuentaId],
+    queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
+      // Los documentos en BD están vinculados por id_persona, no id_cuenta_cobranza
+      if (!row.personaId) return [];
       const { data } = await supabase
         .from('documentos')
         .select(`
-          id, url, fecha_actualizacion, es_draft,
+          id, id_tipo_documento, id_estatus_verificacion, url, fecha_creacion, fecha_actualizacion, es_draft,
           tipos_documento:documentos_id_tipo_documento_fkey(nombre),
           estatus_verificacion:documentos_id_estatus_verificacion_fkey(nombre)
         `)
-        .eq('id_cuenta_cobranza', row.cuentaId)
+        .eq('id_persona', row.personaId)
         .eq('activo', true)
         .eq('es_draft', false)
-        .order('id');
-      return (data || []).map((d: any) => ({
+        .order('fecha_creacion', { ascending: false })
+        .order('id', { ascending: false });
+
+      const items: DocItem[] = (data || []).map((d: any) => ({
         id: d.id,
+        idTipoDocumento: d.id_tipo_documento,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
+        estatusId: d.id_estatus_verificacion ?? null,
         url: d.url,
-        fecha: d.fecha_actualizacion,
+        fecha: d.fecha_creacion ?? d.fecha_actualizacion,
+        isLatest: false,
+        hasOlderValidado: false,
       }));
+
+      // isLatest: el más reciente por id_tipo_documento (ya ordenados desc por fecha_creacion/id)
+      const latestIdByTipoId: Record<number, number> = {};
+      const tipoIdGroups: Record<number, DocItem[]> = {};
+      items.forEach(d => {
+        if (!tipoIdGroups[d.idTipoDocumento]) tipoIdGroups[d.idTipoDocumento] = [];
+        tipoIdGroups[d.idTipoDocumento].push(d);
+      });
+      Object.values(tipoIdGroups).forEach(group => {
+        latestIdByTipoId[group[0].idTipoDocumento] = group[0].id;
+      });
+
+      const isValidado = (s: string) =>
+        s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
+
+      return items.map(d => {
+        const isLatest = latestIdByTipoId[d.idTipoDocumento] === d.id;
+        const latestId = latestIdByTipoId[d.idTipoDocumento];
+        const hasOlderValidado = isLatest && !isValidado(d.estatusNombre) &&
+          (tipoIdGroups[d.idTipoDocumento] ?? []).some(x => x.id !== latestId && isValidado(x.estatusNombre));
+        return { ...d, isLatest, hasOlderValidado };
+      });
     },
     staleTime: 30_000,
   });
 
-  const validatedCount = checklist.filter(d =>
-    d.estatusNombre.toLowerCase().includes('validado') ||
-    d.estatusNombre.toLowerCase().includes('aprobado')
-  ).length;
+  // Contar obligatorios cumplidos: último doc de cada grupo con id_estatus_verificacion === 2 (Validado).
+  // Misma lógica que la tabla — evita divergencia por string matching vs id numérico.
+  const obligatoriosCumplidos = OBLIGATORIO_GRUPOS.filter(grupo => {
+    const grupoItems = checklist.filter(d => (grupo.ids as readonly number[]).includes(d.idTipoDocumento));
+    if (!grupoItems.length) return false;
+    return grupoItems[0].estatusId === 2; // [0] = más reciente (desc); 2 = Validado
+  }).length;
+
+  // Sincroniza docsCompletos en caché de tabla cuando el panel obtiene datos frescos.
+  useEffect(() => {
+    if (loadingDocs || !checklist.length) return;
+    qcPanel.setQueryData(
+      ['expedientes-dashboard', row.proyectoId],
+      (old: ExpedienteRow[] | undefined) => {
+        if (!old) return old;
+        return old.map(r =>
+          r.cuentaId === row.cuentaId ? { ...r, docsCompletos: obligatoriosCumplidos } : r,
+        );
+      },
+    );
+  }, [obligatoriosCumplidos, loadingDocs, checklist.length, row.cuentaId, row.proyectoId, qcPanel]);
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
@@ -235,15 +425,23 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Compradores</p>
             <div className="space-y-1.5">
               {row.compradores.map((c, i) => (
-                <div key={i} className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onEditComprador(c.id_persona)}
+                  className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-xl px-3 py-2.5 cursor-pointer transition-colors group text-left"
+                >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{c.nombre}</p>
                     {c.rfc && <p className="text-xs text-slate-500 font-mono">{c.rfc}</p>}
                   </div>
-                  {c.porcentaje < 100 && (
-                    <span className="text-xs text-slate-500 font-semibold ml-2 shrink-0">{c.porcentaje}%</span>
-                  )}
-                </div>
+                  <div className="flex items-center gap-2 ml-2 shrink-0">
+                    {c.porcentaje < 100 && (
+                      <span className="text-xs text-slate-500 font-semibold">{c.porcentaje}%</span>
+                    )}
+                    <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                  </div>
+                </button>
               ))}
             </div>
           </div>
@@ -252,9 +450,14 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
         {/* Documentos / Checklist */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos adjuntos</p>
             {checklist.length > 0 && (
-              <span className="text-xs text-slate-500">{validatedCount}/{checklist.length} validados</span>
+              <span className="text-xs text-slate-500">
+                <span className={obligatoriosCumplidos >= OBLIGATORIO_GRUPOS.length ? 'text-emerald-600 font-semibold' : ''}>
+                  {obligatoriosCumplidos}/{OBLIGATORIO_GRUPOS.length}
+                </span>
+                {' '}obligatorios
+              </span>
             )}
           </div>
 
@@ -272,11 +475,29 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
                   doc.estatusNombre.toLowerCase().includes('validado') ||
                   doc.estatusNombre.toLowerCase().includes('aprobado');
                 return (
-                  <div key={doc.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
-                    <p className="text-xs text-slate-700 flex-1 truncate">{doc.tipoNombre}</p>
-                    <span className={`text-xs font-medium ml-2 shrink-0 ${validated ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {doc.estatusNombre}
-                    </span>
+                  <div key={doc.id} className={`rounded-xl px-3 py-2 border ${doc.isLatest ? 'bg-white border-slate-200' : 'bg-slate-50/50 border-transparent opacity-60'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <p className="text-xs text-slate-700 truncate">{doc.tipoNombre}</p>
+                        {doc.isLatest && (
+                          <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded shrink-0 font-medium">
+                            Vigente
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium shrink-0 ${validated ? 'text-emerald-600' : doc.isLatest ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {doc.estatusNombre}
+                      </span>
+                    </div>
+                    {doc.fecha && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(doc.fecha)}</p>
+                    )}
+                    {doc.hasOlderValidado && (
+                      <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                        <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                        El último documento cargado no está validado
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -288,20 +509,50 @@ function DetailPanel({ row, onClose }: { row: ExpedienteRow; onClose: () => void
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones rápidas</p>
           <div className="grid grid-cols-2 gap-2">
-            {([
-              { label: 'Subir documento', Icon: Plus },
-              { label: 'Marcar listo',    Icon: CheckCircle2 },
-              { label: 'Observación',     Icon: AlertTriangle },
-              { label: 'Descargar',       Icon: Download },
-            ] as const).map(({ label, Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              onClick={() => toast.info('Para subir documentos, edita el perfil del comprador usando el botón de edición en la sección Compradores.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />Subir documento
+            </button>
+            <button
+              onClick={handleMarcarListo}
+              disabled={markingListo}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {markingListo
+                ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              }
+              Marcar listo
+            </button>
+            <button
+              onClick={() => toast.info('Las observaciones se registran desde el perfil del comprador. Usa el botón de edición en la sección Compradores.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />Observación
+            </button>
+            <button
+              onClick={() => downloadCsv(
+                `expediente_${row.cuentaLabel}_${row.clienteNombre.replace(/\s+/g, '_')}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                [[
+                  row.cuentaLabel,
+                  row.proyectoNombre,
+                  row.unidad,
+                  row.clienteNombre,
+                  TIPO_META[row.tipoComprador]?.label ?? row.tipoComprador,
+                  ESTATUS_META[row.estatusExpediente]?.label ?? row.estatusExpediente,
+                  String(row.docsCompletos),
+                  String(row.docsTotal),
+                  fmtMxn(row.precioFinal),
+                  row.fechaActualizacion ? new Date(row.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]],
+              )}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />Descargar
+            </button>
           </div>
         </div>
       </div>
@@ -340,7 +591,7 @@ export function ExpedientesDashboard() {
   const [filtroTipo, setFiltroTipo]       = useState<TipoComprador | 'TODOS'>('TODOS');
   const [filtroEstatus, setFiltroEstatus] = useState<EstatusExpediente | 'TODOS'>('TODOS');
   const [page, setPage]                   = useState(0);
-  const [selected, setSelected]           = useState<ExpedienteRow | null>(null);
+  const [selectedId, setSelectedId]       = useState<number | null>(null);
   const [editingPersonaId, setEditingPersonaId] = useState<number | null>(null);
   const [isEditPersonaOpen, setIsEditPersonaOpen] = useState(false);
   const qc = useQueryClient();
@@ -433,7 +684,9 @@ export function ExpedientesDashboard() {
         .from('compradores')
         .select('id_cuenta_cobranza, id_persona, porcentaje_copropiedad')
         .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true);
+        .eq('activo', true)
+        .order('porcentaje_copropiedad', { ascending: false })
+        .order('id_persona', { ascending: true });
 
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
       const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null }> = {};
@@ -463,6 +716,7 @@ export function ExpedientesDashboard() {
           primerPersonaIdByCuenta[c.id_cuenta_cobranza] = c.id_persona; // primer comprador
         }
         comprsByCuenta[c.id_cuenta_cobranza].push({
+          id_persona: c.id_persona,
           nombre: p?.nombre_legal ?? '—',
           rfc: p?.rfc ?? null,
           porcentaje: c.porcentaje_copropiedad,
@@ -471,22 +725,59 @@ export function ExpedientesDashboard() {
         });
       });
 
-      // Paso 4: Conteo de documentos por cuenta
-      const { data: docs } = await supabase
+      // Paso 4: Documentos — query por id_persona (relación real en BD)
+      // Verificado: id_cuenta_cobranza es NULL en ~99.9% de documentos obligatorios.
+      // El campo de vinculación real es id_persona → compradores → cuentas_cobranza.
+      // Campo de fecha real para "último cargado": fecha_creacion (fecha_carga no existe en BD).
+      const personaIdsForDocs = [...new Set(Object.values(primerPersonaIdByCuenta))];
+
+      const { data: docs } = await (supabase as any)
         .from('documentos')
-        .select('id, id_cuenta_cobranza, id_estatus_verificacion')
-        .in('id_cuenta_cobranza', cuentaIds)
+        .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+        .in('id_persona', personaIdsForDocs)
+        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
         .eq('activo', true)
-        .eq('es_draft', false);
+        .eq('es_draft', false)
+        .order('fecha_creacion', { ascending: false })
+        .order('id', { ascending: false });
+
+      // latestDocByKey: "personaId__grupoKey" → doc más reciente de ese grupo obligatorio
+      // Docs ya vienen ordenados desc por fecha_creacion, id — tomar el primero encontrado por key.
+      const latestDocByKey: Record<string, { id: number; estatusId: number }> = {};
+      (docs || []).forEach((d: any) => {
+        if (!d.id_persona) return;
+        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+        if (!groupKey) return;
+        const key = `${d.id_persona}__${groupKey}`;
+        if (!latestDocByKey[key]) {
+          latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion };
+        }
+      });
 
       const docsByCuenta: Record<number, { total: number; completos: number }> = {};
-      (docs || []).forEach(d => {
-        if (!d.id_cuenta_cobranza) return;
-        if (!docsByCuenta[d.id_cuenta_cobranza]) docsByCuenta[d.id_cuenta_cobranza] = { total: 0, completos: 0 };
-        docsByCuenta[d.id_cuenta_cobranza].total++;
-        // id_estatus_verificacion = 2 es "Validado" en la mayoría de los schemas
-        if (d.id_estatus_verificacion && d.id_estatus_verificacion >= 2) {
-          docsByCuenta[d.id_cuenta_cobranza].completos++;
+      cuentaIds.forEach(cuentaId => {
+        const personaId = primerPersonaIdByCuenta[cuentaId];
+        let cumplidos = 0;
+        if (personaId) {
+          for (const grupo of OBLIGATORIO_GRUPOS) {
+            const latest = latestDocByKey[`${personaId}__${grupo.key}`];
+            if (latest && latest.estatusId === 2) cumplidos++; // 2 = Validado
+          }
+        }
+        docsByCuenta[cuentaId] = { total: OBLIGATORIO_GRUPOS.length, completos: cumplidos };
+
+        if (process.env.NODE_ENV !== 'production') {
+          const latestRequiredDocs = OBLIGATORIO_GRUPOS.map(g => ({
+            grupo: g.key,
+            doc: personaId ? (latestDocByKey[`${personaId}__${g.key}`] ?? null) : null,
+          }));
+          console.debug('[Expedientes] documentos por cuenta', {
+            cuentaId,
+            personaId: personaId ?? null,
+            latestRequiredDocs,
+            completed: cumplidos,
+            status: cumplidos >= OBLIGATORIO_GRUPOS.length ? 'LISTO' : 'PENDIENTE',
+          });
         }
       });
 
@@ -497,8 +788,8 @@ export function ExpedientesDashboard() {
           const cuenta = cuentaByProp[p.id];
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
-          const estatusExpediente = mapEstatusPropiedad(p.id_estatus_disponibilidad);
-          const docStats = docsByCuenta[cuenta.id] || { total: 0, completos: 0 };
+          const docStats = docsByCuenta[cuenta.id] || { total: OBLIGATORIO_GRUPOS.length, completos: 0 };
+          const estatusExpediente = deriveEstatusExpediente(p.id_estatus_disponibilidad, docStats.completos);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
             cuentaId: cuenta.id,
@@ -522,6 +813,12 @@ export function ExpedientesDashboard() {
     enabled: !!proyectoId,
     staleTime: 30_000,
   });
+
+  // selectedRow siempre refleja el estado actual de rows (nunca stale)
+  const selectedRow = useMemo(
+    () => rows.find(r => r.cuentaId === selectedId) ?? null,
+    [rows, selectedId],
+  );
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -581,6 +878,10 @@ export function ExpedientesDashboard() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expedientes-real', proyectoId] });
+      if (editingPersonaId) {
+        qc.invalidateQueries({ queryKey: ['expedientes-persona-edit', editingPersonaId] });
+        qc.invalidateQueries({ queryKey: ['exp-docs-persona', editingPersonaId] });
+      }
       setIsEditPersonaOpen(false);
       setEditingPersonaId(null);
       toast.success('Comprador actualizado correctamente.');
@@ -591,7 +892,7 @@ export function ExpedientesDashboard() {
   // ── Proyecto selector ─────────────────────────────────────────────────────
   const handleProyecto = (id: number) => {
     const p = proyectos.find(x => x.id === id);
-    if (p) { setProyectoId(p.id); setProyectoNombre(p.nombre); setSelected(null); }
+    if (p) { setProyectoId(p.id); setProyectoNombre(p.nombre); setSelectedId(null); }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -620,7 +921,7 @@ export function ExpedientesDashboard() {
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => toast.info('Los expedientes se generan automáticamente al asociar un comprador a una cuenta de cobranza.')}
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl font-medium text-sm transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" /> Nuevo expediente
@@ -722,7 +1023,22 @@ export function ExpedientesDashboard() {
               <option value="CON_OBSERVACIONES">Con observaciones</option>
             </select>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => downloadCsv(
+                `expedientes_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Tipo','Estatus','Docs completos','Docs total','Precio final','Última actualización'],
+                filtered.map(r => [
+                  r.cuentaLabel,
+                  r.proyectoNombre,
+                  r.unidad,
+                  r.clienteNombre,
+                  TIPO_META[r.tipoComprador]?.label ?? r.tipoComprador,
+                  ESTATUS_META[r.estatusExpediente]?.label ?? r.estatusExpediente,
+                  String(r.docsCompletos),
+                  String(r.docsTotal),
+                  fmtMxn(r.precioFinal),
+                  r.fechaActualizacion ? new Date(r.fechaActualizacion).toLocaleDateString('es-MX') : '',
+                ]),
+              )}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors ml-auto"
             >
               <Download className="w-4 h-4" /> Exportar
@@ -748,7 +1064,7 @@ export function ExpedientesDashboard() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60">
-                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Documentos', 'Actualizado'].map(h => (
+                    {['ID Cuenta', 'Tipo', 'Unidad / Cliente', 'Estatus', 'Docs obligatorios', 'Actualizado'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>
@@ -757,11 +1073,11 @@ export function ExpedientesDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paged.map(row => {
-                    const isSelected = selected?.cuentaId === row.cuentaId;
+                    const isSelected = selectedId === row.cuentaId;
                     return (
                       <tr
                         key={row.cuentaId}
-                        onClick={() => setSelected(isSelected ? null : row)}
+                        onClick={() => setSelectedId(isSelected ? null : row.cuentaId)}
                         className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-emerald-50/40' : ''}`}
                       >
                         <td className="px-5 py-4 whitespace-nowrap">
@@ -852,8 +1168,15 @@ export function ExpedientesDashboard() {
         </div>
 
         {/* ── Detail Panel ──────────────────────────────────────────────── */}
-        {selected && (
-          <DetailPanel row={selected} onClose={() => setSelected(null)} />
+        {selectedRow && (
+          <DetailPanel
+            row={selectedRow}
+            onClose={() => setSelectedId(null)}
+            onEditComprador={personaId => {
+              setEditingPersonaId(personaId);
+              setIsEditPersonaOpen(true);
+            }}
+          />
         )}
       </div>
 

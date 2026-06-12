@@ -301,6 +301,7 @@ export function AgregarMultaDialog({
             Cancelar
           </Button>
           <Button
+            data-cta="condominio.multa.guardar"
             type="button"
             onClick={() => mutation.mutate()}
             disabled={!formValido || mutation.isPending}

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { CreditCard, Lock, ShieldCheck, AlertCircle } from "lucide-react";
-import OfertaFlowShell from "@/components/offer/OfertaFlowShell";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
+import OfferFlowShell from "@/components/offer/OfferFlowShell";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
 
 function formatCardNumber(val: string) {
   return val.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
@@ -15,7 +15,7 @@ function formatExpiry(val: string) {
 }
 
 export default function HoldTarjetaPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { activateHold } = useOfertaFlowStore();
 
@@ -51,15 +51,15 @@ export default function HoldTarjetaPage() {
       const last4 = rawCard.slice(-4);
       activateHold(last4);
       setLoading(false);
-      navigate(`/oferta/${ofertaId}/confirmacion`);
+      navigate(`/oferta/${offerId}/confirmacion`);
     }, 2000);
   };
 
   return (
-    <OfertaFlowShell
+    <OfferFlowShell
       currentStep={2}
       title="Activa la retención"
-      onBack={() => navigate(`/oferta/${ofertaId}/tipo-comprador`)}
+      onBack={() => navigate(`/oferta/${offerId}/tipo-comprador`)}
     >
       <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col">
 
@@ -86,68 +86,76 @@ export default function HoldTarjetaPage() {
 
           {/* Holder name */}
           <div>
-            <label className="text-[11px] text-muted-foreground font-medium mb-1 block">
+            <label htmlFor="holderName" className="text-[11px] text-muted-foreground font-medium mb-1 block">
               Nombre del titular
             </label>
             <input
+              id="holderName"
               type="text"
+              autoComplete="cc-name"
               placeholder="Como aparece en la tarjeta"
               value={holderName}
               onChange={(e) => setHolderName(e.target.value)}
-              className="w-full h-10 px-3 rounded-xl border border-border bg-background text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+              className="w-full h-11 px-3 rounded-xl border border-border bg-background text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
             />
-            {errors.holderName && <p className="text-[11px] text-destructive mt-1">{errors.holderName}</p>}
+            {errors.holderName && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.holderName}</p>}
           </div>
 
           {/* Card number */}
           <div>
-            <label className="text-[11px] text-muted-foreground font-medium mb-1 block">
+            <label htmlFor="cardNumber" className="text-[11px] text-muted-foreground font-medium mb-1 block">
               Número de tarjeta
             </label>
             <div className="relative">
               <input
+                id="cardNumber"
                 type="text"
                 inputMode="numeric"
+                autoComplete="cc-number"
                 placeholder="1234 5678 9012 3456"
                 value={cardNumber}
                 onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                className="w-full h-10 pl-3 pr-10 rounded-xl border border-border bg-background text-[13px] tabular-nums tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                className="w-full h-11 pl-3 pr-10 rounded-xl border border-border bg-background text-[13px] tabular-nums tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               />
               <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             </div>
-            {errors.cardNumber && <p className="text-[11px] text-destructive mt-1">{errors.cardNumber}</p>}
+            {errors.cardNumber && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.cardNumber}</p>}
           </div>
 
           {/* Expiry + CVC */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-muted-foreground font-medium mb-1 block">
+              <label htmlFor="expiry" className="text-[11px] text-muted-foreground font-medium mb-1 block">
                 Vencimiento
               </label>
               <input
+                id="expiry"
                 type="text"
                 inputMode="numeric"
+                autoComplete="cc-exp"
                 placeholder="MM/AA"
                 value={expiry}
                 onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                className="w-full h-10 px-3 rounded-xl border border-border bg-background text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                className="w-full h-11 px-3 rounded-xl border border-border bg-background text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               />
-              {errors.expiry && <p className="text-[11px] text-destructive mt-1">{errors.expiry}</p>}
+              {errors.expiry && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.expiry}</p>}
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground font-medium mb-1 block">
+              <label htmlFor="cvc" className="text-[11px] text-muted-foreground font-medium mb-1 block">
                 CVC / CVV
               </label>
               <input
+                id="cvc"
                 type="text"
                 inputMode="numeric"
+                autoComplete="cc-csc"
                 placeholder="123"
                 maxLength={4}
                 value={cvc}
                 onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                className="w-full h-10 px-3 rounded-xl border border-border bg-background text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                className="w-full h-11 px-3 rounded-xl border border-border bg-background text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               />
-              {errors.cvc && <p className="text-[11px] text-destructive mt-1">{errors.cvc}</p>}
+              {errors.cvc && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.cvc}</p>}
             </div>
           </div>
 
@@ -183,7 +191,7 @@ export default function HoldTarjetaPage() {
             </p>
           </label>
           {errors.terms && (
-            <div className="flex items-center gap-1.5 mt-2">
+            <div role="alert" className="flex items-center gap-1.5 mt-2">
               <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
               <p className="text-[11px] text-destructive">{errors.terms}</p>
             </div>
@@ -194,11 +202,11 @@ export default function HoldTarjetaPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {loading ? (
               <>
-                <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full motion-safe:animate-spin" />
                 Procesando…
               </>
             ) : (
@@ -210,6 +218,6 @@ export default function HoldTarjetaPage() {
           </button>
         </div>
       </form>
-    </OfertaFlowShell>
+    </OfferFlowShell>
   );
 }

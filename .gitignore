@@ -17,6 +17,10 @@ graphify-out
 !.env.development
 !.env.example
 
+# Agents
+.agents/
+skills-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -45,6 +49,9 @@ Ejecuciones_manuales/*
 !public/*.png
 bundle*.js
 
+# Archivos temporales de Vite (transpilación del config)
+vite.config.ts.timestamp-*.mjs
+
 # Lock files de otros package managers (solo pnpm)
 package-lock.json
 bun.lock
@@ -54,3 +61,4 @@ bun.lockb
 ARCHITECTURE.md
 DESIGN.md
 graphify-out/
+*:Zone.Identifier

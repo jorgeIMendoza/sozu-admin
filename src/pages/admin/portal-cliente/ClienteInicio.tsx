@@ -136,6 +136,7 @@ const ClienteInicio = () => {
             </div>
             {safePortfolio.length > 3 && (
               <button
+                data-cta="cliente.inicio.ver-en-adquisicion"
                 onClick={() => navigate("/admin/portal-cliente/en-adquisicion")}
                 className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium text-primary hover:bg-primary/5 transition-colors border border-dashed border-primary/30"
               >

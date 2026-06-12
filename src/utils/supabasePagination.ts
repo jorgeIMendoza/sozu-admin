@@ -35,3 +35,43 @@ export async function fetchAllRows<T = any>(
   }
   return out;
 }
+
+/**
+ * Helper para ejecutar un query con `.in(...)` partiendo la lista de IDs en
+ * lotes para no exceder el límite de longitud del URL en PostgREST
+ * (~8 KB). Con IDs como bigint, ~500 IDs son seguros (~3-4 KB en el
+ * querystring incluso URL-encoded).
+ *
+ * Cada batch ejecuta el query en paralelo y los resultados se concatenan
+ * preservando el orden de aparición.
+ *
+ * Uso:
+ *
+ *   const rows = await fetchInBatches(ids, (batch) =>
+ *     supabase.from("ofertas").select("id, id_propiedad").in("id", batch),
+ *   );
+ *
+ * Si el caller necesita un `.in(...)` sobre una columna distinta del primary
+ * key (ej. `id_cuenta_cobranza`), el builder hace todo el query — el helper
+ * sólo provee el slice de IDs.
+ */
+export async function fetchInBatches<T = any>(
+  ids: ReadonlyArray<number | string>,
+  build: (batch: Array<number | string>) => PromiseLike<{ data: T[] | null; error: any }>,
+  options: { batchSize?: number } = {},
+): Promise<T[]> {
+  const batchSize = options.batchSize ?? 500;
+  if (!ids.length) return [];
+  const batches: Array<Array<number | string>> = [];
+  for (let i = 0; i < ids.length; i += batchSize) {
+    batches.push(ids.slice(i, i + batchSize) as Array<number | string>);
+  }
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      const { data, error } = await build(batch);
+      if (error) throw error;
+      return (data ?? []) as T[];
+    }),
+  );
+  return results.flat();
+}

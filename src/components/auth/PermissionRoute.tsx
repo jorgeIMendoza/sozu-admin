@@ -141,6 +141,39 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Portal CRM Sozu: mismo patrón coarse — basta tener permiso sobre cualquier
+  // submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-crm')) {
+    let tieneAccesoCrm = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-crm')) {
+        tieneAccesoCrm = true;
+        break;
+      }
+    }
+    return tieneAccesoCrm
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Bancos: mismo patrón coarse — basta tener permiso sobre cualquier
+  // submenu del portal para habilitar todas sus rutas. Además permitimos al rol
+  // "Banco" entrar directamente (fallback por si los submenús aún no están
+  // asignados a su rol en BD para ese ambiente).
+  if (location.pathname.startsWith('/admin/portal-bancos')) {
+    if (profile?.rol_nombre === 'Banco') return <>{children}</>;
+    let tieneAccesoBancos = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-bancos')) {
+        tieneAccesoBancos = true;
+        break;
+      }
+    }
+    return tieneAccesoBancos
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Check if current path is allowed
   const currentPath = location.pathname;
   

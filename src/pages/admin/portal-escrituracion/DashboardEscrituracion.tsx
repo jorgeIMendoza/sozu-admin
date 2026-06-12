@@ -152,9 +152,11 @@ function DashboardHeader() {
 
       // ── Inventario / Escriturados / Entregas (solo propiedades) ──
       const inventario = allProps.length;
-      const escriturados = allProps.filter(
-        p => p.id_estatus_disponibilidad === 7 || p.id_estatus_disponibilidad === 8
-      ).length;
+      // "Escriturado" = propiedad con numero_escritura asignado en al menos una cuenta
+      const propIdsConEscritura = new Set(
+        allCuentas.filter(c => !!c.numero_escritura).map(c => c.id_propiedad).filter(Boolean)
+      );
+      const escriturados = propIdsConEscritura.size;
       const entregas = allProps.filter(p => p.id_estatus_disponibilidad === 8).length;
 
       // ── Relación Pagos / Alertas PLD ──

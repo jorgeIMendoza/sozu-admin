@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllRows } from "@/utils/supabasePagination";
+import { fetchAllRows, fetchInBatches } from "@/utils/supabasePagination";
 
 export type EstadoComisionExterna =
   | "devengada"
@@ -42,6 +42,9 @@ export interface ComisionExterna {
   modelo_nombre: string;
   numero_departamento: string;
   producto_nombre: string;
+  /** Razón social o nombre comercial de la entidad dueña de la propiedad
+   *  (desarrollador). Cadena vacía si la propiedad no tiene dueño asignado. */
+  entidad_duena: string;
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -84,23 +87,31 @@ export function useComisionesExternas() {
         new Set(comisionistas.map((c) => c.email_usuario).filter((v): v is string => !!v)),
       );
 
-      const [
-        { data: usuarios, error: usErr },
-        { data: personas, error: peErr },
-      ] = await Promise.all([
-        emails.length
-          ? supabase.from("usuarios").select("email, nombre, rol_id").in("email", emails)
-          : Promise.resolve({ data: [] as Array<{ email: string; nombre: string | null; rol_id: number | null }>, error: null }),
-        emails.length
-          ? (supabase as any)
-              .from("personas")
-              .select("email, nombre_legal, nombre_comercial, rfc, tipo_persona")
-              .in("email", emails)
-              .eq("activo", true)
-          : Promise.resolve({ data: [] as Array<{ email: string; nombre_legal: string | null; nombre_comercial: string | null; rfc: string | null; tipo_persona: string | null }>, error: null }),
+      // IN(...) batcheado — emails y otros IDs en grandes volúmenes
+      // generan URLs > 8 KB en PostgREST.
+      const [usuarios, personas] = await Promise.all([
+        fetchInBatches<{ email: string; nombre: string | null; rol_id: number | null }>(
+          emails,
+          (batch) =>
+            supabase
+              .from("usuarios")
+              .select("email, nombre, rol_id")
+              .in("email", batch as string[]),
+        ),
+        fetchInBatches<{
+          email: string | null;
+          nombre_legal: string | null;
+          nombre_comercial: string | null;
+          rfc: string | null;
+          tipo_persona: string | null;
+        }>(emails, (batch) =>
+          (supabase as any)
+            .from("personas")
+            .select("email, nombre_legal, nombre_comercial, rfc, tipo_persona")
+            .in("email", batch as string[])
+            .eq("activo", true),
+        ),
       ]);
-      if (usErr) throw usErr;
-      if (peErr) throw peErr;
 
       const usuariosMap = new Map<string, { nombre: string; rolId: number | null }>();
       (usuarios || []).forEach((u: any) => {
@@ -141,15 +152,14 @@ export function useComisionesExternas() {
         ),
       );
 
-      const { data: cuentas, error: ccErr } = cuentaIds.length
-        ? await supabase
-            .from("cuentas_cobranza")
-            .select(
-              "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
-            )
-            .in("id", cuentaIds)
-        : { data: [] as Array<any>, error: null };
-      if (ccErr) throw ccErr;
+      const cuentas = await fetchInBatches<any>(cuentaIds, (batch) =>
+        supabase
+          .from("cuentas_cobranza")
+          .select(
+            "id, id_oferta, id_propiedad, precio_final, porcentaje_comision_venta, fecha_compra, es_pagada_comision_venta",
+          )
+          .in("id", batch as number[]),
+      );
 
       const cuentaMap = new Map(
         (cuentas || []).map((c: any) => {
@@ -159,6 +169,7 @@ export function useComisionesExternas() {
             {
               id: idNum,
               idOferta: c.id_oferta as number | null,
+              idPropiedad: (c.id_propiedad as number | null) ?? null,
               precioFinal: Number(c.precio_final) || 0,
               porcentajeVenta: Number(c.porcentaje_comision_venta) || 0,
               fechaCompra: c.fecha_compra as string | null,
@@ -176,38 +187,75 @@ export function useComisionesExternas() {
         ),
       );
 
-      const { data: ofertas, error: ofErr } = ofertaIds.length
-        ? await supabase
-            .from("ofertas")
-            .select("id, id_propiedad, id_producto")
-            .in("id", ofertaIds)
-        : { data: [] as Array<{ id: number; id_propiedad: number | null; id_producto: number | null }>, error: null };
-      if (ofErr) throw ofErr;
+      const ofertas = await fetchInBatches<{
+        id: number;
+        id_propiedad: number | null;
+        id_producto: number | null;
+      }>(ofertaIds, (batch) =>
+        supabase
+          .from("ofertas")
+          .select("id, id_propiedad, id_producto")
+          .in("id", batch as number[]),
+      );
 
       const ofertaMap = new Map<number, { idPropiedad: number | null; idProducto: number | null }>(
         (ofertas || []).map((o) => [o.id, { idPropiedad: o.id_propiedad, idProducto: o.id_producto }]),
       );
 
+      // id_propiedad puede venir de cuentas_cobranza directo o de la oferta.
       const propiedadIds = Array.from(
-        new Set(
-          (ofertas || [])
+        new Set([
+          ...Array.from(cuentaMap.values())
+            .map((c) => c.idPropiedad)
+            .filter((v): v is number => v != null),
+          ...(ofertas || [])
             .map((o) => o.id_propiedad)
             .filter((v): v is number => v != null),
-        ),
+        ]),
       );
 
-      const { data: propiedades, error: prErr } = propiedadIds.length
-        ? await supabase
-            .from("propiedades")
-            .select("id, numero_propiedad, id_edificio_modelo")
-            .in("id", propiedadIds)
-        : { data: [] as Array<{ id: number; numero_propiedad: string | null; id_edificio_modelo: number | null }>, error: null };
-      if (prErr) throw prErr;
+      const propiedades = await fetchInBatches<{
+        id: number;
+        numero_propiedad: string | null;
+        id_edificio_modelo: number | null;
+        id_entidad_relacionada_dueno: number | null;
+      }>(propiedadIds, (batch) =>
+        supabase
+          .from("propiedades")
+          .select("id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno")
+          .in("id", batch as number[]),
+      );
 
       const propiedadMap = new Map(
         (propiedades || []).map((p) => [
           p.id,
-          { numero: p.numero_propiedad ?? "", idEdificioModelo: p.id_edificio_modelo },
+          {
+            numero: p.numero_propiedad ?? "",
+            idEdificioModelo: p.id_edificio_modelo,
+            idEntidadDueno: p.id_entidad_relacionada_dueno,
+          },
+        ]),
+      );
+
+      // Entidad dueña (desarrollador) — entidades_relacionadas → personas
+      const entidadDuenoIds = Array.from(
+        new Set(
+          (propiedades || [])
+            .map((p) => p.id_entidad_relacionada_dueno)
+            .filter((v): v is number => v != null),
+        ),
+      );
+      const { data: entidadesDuenas, error: entDError } = entidadDuenoIds.length
+        ? await (supabase as any)
+            .from("entidades_relacionadas")
+            .select("id, id_persona, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+            .in("id", entidadDuenoIds)
+        : { data: [] as any[], error: null };
+      if (entDError) throw entDError;
+      const entidadDuenoMap = new Map<number, string>(
+        ((entidadesDuenas || []) as Array<{ id: number; personas: { nombre_legal: string | null; nombre_comercial: string | null } | null }>).map((e) => [
+          e.id,
+          e.personas?.nombre_comercial || e.personas?.nombre_legal || "",
         ]),
       );
 
@@ -219,13 +267,16 @@ export function useComisionesExternas() {
         ),
       );
 
-      const { data: edms, error: emErr } = emIds.length
-        ? await supabase
-            .from("edificios_modelos")
-            .select("id, id_edificio, id_modelo")
-            .in("id", emIds)
-        : { data: [] as Array<{ id: number; id_edificio: number | null; id_modelo: number | null }>, error: null };
-      if (emErr) throw emErr;
+      const edms = await fetchInBatches<{
+        id: number;
+        id_edificio: number | null;
+        id_modelo: number | null;
+      }>(emIds, (batch) =>
+        supabase
+          .from("edificios_modelos")
+          .select("id, id_edificio, id_modelo")
+          .in("id", batch as number[]),
+      );
 
       const emMap = new Map(
         (edms || []).map((em) => [em.id, { idEdificio: em.id_edificio, idModelo: em.id_modelo }]),
@@ -290,15 +341,14 @@ export function useComisionesExternas() {
         ),
       );
 
-      const { data: productos, error: prodErr } = productoIds.length
-        ? await (supabase as any)
-            .from("productos_servicios")
-            .select(
-              "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
-            )
-            .in("id", productoIds)
-        : { data: [] as any[], error: null };
-      if (prodErr) throw prodErr;
+      const productos = await fetchInBatches<any>(productoIds, (batch) =>
+        (supabase as any)
+          .from("productos_servicios")
+          .select(
+            "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+          )
+          .in("id", batch as number[]),
+      );
 
       const productoMap = new Map<number, { nombre: string; categoria: string }>(
         ((productos || []) as Array<{ id: number; nombre: string | null; categorias_producto: { nombre: string | null } | null }>).map((p) => [
@@ -344,7 +394,12 @@ export function useComisionesExternas() {
 
         const cuenta = c.id_cuenta_cobranza != null ? cuentaMap.get(c.id_cuenta_cobranza) : undefined;
         const oferta = cuenta?.idOferta != null ? ofertaMap.get(cuenta.idOferta) : undefined;
-        const prop = oferta?.idPropiedad != null ? propiedadMap.get(oferta.idPropiedad) : undefined;
+        // Fallback: cc.id_propiedad cuando la oferta no la trae.
+        const idPropResolved = cuenta?.idPropiedad ?? oferta?.idPropiedad ?? null;
+        const prop = idPropResolved != null ? propiedadMap.get(idPropResolved) : undefined;
+        const entidadDuena = prop?.idEntidadDueno != null
+          ? entidadDuenoMap.get(prop.idEntidadDueno) ?? ""
+          : "";
         const em = prop?.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
         const edif = em?.idEdificio != null ? edificioMap.get(em.idEdificio) : undefined;
         const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";
@@ -409,6 +464,7 @@ export function useComisionesExternas() {
           modelo_nombre: modeloNombre,
           numero_departamento: prop?.numero ?? "",
           producto_nombre: producto?.nombre ?? "",
+          entidad_duena: entidadDuena,
         };
       });
     },

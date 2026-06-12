@@ -98,6 +98,7 @@ export default function Cargos() {
         subtitle={`${filtered.length} cargos y pagos · cuentas de mantenimiento`}
         actions={
           <Button
+            data-cta="condominio.cargos.abrir-agregar-multa"
             size="sm"
             className="h-9 gap-1.5 text-[13px]"
             onClick={() => setDialogOpen(true)}

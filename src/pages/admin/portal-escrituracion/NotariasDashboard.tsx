@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -52,6 +53,19 @@ const fmtMxn = (n: number) =>
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function downloadCsv(filename: string, headers: string[], rows: string[][]): void {
+  const bom = '﻿';
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
 
 function estatusFromId(id: number): EstatusVisual {
   if (id === 7) return 'Escriturado';
@@ -292,6 +306,7 @@ function DetailPanel({
   onClose: () => void;
   onAssign: (cuentaId: number, notarioId: number | null) => void;
 }) {
+  const navigate = useNavigate();
   const notario = notarios.find(n => n.id === row.notarioId);
 
   return (
@@ -351,25 +366,38 @@ function DetailPanel({
           )}
         </div>
 
-        {/* Etapas pendientes (stubbed) */}
+        {/* Etapas del proceso notarial */}
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Proceso notarial</p>
           <div className="space-y-1.5">
-            {[
-              { label: 'VoBo Desarrollador', icon: CheckCircle2 },
-              { label: 'VoBo Banco',         icon: CheckCircle2 },
-              { label: 'Cita de Firma',      icon: Clock },
-              { label: 'Registro Público',   icon: FileText },
-            ].map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <span>{label}</span>
-                <Icon className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-            ))}
+            <button
+              onClick={() => toast.info('El VoBo del desarrollador se gestiona desde el módulo Créditos Hipotecarios.')}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <span>VoBo Desarrollador</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            <button
+              onClick={() => toast.info('El VoBo del banco se gestiona desde el módulo Créditos Hipotecarios.')}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <span>VoBo Banco</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            <button
+              onClick={() => toast.info('La cita de firma se programa desde el módulo Programar Citas.')}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <span>Cita de Firma</span>
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            <button
+              onClick={() => toast.info('El registro público se actualiza desde el módulo Créditos Hipotecarios una vez firmada la escritura.')}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <span>Registro Público</span>
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </div>
         </div>
 
@@ -377,20 +405,44 @@ function DetailPanel({
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Acciones</p>
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: 'Programar cita',   Icon: Clock },
-              { label: 'Agregar nota',     Icon: FileText },
-              { label: 'Descargar',        Icon: Download },
-              { label: 'Ver documentos',   Icon: Users },
-            ].map(({ label, Icon }) => (
-              <button
-                key={label}
-                onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />{label}
-              </button>
-            ))}
+            <button
+              onClick={() => navigate('/admin/portal-escrituracion/programar-citas')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Clock className="w-3.5 h-3.5 shrink-0" />Programar cita
+            </button>
+            <button
+              onClick={() => toast.info('Las notas se registran en el perfil del comprador dentro del módulo de Expedientes.')}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />Agregar nota
+            </button>
+            <button
+              onClick={() => downloadCsv(
+                `notaria_${row.cuentaLabel}_${row.clienteNombre.replace(/\s+/g, '_')}.csv`,
+                ['Cuenta','Proyecto','Unidad','Cliente','Notaría','Notario','Estatus','Precio final','Última actualización'],
+                [[
+                  row.cuentaLabel,
+                  row.proyectoNombre,
+                  row.unidad,
+                  row.clienteNombre,
+                  notario?.notaria ?? 'Sin asignar',
+                  notario?.nombre ?? '—',
+                  estatusFromId(row.estatusId),
+                  fmtMxn(row.precioFinal),
+                  fmtDate(row.fechaActualizacion),
+                ]],
+              )}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />Descargar
+            </button>
+            <button
+              onClick={() => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${row.cuentaId}`)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+            >
+              <Users className="w-3.5 h-3.5 shrink-0" />Ver documentos
+            </button>
           </div>
         </div>
       </div>
@@ -715,7 +767,24 @@ export function NotariasDashboard() {
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           <button
-            onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+            onClick={() => downloadCsv(
+              `notarias_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
+              ['Cuenta','Proyecto','Unidad','Cliente','Notaría','Notario','Estatus','Precio final','Última actualización'],
+              filtered.map(r => {
+                const not = notarios.find(n => n.id === r.notarioId);
+                return [
+                  r.cuentaLabel,
+                  r.proyectoNombre,
+                  r.unidad,
+                  r.clienteNombre,
+                  not?.notaria ?? 'Sin asignar',
+                  not?.nombre ?? '—',
+                  estatusFromId(r.estatusId),
+                  fmtMxn(r.precioFinal),
+                  fmtDate(r.fechaActualizacion),
+                ];
+              }),
+            )}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
           >
             <Download className="w-4 h-4" /> Exportar
@@ -876,7 +945,7 @@ export function NotariasDashboard() {
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
             <button
-              onClick={() => toast.info('Funcionalidad pendiente de conectar al backend')}
+              onClick={() => toast.info('Los procesos notariales se generan automáticamente al asignar una notaría a una cuenta de cobranza.')}
               className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl font-medium text-sm transition-colors shadow-sm ml-auto"
             >
               <Plus className="w-4 h-4" /> Nuevo proceso

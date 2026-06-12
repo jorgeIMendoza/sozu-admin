@@ -1,34 +1,37 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { User, Mail, Phone, ShieldCheck } from "lucide-react";
-import OfertaFlowShell from "@/components/offer/OfertaFlowShell";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
+import OfferFlowShell from "@/components/offer/OfferFlowShell";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
 
 function InputField({
-  icon: Icon, type = "text", placeholder, value, onChange, required, pattern, minLength,
+  id, icon: Icon, type = "text", placeholder, value, onChange, required, pattern, minLength, autoComplete,
 }: {
-  icon: React.ElementType; type?: string; placeholder: string; value: string;
-  onChange: (v: string) => void; required?: boolean; pattern?: string; minLength?: number;
+  id: string; icon: React.ElementType; type?: string; placeholder: string; value: string;
+  onChange: (v: string) => void; required?: boolean; pattern?: string; minLength?: number; autoComplete?: string;
 }) {
   return (
     <div className="relative">
+      <label htmlFor={id} className="sr-only">{placeholder}</label>
       <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
       <input
+        id={id}
         type={type}
+        autoComplete={autoComplete}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
         pattern={pattern}
         minLength={minLength}
-        className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-background text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+        className="w-full h-11 pl-9 pr-4 rounded-xl border border-border bg-background text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
       />
     </div>
   );
 }
 
 export default function CapturaDatosPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { setProspect, setOfertaId } = useOfertaFlowStore();
 
@@ -51,17 +54,17 @@ export default function CapturaDatosPage() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
-    setOfertaId(ofertaId ?? "");
+    setOfertaId(offerId ?? "");
     setProspect({ fullName: fullName.trim(), email: email.trim().toLowerCase(), phone: phone.trim() });
     // TODO: send magic link via Supabase edge function
     setTimeout(() => {
       setLoading(false);
-      navigate(`/oferta/${ofertaId}/verificar-email`);
+      navigate(`/oferta/${offerId}/verificar-email`);
     }, 800);
   };
 
   return (
-    <OfertaFlowShell title="Tus datos de contacto">
+    <OfferFlowShell title="Tus datos de contacto">
       <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col">
         <div className="rounded-2xl bg-card border border-border p-5 space-y-4">
           <p className="text-[13px] text-muted-foreground leading-relaxed">
@@ -70,16 +73,16 @@ export default function CapturaDatosPage() {
 
           <div className="space-y-3">
             <div>
-              <InputField icon={User} placeholder="Nombre completo" value={fullName} onChange={setFullName} required minLength={3} />
-              {errors.fullName && <p className="text-[11px] text-destructive mt-1">{errors.fullName}</p>}
+              <InputField id="fullName" autoComplete="name" icon={User} placeholder="Nombre completo" value={fullName} onChange={setFullName} required minLength={3} />
+              {errors.fullName && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.fullName}</p>}
             </div>
             <div>
-              <InputField icon={Mail} type="email" placeholder="Correo electrónico" value={email} onChange={setEmail} required />
-              {errors.email && <p className="text-[11px] text-destructive mt-1">{errors.email}</p>}
+              <InputField id="email" autoComplete="email" icon={Mail} type="email" placeholder="Correo electrónico" value={email} onChange={setEmail} required />
+              {errors.email && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.email}</p>}
             </div>
             <div>
-              <InputField icon={Phone} type="tel" placeholder="Teléfono (10 dígitos)" value={phone} onChange={setPhone} required />
-              {errors.phone && <p className="text-[11px] text-destructive mt-1">{errors.phone}</p>}
+              <InputField id="phone" autoComplete="tel" icon={Phone} type="tel" placeholder="Teléfono (10 dígitos)" value={phone} onChange={setPhone} required />
+              {errors.phone && <p role="alert" className="text-[11px] text-destructive mt-1">{errors.phone}</p>}
             </div>
           </div>
         </div>
@@ -99,16 +102,16 @@ export default function CapturaDatosPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {loading ? (
-              <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full motion-safe:animate-spin" />
             ) : (
               "Continuar al apartado"
             )}
           </button>
         </div>
       </form>
-    </OfertaFlowShell>
+    </OfferFlowShell>
   );
 }

@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserX, RotateCcw, Upload, ChevronLeft, ChevronRight, FileSpreadsheet, User, CalendarCheck, Calendar, RefreshCw, Clock, MapPin } from "lucide-react";
+import { Plus, Search, Edit, Trash2, UserX, RotateCcw, Upload, ChevronLeft, ChevronRight, FileSpreadsheet, User, CalendarCheck, Calendar, RefreshCw, Clock, MapPin, ImagePlus, Loader2, Camera, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";  
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -250,6 +250,209 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
   );
 }
 
+// ─── Dialog: editar foto y frase de un agente (uso exclusivo super admin) ───
+function AgenteAvatarDialog({
+  agente,
+  open,
+  onOpenChange,
+}: {
+  agente: Agente | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [fraseValue, setFraseValue] = useState('');
+  const [savingFrase, setSavingFrase] = useState(false);
+
+  const { data: perfilExtra, isLoading: loadingExtra } = useQuery({
+    queryKey: ['agente-avatar-extra', agente?.email],
+    queryFn: async () => {
+      if (!agente?.email) return null;
+      const { data } = await (supabase as any)
+        .from('usuarios')
+        .select('foto_perfil_url, frase_perfil')
+        .eq('email', agente.email)
+        .maybeSingle();
+      return data as { foto_perfil_url: string | null; frase_perfil: string | null } | null;
+    },
+    enabled: open && !!agente?.email,
+  });
+
+  // Sync frase when data arrives
+  useState(() => {
+    setFraseValue(perfilExtra?.frase_perfil || '');
+  });
+  // Update when perfilExtra changes
+  const prevFraseRef = useRef<string | null>(null);
+  if (perfilExtra && perfilExtra.frase_perfil !== prevFraseRef.current) {
+    prevFraseRef.current = perfilExtra.frase_perfil ?? null;
+    setFraseValue(perfilExtra.frase_perfil || '');
+  }
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !agente?.email) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `avatars/${agente.email}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatar')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('avatar').getPublicUrl(path);
+      await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: urlData.publicUrl })
+        .eq('email', agente.email);
+      queryClient.invalidateQueries({ queryKey: ['agente-avatar-extra', agente.email] });
+      toast({ title: 'Foto actualizada', description: agente.nombre_legal });
+    } catch (err: any) {
+      toast({ title: 'Error al subir foto', description: err?.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFraseSave = async () => {
+    if (!agente?.email) return;
+    setSavingFrase(true);
+    try {
+      await (supabase as any)
+        .from('usuarios')
+        .update({ frase_perfil: fraseValue.trim() || null })
+        .eq('email', agente.email);
+      queryClient.invalidateQueries({ queryKey: ['agente-avatar-extra', agente.email] });
+      toast({ title: 'Frase guardada' });
+    } catch (err: any) {
+      toast({ title: 'Error al guardar frase', description: err?.message, variant: 'destructive' });
+    } finally {
+      setSavingFrase(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!agente?.email) return;
+    setUploading(true);
+    try {
+      await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: null })
+        .eq('email', agente.email);
+      queryClient.invalidateQueries({ queryKey: ['agente-avatar-extra', agente.email] });
+      toast({ title: 'Foto eliminada' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Foto y frase — {agente?.nombre_legal}</DialogTitle>
+        </DialogHeader>
+
+        {loadingExtra ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-5 py-1">
+            {/* Avatar */}
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative group">
+                {perfilExtra?.foto_perfil_url ? (
+                  <img
+                    src={perfilExtra.foto_perfil_url}
+                    alt={agente?.nombre_legal}
+                    className="h-24 w-24 rounded-full object-cover border-2 border-border"
+                  />
+                ) : (
+                  <div className="h-24 w-24 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl">
+                    {(agente?.nombre_legal || 'A')[0]?.toUpperCase()}
+                  </div>
+                )}
+                {/* Overlay cámara */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                >
+                  {uploading
+                    ? <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    : <Camera className="h-6 w-6 text-white" />
+                  }
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+                  {perfilExtra?.foto_perfil_url ? 'Cambiar foto' : 'Subir foto'}
+                </Button>
+                {perfilExtra?.foto_perfil_url && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemovePhoto}
+                    disabled={uploading}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <X className="h-3.5 w-3.5 mr-1.5" />
+                    Quitar
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Frase */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Frase del agente</label>
+              <div className="flex gap-2">
+                <input
+                  value={fraseValue}
+                  onChange={e => setFraseValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleFraseSave(); }}
+                  maxLength={250}
+                  placeholder="Ej: Especialista en bienes raíces residenciales"
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleFraseSave}
+                  disabled={savingFrase}
+                >
+                  {savingFrase ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">{fraseValue.length}/250 caracteres</p>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Agentes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [inmobiliariaFilter, setInmobiliariaFilter] = useState<string>("all");
@@ -265,6 +468,8 @@ export default function Agentes() {
   const [agenteToRestore, setAgenteToRestore] = useState<Agente | null>(null);
   const [isBulkUploadDialogOpen, setIsBulkUploadDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [agenteParaAvatar, setAgenteParaAvatar] = useState<Agente | null>(null);
+  const [isAvatarDialogOpen, setIsAvatarDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canCreate, canUpdate, canDelete, canExport, isSuperAdmin } = usePagePermissions('/admin/agentes');
@@ -829,6 +1034,11 @@ export default function Agentes() {
     setIsBankAccountsDialogOpen(true);
   };
 
+  const handleAvatarEdit = (agente: Agente) => {
+    setAgenteParaAvatar(agente);
+    setIsAvatarDialogOpen(true);
+  };
+
   function renderTable() {
     if (isLoading) {
       return (
@@ -966,6 +1176,15 @@ export default function Agentes() {
                           className="h-8 px-2 text-xs hover:bg-accent"
                         >
                           Cuentas
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleAvatarEdit(agente)}
+                          className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                          title="Editar foto y frase"
+                        >
+                          <ImagePlus className="h-4 w-4" />
                         </Button>
                       </>
                     ) : (
@@ -1236,6 +1455,16 @@ export default function Agentes() {
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['agentes'] });
           queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+        }}
+      />
+
+      {/* Avatar / Frase Dialog */}
+      <AgenteAvatarDialog
+        agente={agenteParaAvatar}
+        open={isAvatarDialogOpen}
+        onOpenChange={(v) => {
+          setIsAvatarDialogOpen(v);
+          if (!v) setAgenteParaAvatar(null);
         }}
       />
     </div>

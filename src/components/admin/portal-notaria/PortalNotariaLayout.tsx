@@ -4,6 +4,7 @@ import { Home, ArrowLeft, LogOut, Menu } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const NAV = [
@@ -70,6 +71,7 @@ export const PortalNotariaLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="notaria">
     <div className="min-h-screen bg-background">
       <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 border-r">
         <SidebarBody />
@@ -102,5 +104,6 @@ export const PortalNotariaLayout = () => {
         </main>
       </div>
     </div>
+    </PortalTrackingProvider>
   );
 };

@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import ManualsBlock from "../post-delivery/ManualsBlock";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import MaintenancePaymentSheet from "@/components/admin/portal-cliente/detail/MaintenancePaymentSheet";
+import FichaTecnicaSection from "./FichaTecnicaSection";
 import { useClientePropiedadDetalle, type MantenimientoHistorial } from "@/hooks/useClientePropiedadDetalle";
 
 interface Props {
@@ -52,7 +53,7 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
   const deliveredAt = property.fechaEscritura ?? "2024-05-15";
 
   // Real maintenance data from Supabase
-  const { data: propDetalle, isLoading: loadingMaint } = useClientePropiedadDetalle(property.id);
+  const { data: propDetalle, isLoading: loadingMaint } = useClientePropiedadDetalle(Number(property.id));
   const [showMaintSheet, setShowMaintSheet] = useState(false);
 
   const clabe = propDetalle?.mantenimientoClabeStp ?? null;
@@ -108,6 +109,15 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
             isLoading={loadingMaint}
             onPay={() => setShowMaintSheet(true)}
           />
+          {loadingMaint ? (
+            <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
+              <div className="h-3 w-32 bg-muted rounded" />
+              <div className="h-3 w-48 bg-muted rounded" />
+              <div className="h-40 bg-muted rounded-xl" />
+            </div>
+          ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
+            <FichaTecnicaSection propDetalle={propDetalle} />
+          ) : null}
           <UsageSection usage={usage} />
           <PropertyDocuments propertyId={property.id} />
           <ManualsBlock cuentaId={property.id} />

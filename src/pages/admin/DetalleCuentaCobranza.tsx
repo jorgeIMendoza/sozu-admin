@@ -1904,16 +1904,16 @@ export default function DetalleCuentaCobranza() {
     if (!cuentaDetalle?.oferta_id) return;
     setDownloadingOferta(true);
     try {
-      const { ofertaPdfStorageService } = await import('@/services/ofertaPdfStorageService');
+      const { offerPdfStorageService } = await import('@/services/offerPdfStorageService');
       const offerId = cuentaDetalle.oferta_id;
 
-      const existingUrl = await ofertaPdfStorageService.getExistingUrl(offerId);
+      const existingUrl = await offerPdfStorageService.getExistingUrl(offerId);
 
       if (existingUrl) {
-        const validation = await ofertaPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offerId);
+        const validation = await offerPdfStorageService.validateOfferDataAndInvalidateIfNeeded(offerId);
         if (!validation.wasInvalidated) {
           const filename = existingUrl.split('/').pop() || `oferta-${offerId}.pdf`;
-          await ofertaPdfStorageService.downloadFromUrl(existingUrl, filename);
+          await offerPdfStorageService.downloadFromUrl(existingUrl, filename);
           toast({ title: "PDF descargado", description: "La oferta se ha descargado exitosamente" });
           return;
         }

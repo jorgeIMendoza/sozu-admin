@@ -50,6 +50,9 @@ All colors MUST be HSL.
     --warning-foreground: 30 25% 20%;
 
     --border: 214.3 31.8% 91.4%;
+    --border-soft: 214.3 31.8% 93.5%;
+    --border-subtle: 214.3 31.8% 95.5%;
+    --border-soft-dark: 217.2 32.6% 19%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
 
@@ -131,6 +134,8 @@ All colors MUST be HSL.
     --warning-foreground: 43 96% 90%;
 
     --border: 217.2 32.6% 17.5%;
+    --border-soft: 217.2 32.6% 19.5%;
+    --border-subtle: 217.2 32.6% 15.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
     --sidebar-background: 240 5.9% 10%;
@@ -1126,3 +1131,4 @@ All colors MUST be HSL.
   border-color: #D1D5DB;
   transform: translateY(-1px);
 }
+

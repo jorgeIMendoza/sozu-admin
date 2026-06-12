@@ -149,6 +149,47 @@ export function EjecucionDispersionExpedienteContent({
     },
   });
 
+  // Bulk: paga a todos los comisionistas internos aprobados y aún no
+  // pagados en un solo UPDATE. `eq("aprobada", true).eq("pagada", false)`
+  // garantiza que no toquemos en_espera ni rechazados (aprobada=false),
+  // ni dupliquemos pagos sobre comisionistas ya pagados.
+  const [confirmandoTodos, setConfirmandoTodos] = useState(false);
+  const ejecutarTodosMutation = useMutation({
+    mutationFn: async () => {
+      const { error: e } = await (supabase as any)
+        .from("comisionistas")
+        .update({
+          pagada: true,
+          fecha_pago_comision: new Date().toISOString(),
+        })
+        .eq("id_cuenta_cobranza", entity.id_cuenta_cobranza)
+        .eq("activo", true)
+        .eq("aprobada", true)
+        .eq("pagada", false);
+      if (e) throw e;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["expediente_venta_detalle", entity.folio_cuenta],
+      });
+      queryClient.invalidateQueries({ queryKey: ["dispersiones_internas_pendientes"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones_internas_alta_direccion"] });
+      toast({
+        title: "Dispersión ejecutada",
+        description: "Todos los comisionistas aprobados quedaron marcados como pagados.",
+      });
+      setConfirmandoTodos(false);
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Error al ejecutar dispersión",
+        description: err instanceof Error ? err.message : "No se pudo ejecutar.",
+        variant: "destructive",
+      });
+      setConfirmandoTodos(false);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -333,8 +374,106 @@ export function EjecucionDispersionExpedienteContent({
         }
       >
         {internos.length > 0 && (
-          <ul className="space-y-2">
-            {internos.map((c) => {
+          <>
+            {/* Totales de la dispersión — desglose % total y monto total
+                que se va a dispersar al equipo interno, más el monto ya
+                pagado (informativo) y el aprobado pendiente (lo accionable). */}
+            {(() => {
+              const pctTotal = internos.reduce((s, c) => s + c.porcentaje, 0);
+              const pagadoTotal = internos
+                .filter((c) => estadoDe(c) === "pagada")
+                .reduce((s, c) => s + c.monto, 0);
+              const aprobadosPendientes = internos.filter(
+                (c) => estadoDe(c) === "aprobado",
+              );
+              const isPendingBulk = ejecutarTodosMutation.isPending;
+              return (
+                <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Total a dispersar ({internos.length}{" "}
+                      {internos.length === 1 ? "comisionista" : "comisionistas"})
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {pctTotal.toFixed(2)}% · {fmtMxn(totalDispersar)}
+                    </span>
+                  </div>
+                  {(montoAprobadoPendiente > 0 || pagadoTotal > 0) && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Aprobado pendiente · Pagado
+                      </span>
+                      <span className="tabular-nums">
+                        <span className="text-amber-700 dark:text-amber-300 font-medium">
+                          {fmtMxn(montoAprobadoPendiente)}
+                        </span>
+                        {" · "}
+                        <span className="text-blue-700 dark:text-blue-300 font-medium">
+                          {fmtMxn(pagadoTotal)}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                  {/* CTA bulk — sólo cuando hay >=2 aprobados pendientes
+                      para evitar duplicar el flujo per-fila. La acción
+                      paga a todos los aprobados en un solo UPDATE. */}
+                  {aprobadosPendientes.length >= 2 && (
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                      <span className="text-xs text-muted-foreground">
+                        {aprobadosPendientes.length} comisionistas aprobados sin
+                        dispersar
+                      </span>
+                      {confirmandoTodos ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            data-cta="admin.dispersion.confirmar-bulk"
+                            size="sm"
+                            className="h-7 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={isPendingBulk}
+                            onClick={() => ejecutarTodosMutation.mutate()}
+                          >
+                            {isPendingBulk ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Ejecutando…
+                              </>
+                            ) : (
+                              `Sí, dispersar ${fmtMxn(montoAprobadoPendiente)}`
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px] px-2"
+                            disabled={isPendingBulk}
+                            onClick={() => setConfirmandoTodos(false)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          data-cta="admin.dispersion.ejecutar-todos"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                          onClick={() => setConfirmandoTodos(true)}
+                          disabled={
+                            ejecutarDispersionMutation.isPending || isPendingBulk
+                          }
+                        >
+                          <Send className="h-3 w-3 mr-1" />
+                          Ejecutar dispersión a todos
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <ul className="space-y-2">
+              {internos.map((c) => {
               const estado = estadoDe(c);
               const puedeEjecutar = estado === "aprobado";
               const enConfirmacion = confirmando === c.email;
@@ -398,10 +537,12 @@ export function EjecucionDispersionExpedienteContent({
                           </div>
                         ) : (
                           <Button
+                            data-cta="admin.dispersion.ejecutar-individual"
                             size="sm"
                             variant="outline"
                             className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                             onClick={() => setConfirmando(c.email)}
+                            disabled={ejecutarTodosMutation.isPending}
                           >
                             <Send className="h-3 w-3 mr-1" />
                             Ejecutar dispersión
@@ -413,7 +554,8 @@ export function EjecucionDispersionExpedienteContent({
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </>
         )}
       </Section>
 

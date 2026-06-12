@@ -43,6 +43,7 @@ const ProductoTabs = ({
       return (
         <button
           key={p.cuentaId}
+          data-cta="cliente.productos.seleccionar"
           onClick={() => onSelect(p.cuentaId)}
           className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium border transition-colors ${
             active
@@ -197,6 +198,7 @@ const ClienteProductos = () => {
                   return (
                     <button
                       key={p.propiedadId}
+                      data-cta="cliente.productos.ver-propiedad"
                       onClick={() => setSearchParams({ p: String(p.propiedadId) })}
                       className="w-full flex items-center gap-3.5 bg-card rounded-2xl border border-border p-4 transition-all active:scale-[0.98] hover:border-primary/30 text-left"
                     >

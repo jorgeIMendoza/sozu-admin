@@ -827,20 +827,20 @@ function DetailPanel({ cita, onClose, onConfirm, onCancel, onComplete, updating 
             {updating ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
             Confirmar
           </button>
-          <button disabled={updating} onClick={() => toast.info('Funcionalidad de reprogramación pendiente')}
+          <button data-cta="escrituracion.citas.reprogramar" disabled={updating} onClick={() => toast.info('Funcionalidad de reprogramación pendiente')}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <RotateCcw className="w-3.5 h-3.5 shrink-0" />Reprogramar
           </button>
-          <button disabled={!canComplete || updating} onClick={() => onComplete(cita.id)}
+          <button data-cta="escrituracion.citas.marcar-realizada" disabled={!canComplete || updating} onClick={() => onComplete(cita.id)}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-teal-50 hover:border-teal-200 hover:text-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <CalendarDays className="w-3.5 h-3.5 shrink-0" />Marcar realizada
           </button>
-          <button disabled={!canCancel || updating} onClick={() => onCancel(cita.id)}
+          <button data-cta="escrituracion.citas.cancelar" disabled={!canCancel || updating} onClick={() => onCancel(cita.id)}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <XCircle className="w-3.5 h-3.5 shrink-0" />Cancelar
           </button>
           <button className="col-span-2 flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs hover:bg-slate-50 transition-colors"
-            onClick={() => toast.info('Envío de recordatorio pendiente de conectar')}>
+            onClick={() => toast.info(`Recordatorio para ${cita.clienteNombre} — el envío automático requiere configurar el flujo "citaRecordatorio" en N8N y conectarlo con la Edge Function enviar-notificacion.`)}>
             <Bell className="w-3.5 h-3.5 shrink-0" />Enviar recordatorio
           </button>
         </div>

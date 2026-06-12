@@ -381,6 +381,7 @@ const ClientePerfil = () => {
       {/* Security */}
       <Section title="Seguridad" icon={Shield}>
         <button
+          data-cta="cliente.perfil.cambiar-password"
           onClick={isImpersonating ? undefined : () => setShowChangePassword(true)}
           disabled={isImpersonating}
           className={`w-full flex items-center justify-between py-2.5 -mx-1 px-1 rounded-lg transition-colors ${isImpersonating ? "opacity-40 cursor-not-allowed" : "hover:bg-accent/30"}`}
@@ -396,6 +397,7 @@ const ClientePerfil = () => {
       {/* Bottom actions */}
       <div className="space-y-0">
         <button
+          data-cta="cliente.perfil.cerrar-sesion"
           onClick={signOut}
           className="w-full flex items-center gap-3 py-3.5 text-left hover:bg-accent/50 transition-colors rounded-lg px-1"
         >
@@ -504,6 +506,7 @@ const ClientePerfil = () => {
             {/* Footer */}
             <div className="px-5 pb-8 pt-2 space-y-2">
               <button
+                data-cta="cliente.perfil.confirmar-cambio-password"
                 onClick={handleChangePassword}
                 className={`w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
                   pwButtonReady

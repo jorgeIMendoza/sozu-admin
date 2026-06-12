@@ -15,6 +15,9 @@ import {
   ChevronRight,
   TrendingUp,
   Banknote,
+  Activity,
+  BarChart3,
+  MousePointerClick,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -24,6 +27,7 @@ import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
@@ -38,6 +42,10 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/historico-comercial",
   "/admin/portal-alta-direccion/analisis-cobranza",
   "/admin/portal-alta-direccion/ingresos-egresos",
+  "/admin/portal-alta-direccion/forecast-ingresos",
+  "/admin/portal-alta-direccion/mediciones/portales",
+  "/admin/portal-alta-direccion/mediciones/menus",
+  "/admin/portal-alta-direccion/mediciones/ctas",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -87,7 +95,16 @@ const navGroups: NavGroup[] = [
   {
     label: "Finanzas",
     items: [
-      { label: "Ingresos y Egresos", path: "/admin/portal-alta-direccion/ingresos-egresos", icon: ArrowLeftRight },
+      { label: "Ingresos y Egresos",  path: "/admin/portal-alta-direccion/ingresos-egresos",  icon: ArrowLeftRight },
+      { label: "Forecast de Ingresos", path: "/admin/portal-alta-direccion/forecast-ingresos", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Mediciones",
+    items: [
+      { label: "Uso por portal",         path: "/admin/portal-alta-direccion/mediciones/portales", icon: Activity },
+      { label: "Mapa de calor de menús", path: "/admin/portal-alta-direccion/mediciones/menus",    icon: BarChart3 },
+      { label: "Mapa de calor de CTAs",  path: "/admin/portal-alta-direccion/mediciones/ctas",     icon: MousePointerClick },
     ],
   },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
@@ -250,13 +267,18 @@ export const PortalAltaDireccionLayout = () => {
           <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleNavigate("/admin")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Menú principal
-          </button>
+          {/* "Menú principal" sólo es relevante para Super Admin (rol_id=1)
+              — únicos que pueden navegar fuera del Portal Alta Dirección
+              hacia el panel admin general. */}
+          {profile?.rol_id === 1 && (
+            <button
+              onClick={() => handleNavigate("/admin")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Menú principal
+            </button>
+          )}
           <button
             onClick={signOut}
             className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
@@ -270,6 +292,7 @@ export const PortalAltaDireccionLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="alta-direccion">
     <AltaDireccionFiltersProvider>
       <div className="min-h-screen flex">
         <aside
@@ -337,6 +360,7 @@ export const PortalAltaDireccionLayout = () => {
         </div>
       </div>
     </AltaDireccionFiltersProvider>
+    </PortalTrackingProvider>
   );
 };
 
