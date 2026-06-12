@@ -23,12 +23,32 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
     props.onMonthChange?.(newMonth);
   };
 
-  // Extract onSelect to wrap it for auto-navigating to selected date's month
+  // Extract onSelect to wrap it for auto-navigating to selected date's month.
+  // Soporta los 3 modos de react-day-picker:
+  //   - single   → onSelect(day: Date | undefined, ...)
+  //   - range    → onSelect(range: DateRange { from?, to? } | undefined, ...)
+  //   - multiple → onSelect(days: Date[] | undefined, ...)
+  // Sin esta diferenciación, en modo range el primer argumento es un objeto
+  // {from, to} y llamar .getMonth() sobre él rompe la selección.
   const originalOnSelect = (props as any).onSelect;
   const wrappedOnSelect = React.useCallback((...args: any[]) => {
-    const date = args[0] as Date | undefined;
-    if (date && (date.getMonth() !== month.getMonth() || date.getFullYear() !== month.getFullYear())) {
-      handleMonthChange(new Date(date.getFullYear(), date.getMonth(), 1));
+    const first = args[0];
+    let dateForNav: Date | undefined;
+    if (first instanceof Date) {
+      dateForNav = first;
+    } else if (Array.isArray(first) && first.length > 0) {
+      dateForNav = first[first.length - 1];
+    } else if (first && typeof first === "object") {
+      // DateRange: navegar al mes del extremo más reciente seleccionado.
+      const r = first as { from?: Date; to?: Date };
+      dateForNav = r.to ?? r.from;
+    }
+    if (
+      dateForNav &&
+      (dateForNav.getMonth() !== month.getMonth() ||
+        dateForNav.getFullYear() !== month.getFullYear())
+    ) {
+      handleMonthChange(new Date(dateForNav.getFullYear(), dateForNav.getMonth(), 1));
     }
     if (originalOnSelect) {
       originalOnSelect(...args);

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
-import sozuLogo from "@/assets/sozu-logo.png";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
+const sozuLogo = "/sozu-logo.png";
 
 type State = "verifying" | "success" | "error";
 
 export default function VerificacionCallbackPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
@@ -26,7 +26,7 @@ export default function VerificacionCallbackPage() {
       if (token === "demo" || token.length > 3) {
         setVerified();
         setState("success");
-        setTimeout(() => navigate(`/oferta/${ofertaId}/tipo-comprador`), 1500);
+        setTimeout(() => navigate(`/oferta/${offerId}/tipo-comprador`), 1500);
       } else {
         setState("error");
       }
@@ -63,7 +63,7 @@ export default function VerificacionCallbackPage() {
             El enlace de verificación expiró o ya fue usado. Solicita uno nuevo desde la pantalla anterior.
           </p>
           <button
-            onClick={() => navigate(`/oferta/${ofertaId}/verificar-email`)}
+            onClick={() => navigate(`/oferta/${offerId}/verificar-email`)}
             className="h-10 px-6 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold hover:bg-primary/90 transition-colors"
           >
             Solicitar nuevo enlace

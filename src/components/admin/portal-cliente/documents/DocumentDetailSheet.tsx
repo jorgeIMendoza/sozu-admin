@@ -14,14 +14,14 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import type { DocumentRecord } from "@/lib/portal-cliente/document-data";
 import {
   getStatusInfo,
   getTypeInfo,
   formatFileSize,
-  uploadDocument,
-  simulateValidation,
 } from "@/lib/portal-cliente/document-data";
+import { supabase } from "@/integrations/supabase/client";
 import { usePortfolioCliente } from "@/lib/portal-cliente/use-portfolio";
 import SupportLauncher from "@/components/admin/portal-cliente/support/SupportLauncher";
 import type { SupportContext } from "@/lib/portal-cliente/advisor-data";
@@ -45,6 +45,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : false
@@ -86,18 +87,28 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const handleUpload = async () => {
     if (!uploadedFile) return;
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    const ext =
-      uploadedFile.type === "application/pdf"
-        ? "pdf"
-        : uploadedFile.type === "image/png"
-          ? "png"
-          : "jpg";
-    uploadDocument(document.id, uploadedFile.name, ext, uploadedFile.size);
-    setSubmitting(false);
-    toast.success("Documento subido. Te avisaremos al validarlo en máx. 24 hrs hábiles.");
-    setUploadedFile(null);
-    setTimeout(() => onClose(), 400);
+    try {
+      const timestamp = Date.now();
+      const fileName = `doc_${timestamp}_${uploadedFile.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("documentos")
+        .upload(fileName, uploadedFile);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(fileName);
+      const { error: updateError } = await supabase
+        .from("documentos")
+        .update({ url: publicUrl, id_estatus_verificacion: 1 })
+        .eq("id", parseInt(document.id));
+      if (updateError) throw updateError;
+      queryClient.invalidateQueries({ queryKey: ["cliente-documents"] });
+      toast.success("Documento subido. Te avisaremos al validarlo en máx. 24 hrs hábiles.");
+      setUploadedFile(null);
+      setTimeout(() => onClose(), 400);
+    } catch {
+      toast.error("No se pudo subir el archivo. Intenta de nuevo.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDownload = () => {
@@ -106,12 +117,6 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
     } else {
       toast.success(`Descargando ${document.fileName ?? document.name}...`);
     }
-  };
-
-  const handleSimulateValidation = () => {
-    simulateValidation(document.id);
-    toast.success("Documento validado.");
-    setTimeout(() => onClose(), 300);
   };
 
   const renderUploadZone = () => (
@@ -191,51 +196,9 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
   const renderBody = ({ inDialog }: { inDialog: boolean }) => (
     <div className="pt-4">
-      {/* Status badge */}
-      <div className="flex items-center gap-2 mb-4">
-        <span
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${statusInfo.className}`}
-        >
-          {document.status === "firmado" && <Zap className="w-3 h-3" />}
-          {statusInfo.label}
-        </span>
-      </div>
-
-      {/* File preview — only in Sheet (mobile), not in dialog right pane */}
-      {!inDialog && hasRealUrl && (
-        <div className="rounded-xl overflow-hidden bg-muted mb-4 border border-border">
-          {isImage ? (
-            <img
-              src={document.url}
-              alt={document.name}
-              className="w-full max-h-72 object-contain bg-black/5"
-            />
-          ) : (
-            <iframe
-              src={document.url}
-              title={document.name}
-              className="w-full h-72"
-              style={{ border: "none" }}
-            />
-          )}
-        </div>
-      )}
-
       {/* Status-specific blocks */}
       {document.status === "pendiente" && (
         <>
-          <div className="rounded-xl border border-warning/30 bg-warning/[0.05] p-4 mb-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-warning" />
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-warning">
-                Acción requerida
-              </span>
-            </div>
-            <p className="text-sm text-foreground leading-relaxed mt-2">
-              {document.description ??
-                "Necesitamos que subas este documento para continuar con tu proceso."}
-            </p>
-          </div>
           {document.origin === "client_uploaded" && (
             <>
               {renderUploadZone()}
@@ -260,72 +223,21 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
       {document.status === "recibido" && (
         <>
-          <div className="rounded-xl bg-primary/[0.05] border border-primary/20 p-4 mb-4">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-primary">
-                En revisión
-              </span>
-            </div>
-            <p className="text-sm text-foreground mt-2 leading-relaxed">
-              Recibimos tu documento. Lo estamos validando, esto puede tomar hasta 24 hrs hábiles.
-              Te avisaremos cuando esté listo.
-            </p>
-          </div>
           {renderMetadata()}
-          <button
-            onClick={handleDownload}
-            className="w-full h-11 rounded-xl bg-muted/50 hover:bg-muted text-foreground font-semibold flex items-center justify-center gap-2 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Descargar mi copia
-          </button>
-          <button
-            onClick={handleSimulateValidation}
-            className="w-full h-9 mt-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            [DEMO] Simular validación de ops
-          </button>
         </>
       )}
 
       {document.status === "validado" && (
         <>
-          <div className="rounded-xl bg-success/10 border border-success/20 p-4 mb-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-success" />
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-success">
-                Validado
-              </span>
-            </div>
-            <p className="text-sm text-foreground mt-2">
-              Documento validado por SOZU el {formatDate(document.validatedAt ?? document.uploadedAt)}.
-            </p>
-          </div>
           {renderMetadata()}
-          <button
-            onClick={handleDownload}
-            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold flex items-center justify-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Descargar
-          </button>
         </>
       )}
 
       {document.status === "rechazado" && (
         <>
-          <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 mb-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-destructive" />
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-destructive">
-                Rechazado - Acción requerida
-              </span>
-            </div>
-            <p className="text-sm text-foreground mt-2 leading-relaxed">
-              {document.rejectionReason}
-            </p>
-          </div>
+          {document.rejectionReason && (
+            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{document.rejectionReason}</p>
+          )}
           {document.fileName && (
             <div className="rounded-xl border border-border bg-muted/20 p-3 mb-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
@@ -405,59 +317,84 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
             )}
           </div>
           {renderMetadata()}
-          <button
-            onClick={handleDownload}
-            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold flex items-center justify-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Descargar documento firmado
-          </button>
-          {document.nom151ConstancyUrl && (
-            <button
-              onClick={handleDownload}
-              className="w-full h-11 mt-2 rounded-xl bg-muted/50 hover:bg-muted text-foreground font-semibold flex items-center justify-center gap-2 transition-colors"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Descargar constancia NOM-151
-            </button>
-          )}
         </>
+      )}
+
+      {/* File preview — mobile only, after details */}
+      {!inDialog && hasRealUrl && (
+        <div className="rounded-xl overflow-hidden bg-muted mt-4 border border-border">
+          {isImage ? (
+            <img
+              src={document.url}
+              alt={document.name}
+              className="w-full max-h-72 object-contain bg-black/5"
+            />
+          ) : (
+            <iframe
+              src={document.url}
+              title={document.name}
+              className="w-full h-72"
+              style={{ border: "none" }}
+            />
+          )}
+        </div>
       )}
     </div>
   );
 
-  const stickyHeader = (
-    <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3 bg-card border-b border-border flex-shrink-0">
-      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <TypeIcon className="w-4 h-4 text-primary" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground leading-none mb-0.5">
-          {typeInfo.label}
-        </p>
-        <h2 className="font-display font-semibold text-sm text-foreground leading-tight truncate">
-          {document.name}
-        </h2>
-        {inv && (
-          <p className="text-[11px] text-muted-foreground truncate">
-            {inv.property.projectName} - U-{inv.property.unitNumber}
-          </p>
-        )}
-      </div>
+  const footer = (
+    <div className="px-5 pb-8 pt-4 border-t border-border/50 space-y-2 shrink-0">
+      {hasRealUrl && (
+        <a
+          href={document.url}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Descargar
+        </a>
+      )}
+      {document.nom151ConstancyUrl && (
+        <a
+          href={document.nom151ConstancyUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+        >
+          <ShieldCheck className="w-4 h-4" />
+          Constancia NOM-151
+        </a>
+      )}
       <button
         onClick={onClose}
-        aria-label="Cerrar"
-        className="w-9 h-9 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors flex-shrink-0 shadow-sm"
+        className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
       >
-        <X className="w-4 h-4" />
+        Cerrar
       </button>
+    </div>
+  );
+
+  const stickyHeader = (
+    <div className="sticky top-0 z-20 flex items-center gap-3 px-5 pt-5 pb-4 bg-card border-b border-border shrink-0">
+      <TypeIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <h2 className="font-bold text-sm text-foreground leading-tight truncate">
+          {document.name}
+        </h2>
+        <p className="text-xs text-muted-foreground truncate">
+          {typeInfo.label}{inv ? ` · ${inv.property.projectName} U-${inv.property.unitNumber}` : ""}
+        </p>
+      </div>
     </div>
   );
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl" style={{ maxHeight: "90vh" }}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl [&>button:last-child]:hidden" style={{ maxHeight: "90vh" }}>
           <div className="flex h-full" style={{ minHeight: hasRealUrl ? "560px" : undefined }}>
             {/* Left preview pane */}
             {hasRealUrl && (
@@ -477,9 +414,10 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
             {/* Right details pane */}
             <div className={`${hasRealUrl ? "w-[360px] shrink-0" : "w-full"} flex flex-col overflow-hidden`}>
               {stickyHeader}
-              <div className="overflow-y-auto px-5 pb-6 flex-1">
+              <div className="overflow-y-auto px-5 pb-2 flex-1">
                 {renderBody({ inDialog: true })}
               </div>
+              {footer}
             </div>
           </div>
         </DialogContent>
@@ -491,12 +429,13 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl max-h-[75vh] p-0 flex flex-col overflow-hidden"
+        className="rounded-t-2xl max-h-[75dvh] p-0 flex flex-col overflow-hidden [&>button:last-child]:hidden"
       >
         {stickyHeader}
-        <div className="overflow-y-auto px-5 pb-8 flex-1">
+        <div className="overflow-y-auto px-5 pb-2 flex-1">
           {renderBody({ inDialog: false })}
         </div>
+        {footer}
       </SheetContent>
     </Sheet>
   );

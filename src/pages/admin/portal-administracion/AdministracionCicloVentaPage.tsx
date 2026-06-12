@@ -8,6 +8,7 @@ import {
   Star,
   ArrowLeft,
   ArrowRight,
+  Banknote,
   Building2,
   User,
   DollarSign,
@@ -38,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
   SelectContent,
@@ -447,6 +449,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
   const [search, setSearch] = useState("");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
 
   const { data: casos = [], isLoading, error } = useCicloVentaCasos();
 
@@ -478,6 +481,12 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       return true;
     });
   }, [search, proyectoFilter, tipoFilter, casos]);
+
+  const totalPages = Math.max(1, Math.ceil(filtrados.length / ADMIN_PAGE_SIZE));
+  const filtradosPage = useMemo(
+    () => filtrados.slice(page * ADMIN_PAGE_SIZE, (page + 1) * ADMIN_PAGE_SIZE),
+    [filtrados, page],
+  );
 
   const hayFiltros = !!search || proyectoFilter !== "all" || tipoFilter !== "all";
 
@@ -583,7 +592,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtrados.map((c) => (
+                {filtradosPage.map((c) => (
                   <TableRow key={c.id_cuenta_cobranza}>
                     <TableCell className="font-medium text-sm font-mono whitespace-nowrap">
                       {c.folio}
@@ -617,6 +626,12 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                 ))}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalCount={filtrados.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Panel>
@@ -1381,6 +1396,9 @@ function ExpedienteDetalleReal({
         </CardContent>
       </Card>
 
+      {/* Estado de pagos — desglose financiero */}
+      <EstadoPagosPanel data={data} />
+
       {/* Timeline del ciclo (16 pasos) */}
       <Section
         title="Timeline del ciclo"
@@ -1623,5 +1641,98 @@ export default function AdministracionCicloVentaPage() {
       onPrev={null}
       onNext={null}
     />
+  );
+}
+
+/* ──────────────────────────────────────────────────────────
+   Estado de pagos — desglose financiero del expediente
+   ────────────────────────────────────────────────────────── */
+
+function EstadoPagosPanel({ data }: { data: ExpedienteVentaDetalle }) {
+  const fb = data.financial_breakdown;
+  return (
+    <Section
+      title="Estado de pagos"
+      icon={Banknote}
+      description="Total pagado, saldo pendiente, efectivo permitido y valor de escrituración"
+    >
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
+              <p className="text-[11px] uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
+                Total Pagado
+              </p>
+              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 tabular-nums">
+                {fmtMxn(fb.total_pagado)}
+              </p>
+              <p className="text-[12px] text-emerald-700/70 dark:text-emerald-300/70 tabular-nums mt-0.5">
+                {fb.total_pagado_pct.toFixed(1)}% del total
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-1">
+              <p className="text-[11px] uppercase tracking-wider text-amber-700/80 dark:text-amber-300/80 font-semibold">
+                Saldo Pendiente
+              </p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 mt-1 tabular-nums">
+                {fmtMxn(fb.saldo_pendiente)}
+              </p>
+              <p className="text-[12px] text-amber-700/70 dark:text-amber-300/70 tabular-nums">
+                {fb.saldo_pendiente_pct.toFixed(1)}% del total
+              </p>
+              <div className="pt-2 mt-2 border-t border-amber-200/50 space-y-1 text-[12px] text-amber-900/80 dark:text-amber-200/80">
+                <div className="flex justify-between">
+                  <span>Durante obra:</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(fb.durante_obra_pendiente)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>A la entrega:</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(fb.a_la_entrega_pendiente)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Parcialidades restantes:</span>
+                  <span className="tabular-nums font-medium">{fb.parcialidades_restantes}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-violet-200 bg-violet-50/40 dark:bg-violet-950/20 p-4 space-y-1">
+              <p className="text-[11px] uppercase tracking-wider text-violet-700/80 dark:text-violet-300/80 font-semibold">
+                Pago en efectivo
+              </p>
+              <p className="text-2xl font-bold text-violet-700 dark:text-violet-300 mt-1 tabular-nums">
+                {fmtMxn(fb.efectivo_aun_permitido)}
+              </p>
+              <p className="text-[12px] text-violet-700/70 dark:text-violet-300/70">
+                Aún permitido
+              </p>
+              <div className="pt-2 mt-2 border-t border-violet-200/50 space-y-1 text-[12px] text-violet-900/80 dark:text-violet-200/80">
+                <div className="flex justify-between">
+                  <span>Límite:</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(fb.efectivo_limite)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Pagado:</span>
+                  <span className="tabular-nums font-medium">{fmtMxn(fb.efectivo_pagado)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-sky-200 bg-sky-50/40 dark:bg-sky-950/20 p-4">
+              <p className="text-[11px] uppercase tracking-wider text-sky-700/80 dark:text-sky-300/80 font-semibold">
+                Valor de escrituración
+              </p>
+              <p className="text-2xl font-bold text-sky-700 dark:text-sky-300 mt-1 tabular-nums">
+                {fmtMxn(fb.valor_escrituracion)}
+              </p>
+              <p className="text-[12px] text-sky-700/70 dark:text-sky-300/70 mt-0.5">
+                Precio final de la cuenta
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Section>
   );
 }

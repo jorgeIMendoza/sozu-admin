@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -189,6 +189,15 @@ export function PipelineOfferDetailDialog({
             {isProducto ? oferta.producto_nombre : oferta.propiedad_nombre}
             {oferta.proyecto_nombre ? ` de ${oferta.proyecto_nombre}` : ''}
           </p>
+          <div className="flex justify-center pt-1">
+            <button
+              onClick={() => window.open(`/oferta/${oferta.id}`, '_blank')}
+              className="flex items-center gap-1.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 transition-colors"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Ver oferta pública
+            </button>
+          </div>
         </DialogHeader>
 
         <ScrollArea className="max-h-[75vh]">

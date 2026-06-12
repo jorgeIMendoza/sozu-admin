@@ -329,9 +329,15 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
         },
       });
 
+      // En respuestas non-2xx, supabase.functions.invoke deja el mensaje genérico
+      // "Edge Function returned a non-2xx status code" en fnError y el cuerpo real
+      // (motivo) en fnError.context. Lo extraemos para mostrar el error verdadero.
+      const payload = fnData ?? (await (fnError as any)?.context?.json?.().catch(() => null));
+      if (payload?.error) {
+        throw new Error(payload.error === "no_disponible" ? payload.message : (payload.message || payload.error));
+      }
       if (fnError) throw fnError;
-      if (fnData?.error) throw new Error(fnData.error === "no_disponible" ? fnData.message : fnData.error);
-      return fnData;
+      return payload;
     },
     onSuccess: (data: any) => {
       if (data?.warning) {

@@ -1,6 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
-  X,
   CheckCircle2,
   Clock,
   User,
@@ -43,12 +42,10 @@ const IncidentDetailSheet = ({ cuentaId, incident, open, onClose }: Props) => {
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="h-[92vh] p-0 rounded-t-2xl overflow-y-auto"
+        className="max-h-[75dvh] p-0 rounded-t-2xl overflow-y-auto [&>button:last-child]:hidden"
       >
         <div className="p-5 flex items-start gap-3 border-b border-border">
-          <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5 text-warning" />
-          </div>
+          <Wrench className="w-5 h-5 text-muted-foreground shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
               {getIncidentCategoryLabel(incident.category)}
@@ -65,13 +62,6 @@ const IncidentDetailSheet = ({ cuentaId, incident, open, onClose }: Props) => {
               })}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-lg hover:bg-muted flex items-center justify-center shrink-0"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4 text-foreground" />
-          </button>
         </div>
 
         <div className="px-5 pt-4 flex flex-wrap gap-2">
@@ -138,6 +128,12 @@ const IncidentDetailSheet = ({ cuentaId, incident, open, onClose }: Props) => {
               </p>
             </div>
           )}
+          <button
+            onClick={onClose}
+            className="w-full mt-3 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+          >
+            Cerrar
+          </button>
         </div>
       </SheetContent>
     </Sheet>

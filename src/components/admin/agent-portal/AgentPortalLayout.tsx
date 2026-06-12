@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
 
@@ -115,6 +116,7 @@ export const AgentPortalLayout = () => {
   const showBackButton = !livesInAgentPortal && hasOtherMenus;
 
   return (
+    <PortalTrackingProvider portal="agentes">
     <div className="agent-portal light min-h-screen flex flex-col" style={{ background: "hsl(var(--agent-bg))", colorScheme: "light" }}>
       {showBackButton && (
         <div className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100 px-4 py-2">
@@ -173,5 +175,6 @@ export const AgentPortalLayout = () => {
         </div>
       </nav>
     </div>
+    </PortalTrackingProvider>
   );
 };

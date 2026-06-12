@@ -197,19 +197,20 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         notas_internas, comentarios_publicos, proximo_paso, estatus_proteccion,
         monto_venta, monto_comision, estatus_comision, fecha_pago_estimada, fecha_pago,
         audit_trail, fecha_creacion, activo,
-        entidades_relacionadas(
+        entidades_relacionadas!embajadores_referidos_id_entidad_relacionada_fkey(
           id_persona,
-          personas(nombre_legal, email, telefono)
+          personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono)
         )
       `)
       .eq('activo', true)
       .order('fecha_creacion', { ascending: false });
 
-    if (!error && data) setReferrals(data.map(mapReferral));
+    if (error) { console.error('loadReferrals error:', error); return; }
+    if (data) setReferrals(data.map(mapReferral));
   }, []);
 
   const loadAdvisors = useCallback(async () => {
-    // rol_id 9 = "Agente Interno"
+    // Roles internos: Super Admin (1), Administrador de Proyecto (2), Agente Interno (9), Directores (19)
     const { data, error } = await supabase
       .from('usuarios')
       .select(`
@@ -218,7 +219,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         personas!id_persona(nombre_legal, telefono)
       `)
       .eq('activo', true)
-      .eq('rol_id', 9)
+      .in('rol_id', [1, 2, 9, 19])
       .order('nombre');
     if (error) {
       console.error('loadAdvisors error:', error);

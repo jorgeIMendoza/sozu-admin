@@ -625,6 +625,7 @@ export type Database = {
           cron_expression: string | null
           fecha_actualizacion: string
           fecha_creacion: string
+          filtros_destinatario: Json
           id: number
           mensaje_html: string
           mensajes_whatsapp: Json | null
@@ -642,6 +643,7 @@ export type Database = {
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          filtros_destinatario?: Json
           id?: never
           mensaje_html: string
           mensajes_whatsapp?: Json | null
@@ -659,6 +661,7 @@ export type Database = {
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          filtros_destinatario?: Json
           id?: never
           mensaje_html?: string
           mensajes_whatsapp?: Json | null
@@ -3341,6 +3344,66 @@ export type Database = {
         }
         Relationships: []
       }
+      cep_audit_log: {
+        Row: {
+          auditado_en: string | null
+          banco_beneficiario: string | null
+          banco_ordenante: string | null
+          clave_rastreo: string | null
+          estado: string
+          fecha_pago: string | null
+          id: number
+          id_pago: number
+          monto: number | null
+          motivo: string | null
+          num_cuenta: string | null
+          url_cep: string
+        }
+        Insert: {
+          auditado_en?: string | null
+          banco_beneficiario?: string | null
+          banco_ordenante?: string | null
+          clave_rastreo?: string | null
+          estado: string
+          fecha_pago?: string | null
+          id?: number
+          id_pago: number
+          monto?: number | null
+          motivo?: string | null
+          num_cuenta?: string | null
+          url_cep: string
+        }
+        Update: {
+          auditado_en?: string | null
+          banco_beneficiario?: string | null
+          banco_ordenante?: string | null
+          clave_rastreo?: string | null
+          estado?: string
+          fecha_pago?: string | null
+          id?: number
+          id_pago?: number
+          monto?: number | null
+          motivo?: string | null
+          num_cuenta?: string | null
+          url_cep?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cep_audit_log_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "pagos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cep_audit_log_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_pago"]
+          },
+        ]
+      }
       citas_calendar_events: {
         Row: {
           activo: boolean
@@ -3935,6 +3998,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_banco: number | null
+          id_estatus_verificacion: number
           id_persona: number
           numero_cuenta: string
           titular: string | null
@@ -3949,6 +4013,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_banco?: number | null
+          id_estatus_verificacion?: number
           id_persona: number
           numero_cuenta: string
           titular?: string | null
@@ -3963,6 +4028,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_banco?: number | null
+          id_estatus_verificacion?: number
           id_persona?: number
           numero_cuenta?: string
           titular?: string | null
@@ -4002,15 +4068,18 @@ export type Database = {
           contrato_draft: string | null
           email_autoriza_comision: string | null
           email_autoriza_comision_externa: string | null
+          email_autoriza_comision_interna: string | null
           es_aprobado: boolean
           es_comision_venta_efectivo: boolean
           es_draft_factura_comision: boolean | null
           es_pagada_comision_venta: boolean
           estatus_autorizacion_comision: string
           estatus_autorizacion_comision_externa: string
+          estatus_autorizacion_comision_interna: string
           fecha_actualizacion: string
           fecha_autorizacion_comision: string | null
           fecha_autorizacion_comision_externa: string | null
+          fecha_autorizacion_comision_interna: string | null
           fecha_compra: string | null
           fecha_creacion: string
           fecha_escritura: string | null
@@ -4029,6 +4098,7 @@ export type Database = {
           monto_comision_pagado: number
           notas_rechazo_comision: string | null
           notas_rechazo_comision_externa: string | null
+          notas_rechazo_comision_interna: string | null
           numero_escritura: string | null
           numero_unidad_privativa: string | null
           porcentaje_comision_venta: number
@@ -4048,15 +4118,18 @@ export type Database = {
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
           email_autoriza_comision_externa?: string | null
+          email_autoriza_comision_interna?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
           estatus_autorizacion_comision_externa?: string
+          estatus_autorizacion_comision_interna?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
           fecha_autorizacion_comision_externa?: string | null
+          fecha_autorizacion_comision_interna?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -4075,6 +4148,7 @@ export type Database = {
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
           notas_rechazo_comision_externa?: string | null
+          notas_rechazo_comision_interna?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -4094,15 +4168,18 @@ export type Database = {
           contrato_draft?: string | null
           email_autoriza_comision?: string | null
           email_autoriza_comision_externa?: string | null
+          email_autoriza_comision_interna?: string | null
           es_aprobado?: boolean
           es_comision_venta_efectivo?: boolean
           es_draft_factura_comision?: boolean | null
           es_pagada_comision_venta?: boolean
           estatus_autorizacion_comision?: string
           estatus_autorizacion_comision_externa?: string
+          estatus_autorizacion_comision_interna?: string
           fecha_actualizacion?: string
           fecha_autorizacion_comision?: string | null
           fecha_autorizacion_comision_externa?: string | null
+          fecha_autorizacion_comision_interna?: string | null
           fecha_compra?: string | null
           fecha_creacion?: string
           fecha_escritura?: string | null
@@ -4121,6 +4198,7 @@ export type Database = {
           monto_comision_pagado?: number
           notas_rechazo_comision?: string | null
           notas_rechazo_comision_externa?: string | null
+          notas_rechazo_comision_interna?: string | null
           numero_escritura?: string | null
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
@@ -5808,6 +5886,256 @@ export type Database = {
         }
         Relationships: []
       }
+      legal_flow_bitacora: {
+        Row: {
+          activo: boolean
+          autor_email: string
+          autor_nombre: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: string
+          id_cuenta_cobranza: number
+          id_documento: number | null
+          id_persona: number | null
+          mensaje: string
+          scope: string | null
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          autor_email: string
+          autor_nombre?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_cuenta_cobranza: number
+          id_documento?: number | null
+          id_persona?: number | null
+          mensaje: string
+          scope?: string | null
+          tipo: string
+        }
+        Update: {
+          activo?: boolean
+          autor_email?: string
+          autor_nombre?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_cuenta_cobranza?: number
+          id_documento?: number | null
+          id_persona?: number | null
+          mensaje?: string
+          scope?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_bitacora_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_documento_fkey"
+            columns: ["id_documento"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_bitacora_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_flow_etapas: {
+        Row: {
+          activo: boolean
+          codigo: string
+          es_terminal: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          nombre: string
+          orden: number
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      legal_flow_expedientes: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          email_asignado: string | null
+          email_solicitante: string
+          etapa: string
+          fecha_actualizacion: string
+          fecha_aprobacion: string | null
+          fecha_creacion: string
+          fecha_envio_firma: string | null
+          fecha_firmado: string | null
+          fecha_limite: string | null
+          id: number
+          id_cuenta_cobranza: number
+          id_template: number | null
+          notas_rechazo: string | null
+          prioridad: string
+          tipo_solicitud: string
+          titulo: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          email_asignado?: string | null
+          email_solicitante: string
+          etapa?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          fecha_envio_firma?: string | null
+          fecha_firmado?: string | null
+          fecha_limite?: string | null
+          id?: number
+          id_cuenta_cobranza: number
+          id_template?: number | null
+          notas_rechazo?: string | null
+          prioridad?: string
+          tipo_solicitud?: string
+          titulo?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          email_asignado?: string | null
+          email_solicitante?: string
+          etapa?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          fecha_envio_firma?: string | null
+          fecha_firmado?: string | null
+          fecha_limite?: string | null
+          id?: number
+          id_cuenta_cobranza?: number
+          id_template?: number | null
+          notas_rechazo?: string | null
+          prioridad?: string
+          tipo_solicitud?: string
+          titulo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_expedientes_etapa_fkey"
+            columns: ["etapa"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_expedientes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_flow_expedientes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
+      }
+      legal_flow_historico: {
+        Row: {
+          activo: boolean
+          email_usuario: string
+          etapa_anterior: string | null
+          etapa_nueva: string
+          fecha: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_expediente: number
+          notas: string | null
+        }
+        Insert: {
+          activo?: boolean
+          email_usuario: string
+          etapa_anterior?: string | null
+          etapa_nueva: string
+          fecha?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_expediente: number
+          notas?: string | null
+        }
+        Update: {
+          activo?: boolean
+          email_usuario?: string
+          etapa_anterior?: string | null
+          etapa_nueva?: string
+          fecha?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_expediente?: number
+          notas?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_flow_historico_etapa_anterior_fkey"
+            columns: ["etapa_anterior"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_historico_etapa_nueva_fkey"
+            columns: ["etapa_nueva"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_etapas"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "legal_flow_historico_id_expediente_fkey"
+            columns: ["id_expediente"]
+            isOneToOne: false
+            referencedRelation: "legal_flow_expedientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logs_actividad: {
         Row: {
           actividad_id: number
@@ -5981,6 +6309,7 @@ export type Database = {
           descripcion: string | null
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          highlights: Json | null
           id: number
           id_proyecto: number | null
           nombre: string
@@ -5989,12 +6318,14 @@ export type Database = {
           numero_recamaras: number | null
           plano_arquitectonico: string | null
           url_imagen_portada: string | null
+          url_tour_360: string | null
         }
         Insert: {
           activo?: boolean | null
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre: string
@@ -6003,12 +6334,14 @@ export type Database = {
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
           url_imagen_portada?: string | null
+          url_tour_360?: string | null
         }
         Update: {
           activo?: boolean | null
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre?: string
@@ -6017,6 +6350,7 @@ export type Database = {
           numero_recamaras?: number | null
           plano_arquitectonico?: string | null
           url_imagen_portada?: string | null
+          url_tour_360?: string | null
         }
         Relationships: [
           {
@@ -6951,9 +7285,12 @@ export type Database = {
           activo: boolean
           clave_pais_telefono: string | null
           curp: string | null
+          datos_basicos_estatus_verificacion: number
+          datos_fiscales_estatus_verificacion: number
           direccion_calle: string | null
           direccion_codigo_postal: string | null
           direccion_colonia: string | null
+          direccion_estatus_verificacion: number
           direccion_fiscal_calle: string | null
           direccion_fiscal_codigo_postal: string | null
           direccion_fiscal_colonia: string | null
@@ -7002,9 +7339,12 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
+          datos_basicos_estatus_verificacion?: number
+          datos_fiscales_estatus_verificacion?: number
           direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
+          direccion_estatus_verificacion?: number
           direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
@@ -7053,9 +7393,12 @@ export type Database = {
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
+          datos_basicos_estatus_verificacion?: number
+          datos_fiscales_estatus_verificacion?: number
           direccion_calle?: string | null
           direccion_codigo_postal?: string | null
           direccion_colonia?: string | null
+          direccion_estatus_verificacion?: number
           direccion_fiscal_calle?: string | null
           direccion_fiscal_codigo_postal?: string | null
           direccion_fiscal_colonia?: string | null
@@ -7221,6 +7564,115 @@ export type Database = {
             referencedColumns: ["codigo"]
           },
         ]
+      }
+      portal_eventos: {
+        Row: {
+          cta_nombre: string | null
+          email_usuario: string | null
+          fecha_creacion: string
+          id: number
+          id_menu: number | null
+          id_sesion: string | null
+          id_submenu: number | null
+          id_usuario: string | null
+          metadatos: Json | null
+          portal: string
+          ruta: string | null
+          tipo_evento: string
+        }
+        Insert: {
+          cta_nombre?: string | null
+          email_usuario?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_menu?: number | null
+          id_sesion?: string | null
+          id_submenu?: number | null
+          id_usuario?: string | null
+          metadatos?: Json | null
+          portal: string
+          ruta?: string | null
+          tipo_evento: string
+        }
+        Update: {
+          cta_nombre?: string | null
+          email_usuario?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_menu?: number | null
+          id_sesion?: string | null
+          id_submenu?: number | null
+          id_usuario?: string | null
+          metadatos?: Json | null
+          portal?: string
+          ruta?: string | null
+          tipo_evento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_eventos_id_menu_fkey"
+            columns: ["id_menu"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_eventos_id_sesion_fkey"
+            columns: ["id_sesion"]
+            isOneToOne: false
+            referencedRelation: "portal_sesiones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_eventos_id_submenu_fkey"
+            columns: ["id_submenu"]
+            isOneToOne: false
+            referencedRelation: "submenus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_sesiones: {
+        Row: {
+          activo: boolean
+          email_usuario: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: string
+          id_usuario: string
+          portal: string
+          sesion_fin: string | null
+          sesion_inicio: string
+          ultima_actividad: string
+          user_agent: string | null
+        }
+        Insert: {
+          activo?: boolean
+          email_usuario: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_usuario: string
+          portal: string
+          sesion_fin?: string | null
+          sesion_inicio?: string
+          ultima_actividad?: string
+          user_agent?: string | null
+        }
+        Update: {
+          activo?: boolean
+          email_usuario?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: string
+          id_usuario?: string
+          portal?: string
+          sesion_fin?: string | null
+          sesion_inicio?: string
+          ultima_actividad?: string
+          user_agent?: string | null
+        }
+        Relationships: []
       }
       postventa_categorias_garantia: {
         Row: {
@@ -7510,6 +7962,7 @@ export type Database = {
           descripcion: string
           descripcion_reparacion: string | null
           diagnostico: string | null
+          es_reclamo_garantia: boolean
           estatus: string
           fecha_actualizacion: string
           fecha_confirmacion_cliente: string | null
@@ -7541,6 +7994,7 @@ export type Database = {
           descripcion: string
           descripcion_reparacion?: string | null
           diagnostico?: string | null
+          es_reclamo_garantia?: boolean
           estatus?: string
           fecha_actualizacion?: string
           fecha_confirmacion_cliente?: string | null
@@ -7572,6 +8026,7 @@ export type Database = {
           descripcion?: string
           descripcion_reparacion?: string | null
           diagnostico?: string | null
+          es_reclamo_garantia?: boolean
           estatus?: string
           fecha_actualizacion?: string
           fecha_confirmacion_cliente?: string | null
@@ -7973,6 +8428,7 @@ export type Database = {
           direccion_id_estado: number | null
           direccion_id_municipio: number | null
           direccion_id_pais: string | null
+          facebook_handle: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           fecha_entrega: string | null
@@ -7983,6 +8439,7 @@ export type Database = {
           id: number
           id_estatus_proyecto: number | null
           id_tipo_uso: number | null
+          instagram_handle: string | null
           latitud: number | null
           longitud: number | null
           monto_garantia_renta: number
@@ -7994,9 +8451,12 @@ export type Database = {
           nombre_firmante_recibos: string | null
           precio_m2_actual: number
           publicar: boolean | null
+          slogan: string | null
           url_firma_recibos: string | null
           url_imagen_portada: string | null
           url_logo: string | null
+          url_sitio_web: string | null
+          youtube_handle: string | null
         }
         Insert: {
           activo?: boolean
@@ -8006,6 +8466,7 @@ export type Database = {
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          facebook_handle?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_entrega?: string | null
@@ -8016,6 +8477,7 @@ export type Database = {
           id?: number
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
+          instagram_handle?: string | null
           latitud?: number | null
           longitud?: number | null
           monto_garantia_renta?: number
@@ -8027,9 +8489,12 @@ export type Database = {
           nombre_firmante_recibos?: string | null
           precio_m2_actual?: number
           publicar?: boolean | null
+          slogan?: string | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
+          url_sitio_web?: string | null
+          youtube_handle?: string | null
         }
         Update: {
           activo?: boolean
@@ -8039,6 +8504,7 @@ export type Database = {
           direccion_id_estado?: number | null
           direccion_id_municipio?: number | null
           direccion_id_pais?: string | null
+          facebook_handle?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           fecha_entrega?: string | null
@@ -8049,6 +8515,7 @@ export type Database = {
           id?: number
           id_estatus_proyecto?: number | null
           id_tipo_uso?: number | null
+          instagram_handle?: string | null
           latitud?: number | null
           longitud?: number | null
           monto_garantia_renta?: number
@@ -8060,9 +8527,12 @@ export type Database = {
           nombre_firmante_recibos?: string | null
           precio_m2_actual?: number
           publicar?: boolean | null
+          slogan?: string | null
           url_firma_recibos?: string | null
           url_imagen_portada?: string | null
           url_logo?: string | null
+          url_sitio_web?: string | null
+          youtube_handle?: string | null
         }
         Relationships: [
           {
@@ -8670,6 +9140,7 @@ export type Database = {
           descripcion_direccion: string
           fecha_actualizacion: string
           fecha_creacion: string
+          horarios: string | null
           id: number
           id_proyecto: number
           latitud: number
@@ -8681,6 +9152,7 @@ export type Database = {
           descripcion_direccion: string
           fecha_actualizacion?: string
           fecha_creacion?: string
+          horarios?: string | null
           id?: never
           id_proyecto: number
           latitud: number
@@ -8692,6 +9164,7 @@ export type Database = {
           descripcion_direccion?: string
           fecha_actualizacion?: string
           fecha_creacion?: string
+          horarios?: string | null
           id?: never
           id_proyecto?: number
           latitud?: number
@@ -9437,6 +9910,8 @@ export type Database = {
           email_confirmado: boolean
           fecha_actualizacion: string | null
           fecha_creacion: string | null
+          foto_perfil_url: string | null
+          frase_perfil: string | null
           id_notario: number | null
           id_persona: number | null
           nombre: string
@@ -9455,6 +9930,8 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          foto_perfil_url?: string | null
+          frase_perfil?: string | null
           id_notario?: number | null
           id_persona?: number | null
           nombre: string
@@ -9473,6 +9950,8 @@ export type Database = {
           email_confirmado?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          foto_perfil_url?: string | null
+          frase_perfil?: string | null
           id_notario?: number | null
           id_persona?: number | null
           nombre?: string
@@ -9760,6 +10239,35 @@ export type Database = {
       }
     }
     Functions: {
+      accesos_por_cta: {
+        Args: {
+          p_desde?: string
+          p_hasta?: string
+          p_id_submenu?: number
+          p_portal: string
+        }
+        Returns: {
+          clicks: number
+          cta_nombre: string
+          id_submenu: number
+          submenu_nombre: string
+          ultimo_click: string
+          usuarios_unicos: number
+        }[]
+      }
+      accesos_por_menu: {
+        Args: { p_desde?: string; p_hasta?: string; p_portal: string }
+        Returns: {
+          accesos: number
+          id_menu: number
+          id_submenu: number
+          menu_nombre: string
+          submenu_nombre: string
+          ultimo_acceso: string
+          usuarios_unicos: number
+          vista_front_end: string
+        }[]
+      }
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
       agent_claim_or_reactivate_prospect_project:
         | {
@@ -9813,6 +10321,10 @@ export type Database = {
         Args: { p_cuenta_cobranza_id: number }
         Returns: boolean
       }
+      close_portal_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string
@@ -9830,6 +10342,7 @@ export type Database = {
           reporte_id: number
         }[]
       }
+      get_active_projects: { Args: never; Returns: Json }
       get_bandeja_operativa: {
         Args: {
           p_proyecto_id?: number
@@ -10267,8 +10780,31 @@ export type Database = {
           url_recibo: string
         }[]
       }
+      get_payments_for_cep_audit: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_metodos?: string[]
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
+      get_payments_recibo_for_validation: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_metodos?: string[]
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
+      get_pending_cep_chains: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
       get_pending_payments: {
         Args: {
+          p_banco?: string
           p_excluir_metodos?: string[]
           p_excluir_proyectos?: string[]
           p_limit?: number
@@ -10366,6 +10902,7 @@ export type Database = {
           vista: string
         }[]
       }
+      get_proyectos_publicados: { Args: never; Returns: Json }
       get_relacion_pagos:
         | {
             Args: {
@@ -10406,6 +10943,8 @@ export type Database = {
             }
             Returns: Json
           }
+      get_showrooms_contacto: { Args: never; Returns: Json }
+      get_stats_respaldo: { Args: never; Returns: Json }
       get_totales_comisiones_sozu: {
         Args: never
         Returns: {
@@ -10474,6 +11013,10 @@ export type Database = {
         | { Args: { user_id: string }; Returns: boolean }
       mark_email_confirmed: { Args: never; Returns: undefined }
       mark_password_changed: { Args: never; Returns: undefined }
+      migrate_invalid_cep_to_recibo: {
+        Args: { p_ids: string[] }
+        Returns: Json
+      }
       obtener_pagos_sin_cep: {
         Args: { p_edificio?: string }
         Returns: {
@@ -10488,6 +11031,24 @@ export type Database = {
         Args: { p_id_entidad?: number; p_id_proyecto?: number }
         Returns: number
       }
+      register_portal_session: {
+        Args: { p_portal: string; p_user_agent?: string }
+        Returns: string
+      }
+      registrar_evento_portal: {
+        Args: {
+          p_cta_nombre?: string
+          p_id_menu?: number
+          p_id_submenu?: number
+          p_metadatos?: Json
+          p_portal: string
+          p_ruta?: string
+          p_session_id: string
+          p_tipo_evento: string
+        }
+        Returns: number
+      }
+      save_cep_audit_results: { Args: { p_results: Json }; Returns: Json }
       scan_legacy_urls: {
         Args: never
         Returns: {
@@ -10503,6 +11064,14 @@ export type Database = {
           mensaje: string
         }[]
       }
+      touch_portal_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
+      update_payment_cep_from_recibo: {
+        Args: { p_updates: Json }
+        Returns: Json
+      }
       user_can_access_report: {
         Args: { _reporte_id: number }
         Returns: boolean
@@ -10516,7 +11085,40 @@ export type Database = {
         Args: { _email: string; _rol_id: number }
         Returns: boolean
       }
+      usuarios_actividad_por_portal: {
+        Args: { p_desde?: string; p_hasta?: string; p_portal: string }
+        Returns: {
+          dias_desde_ultima_actividad: number
+          duracion_total_min: number
+          email_usuario: string
+          esta_online: boolean
+          id_usuario: string
+          nombre_usuario: string
+          primera_sesion: string
+          total_sesiones: number
+          ultima_actividad: string
+        }[]
+      }
+      usuarios_online_por_portal: {
+        Args: { p_minutos_inactividad?: number }
+        Returns: {
+          portal: string
+          sesiones_activas: number
+          usuarios_online: number
+        }[]
+      }
       validar_mensajes_whatsapp: { Args: { _mensajes: Json }; Returns: boolean }
+      visitas_historicas_por_portal: {
+        Args: { p_desde?: string; p_hasta?: string }
+        Returns: {
+          duracion_promedio_min: number
+          portal: string
+          primera_sesion: string
+          total_sesiones: number
+          ultima_sesion: string
+          usuarios_unicos: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

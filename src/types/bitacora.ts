@@ -1,12 +1,18 @@
 /**
- * Shape de una entrada en `cuentas_cobranza.bitacora` (jsonb).
- * Ver `Ejecuciones_manuales/bitacora_cuenta_cobranza.md` para el DDL.
+ * Shape de una entrada de bitácora. Persistido en la tabla dedicada
+ * `legal_flow_bitacora` (una fila por entrada). Ver migración
+ * 20260601000002_legal_flow_bitacora.sql.
  *
- * La bitácora viene como un array de estas entradas, ordenado por
- * inserción (las nuevas se appendéan al final).
+ * Las entradas se ordenan por `timestamp` ascendente (las nuevas se
+ * appendéan al final).
  */
 
-export type BitacoraTipo = 'nota' | 'validacion' | 'rechazo' | 'sistema';
+export type BitacoraTipo =
+  | 'nota'
+  | 'validacion'
+  | 'rechazo'
+  | 'sistema'
+  | 'informacion_faltante';
 
 export type BitacoraScope =
   | 'expediente'
@@ -27,12 +33,14 @@ export interface BitacoraEntry {
   autorEmail: string;
   autorNombre?: string;
   tipo: BitacoraTipo;
+  titulo?: string;
   mensaje: string;
   referencia?: BitacoraReferencia;
 }
 
 export interface BitacoraEntryInput {
   tipo: BitacoraTipo;
+  titulo?: string;
   mensaje: string;
   referencia?: BitacoraReferencia;
 }

@@ -1,0 +1,10 @@
+export { default as CondominioDashboard } from "./Dashboard";
+export { default as CondominioDepartamentos } from "./Departamentos";
+export { default as CondominioUnidadDetalle } from "./UnidadDetalle";
+export { default as CondominioCargos } from "./Cargos";
+export { default as CondominioPagos } from "./Pagos";
+export { default as CondominioCobranza } from "./Cobranza";
+export { default as CondominioTesoreria } from "./Tesoreria";
+export { default as CondominioAmenidades } from "./Amenidades";
+export { default as CondominioAuditoria } from "./Auditoria";
+export { default as CondominioConfiguracion } from "./Configuracion";

@@ -11,10 +11,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+graphify-out
 *.local
 .env
 !.env.development
 !.env.example
+
+# Agents
+.agents/
+skills-lock.json
 
 # Editor directories and files
 .vscode/*
@@ -41,7 +46,11 @@ Ejecuciones_manuales/*
 .playwright-mcp/
 *.png
 !src/assets/*.png
+!public/*.png
 bundle*.js
+
+# Archivos temporales de Vite (transpilación del config)
+vite.config.ts.timestamp-*.mjs
 
 # Lock files de otros package managers (solo pnpm)
 package-lock.json
@@ -52,3 +61,4 @@ bun.lockb
 ARCHITECTURE.md
 DESIGN.md
 graphify-out/
+*:Zone.Identifier

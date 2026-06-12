@@ -20,6 +20,14 @@ export interface StageInfo {
   details?: Record<string, string>;
 }
 
+export interface NotaryData {
+  name: string;    // notarios.nombre (personal name)
+  notaria: string; // notarios.notaria (office name)
+  phone: string;
+  email: string;
+  address: string;
+}
+
 export interface PropertyData {
   id: string;
   projectName: string;
@@ -36,8 +44,11 @@ export interface PropertyData {
   address?: string;
   fechaEscritura?: string;
   projectId?: number;
+  idPropiedad?: number;
   clientName?: string;
   clientRFC?: string;
+  notary?: NotaryData;
+  tipoFinanciamiento?: 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null;
 }
 
 export interface FinancialData {
@@ -69,11 +80,13 @@ export interface PaymentRecord {
   evidenceUrl?: string;
   trackingKey?: string;
   paymentMethodName?: string;
+  receiptUrl?: string;
 }
 
 export interface AdditionalProduct {
   id: string;
   name: string;
+  description?: string;
   totalPrice: number;
   totalPaid: number;
   pendingBalance: number;

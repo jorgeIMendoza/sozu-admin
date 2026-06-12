@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Info } from "lucide-react";
-import OfertaFlowShell from "@/components/offer/OfertaFlowShell";
-import { useOfertaFlowStore, type BuyerType } from "@/lib/oferta-flow-store";
+import OfferFlowShell from "@/components/offer/OfferFlowShell";
+import { useOfertaFlowStore, type BuyerType } from "@/lib/offer-flow-store";
 
 const BUYER_TYPES: { id: BuyerType; flag: string; title: string; description: string }[] = [
   {
@@ -32,7 +32,7 @@ const BUYER_TYPES: { id: BuyerType; flag: string; title: string; description: st
 ];
 
 export default function TipoCompradorPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { setBuyerType, buyerType: savedType } = useOfertaFlowStore();
 
@@ -41,14 +41,14 @@ export default function TipoCompradorPage() {
   const handleContinue = () => {
     if (!selected) return;
     setBuyerType(selected);
-    navigate(`/oferta/${ofertaId}/hold`);
+    navigate(`/oferta/${offerId}/hold`);
   };
 
   return (
-    <OfertaFlowShell
+    <OfferFlowShell
       currentStep={1}
       title="¿Cómo vas a comprar?"
-      onBack={() => navigate(`/oferta/${ofertaId}/datos`)}
+      onBack={() => navigate(`/oferta/${offerId}/datos`)}
     >
       <div className="space-y-3 flex-1">
         {BUYER_TYPES.map((bt) => {
@@ -57,6 +57,7 @@ export default function TipoCompradorPage() {
             <button
               key={bt.id}
               onClick={() => setSelected(bt.id)}
+              aria-pressed={isActive}
               className={`w-full text-left rounded-xl border-2 p-4 transition-all ${
                 isActive
                   ? "border-primary bg-primary/5"
@@ -104,11 +105,11 @@ export default function TipoCompradorPage() {
         <button
           onClick={handleContinue}
           disabled={!selected}
-          className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold inline-flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continuar
         </button>
       </div>
-    </OfertaFlowShell>
+    </OfferFlowShell>
   );
 }

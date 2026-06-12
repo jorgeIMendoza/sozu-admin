@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Mail, RefreshCw, ArrowLeft } from "lucide-react";
-import { useOfertaFlowStore } from "@/lib/oferta-flow-store";
-import sozuLogo from "@/assets/sozu-logo.png";
+import { useOfertaFlowStore } from "@/lib/offer-flow-store";
+const sozuLogo = "/sozu-logo.png";
 
 export default function VerificarEmailPage() {
-  const { ofertaId } = useParams<{ ofertaId: string }>();
+  const { offerId } = useParams<{ offerId: string }>();
   const navigate = useNavigate();
   const { prospectData } = useOfertaFlowStore();
 
@@ -25,7 +25,7 @@ export default function VerificarEmailPage() {
 
   const handleDemo = () => {
     // Simulates clicking the magic link — goes to callback with demo token
-    navigate(`/oferta/${ofertaId}/verificacion-ok?token=demo`);
+    navigate(`/oferta/${offerId}/verificacion-ok?token=demo`);
   };
 
   return (

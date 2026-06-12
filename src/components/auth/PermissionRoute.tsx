@@ -42,25 +42,9 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow portal-escrituracion routes only for Super Admin
-  if (location.pathname.startsWith('/admin/portal-escrituracion')) {
-    if (profile?.rol_id === 1) {
-      return <>{children}</>;
-    }
-    return <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Allow portal-embajador routes only for Super Admin
+  // Allow portal-embajador routes para el rol Embajador y para Super Admin / Admin (impersonación)
   if (location.pathname.startsWith('/admin/portal-embajador')) {
-    if (profile?.rol_id === 1) {
-      return <>{children}</>;
-    }
-    return <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Allow legal-flow routes only for Super Admin
-  if (location.pathname.startsWith('/admin/legal-flow')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
       return <>{children}</>;
     }
     return <Navigate to="/admin/access-denied" replace />;
@@ -102,6 +86,90 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoPortalAdmin
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Legal Flow: varias rutas (cases/:id, requests/new, templates, etc.)
+  // no tienen un submenu propio en allowedPaths. Si el rol tiene permiso sobre
+  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual
+  // que portal-administracion). Antes este gate estaba hardcodeado a rol_id 1/2,
+  // lo que daba 403 a roles como Admin Legal pese a tener el permiso en DB.
+  if (location.pathname.startsWith('/admin/legal-flow')) {
+    let tieneAccesoLegalFlow = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/legal-flow')) {
+        tieneAccesoLegalFlow = true;
+        break;
+      }
+    }
+    return tieneAccesoLegalFlow
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal de Escrituración: varias rutas (expedientes, unidades, relacion-pagos, etc.)
+  // pueden no tener un submenu propio en allowedPaths. Si el rol tiene permiso sobre
+  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual que
+  // portal-administracion y legal-flow). Antes este gate estaba hardcodeado a rol_id 1,
+  // lo que daba 403 a roles como Administrador de Finanzas pese a tener el permiso en DB.
+  if (location.pathname.startsWith('/admin/portal-escrituracion')) {
+    let tieneAccesoEscrituracion = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-escrituracion')) {
+        tieneAccesoEscrituracion = true;
+        break;
+      }
+    }
+    return tieneAccesoEscrituracion
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Condominio Administración: mismo patrón coarse — basta tener permiso
+  // sobre cualquier submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-condominio')) {
+    let tieneAccesoCondominio = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-condominio')) {
+        tieneAccesoCondominio = true;
+        break;
+      }
+    }
+    return tieneAccesoCondominio
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal CRM Sozu: mismo patrón coarse — basta tener permiso sobre cualquier
+  // submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-crm')) {
+    let tieneAccesoCrm = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-crm')) {
+        tieneAccesoCrm = true;
+        break;
+      }
+    }
+    return tieneAccesoCrm
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Bancos: mismo patrón coarse — basta tener permiso sobre cualquier
+  // submenu del portal para habilitar todas sus rutas. Además permitimos al rol
+  // "Banco" entrar directamente (fallback por si los submenús aún no están
+  // asignados a su rol en BD para ese ambiente).
+  if (location.pathname.startsWith('/admin/portal-bancos')) {
+    if (profile?.rol_nombre === 'Banco') return <>{children}</>;
+    let tieneAccesoBancos = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-bancos')) {
+        tieneAccesoBancos = true;
+        break;
+      }
+    }
+    return tieneAccesoBancos
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }

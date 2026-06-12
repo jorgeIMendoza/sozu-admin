@@ -48,7 +48,7 @@ interface DocItem {
   idTipoDocumento: number;
   tipoNombre: string;
   estatusNombre: string;
-  estatusId: number;
+  estatusId: number | null;
   url: string;
   fecha: string | null;
   isLatest: boolean;
@@ -388,7 +388,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
       const { data } = await supabase
         .from('documentos')
         .select(`
-          id, id_tipo_documento, id_persona, url, fecha_creacion, fecha_actualizacion, es_draft,
+          id, id_tipo_documento, id_persona, id_estatus_verificacion, url, fecha_creacion, fecha_actualizacion, es_draft,
           tipos_documento:documentos_id_tipo_documento_fkey(nombre),
           estatus_verificacion:documentos_id_estatus_verificacion_fkey(nombre)
         `)
@@ -407,7 +407,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         idTipoDocumento: d.id_tipo_documento,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
-        estatusId: d.id_estatus_verificacion,
+        estatusId: d.id_estatus_verificacion ?? null,
         url: d.url,
         fecha: d.fecha_creacion ?? d.fecha_actualizacion,
         isLatest: false,
@@ -441,12 +441,13 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   });
 
   // Reutiliza la misma función centralizada que la tabla — mínimo entre todos los compradores
+  // (null ?? 0 convierte estatus nulo a 0, que no es un ID válido → tratado como no validado)
   const panelLatestByKey = buildLatestDocByKey(
     checklist.map(d => ({
       id: d.id,
       id_persona: d.personaId,
       id_tipo_documento: d.idTipoDocumento,
-      id_estatus_verificacion: d.estatusId,
+      id_estatus_verificacion: d.estatusId ?? 0,
       fecha_creacion: d.fecha,
     }))
   );
@@ -454,6 +455,20 @@ function DetailPanel({ row, onClose, onEditComprador }: {
     row.compradores.map(c => c.id_persona),
     panelLatestByKey
   );
+
+  // Sincroniza docsCompletos en caché de tabla cuando el panel obtiene datos frescos.
+  useEffect(() => {
+    if (loadingDocs || !checklist.length) return;
+    qcPanel.setQueryData(
+      ['expedientes-dashboard', row.proyectoId],
+      (old: ExpedienteRow[] | undefined) => {
+        if (!old) return old;
+        return old.map(r =>
+          r.cuentaId === row.cuentaId ? { ...r, docsCompletos: obligatoriosCumplidos } : r,
+        );
+      },
+    );
+  }, [obligatoriosCumplidos, loadingDocs, checklist.length, row.cuentaId, row.proyectoId, qcPanel]);
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">

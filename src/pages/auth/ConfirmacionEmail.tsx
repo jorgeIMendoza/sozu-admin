@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EmailOtpType } from '@supabase/supabase-js';
-import { CheckCircle, Mail } from 'lucide-react';
+import { CheckCircle, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
 import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
@@ -45,6 +45,9 @@ export default function ConfirmacionEmail() {
   const calledRef = useRef(false);
   const [ctaUrl, setCtaUrl] = useState(`${getPortalHost('inmobiliarias')}/auth/change-password`);
   const [ctaLabel, setCtaLabel] = useState('Ir a Cambiar Contraseña');
+  const [loginUrl, setLoginUrl] = useState(`${getPortalHost('inmobiliarias')}/auth/login`);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (calledRef.current) return;
@@ -62,6 +65,7 @@ export default function ConfirmacionEmail() {
 
     setCtaUrl(getPortalUrl(portal, destination));
     setCtaLabel(destination === 'login' ? 'Ir a Iniciar Sesión' : 'Ir a Cambiar Contraseña');
+    setLoginUrl(getPortalUrl(portal, 'login'));
 
     if (portal && requestedHost !== currentHost) {
       const nextUrl = new URL(window.location.href);
@@ -80,11 +84,17 @@ export default function ConfirmacionEmail() {
 
         if (verifyError) {
           console.error('Email confirmation verify error:', verifyError);
+          setErrorMsg('El enlace de confirmación expiró o ya fue utilizado. Pide al administrador que reenvíe la confirmación.');
+          setStatus('error');
           return;
         }
       }
 
-      if (!email) return;
+      if (!email) {
+        setErrorMsg('No pudimos identificar tu correo desde el enlace. Pide al administrador que reenvíe la confirmación.');
+        setStatus('error');
+        return;
+      }
 
       const { data, error } = await supabase.functions.invoke('post-confirmacion-registro', {
         body: { email, nombre },
@@ -92,6 +102,8 @@ export default function ConfirmacionEmail() {
 
       if (error) {
         console.error('Post-confirm error:', error);
+        setErrorMsg('No pudimos completar la confirmación. Intenta de nuevo o contacta a soporte.');
+        setStatus('error');
         return;
       }
 
@@ -114,12 +126,18 @@ export default function ConfirmacionEmail() {
         setCtaLabel(data.ctaLabel);
       }
 
+      setStatus('success');
+
       if (tokenHash) {
         window.location.replace(resolvedCtaUrl);
       }
     };
 
-    processConfirmation().catch(err => console.error('Post-confirm error:', err));
+    processConfirmation().catch(err => {
+      console.error('Post-confirm error:', err);
+      setErrorMsg('Ocurrió un error inesperado al confirmar tu correo. Intenta de nuevo o contacta a soporte.');
+      setStatus('error');
+    });
   }, []);
 
   return (
@@ -131,42 +149,92 @@ export default function ConfirmacionEmail() {
           <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto" />
         </div>
 
-        {/* Success icon */}
-        <div
-          className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
-          style={{ background: 'hsl(145 35% 95%)' }}
-        >
-          <CheckCircle className="h-8 w-8" style={{ color: 'hsl(145 35% 51%)' }} />
-        </div>
+        {status === 'loading' && (
+          <>
+            <div
+              className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
+              style={{ background: 'hsl(210 80% 95%)' }}
+            >
+              <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'hsl(210 80% 45%)' }} />
+            </div>
+            <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
+              Confirmando tu correo…
+            </h1>
+            <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
+              Estamos verificando tu cuenta. Esto tomará solo un momento.
+            </p>
+          </>
+        )}
 
-        {/* Title */}
-        <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
-          ¡Gracias por confirmar tu correo!
-        </h1>
+        {status === 'success' && (
+          <>
+            {/* Success icon */}
+            <div
+              className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
+              style={{ background: 'hsl(145 35% 95%)' }}
+            >
+              <CheckCircle className="h-8 w-8" style={{ color: 'hsl(145 35% 51%)' }} />
+            </div>
 
-        <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
-          Tu cuenta ha sido verificada exitosamente.
-        </p>
+            {/* Title */}
+            <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
+              ¡Gracias por confirmar tu correo!
+            </h1>
 
-        {/* Info card */}
-        <div
-          className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
-          style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
-        >
-          <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
-          <p>
-            En breve recibirás un correo electrónico con tus <strong>credenciales de acceso</strong> al sistema.
-            Revisa tu bandeja de entrada y la carpeta de spam.
-          </p>
-        </div>
+            <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
+              Tu cuenta ha sido verificada exitosamente.
+            </p>
 
-        {/* CTA */}
-        <a
-          href={ctaUrl}
-          className="login-btn-primary flex items-center justify-center gap-2 no-underline"
-        >
-          {ctaLabel}
-        </a>
+            {/* Info card */}
+            <div
+              className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
+              style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
+            >
+              <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <p>
+                En breve recibirás un correo electrónico con tus <strong>credenciales de acceso</strong> al sistema.
+                Revisa tu bandeja de entrada y la carpeta de spam.
+              </p>
+            </div>
+
+            {/* CTA */}
+            <a
+              href={ctaUrl}
+              className="login-btn-primary flex items-center justify-center gap-2 no-underline"
+            >
+              {ctaLabel}
+            </a>
+          </>
+        )}
+
+        {status === 'error' && (
+          <>
+            {/* Error icon */}
+            <div
+              className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
+              style={{ background: 'hsl(0 70% 95%)' }}
+            >
+              <AlertCircle className="h-8 w-8" style={{ color: 'hsl(0 70% 50%)' }} />
+            </div>
+
+            {/* Title */}
+            <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
+              No se pudo confirmar tu correo
+            </h1>
+
+            <p className="text-sm mb-7" style={{ color: 'hsl(0 0% 45%)' }}>
+              {errorMsg}
+            </p>
+
+            {/* CTA */}
+            <a
+              href={loginUrl}
+              className="login-btn-primary flex items-center justify-center gap-2 no-underline"
+            >
+              Ir a Iniciar Sesión
+            </a>
+          </>
+        )}
       </div>
     </div>
   );

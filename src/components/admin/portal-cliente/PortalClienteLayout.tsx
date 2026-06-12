@@ -13,7 +13,8 @@ import { PortalSearchInput } from "./PortalSearchInput";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "./BottomNav";
-import sozuLogo from "@/assets/sozu-logo.png";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
+const sozuLogo = "/sozu-logo.png";
 
 function truncateName(full: string, max = 22): string {
   const parts = full.trim().split(/\s+/);
@@ -67,6 +68,7 @@ const unreadCount = useUnreadCount();
     /\/propiedad\/[^/]+/.test(location.pathname);
 
   return (
+    <PortalTrackingProvider portal="clientes">
     <div className="inmob-portal min-h-screen bg-background [overflow-x:clip]">
       {/* ── Desktop sidebar ── */}
       <Sidebar
@@ -195,5 +197,6 @@ const unreadCount = useUnreadCount();
       {/* ── Mobile bottom nav ── */}
       <BottomNav />
     </div>
+    </PortalTrackingProvider>
   );
 };

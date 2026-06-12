@@ -1,26 +1,33 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarCheck,
   UserSearch,
   Briefcase,
-  FileText,
   Percent,
   ArrowLeft,
+  ArrowLeftRight,
   LogOut,
   Menu,
   Inbox,
   Workflow,
   ChevronDown,
   ChevronRight,
+  TrendingUp,
+  Banknote,
+  Activity,
+  BarChart3,
+  MousePointerClick,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 
 const ROUTES_SIN_FILTER_BAR = [
@@ -30,10 +37,15 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/pipeline",
   "/admin/portal-alta-direccion/bandeja",
   "/admin/portal-alta-direccion/ciclo-venta",
-  "/admin/portal-alta-direccion/facturas-por-cobrar",
-  "/admin/portal-alta-direccion/facturas-por-pagar",
   "/admin/portal-alta-direccion/comisiones-externas",
   "/admin/portal-alta-direccion/comisiones-internas",
+  "/admin/portal-alta-direccion/historico-comercial",
+  "/admin/portal-alta-direccion/analisis-cobranza",
+  "/admin/portal-alta-direccion/ingresos-egresos",
+  "/admin/portal-alta-direccion/forecast-ingresos",
+  "/admin/portal-alta-direccion/mediciones/portales",
+  "/admin/portal-alta-direccion/mediciones/menus",
+  "/admin/portal-alta-direccion/mediciones/ctas",
 ];
 
 type NavLeaf = { label: string; path: string; icon: LucideIcon };
@@ -64,14 +76,6 @@ const navGroups: NavGroup[] = [
       { label: "Ciclo de Venta",          path: "/admin/portal-alta-direccion/ciclo-venta",  icon: Workflow },
       // "Cobranza" y "Contratos" ocultas en esta fase de demo; rutas vivas en App.tsx por URL directa.
       {
-        label: "Facturas",
-        icon: FileText,
-        children: [
-          { label: "Por Cobrar", path: "/admin/portal-alta-direccion/facturas-por-cobrar" },
-          { label: "Por Pagar",  path: "/admin/portal-alta-direccion/facturas-por-pagar"  },
-        ],
-      },
-      {
         label: "Comisiones",
         icon: Percent,
         children: [
@@ -79,6 +83,28 @@ const navGroups: NavGroup[] = [
           { label: "Internas", path: "/admin/portal-alta-direccion/comisiones-internas" },
         ],
       },
+    ],
+  },
+  {
+    label: "Análisis",
+    items: [
+      { label: "Histórico Comercial", path: "/admin/portal-alta-direccion/historico-comercial", icon: TrendingUp },
+      { label: "Análisis de Cobranza", path: "/admin/portal-alta-direccion/analisis-cobranza", icon: Banknote },
+    ],
+  },
+  {
+    label: "Finanzas",
+    items: [
+      { label: "Ingresos y Egresos",  path: "/admin/portal-alta-direccion/ingresos-egresos",  icon: ArrowLeftRight },
+      { label: "Forecast de Ingresos", path: "/admin/portal-alta-direccion/forecast-ingresos", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Mediciones",
+    items: [
+      { label: "Uso por portal",         path: "/admin/portal-alta-direccion/mediciones/portales", icon: Activity },
+      { label: "Mapa de calor de menús", path: "/admin/portal-alta-direccion/mediciones/menus",    icon: BarChart3 },
+      { label: "Mapa de calor de CTAs",  path: "/admin/portal-alta-direccion/mediciones/ctas",     icon: MousePointerClick },
     ],
   },
   // Sección "Administración" (Reportes / Red Comercial / Auditoría / Configuración)
@@ -89,8 +115,28 @@ export const PortalAltaDireccionLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const { isPathAllowed } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Filtra el menú según los permisos (submenus_permisos) de la BD.
+  // Super Admin ve todo (isPathAllowed devuelve true para todas las rutas).
+  const visibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => {
+        const items = group.items
+          .map((item) => {
+            if (isParent(item)) {
+              const children = item.children.filter((c) => isPathAllowed(c.path));
+              return children.length ? { ...item, children } : null;
+            }
+            return isPathAllowed(item.path) ? item : null;
+          })
+          .filter(Boolean) as NavItem[];
+        return items.length ? { ...group, items } : null;
+      })
+      .filter(Boolean) as NavGroup[];
+  }, [isPathAllowed]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -129,20 +175,18 @@ export const PortalAltaDireccionLayout = () => {
 
   const sidebar = (
     <>
-      <div className="px-4 pt-4 pb-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">
-            S
-          </div>
-          <div className="min-w-0">
-            <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">Alta Dirección</p>
-          </div>
+      <div className="px-4 pt-5 pb-5 border-b border-border">
+        <div className="flex items-center justify-center">
+          <img
+            src="/sozu-logo.png"
+            alt="SOZU"
+            className="h-9 w-auto object-contain dark:invert"
+          />
         </div>
       </div>
 
       <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               {group.label}
@@ -164,7 +208,7 @@ export const PortalAltaDireccionLayout = () => {
                         )}
                       >
                         <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={groupActive ? 2 : 1.75} />
-                        <span className="flex-1 text-left">{item.label}</span>
+                        <span className="flex-1 text-left leading-tight">{item.label}</span>
                         {expanded
                           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
                           : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />}
@@ -184,7 +228,7 @@ export const PortalAltaDireccionLayout = () => {
                                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                                 )}
                               >
-                                {child.label}
+                                <span className="flex-1 text-left leading-tight">{child.label}</span>
                               </button>
                             );
                           })}
@@ -199,14 +243,14 @@ export const PortalAltaDireccionLayout = () => {
                     key={item.path}
                     onClick={() => handleNavigate(item.path)}
                     className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
+                      "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150 text-left",
                       active
                         ? "bg-primary/10 text-primary font-semibold"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
-                    {item.label}
+                    <span className="flex-1 text-left leading-tight">{item.label}</span>
                   </button>
                 );
               })}
@@ -221,13 +265,18 @@ export const PortalAltaDireccionLayout = () => {
           <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleNavigate("/admin")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Menú principal
-          </button>
+          {/* "Menú principal" sólo es relevante para Super Admin (rol_id=1)
+              — únicos que pueden navegar fuera del Portal Alta Dirección
+              hacia el panel admin general. */}
+          {profile?.rol_id === 1 && (
+            <button
+              onClick={() => handleNavigate("/admin")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Menú principal
+            </button>
+          )}
           <button
             onClick={signOut}
             className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
@@ -241,6 +290,7 @@ export const PortalAltaDireccionLayout = () => {
   );
 
   return (
+    <PortalTrackingProvider portal="alta-direccion">
     <AltaDireccionFiltersProvider>
       <div className="min-h-screen flex">
         <aside
@@ -308,6 +358,7 @@ export const PortalAltaDireccionLayout = () => {
         </div>
       </div>
     </AltaDireccionFiltersProvider>
+    </PortalTrackingProvider>
   );
 };
 

@@ -74,11 +74,76 @@ async function fetchSolicitudesRecibidas(): Promise<LegalRequest[]> {
   const cuentasRows = Array.from(cuentasMap.values());
   if (!cuentasRows.length) return [];
 
-  return enrichLegalFlowCases({
+  // 4) Determinar promoción a "En revisión legal" leyendo la bitácora.
+  //    Un expediente avanza cuando tiene AMBOS gates marcados:
+  //    - Abogado asignado (entrada tipo='sistema', scope='expediente',
+  //      titulo='Abogado asignado').
+  //    - Validación inicial completa (tipo='validacion',
+  //      scope='expediente', titulo='Validación inicial completa').
+  const ccIds = cuentasRows.map((c) => c.id as number);
+  const { data: bitacoraRows } = ccIds.length
+    ? ((await (supabase as any)
+        .from("legal_flow_bitacora")
+        .select("id_cuenta_cobranza, tipo, scope, mensaje, fecha_creacion")
+        .in("id_cuenta_cobranza", ccIds)
+        .eq("activo", true)
+        .eq("scope", "expediente")) as any)
+    : { data: [] };
+
+  const promotedSet = computePromotedCuentas(
+    (bitacoraRows || []) as Array<any>,
+  );
+
+  const all = await enrichLegalFlowCases({
     cuentas: cuentasRows,
     ofertas: ofertaRows,
     propiedades: propRows,
-    status: "request_received",
+    status: "Solicitud recibida",
     titlePhrase: "Solicitud de contrato",
   });
+
+  // Reescribir el status de los expedientes promovidos. El title también
+  // cambia para reflejar la nueva etapa.
+  return all.map((req) => {
+    if (!req.idCuentaCobranza || !promotedSet.has(req.idCuentaCobranza)) return req;
+    const newTitle = (req.title ?? "").replace(/Solicitud de contrato/, "Contrato en revisión");
+    return {
+      ...req,
+      status: "En revisión legal" as const,
+      title: newTitle || req.title,
+    };
+  });
+}
+
+/**
+ * Devuelve el set de id_cuenta_cobranza que cumplen AMBOS gates:
+ *   - asignación de abogado (entrada sistema con "Abogado asignado")
+ *   - validación inicial completa (entrada validacion con
+ *     "Validación inicial completa")
+ *
+ * Tolerante al shape antiguo donde titulo no existía y el dato venía
+ * embebido en `mensaje` con `"<titulo>\n\n<descripcion>"`.
+ */
+function computePromotedCuentas(rows: Array<any>): Set<number> {
+  const byCuenta = new Map<number, { lawyer: boolean; intake: boolean }>();
+  for (const r of rows) {
+    const id = r.id_cuenta_cobranza as number;
+    if (!byCuenta.has(id)) byCuenta.set(id, { lawyer: false, intake: false });
+    const flags = byCuenta.get(id)!;
+    const mensaje: string = (r.mensaje ?? "") as string;
+    if (r.tipo === "sistema" && mensaje.includes("Abogado asignado")) {
+      flags.lawyer = true;
+    }
+    if (
+      r.tipo === "validacion" &&
+      mensaje.includes("Validación inicial completa")
+    ) {
+      flags.intake = true;
+    }
+  }
+  const promoted = new Set<number>();
+  byCuenta.forEach((flags, id) => {
+    if (flags.lawyer && flags.intake) promoted.add(id);
+  });
+  return promoted;
 }

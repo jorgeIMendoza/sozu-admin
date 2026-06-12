@@ -4,40 +4,43 @@ import { Link } from 'react-router-dom';
 import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize2 } from 'lucide-react';
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
+import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
 
 const PIPELINE_STAGES: { status: CaseStatus; label: string }[] = [
-  { status: 'request_received', label: 'Solicitud recibida' },
-  { status: 'in_legal_review', label: 'En revisión legal' },
-  { status: 'approved_for_generation', label: 'Aprobado' },
-  { status: 'client_signature', label: 'Firma de cliente' },
-  { status: 'in_validation', label: 'Firma titular' },
-  { status: 'fully_signed', label: 'Firmado' },
+  { status: 'Solicitud recibida', label: 'Solicitud recibida' },
+  { status: 'En revisión legal', label: 'En revisión legal' },
+  { status: 'Aprobado', label: 'Aprobado' },
+  { status: 'Firma cliente', label: 'Firma de cliente' },
+  { status: 'Firma titular', label: 'Firma titular' },
+  { status: 'Firmado', label: 'Firmado' },
 ];
 
 const NEXT_ACTION: Record<string, string> = {
-  request_received: 'Revisar',
-  missing_information: 'Completar',
-  in_legal_review: 'Aprobar',
-  approved_for_generation: 'Generar',
-  client_signature: 'Ver firmas',
-  in_validation: 'Firmar',
-  in_signature_process: 'Firmar',
-  partially_signed: 'Firmar',
-  fully_signed: 'Archivar',
+  'Solicitud recibida': 'Revisar',
+  'Información faltante': 'Completar',
+  'En revisión legal': 'Aprobar',
+  'Aprobado': 'Generar',
+  'Firma cliente': 'Ver firmas',
+  'Firma titular': 'Firmar',
+  'En firma': 'Firmar',
+  'Parcialmente firmado': 'Firmar',
+  'Firmado': 'Archivar',
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  request_received: 'hsl(var(--status-info))',
-  in_legal_review: 'hsl(var(--status-warning))',
-  approved_for_generation: 'hsl(var(--status-success))',
-  client_signature: 'hsl(var(--status-purple))',
-  in_validation: 'hsl(200, 72%, 36%)',
-  fully_signed: 'hsl(var(--status-success))',
+  'Solicitud recibida': 'hsl(var(--status-info))',
+  'En revisión legal': 'hsl(var(--status-warning))',
+  'Aprobado': 'hsl(var(--status-success))',
+  'Firma cliente': 'hsl(var(--status-purple))',
+  'Firma titular': 'hsl(200, 72%, 36%)',
+  'Firmado': 'hsl(var(--status-success))',
 };
 
 interface Props {
   onColumnClick?: (status: CaseStatus) => void;
+  search?: string;
 }
 
 type ViewMode = 'compact' | 'expanded';
@@ -46,9 +49,9 @@ function groupByStage(requests: LegalRequest[]) {
   const groups: Record<string, LegalRequest[]> = {};
   for (const stage of PIPELINE_STAGES) groups[stage.status] = [];
   for (const r of requests) {
-    if (r.status === 'missing_information') groups['request_received']?.push(r);
-    else if (r.status === 'partially_signed') groups['in_validation']?.push(r);
-    else if (r.status === 'in_signature_process') groups['in_validation']?.push(r);
+    if (r.status === 'Información faltante') groups['Solicitud recibida']?.push(r);
+    else if (r.status === 'Parcialmente firmado') groups['Firma titular']?.push(r);
+    else if (r.status === 'En firma') groups['Firma titular']?.push(r);
     else if (groups[r.status]) groups[r.status].push(r);
   }
   return groups;
@@ -57,22 +60,81 @@ function groupByStage(requests: LegalRequest[]) {
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 const isOverdue = (d: string) => new Date(d) < new Date();
 
-export default function PipelineBoard({ onColumnClick }: Props) {
+export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('expanded');
   const { data: solicitudesRecibidas } = useLegalFlowSolicitudesRecibidas();
+  const { data: firmaTitular } = useLegalFlowFirmaTitular();
+  const { data: firmado } = useLegalFlowFirmado();
 
-  // La primera etapa (request_received / missing_information) se alimenta de
-  // datos reales: cuentas de cobranza con propiedad en estatus Apartado. Las
-  // etapas posteriores siguen usando mock hasta que cada una tenga su origen.
+  // Etapas alimentadas con datos reales:
+  //   • Solicitud recibida + En revisión legal: cuentas Apartado con/sin
+  //     promoción según bitácora.
+  //   • Firma titular: cuentas con Contrato firmado completamente (tipo 18)
+  //     en estatus de verificación Pendiente.
+  //   • Firmado: cuentas con el mismo documento en estatus Validado. Una
+  //     vez el contrato se valida, el expediente vive aquí y no regresa
+  //     a Solicitud recibida ni a Firma titular.
+  // El resto del pipeline sigue usando mock hasta que cada etapa tenga
+  // su origen propio.
   const activeRequests = useMemo<LegalRequest[]>(() => {
-    const realRequestReceived = solicitudesRecibidas ?? [];
-    const downstreamMock = mockRequests.filter(
-      (r) => !['request_received', 'missing_information', 'cancelled', 'rejected', 'archived'].includes(r.status),
+    const firmadoSet = new Set(
+      (firmado ?? [])
+        .map((r) => r.idCuentaCobranza)
+        .filter((v): v is number => !!v),
     );
-    return [...realRequestReceived, ...downstreamMock];
-  }, [solicitudesRecibidas]);
+    const firmaTitularSet = new Set(
+      (firmaTitular ?? [])
+        .map((r) => r.idCuentaCobranza)
+        .filter((v): v is number => !!v),
+    );
+    // Una cuenta en "Firmado" sale de Firma titular y de Solicitud
+    // recibida; una cuenta en "Firma titular" sale de Solicitud recibida.
+    const firmaTitularFiltered = (firmaTitular ?? []).filter(
+      (r) => !r.idCuentaCobranza || !firmadoSet.has(r.idCuentaCobranza),
+    );
+    const recibidasFiltered = (solicitudesRecibidas ?? []).filter(
+      (r) =>
+        !r.idCuentaCobranza ||
+        (!firmaTitularSet.has(r.idCuentaCobranza) && !firmadoSet.has(r.idCuentaCobranza)),
+    );
+    const downstreamMock = mockRequests.filter(
+      (r) =>
+        ![
+          'Solicitud recibida',
+          'Información faltante',
+          'En revisión legal',
+          'Firma titular',
+          'En firma',
+          'Parcialmente firmado',
+          'Firmado',
+          'Cancelado',
+          'Rechazado',
+          'Archivado',
+        ].includes(r.status),
+    );
+    return [
+      ...recibidasFiltered,
+      ...firmaTitularFiltered,
+      ...(firmado ?? []),
+      ...downstreamMock,
+    ];
+  }, [solicitudesRecibidas, firmaTitular, firmado]);
 
-  const grouped = groupByStage(activeRequests);
+  // Búsqueda por ID de cuenta (folio CC-XXXXXX), contraparte
+  // (titular/compradores) o unidad ("Unidad 1005" o solo "1005").
+  const visibleRequests = useMemo<LegalRequest[]>(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return activeRequests;
+    return activeRequests.filter((r) => {
+      if (r.id.toLowerCase().includes(q)) return true;
+      if (r.counterparty?.toLowerCase().includes(q)) return true;
+      if (r.counterparties?.some((cp) => cp.toLowerCase().includes(q))) return true;
+      if (r.property?.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [activeRequests, search]);
+
+  const grouped = groupByStage(visibleRequests);
 
   return (
     <motion.div
@@ -88,7 +150,7 @@ export default function PipelineBoard({ onColumnClick }: Props) {
             Pipeline de Contratos
           </h2>
           <span className="text-[12px] text-muted-foreground bg-muted rounded-md px-2 py-0.5 tabular-nums font-medium">
-            {activeRequests.length} activos
+            {visibleRequests.length} activos
           </span>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
@@ -124,7 +186,7 @@ export default function PipelineBoard({ onColumnClick }: Props) {
           {PIPELINE_STAGES.map((stage) => {
             const items = grouped[stage.status] || [];
             const overdueCount = items.filter(r => isOverdue(r.dueDate)).length;
-            const urgentCount = items.filter(r => r.priority === 'high').length;
+            const urgentCount = items.filter(r => r.priority === 'Alto').length;
             const stageColor = STAGE_COLORS[stage.status] || 'hsl(var(--muted-foreground))';
 
             return (
@@ -198,7 +260,7 @@ export default function PipelineBoard({ onColumnClick }: Props) {
 }
 
 function PipelineCard({ request: r, viewMode }: { request: LegalRequest; viewMode: ViewMode }) {
-  const overdue = isOverdue(r.dueDate) && !['fully_signed', 'archived'].includes(r.status);
+  const overdue = isOverdue(r.dueDate) && !['Firmado', 'Archivado'].includes(r.status);
   const action = NEXT_ACTION[r.status];
   const isCompact = viewMode === 'compact';
 
@@ -252,7 +314,7 @@ function PipelineCard({ request: r, viewMode }: { request: LegalRequest; viewMod
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          {r.priority === 'high' && (
+          {r.priority === 'Alto' && (
             <span className="status-badge status-danger text-[10px] px-2 py-0.5">Urgente</span>
           )}
           {overdue && (

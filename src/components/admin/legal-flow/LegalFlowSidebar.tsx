@@ -1,12 +1,11 @@
 import {
   LayoutDashboard,
   Inbox,
-  FilePlus,
   FileText,
   Bell,
-  Settings,
   Archive,
   ArrowLeft,
+  LogOut,
 } from 'lucide-react';
 import { NavLink } from '@/components/admin/legal-flow/NavLink';
 import { useNavigate } from 'react-router-dom';
@@ -31,7 +30,6 @@ const BASE = '/admin/legal-flow';
 const mainNav = [
   { title: 'Panel de Operaciones', url: `${BASE}`, icon: LayoutDashboard, end: true },
   { title: 'Solicitudes Legales', url: `${BASE}/requests`, icon: Inbox },
-  { title: 'Nueva Solicitud', url: `${BASE}/requests/new`, icon: FilePlus },
 ];
 
 const catalogNav = [
@@ -41,14 +39,18 @@ const catalogNav = [
 
 const systemNav = [
   { title: 'Notificaciones', url: `${BASE}/notifications`, icon: Bell },
-  { title: 'Configuración', url: `${BASE}/settings`, icon: Settings },
 ];
 
 export function LegalFlowSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const displayName = profile?.nombre || 'Usuario Legal';
   const initials = displayName.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
@@ -82,16 +84,33 @@ export function LegalFlowSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
-        {!collapsed && (
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
-              {initials}
+        {!collapsed ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                {initials}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[13px] font-medium text-foreground leading-tight">{displayName}</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">{profile?.rol_nombre || 'Legal'}</span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-[13px] font-medium text-foreground leading-tight">{displayName}</span>
-              <span className="text-[11px] text-muted-foreground leading-tight">{profile?.rol_nombre || 'Legal'}</span>
-            </div>
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              className="rounded-lg px-2.5 py-[9px] text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="mr-2.5 h-[18px] w-[18px]" strokeWidth={1.75} />
+              <span>Cerrar sesión</span>
+            </SidebarMenuButton>
           </div>
+        ) : (
+          <SidebarMenuButton
+            onClick={handleSignOut}
+            tooltip="Cerrar sesión"
+            className="justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </SidebarMenuButton>
         )}
       </SidebarFooter>
     </Sidebar>

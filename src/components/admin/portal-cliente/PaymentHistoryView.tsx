@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { CheckCircle2, Clock, ChevronDown, ChevronUp, Eye, Download, X, Loader2, Receipt, FileText } from "lucide-react";
+import { CheckCircle2, Clock, ChevronDown, ChevronUp, Eye, Loader2, Receipt, FileText } from "lucide-react";
+import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { getPropertyStatus } from "@/lib/portal-cliente/mock-data";
 import { usePaymentPlan } from "@/lib/portal-cliente/payment-data";
@@ -8,6 +8,10 @@ import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptMo
 import { buildReceiptFromPaymentRecord, buildReceiptFromInstallment, buildReceiptFromMaintenance } from "@/lib/portal-cliente/receipt-utils";
 import { fmtMXN as fmt } from "@/lib/utils";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
+
+const sozuLogo = "/sozu-logo.png";
+const MONTH_NAMES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const currentPeriod = () => { const d = new Date(); return `${MONTH_NAMES_FULL[d.getMonth()]} ${d.getFullYear()}`; };
 
 interface PaymentHistoryViewProps {
   investment: InvestmentProperty;
@@ -326,22 +330,34 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
 
   const summaryBlock = (
     <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-      <div className="flex items-center justify-between gap-2 flex-nowrap">
-        <h3 className="font-display font-semibold text-xs text-muted-foreground uppercase tracking-wider shrink-0">Resumen</h3>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${statusColorClass}`}>{status.label}</span>
+      <div className="flex items-center gap-2 flex-nowrap">
+        <img src={sozuLogo} alt="SOZU" className="h-3.5 w-auto object-contain dark:invert shrink-0" />
+        <span className="text-muted-foreground text-xs shrink-0">-</span>
+        <p className="text-xs font-semibold text-foreground truncate flex-1">Historial de Pagos</p>
+        <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${statusColorClass}`}>{status.label}</span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <p className="text-[11px] text-muted-foreground">Total pagado</p>
-          <p className="font-display font-bold text-base text-foreground tabular-nums mt-0.5">{fmt(totalPaid)}</p>
+      <div className="text-[11px] text-muted-foreground space-y-1 border-t border-border pt-3">
+        <div className="flex justify-between">
+          <span>Propiedad</span>
+          <span className="font-semibold text-foreground">{property.projectName} · U-{property.unitNumber}</span>
         </div>
-        <div className="text-center">
-          <p className="text-[11px] text-muted-foreground">Pagos</p>
-          <p className="font-display font-bold text-base text-foreground mt-0.5">{paidPayments.length}</p>
+        <div className="flex justify-between">
+          <span>Periodo</span>
+          <span className="font-semibold text-foreground">{currentPeriod()}</span>
         </div>
-        <div className="text-right">
-          <p className="text-[11px] text-muted-foreground">Último</p>
-          <p className="text-xs font-semibold text-foreground mt-0.5">{lastPaid ? fmtShortDate(lastPaid.date) : "—"}</p>
+      </div>
+      <div className="space-y-2.5 border-t border-border pt-3">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Total Pagado</span>
+          <span className="font-display font-bold text-sm text-primary tabular-nums">{fmt(totalPaid)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Pagos realizados</span>
+          <span className="font-semibold text-sm text-foreground">{paidPayments.length}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Último pago</span>
+          <span className="font-semibold text-sm text-foreground">{lastPaid ? fmtShortDate(lastPaid.date) : "—"}</span>
         </div>
       </div>
       <div className="border-t border-border pt-3">
@@ -483,58 +499,14 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
 
       <PaymentReceiptModal receipt={receiptData} open={!!receiptData} onClose={() => setReceiptData(null)} />
 
-      {pdfModal && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center"
-          onClick={() => setPdfModal(null)}
-        >
-          <div
-            className="bg-card w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col max-h-[90svh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{pdfModal.concept}</p>
-                <p className="text-[11px] text-muted-foreground">{fmtDate(pdfModal.date)} · {fmt(pdfModal.amount)}</p>
-              </div>
-              <button
-                onClick={() => setPdfModal(null)}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-destructive/15 transition-colors"
-                aria-label="Cerrar"
-              >
-                <X className="w-4 h-4 text-destructive" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/10" style={{ minHeight: "60vh", maxHeight: "60vh" }}>
-              {isImageUrl(pdfModal.url) ? (
-                <img
-                  src={pdfModal.url}
-                  alt="Comprobante de pago"
-                  className="max-w-full object-contain"
-                  style={{ maxHeight: "60vh", width: "auto" }}
-                />
-              ) : (
-                <iframe
-                  src={pdfModal.url}
-                  className="w-full border-0"
-                  title="Comprobante de pago"
-                  style={{ height: "60vh" }}
-                />
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-border shrink-0">
-              <button
-                onClick={() => downloadPdf(pdfModal.url, `SOZU-Recibo-${pdfModal.concept}-${pdfModal.date}.pdf`)}
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold text-sm py-3 rounded-xl hover:bg-primary/90 transition-colors active:scale-[0.98]"
-              >
-                <Download className="w-4 h-4" />
-                Descargar PDF
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <DocViewerPortal
+        open={!!pdfModal}
+        onClose={() => setPdfModal(null)}
+        url={pdfModal?.url ?? ""}
+        title={pdfModal?.concept ?? ""}
+        subtitle={pdfModal ? `${fmtDate(pdfModal.date)} · ${fmt(pdfModal.amount)}` : undefined}
+        downloadFilename={pdfModal ? `SOZU-Recibo-${pdfModal.concept}-${pdfModal.date}.pdf` : undefined}
+      />
     </div>
   );
 };

@@ -1,26 +1,26 @@
 export type RequestType =
-  | 'new_contract'
-  | 'new_agreement'
-  | 'amendment'
-  | 'renewal'
-  | 'termination'
-  | 'external_validation';
+  | 'Nuevo contrato'
+  | 'Nuevo convenio'
+  | 'Modificatorio'
+  | 'Renovación'
+  | 'Terminación'
+  | 'Validación externa';
 
-export type Priority = 'high' | 'medium' | 'low';
+export type Priority = 'Alto' | 'Medio' | 'Bajo';
 
 export type CaseStatus =
-  | 'request_received'
-  | 'missing_information'
-  | 'in_legal_review'
-  | 'approved_for_generation'
-  | 'client_signature'
-  | 'in_validation'
-  | 'in_signature_process'
-  | 'partially_signed'
-  | 'fully_signed'
-  | 'rejected'
-  | 'cancelled'
-  | 'archived';
+  | 'Solicitud recibida'
+  | 'Información faltante'
+  | 'En revisión legal'
+  | 'Aprobado'
+  | 'Firma cliente'
+  | 'Firma titular'
+  | 'En firma'
+  | 'Parcialmente firmado'
+  | 'Firmado'
+  | 'Rechazado'
+  | 'Cancelado'
+  | 'Archivado';
 
 export type DocumentStatus = 'draft' | 'generated' | 'validated' | 'sent' | 'signed' | 'rejected';
 

@@ -12,6 +12,7 @@ import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationCon
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
 import { EmbajadorImpersonationProvider } from "@/contexts/EmbajadorImpersonationContext";
+import { CrmImpersonationProvider } from "@/contexts/CrmImpersonationContext";
 import { AmbassadorsProvider } from "@/store/AmbassadorsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
@@ -22,8 +23,8 @@ import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
 
 // Retry wrapper for lazy imports — handles stale cache after deploys
-const lazyRetry = (importFn: () => Promise<{ default: ComponentType }>) =>
-  lazy(() =>
+const lazyRetry = <T extends ComponentType<any>>(importFn: () => Promise<{ default: T }>) =>
+  lazy<T>(() =>
     importFn().catch(() => {
       // If the chunk fails to load, reload the page once
       const key = "chunk-retry";
@@ -111,7 +112,7 @@ const AdministrarMenus = lazyRetry(() => import("./pages/admin/AdministrarMenus"
 const AdministrarAvisos = lazyRetry(() => import("./pages/admin/comunicacion/AdministrarAvisos"));
 const EnviarAvisos = lazyRetry(() => import("./pages/admin/comunicacion/EnviarAvisos"));
 const EjecucionesAvisos = lazyRetry(() => import("./pages/admin/comunicacion/Ejecuciones"));
-const WorkflowOfertas = lazyRetry(() => import("./pages/admin/crm/WorkflowOfertas"));
+const WorkflowOffers = lazyRetry(() => import("./pages/admin/crm/WorkflowOffers"));
 const DashboardEjecutivo = lazyRetry(() => import("./pages/admin/crm/DashboardEjecutivo"));
 const ConfiguracionCitas = lazyRetry(() => import("./pages/admin/comunicacion/ConfiguracionCitas"));
 const TodasLasCitas = lazyRetry(() => import("./pages/admin/comunicacion/TodasLasCitas"));
@@ -152,6 +153,7 @@ const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-clien
 const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
 const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
 const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
+const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
 
 // Portal Cobranza pages
 const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
@@ -203,7 +205,7 @@ const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta
 const AltaDireccionCitas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCitas })));
 const AltaDireccionProspectos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionProspectos })));
 const AltaDireccionPipeline = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionPipeline })));
-const AltaDireccionOfertas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionOfertas })));
+const AltaDireccionOffers = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionOffers })));
 const AltaDireccionCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCobranza })));
 const AltaDireccionContratos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionContratos })));
 const AltaDireccionFacturas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionFacturas })));
@@ -219,13 +221,20 @@ const AltaDireccionFacturasPorCobrar = lazyRetry(() => import("./pages/admin/por
 const AltaDireccionFacturasPorPagar = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionFacturasPorPagarPage"));
 const AltaDireccionComisionesExternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesExternasPage"));
 const AltaDireccionComisionesInternas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionComisionesInternasPage"));
+const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionHistoricoComercialPage"));
+const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
+const AltaDireccionIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionIngresosEgresosPage"));
+const AltaDireccionForecastIngresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionForecastIngresosPage"));
+const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesPortalesPage"));
+const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
+const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
 
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
 const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
 const AdminProspectos           = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionProspectos })));
 const AdminPipeline             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionPipeline })));
-const AdminOfertas              = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionOfertas })));
+const AdminOffers              = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionOffers })));
 const AdminCobranza             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCobranza })));
 const AdminContratos            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionContratos })));
 const AdminFacturas             = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionFacturas })));
@@ -246,6 +255,18 @@ const AdminPagosEjecutados      = lazyRetry(() => import("./pages/admin/portal-a
 const AdminCFDIsEmitidos        = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionCFDIsEmitidosPage"));
 const AdminConciliacionSTP      = lazyRetry(() => import("./pages/admin/portal-administracion/PortalAdministracionConciliacionSTPPage"));
 
+// Portal Condominio Administración
+const CondominioDashboard    = lazyRetry(() => import("./pages/admin/portal-condominio/Dashboard"));
+const CondominioDepartamentos = lazyRetry(() => import("./pages/admin/portal-condominio/Departamentos"));
+const CondominioUnidadDetalle = lazyRetry(() => import("./pages/admin/portal-condominio/UnidadDetalle"));
+const CondominioCargos        = lazyRetry(() => import("./pages/admin/portal-condominio/Cargos"));
+const CondominioPagos         = lazyRetry(() => import("./pages/admin/portal-condominio/Pagos"));
+const CondominioCobranza      = lazyRetry(() => import("./pages/admin/portal-condominio/Cobranza"));
+const CondominioTesoreria     = lazyRetry(() => import("./pages/admin/portal-condominio/Tesoreria"));
+const CondominioAmenidades    = lazyRetry(() => import("./pages/admin/portal-condominio/Amenidades"));
+const CondominioAuditoria     = lazyRetry(() => import("./pages/admin/portal-condominio/Auditoria"));
+const CondominioConfiguracion = lazyRetry(() => import("./pages/admin/portal-condominio/Configuracion"));
+
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
 const EmbajadorInicio          = lazyRetry(() => import("./pages/admin/portal-embajador/index").then(m => ({ default: m.EmbajadorInicio })));
@@ -265,16 +286,94 @@ const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flo
 const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
 const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
 
+// Portal CRM Sozu
+const CrmDashboard         = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmDashboard })));
+const CrmAlertas           = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmAlertas })));
+const CrmTrackingHealth    = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmTrackingHealth })));
+const CrmConversionEvents  = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmConversionEvents })));
+
+// Portal CRM Sozu · Fase 2 (módulo CRM)
+const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
+const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
+const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
+const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
+const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
+const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
+const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmRouting })));
+const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAutomationRules })));
+const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmEscalations })));
+const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmLeadIntelligence })));
+const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAgentPerformance })));
+const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSalesOperations })));
+
+// Portal CRM Sozu — Fase 3 (Inteligencia de marketing)
+const CrmCampaigns         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCampaigns })));
+const CrmAudiences         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAudiences })));
+const CrmAttribution       = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAttribution })));
+const CrmCreatives         = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCreatives })));
+const CrmUtms              = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmUtms })));
+const CrmMarketingAbTests  = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingAbTests })));
+const CrmLandingPages      = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmLandingPages })));
+const CrmForms             = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmForms })));
+const CrmAdIntegrations    = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmAdIntegrations })));
+const CrmBudget            = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmBudget })));
+
+// Portal CRM Sozu — Fase 4 (Dirección · Inteligencia de ingresos)
+const CrmExecutiveKpis     = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmExecutiveKpis })));
+const CrmForecast          = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmForecast })));
+const CrmPipelineReview    = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmPipelineReview })));
+const CrmRevenueOps        = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmRevenueOps })));
+const CrmCohorts           = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmCohorts })));
+const CrmChurn             = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmChurn })));
+const CrmReporting         = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmReporting })));
+
+// Portal CRM Sozu — Fase 5 (Operación)
+const CrmUnifiedInbox      = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmUnifiedInbox })));
+const CrmQueues            = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmQueues })));
+const CrmSlaMonitor        = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmSlaMonitor })));
+
+// Portal CRM Sozu — Fase 6 (Configuración)
+const CrmSettingsUsers           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsUsers })));
+const CrmSettingsRoles           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsRoles })));
+const CrmSettingsPipelineStages  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelineStages })));
+const CrmSettingsCustomFields    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsCustomFields })));
+const CrmSettingsWebhooks        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsWebhooks })));
+const CrmSettingsGoogleCallback  = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsGoogleCallback })));
+const CrmSettingsMetaCallback    = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsMetaCallback })));
+const CrmSettingsAuditLog        = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsAuditLog })));
+
+// Portal Bancos
+const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBandeja })));
+const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
+const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
+const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
-const OfertaCliente = lazyRetry(() => import("./pages/public/OfertaCliente"));
+const OfferPage = lazyRetry(() => import("./pages/public/OfferPage"));
 const CapturaDatosPage = lazyRetry(() => import("./pages/public/CapturaDatosPage"));
 const VerificarEmailPage = lazyRetry(() => import("./pages/public/VerificarEmailPage"));
 const VerificacionCallbackPage = lazyRetry(() => import("./pages/public/VerificacionCallbackPage"));
 const TipoCompradorPage = lazyRetry(() => import("./pages/public/TipoCompradorPage"));
 const HoldTarjetaPage = lazyRetry(() => import("./pages/public/HoldTarjetaPage"));
 const ConfirmacionPage = lazyRetry(() => import("./pages/public/ConfirmacionPage"));
+
+// ── Oferta: nuevas páginas del flujo completo ──────────────────────────────
+const ApartadoProvisionalDashboardPage = lazyRetry(() => import("./pages/public/ApartadoProvisionalDashboardPage"));
+const ApartadoProvisionalActivadoPage  = lazyRetry(() => import("./pages/public/ApartadoProvisionalActivadoPage"));
+const ApartadoLiberadoPage             = lazyRetry(() => import("./pages/public/ApartadoLiberadoPage"));
+const CompletarApartadoPage            = lazyRetry(() => import("./pages/public/CompletarApartadoPage"));
+const PagoApartadoFinalPage            = lazyRetry(() => import("./pages/public/PagoApartadoFinalPage"));
+const FormalReservationSuccessPage     = lazyRetry(() => import("./pages/public/FormalReservationSuccessPage"));
+const ApartarDirectoCapturePage        = lazyRetry(() => import("./pages/public/ApartarDirectoCapturePage"));
+const ApartarDirectoContinuarPage      = lazyRetry(() => import("./pages/public/ApartarDirectoContinuarPage"));
+const ReservarPage                     = lazyRetry(() => import("./pages/public/ReservarPage"));
+const EmailVerificationOfferPage      = lazyRetry(() => import("./pages/public/EmailVerificationPage"));
+const VerificationCallbackOfferPage   = lazyRetry(() => import("./pages/public/VerificationCallbackPageOffers"));
+const CapturaDatosReservaPage         = lazyRetry(() => import("./pages/public/CapturaDatosReservaPage"));
+const HoldApartadoPage                = lazyRetry(() => import("./pages/public/HoldApartadoPage"));
+const ConfirmacionApartadoPage        = lazyRetry(() => import("./pages/public/ConfirmacionApartadoPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -296,6 +395,7 @@ const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
 const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
+const isCrmSubdomain = matchPortal('crm');
 
 // Determine portal context from subdomain for login page branding
 const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
@@ -326,6 +426,7 @@ const App = () => (
             <InmobiliariaImpersonationProvider>
             <CobranzaImpersonationProvider>
             <EmbajadorImpersonationProvider>
+            <CrmImpersonationProvider>
            <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
               {isAgentesSubdomain ? (
@@ -420,13 +521,32 @@ const App = () => (
                   <Route path="/auth/change-password" element={<ChangePassword />} />
                   <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
                   <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-                  <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
-                  <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
-                  <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
-                  <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
-                  <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
-                  <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
-                  <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
+                  <Route path="/oferta/:offerId" element={<OfferPage />} />
+                  <Route path="/oferta/:offerId/datos" element={<CapturaDatosPage />} />
+                  <Route path="/oferta/:offerId/verificar-email" element={<VerificarEmailPage />} />
+                  <Route path="/oferta/:offerId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                  <Route path="/oferta/:offerId/tipo-comprador" element={<TipoCompradorPage />} />
+                  <Route path="/oferta/:offerId/hold" element={<HoldTarjetaPage />} />
+                  <Route path="/oferta/:offerId/confirmacion" element={<ConfirmacionPage />} />
+                  {/* Nuevas páginas flujo oferta completo */}
+                  <Route path="/reservar/:offerToken/datos" element={<ApartarDirectoCapturePage />} />
+                  <Route path="/reservar/:offerToken/continuar" element={<ApartarDirectoContinuarPage />} />
+                  <Route path="/reservar/:formalReservationId/provisional-activado" element={<ApartadoProvisionalActivadoPage />} />
+                  <Route path="/apartado-provisional/:formalReservationId" element={<ApartadoProvisionalDashboardPage />} />
+                  <Route path="/apartado-liberado/:formalReservationId" element={<ApartadoLiberadoPage />} />
+                  <Route path="/apartar/:formalReservationId/completar" element={<CompletarApartadoPage />} />
+                  <Route path="/apartar/:formalReservationId/pago-final" element={<PagoApartadoFinalPage />} />
+                  <Route path="/apartar/:formalReservationId/exito" element={<FormalReservationSuccessPage />} />
+                  {/* Verificación email del flujo oferta */}
+                  <Route path="/verificar-email/:prospectId" element={<EmailVerificationOfferPage />} />
+                  <Route path="/verificar/:prospectId" element={<VerificationCallbackOfferPage />} />
+                  <Route path="/verificacion/:prospectId" element={<VerificationCallbackOfferPage />} />
+                  {/* Wizard de reserva */}
+                  <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
+                  {/* Apartado provisional (DB-backed) */}
+                  <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
+                  <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
+                  <Route path="/reservar/:apartadoId/confirmacion" element={<ConfirmacionApartadoPage />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/admin" element={
                     <ProtectedRoute>
@@ -449,6 +569,7 @@ const App = () => (
                     <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                     <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                     <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                    <Route path="portal-cliente/productos" element={<ClienteProductos />} />
                     <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                     <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                     <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
@@ -471,13 +592,30 @@ const App = () => (
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
-                <Route path="/oferta/:ofertaId" element={<OfertaCliente />} />
-                <Route path="/oferta/:ofertaId/datos" element={<CapturaDatosPage />} />
-                <Route path="/oferta/:ofertaId/verificar-email" element={<VerificarEmailPage />} />
-                <Route path="/oferta/:ofertaId/verificacion-ok" element={<VerificacionCallbackPage />} />
-                <Route path="/oferta/:ofertaId/tipo-comprador" element={<TipoCompradorPage />} />
-                <Route path="/oferta/:ofertaId/hold" element={<HoldTarjetaPage />} />
-                <Route path="/oferta/:ofertaId/confirmacion" element={<ConfirmacionPage />} />
+                <Route path="/oferta/:offerId" element={<OfferPage />} />
+                <Route path="/oferta/:offerId/datos" element={<CapturaDatosPage />} />
+                <Route path="/oferta/:offerId/verificar-email" element={<VerificarEmailPage />} />
+                <Route path="/oferta/:offerId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                <Route path="/oferta/:offerId/tipo-comprador" element={<TipoCompradorPage />} />
+                <Route path="/oferta/:offerId/hold" element={<HoldTarjetaPage />} />
+                <Route path="/oferta/:offerId/confirmacion" element={<ConfirmacionPage />} />
+                {/* Flujo oferta completo */}
+                <Route path="/reservar/:offerToken/datos" element={<ApartarDirectoCapturePage />} />
+                <Route path="/reservar/:offerToken/continuar" element={<ApartarDirectoContinuarPage />} />
+                <Route path="/reservar/:formalReservationId/provisional-activado" element={<ApartadoProvisionalActivadoPage />} />
+                <Route path="/apartado-provisional/:formalReservationId" element={<ApartadoProvisionalDashboardPage />} />
+                <Route path="/apartado-liberado/:formalReservationId" element={<ApartadoLiberadoPage />} />
+                <Route path="/apartar/:formalReservationId/completar" element={<CompletarApartadoPage />} />
+                <Route path="/apartar/:formalReservationId/pago-final" element={<PagoApartadoFinalPage />} />
+                <Route path="/apartar/:formalReservationId/exito" element={<FormalReservationSuccessPage />} />
+                <Route path="/verificar-email/:prospectId" element={<EmailVerificationOfferPage />} />
+                <Route path="/verificar/:prospectId" element={<VerificationCallbackOfferPage />} />
+                <Route path="/verificacion/:prospectId" element={<VerificationCallbackOfferPage />} />
+                <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
+                {/* Apartado provisional (DB-backed) */}
+                <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
+                <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
+                <Route path="/reservar/:apartadoId/confirmacion" element={<ConfirmacionApartadoPage />} />
 
                 {/* Admin Routes - Protected by Auth and Permissions */}
                 <Route path="/admin" element={
@@ -564,7 +702,7 @@ const App = () => (
                   <Route path="comunicacion/ejecuciones" element={<EjecucionesAvisos />} />
                   <Route path="comunicacion/configuracion-citas" element={<ConfiguracionCitas />} />
                   <Route path="comunicacion/todas-las-citas" element={<TodasLasCitas />} />
-                  <Route path="crm/workflow-ofertas" element={<WorkflowOfertas />} />
+                  <Route path="crm/workflow-offers" element={<WorkflowOffers />} />
                   <Route path="crm/dashboard-ejecutivo" element={<DashboardEjecutivo />} />
                   <Route path="mediciones-cta" element={<MedicionesCTA />} />
                   <Route path="ab-tests" element={<ABTests />} />
@@ -604,6 +742,7 @@ const App = () => (
                   <Route path="portal-cliente/perfil" element={<ClientePerfil />} />
                   <Route path="portal-cliente/mantenimiento-pago/:cuentaId" element={<ClienteMantenimientoPago />} />
                   <Route path="portal-cliente/propiedad-pago/:cuentaId" element={<ClientePropiedadPago />} />
+                  <Route path="portal-cliente/productos" element={<ClienteProductos />} />
                   <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
@@ -659,11 +798,71 @@ const App = () => (
                   {/* Administrar Jurídico — menú admin principal */}
                   <Route path="juridico/administrar" element={<JuridicoAdministrar />} />
 
+                  {/* Portal CRM Sozu */}
+                  <Route path="portal-crm/dashboard" element={<CrmDashboard />} />
+                  <Route path="portal-crm/alertas" element={<CrmAlertas />} />
+                  <Route path="portal-crm/tracking-health" element={<CrmTrackingHealth />} />
+                  <Route path="portal-crm/conversion-events" element={<CrmConversionEvents />} />
+                  <Route path="portal-crm/crm/contacts" element={<CrmContacts />} />
+                  <Route path="portal-crm/crm/contacts/:contactId" element={<CrmContactDetail />} />
+                  <Route path="portal-crm/crm/deals" element={<CrmDeals />} />
+                  <Route path="portal-crm/crm/appointments" element={<CrmAppointments />} />
+                  <Route path="portal-crm/crm/tasks" element={<CrmTasks />} />
+                  <Route path="portal-crm/crm/sequences" element={<CrmSequences />} />
+                  <Route path="portal-crm/crm/routing" element={<CrmRouting />} />
+                  <Route path="portal-crm/crm/automation-rules" element={<CrmAutomationRules />} />
+                  <Route path="portal-crm/crm/escalations" element={<CrmEscalations />} />
+                  <Route path="portal-crm/crm/lead-intelligence" element={<CrmLeadIntelligence />} />
+                  <Route path="portal-crm/crm/agent-performance" element={<CrmAgentPerformance />} />
+                  <Route path="portal-crm/crm/sales-operations" element={<CrmSalesOperations />} />
+
+                  {/* Portal CRM Sozu — Inteligencia de marketing */}
+                  <Route path="portal-crm/marketing/campaigns"     element={<CrmCampaigns />} />
+                  <Route path="portal-crm/marketing/audiences"     element={<CrmAudiences />} />
+                  <Route path="portal-crm/marketing/attribution"   element={<CrmAttribution />} />
+                  <Route path="portal-crm/marketing/creatives"     element={<CrmCreatives />} />
+                  <Route path="portal-crm/marketing/utms"          element={<CrmUtms />} />
+                  <Route path="portal-crm/marketing/ab-tests"      element={<CrmMarketingAbTests />} />
+                  <Route path="portal-crm/marketing/landing-pages" element={<CrmLandingPages />} />
+                  <Route path="portal-crm/marketing/forms"         element={<CrmForms />} />
+                  <Route path="portal-crm/marketing/integrations"  element={<CrmAdIntegrations />} />
+                  <Route path="portal-crm/marketing/budget"        element={<CrmBudget />} />
+
+                  {/* Portal CRM Sozu — Dirección · Inteligencia de ingresos */}
+                  <Route path="portal-crm/revenue/executive-kpis"  element={<CrmExecutiveKpis />} />
+                  <Route path="portal-crm/revenue/forecast"        element={<CrmForecast />} />
+                  <Route path="portal-crm/revenue/pipeline-review" element={<CrmPipelineReview />} />
+                  <Route path="portal-crm/revenue/revenue-ops"     element={<CrmRevenueOps />} />
+                  <Route path="portal-crm/revenue/cohorts"         element={<CrmCohorts />} />
+                  <Route path="portal-crm/revenue/churn"           element={<CrmChurn />} />
+                  <Route path="portal-crm/revenue/reporting"       element={<CrmReporting />} />
+
+                  {/* Portal CRM Sozu — Operación */}
+                  <Route path="portal-crm/operations/inbox"   element={<CrmUnifiedInbox />} />
+                  <Route path="portal-crm/operations/queues"  element={<CrmQueues />} />
+                  <Route path="portal-crm/operations/sla"     element={<CrmSlaMonitor />} />
+
+                  {/* Portal CRM Sozu — Configuración */}
+                  <Route path="portal-crm/settings/users"                       element={<CrmSettingsUsers />} />
+                  <Route path="portal-crm/settings/roles"                       element={<CrmSettingsRoles />} />
+                  <Route path="portal-crm/settings/pipeline-stages"             element={<CrmSettingsPipelineStages />} />
+                  <Route path="portal-crm/settings/custom-fields"               element={<CrmSettingsCustomFields />} />
+                  <Route path="portal-crm/settings/webhooks"                    element={<CrmSettingsWebhooks />} />
+                  <Route path="portal-crm/settings/connections/google/callback" element={<CrmSettingsGoogleCallback />} />
+                  <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
+                  <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
+
+                  {/* Portal Bancos */}
+                  <Route path="portal-bancos/bandeja"  element={<BancosBandeja />} />
+                  <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
+                  <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
+                  <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
                   <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
                   <Route path="portal-alta-direccion/pipeline" element={<AltaDireccionPipeline />} />
-                  <Route path="portal-alta-direccion/ofertas" element={<AltaDireccionOfertas />} />
+                  <Route path="portal-alta-direccion/offers" element={<AltaDireccionOffers />} />
                   <Route path="portal-alta-direccion/cobranza" element={<AltaDireccionCobranza />} />
                   <Route path="portal-alta-direccion/contratos" element={<AltaDireccionContratos />} />
                   <Route path="portal-alta-direccion/facturas" element={<AltaDireccionFacturas />} />
@@ -679,13 +878,20 @@ const App = () => (
                   <Route path="portal-alta-direccion/facturas-por-pagar" element={<AltaDireccionFacturasPorPagar />} />
                   <Route path="portal-alta-direccion/comisiones-externas" element={<AltaDireccionComisionesExternas />} />
                   <Route path="portal-alta-direccion/comisiones-internas" element={<AltaDireccionComisionesInternas />} />
+                  <Route path="portal-alta-direccion/historico-comercial" element={<AltaDireccionHistoricoComercial />} />
+                  <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
+                  <Route path="portal-alta-direccion/ingresos-egresos" element={<AltaDireccionIngresosEgresos />} />
+                  <Route path="portal-alta-direccion/forecast-ingresos" element={<AltaDireccionForecastIngresos />} />
+                  <Route path="portal-alta-direccion/mediciones/portales" element={<MedicionesPortales />} />
+                  <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
+                  <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
                  <Route path="portal-administracion/citas" element={<AdminCitas />} />
                  <Route path="portal-administracion/prospectos" element={<AdminProspectos />} />
                  <Route path="portal-administracion/pipeline" element={<AdminPipeline />} />
-                 <Route path="portal-administracion/ofertas" element={<AdminOfertas />} />
+                 <Route path="portal-administracion/offers" element={<AdminOffers />} />
                  <Route path="portal-administracion/cobranza" element={<AdminCobranza />} />
                  <Route path="portal-administracion/contratos" element={<AdminContratos />} />
                  <Route path="portal-administracion/facturas" element={<AdminFacturas />} />
@@ -706,6 +912,18 @@ const App = () => (
                  <Route path="portal-administracion/pagos-ejecutados" element={<AdminPagosEjecutados />} />
                  <Route path="portal-administracion/cfdis-emitidos" element={<AdminCFDIsEmitidos />} />
                  <Route path="portal-administracion/conciliacion-stp" element={<AdminConciliacionSTP />} />
+
+                 {/* Portal Condominio Administración */}
+                 <Route path="portal-condominio/dashboard"        element={<CondominioDashboard />} />
+                 <Route path="portal-condominio/departamentos"    element={<CondominioDepartamentos />} />
+                 <Route path="portal-condominio/departamentos/:numero" element={<CondominioUnidadDetalle />} />
+                 <Route path="portal-condominio/cargos"           element={<CondominioCargos />} />
+                 <Route path="portal-condominio/pagos"            element={<CondominioPagos />} />
+                 <Route path="portal-condominio/cobranza"         element={<CondominioCobranza />} />
+                 <Route path="portal-condominio/tesoreria"        element={<CondominioTesoreria />} />
+                 <Route path="portal-condominio/amenidades"       element={<CondominioAmenidades />} />
+                 <Route path="portal-condominio/auditoria"        element={<CondominioAuditoria />} />
+                 <Route path="portal-condominio/configuracion"    element={<CondominioConfiguracion />} />
 
                  {/* Portal Embajadores */}
                  <Route path="embajadores/gestion" element={<GestionEmbajadores />} />
@@ -733,6 +951,7 @@ const App = () => (
               )}
             </Suspense>
             </AmbassadorsProvider>
+            </CrmImpersonationProvider>
             </EmbajadorImpersonationProvider>
             </CobranzaImpersonationProvider>
             </InmobiliariaImpersonationProvider>

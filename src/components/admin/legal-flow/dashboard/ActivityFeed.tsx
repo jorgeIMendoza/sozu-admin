@@ -4,14 +4,14 @@ import { Activity, ArrowRight } from 'lucide-react';
 import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 
 const NEXT_ACTION: Record<string, string> = {
-  request_received: 'Revisar',
-  missing_information: 'Completar',
-  in_legal_review: 'Aprobar',
-  approved_for_generation: 'Generar',
-  in_validation: 'Firma titular',
-  in_signature_process: 'Firmar',
-  partially_signed: 'Firmar',
-  fully_signed: 'Archivar',
+  'Solicitud recibida': 'Revisar',
+  'Información faltante': 'Completar',
+  'En revisión legal': 'Aprobar',
+  'Aprobado': 'Generar',
+  'Firma titular': 'Firma titular',
+  'En firma': 'Firmar',
+  'Parcialmente firmado': 'Firmar',
+  'Firmado': 'Archivar',
 };
 
 export default function ActivityFeed() {

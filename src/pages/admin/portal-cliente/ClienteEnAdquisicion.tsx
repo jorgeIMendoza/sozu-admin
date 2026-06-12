@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShoppingBag, CreditCard, FileText, TrendingUp, ChevronRight, Calendar, ChevronLeft } from "lucide-react";
+import { ShoppingBag, CreditCard, FileText, TrendingUp, ChevronRight, Calendar, ChevronLeft, Search } from "lucide-react";
 import { filterPortfolioByCategory, getPropertyStatus } from "@/lib/portal-cliente/mock-data";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { fmtMXN as fmt } from "@/lib/utils";
@@ -119,6 +119,7 @@ function AcquisitionCard({
 
   return (
     <div
+      data-cta="cliente.adquisicion.ver-propiedad"
       onClick={onClick}
       className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
     >
@@ -288,8 +289,14 @@ const EmptyState = () => (
 
 const ClienteEnAdquisicion = () => {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const { data: portfolio, isLoading } = usePortfolioCliente();
   const items = portfolio ? filterPortfolioByCategory(portfolio, "in_acquisition") : [];
+  const filtered = items.filter((inv) =>
+    `${inv.property.projectName} ${inv.property.unitNumber} ${inv.property.location}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
 
   return (
     <>
@@ -312,8 +319,22 @@ const ClienteEnAdquisicion = () => {
         ) : items.length === 0 ? (
           <EmptyState />
         ) : (
+          <>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar propiedad…"
+                className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {filtered.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>
+            ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {items.map((inv) => (
+            {filtered.map((inv) => (
               <AcquisitionCard
                 key={inv.property.id}
                 inv={inv}
@@ -325,6 +346,8 @@ const ClienteEnAdquisicion = () => {
               />
             ))}
           </div>
+            )}
+          </>
         )}
       </section>
     </>

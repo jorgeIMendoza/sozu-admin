@@ -5,15 +5,15 @@ import { STATUS_CONFIG, REQUEST_TYPE_LABELS } from '@/data/legalFlow/mockData';
 import type { LegalRequest } from '@/types/legal-flow';
 
 const NEXT_ACTION: Record<string, string> = {
-  request_received: 'Revisar solicitud',
-  missing_information: 'Completar información',
-  in_legal_review: 'Aprobar generación',
-  approved_for_generation: 'Generar documento',
-  client_signature: 'Ver firma de cliente',
-  in_validation: 'Enviar a firma del titular',
-  in_signature_process: 'Seguimiento de firma',
-  partially_signed: 'Seguimiento de firma',
-  fully_signed: 'Archivar expediente',
+  'Solicitud recibida': 'Revisar solicitud',
+  'Información faltante': 'Completar información',
+  'En revisión legal': 'Aprobar generación',
+  'Aprobado': 'Generar documento',
+  'Firma cliente': 'Ver firma de cliente',
+  'Firma titular': 'Enviar a firma del titular',
+  'En firma': 'Seguimiento de firma',
+  'Parcialmente firmado': 'Seguimiento de firma',
+  'Firmado': 'Archivar expediente',
 };
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -30,7 +30,7 @@ interface Props {
 export default function CaseDrawer({ open, onOpenChange, title, subtitle, cases }: Props) {
   const responsables = [...new Set(cases.map(c => c.assignedTo).filter(Boolean))];
   const projects = [...new Set(cases.map(c => c.project).filter(Boolean))];
-  const overdueCount = cases.filter(c => isOverdue(c.dueDate) && !['fully_signed', 'archived', 'cancelled'].includes(c.status)).length;
+  const overdueCount = cases.filter(c => isOverdue(c.dueDate) && !['Firmado', 'Archivado', 'Cancelado'].includes(c.status)).length;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -74,7 +74,7 @@ export default function CaseDrawer({ open, onOpenChange, title, subtitle, cases 
             </div>
           ) : (
             cases.map(c => {
-              const overdue = isOverdue(c.dueDate) && !['fully_signed', 'archived', 'cancelled'].includes(c.status);
+              const overdue = isOverdue(c.dueDate) && !['Firmado', 'Archivado', 'Cancelado'].includes(c.status);
               const action = NEXT_ACTION[c.status];
               return (
                 <div key={c.id} className="py-4 group hover:bg-accent/30 -mx-6 px-6 transition-colors">

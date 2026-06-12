@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { ENVIRONMENT } from "@/lib/config";
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, isBefore, isEqual } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronDown, ChevronRight, Upload, Eye, FileText, Stamp, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, FileText, Stamp, Loader2, Info, Clock, CheckCircle2, XCircle, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
 interface ComisionesPorPagarTabProps {
   comisionistasAgrupados: any[];
@@ -22,24 +23,68 @@ interface ComisionesPorPagarTabProps {
   loadingCuentas: boolean;
   filtroGeneral: string;
   formatCurrency: (value: number) => string;
-  openPagarDialog: (email: string, idCuenta: number) => void;
-  openPagarTodasDialog: (type: 'comisionista' | 'cuenta', data: any) => void;
+  /** @deprecated Pagar Comisiones es ahora vista de seguimiento — la
+   *  ejecución del pago vive en la Bandeja de Ejecución del Portal de
+   *  Administración. Los props quedan por compatibilidad pero no se usan. */
+  openPagarDialog?: (email: string, idCuenta: number) => void;
+  /** @deprecated ver `openPagarDialog`. */
+  openPagarTodasDialog?: (type: 'comisionista' | 'cuenta', data: any) => void;
 }
 
-// Función para determinar la fecha límite de enganche según la lógica de negocio
-function getFechaLimiteEnganche(): Date {
-  const today = new Date();
-  const currentDay = today.getDate();
-  
-  if (currentDay >= 16) {
-    // Del 16 al fin de mes: mostrar comisiones con enganche pagado hasta el día 15 del mes actual
-    const limitDate = new Date(today.getFullYear(), today.getMonth(), 15, 23, 59, 59, 999);
-    return limitDate;
-  } else {
-    // Del 1 al 15: mostrar comisiones con enganche pagado hasta fin del mes anterior
-    const lastMonth = subMonths(today, 1);
-    return endOfMonth(lastMonth);
+/**
+ * Deriva el estatus de seguimiento de una comisión en base a:
+ *  - `pagada` del comisionista → "Pagada".
+ *  - `estatus_autorizacion_comision_*` de la cuenta (según interno/externo) →
+ *      Autorizado / Rechazado / En espera.
+ *  - `aprobada=false` (fallback legacy pre-DDL) → Rechazado.
+ *
+ * Devuelve la etiqueta + icono + tono visual.
+ */
+type EstatusSeguimiento = {
+  label: string;
+  tone: "emerald" | "amber" | "red" | "blue" | "gray";
+  icon: typeof Clock;
+};
+
+function deriveEstatus(item: {
+  pagada?: boolean;
+  aprobada?: boolean;
+  esExterno?: boolean;
+  esPagadaComisionVenta?: boolean;
+  estatusAutorizacionExterna?: string;
+  estatusAutorizacionInterna?: string;
+}): EstatusSeguimiento {
+  if (item.pagada) return { label: "Pagada", tone: "blue", icon: CircleDollarSign };
+  const estatus = item.esExterno
+    ? item.estatusAutorizacionExterna
+    : item.estatusAutorizacionInterna;
+  if (estatus === "Autorizado") {
+    return { label: "Autorizado · listo para pago", tone: "emerald", icon: CheckCircle2 };
   }
+  if (estatus === "Rechazado" || item.aprobada === false) {
+    return { label: "Rechazado", tone: "red", icon: XCircle };
+  }
+  return { label: "Pendiente validación AD", tone: "amber", icon: Clock };
+}
+
+function EstatusBadge({ estatus }: { estatus: EstatusSeguimiento }) {
+  const Icon = estatus.icon;
+  const cls =
+    estatus.tone === "emerald"
+      ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : estatus.tone === "amber"
+        ? "border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300"
+        : estatus.tone === "red"
+          ? "border-red-400 text-red-700 bg-red-50 dark:bg-red-950/40 dark:text-red-300"
+          : estatus.tone === "blue"
+            ? "border-blue-400 text-blue-700 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300"
+            : "border-muted-foreground/40 text-muted-foreground";
+  return (
+    <Badge variant="outline" className={cn("text-[10px] whitespace-nowrap gap-1", cls)}>
+      <Icon className="h-3 w-3" />
+      {estatus.label}
+    </Badge>
+  );
 }
 
 export default function ComisionesPorPagarTab({
@@ -49,9 +94,9 @@ export default function ComisionesPorPagarTab({
   loadingCuentas,
   filtroGeneral,
   formatCurrency,
-  openPagarDialog,
-  openPagarTodasDialog
 }: ComisionesPorPagarTabProps) {
+  // Permisos eliminados: el componente ya no ejecuta acciones de pago,
+  // sólo muestra seguimiento.
   const { canUpdate, isSuperAdmin } = usePagePermissions('/admin/pagar-comisiones');
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,8 +106,6 @@ export default function ComisionesPorPagarTab({
   const [timbrarDialog, setTimbrarDialog] = useState<{ idCuenta: number; idDocumento: number } | null>(null);
   const [isTimbrarLoading, setIsTimbrarLoading] = useState(false);
   const itemsPerPage = 50;
-
-  const fechaLimite = useMemo(() => getFechaLimiteEnganche(), []);
 
   const toggleItem = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
@@ -127,50 +170,41 @@ export default function ComisionesPorPagarTab({
       </div>
     );
   };
-  // Filtrar comisiones por fecha de enganche y estado de pago
+  // La vista ahora es de SEGUIMIENTO: muestra todas las comisiones pendientes
+  // (no sólo las "listas para pagar"), incluyendo las que están en validación
+  // por Alta Dirección, para que el equipo de Admin Panel pueda ver el cambio
+  // de estatus. La ejecución del pago vive en la Bandeja de Ejecución del
+  // Portal de Administración — aquí se eliminó el filtro previo de fecha de
+  // enganche y los CTAs de acción.
   const comisionistasPendientes = useMemo(() => {
     return comisionistasAgrupados?.map((com: any) => {
-      // Filtrar cuentas pendientes que cumplan con la fecha límite
-      const cuentasPendientes = com.cuentas.filter((c: any) => {
-        if (c.pagada) return false;
-        if (!c.fechaPagoEnganche) return false;
-        const fechaEnganche = parseISO(c.fechaPagoEnganche);
-        return isBefore(fechaEnganche, fechaLimite) || isEqual(fechaEnganche, fechaLimite);
-      });
-      
+      const cuentasPendientes = com.cuentas.filter((c: any) => !c.pagada);
       const cuentasPagadas = com.cuentas.filter((c: any) => c.pagada);
-      
-      // Calcular montos
       const montoTotal = com.cuentas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
       const montoPendiente = cuentasPendientes.reduce((sum: number, c: any) => sum + c.montoComision, 0);
       const montoPagado = cuentasPagadas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
-      
       return {
         ...com,
         cuentas: cuentasPendientes,
-        montoTotal, // Total de todas las comisiones (por pagar)
-        montoPendiente, // Total pendiente que cumple con fecha
-        montoPagado, // Total ya pagado
+        montoTotal,
+        montoPendiente,
+        montoPagado,
       };
     }).filter((com: any) => com.cuentas.length > 0) || [];
-  }, [comisionistasAgrupados, fechaLimite]);
+  }, [comisionistasAgrupados]);
 
   const cuentasPendientes = useMemo(() => {
     return cuentasAgrupadas?.map((cuenta: any) => {
-      // Filtrar comisionistas pendientes
       const comisionistasPendientes = cuenta.comisionistas.filter((c: any) => !c.pagada);
       const comisionistasPagados = cuenta.comisionistas.filter((c: any) => c.pagada);
-      
-      // Calcular montos
       const montoTotal = cuenta.comisionistas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
       const montoPendiente = comisionistasPendientes.reduce((sum: number, c: any) => sum + c.montoComision, 0);
       const montoPagado = comisionistasPagados.reduce((sum: number, c: any) => sum + c.montoComision, 0);
-      
       return {
         ...cuenta,
         comisionistas: comisionistasPendientes,
-        montoTotal, // Total de todas las comisiones
-        montoTotalComision: montoPendiente, // Mantener compatibilidad
+        montoTotal,
+        montoTotalComision: montoPendiente,
         montoPendiente,
         montoPagado,
       };
@@ -285,13 +319,25 @@ export default function ComisionesPorPagarTab({
                     <TableHead className="text-right">Monto por Pagar</TableHead>
                     <TableHead className="text-right">Monto Pagado</TableHead>
                     <TableHead className="text-right">Monto Pendiente</TableHead>
-                    <TableHead>Acciones</TableHead>
+                    <TableHead>Estatus</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedComisionistas.map((com: any) => (
+                  {paginatedComisionistas.map((com: any) => {
+                    // Estatus consolidado del comisionista: si todas sus
+                    // cuentas pendientes están en el mismo estado AD, usamos
+                    // ese; si hay mezcla, mostramos "Mixto" — el detalle por
+                    // cuenta sigue siendo accesible expandiendo la fila.
+                    const estatusList = com.cuentas.map((c: any) =>
+                      deriveEstatus({ ...c, esExterno: com.esExterno }).label,
+                    );
+                    const allEqual = estatusList.length > 0 && estatusList.every((s: string) => s === estatusList[0]);
+                    const estatusGrupo = allEqual
+                      ? deriveEstatus({ ...com.cuentas[0], esExterno: com.esExterno })
+                      : { label: `Mixto (${new Set(estatusList).size})`, tone: "gray" as const, icon: Info };
+                    return (
                     <>
-                      <TableRow 
+                      <TableRow
                         key={com.email}
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => toggleItem(com.email)}
@@ -325,24 +371,7 @@ export default function ComisionesPorPagarTab({
                           {formatCurrency(com.montoPendiente)}
                         </TableCell>
                         <TableCell>
-                          {com.cuentas.length > 0 && (canUpdate || isSuperAdmin) && (() => {
-                            const liberables = com.cuentas.filter((c: any) => c.esPagadaComisionVenta).length;
-                            return (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openPagarTodasDialog('comisionista', { ...com, cuentas: com.cuentas.filter((c: any) => c.esPagadaComisionVenta) });
-                                }}
-                                disabled={liberables === 0}
-                                title={liberables === 0 ? 'Ninguna cuenta tiene la comisión Sozu pagada todavía' : liberables < com.cuentas.length ? `${com.cuentas.length - liberables} cuenta(s) bloqueadas: Sozu aún no cobra` : ''}
-                              >
-                                <Upload className="h-4 w-4 mr-1" />
-                                Pagar Todas ({liberables}/{com.cuentas.length})
-                              </Button>
-                            );
-                          })()}
+                          <EstatusBadge estatus={estatusGrupo} />
                         </TableCell>
                       </TableRow>
                       {expandedItems.has(com.email) && (
@@ -363,11 +392,13 @@ export default function ComisionesPorPagarTab({
                                     <TableHead className="text-right">Comisión</TableHead>
                                     {com.esExterno && <TableHead>Factura</TableHead>}
                                     <TableHead>Fact. Comisión Sozu</TableHead>
-                                    {(canUpdate || isSuperAdmin) && <TableHead>Acciones</TableHead>}
+                                    <TableHead>Estatus</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {com.cuentas.map((cuenta: any) => (
+                                  {com.cuentas.map((cuenta: any) => {
+                                    const estatusCuenta = deriveEstatus({ ...cuenta, esExterno: com.esExterno });
+                                    return (
                                     <TableRow key={cuenta.idCuenta}>
                                       <TableCell>{cuenta.numeroCuenta}</TableCell>
                                       <TableCell>{cuenta.tipo}</TableCell>
@@ -376,7 +407,7 @@ export default function ComisionesPorPagarTab({
                                       <TableCell>{cuenta.modelo}</TableCell>
                                       <TableCell>{cuenta.numeroDepartamento}</TableCell>
                                       <TableCell>
-                                        {cuenta.fechaPagoEnganche 
+                                        {cuenta.fechaPagoEnganche
                                           ? format(parseISO(cuenta.fechaPagoEnganche), 'dd/MM/yyyy')
                                           : '-'}
                                       </TableCell>
@@ -408,21 +439,12 @@ export default function ComisionesPorPagarTab({
                                       <TableCell>
                                         {renderFacturaComisionSozu(cuenta.facturaComisionSozu, cuenta.idCuenta)}
                                       </TableCell>
-                                      {(canUpdate || isSuperAdmin) && (
-                                        <TableCell>
-                                          <Button
-                                            size="sm"
-                            onClick={() => openPagarDialog(com.email, cuenta.idCuenta)}
-                            disabled={!cuenta.esPagadaComisionVenta}
-                            title={!cuenta.esPagadaComisionVenta ? 'La comisión Sozu debe estar pagada antes de liberar el pago al externo' : ''}
-                                          >
-                                            <Upload className="h-4 w-4 mr-1" />
-                                            Pagar
-                                          </Button>
-                                        </TableCell>
-                                      )}
+                                      <TableCell>
+                                        <EstatusBadge estatus={estatusCuenta} />
+                                      </TableCell>
                                     </TableRow>
-                                  ))}
+                                    );
+                                  })}
                                 </TableBody>
                               </Table>
                             </div>
@@ -430,7 +452,8 @@ export default function ComisionesPorPagarTab({
                         </TableRow>
                       )}
                     </>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -493,15 +516,27 @@ export default function ComisionesPorPagarTab({
                     <TableHead className="text-right">Precio Final</TableHead>
                     <TableHead className="text-right">Monto por Pagar</TableHead>
                     <TableHead className="text-right">Monto Pagado</TableHead>
-                     <TableHead className="text-right">Monto Pendiente</TableHead>
-                     <TableHead>Fact. Comisión Sozu</TableHead>
-                     {(canUpdate || isSuperAdmin) && <TableHead>Acciones</TableHead>}
+                    <TableHead className="text-right">Monto Pendiente</TableHead>
+                    <TableHead>Fact. Comisión Sozu</TableHead>
+                    <TableHead>Estatus</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedCuentas.map((cuenta: any) => (
+                  {paginatedCuentas.map((cuenta: any) => {
+                    // Estatus consolidado de la cuenta: mismo enfoque que
+                    // en la pestaña por comisionista — si todos los
+                    // comisionistas pendientes tienen el mismo estatus, lo
+                    // usamos; si hay mezcla, mostramos "Mixto".
+                    const labels = cuenta.comisionistas.map((c: any) =>
+                      deriveEstatus(c).label,
+                    );
+                    const allSame = labels.length > 0 && labels.every((l: string) => l === labels[0]);
+                    const estatusGrupo = allSame
+                      ? deriveEstatus(cuenta.comisionistas[0])
+                      : { label: `Mixto (${new Set(labels).size})`, tone: "gray" as const, icon: Info };
+                    return (
                     <>
-                      <TableRow 
+                      <TableRow
                         key={cuenta.idCuenta}
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => toggleItem(`cuenta-${cuenta.idCuenta}`)}
@@ -534,29 +569,13 @@ export default function ComisionesPorPagarTab({
                         <TableCell>
                           {renderFacturaComisionSozu(cuenta.facturaComisionSozu, cuenta.idCuenta)}
                         </TableCell>
-                        {(canUpdate || isSuperAdmin) && (
-                          <TableCell>
-                            {cuenta.comisionistas.length > 0 && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openPagarTodasDialog('cuenta', cuenta);
-                                }}
-                                disabled={!cuenta.esPagadaComisionVenta}
-                                title={!cuenta.esPagadaComisionVenta ? 'La comisión Sozu debe estar pagada antes de liberar el pago al externo' : ''}
-                              >
-                                <Upload className="h-4 w-4 mr-1" />
-                                Pagar Todas ({cuenta.comisionistas.length})
-                              </Button>
-                            )}
-                          </TableCell>
-                        )}
+                        <TableCell>
+                          <EstatusBadge estatus={estatusGrupo} />
+                        </TableCell>
                       </TableRow>
                       {expandedItems.has(`cuenta-${cuenta.idCuenta}`) && (
                         <TableRow>
-                          <TableCell colSpan={12} className="bg-muted/30 p-0">
+                          <TableCell colSpan={13} className="bg-muted/30 p-0">
                             <div className="p-4">
                               <Table>
                                 <TableHeader>
@@ -566,11 +585,13 @@ export default function ComisionesPorPagarTab({
                                     <TableHead className="text-right">Porcentaje</TableHead>
                                     <TableHead className="text-right">Monto Comisión</TableHead>
                                     <TableHead>Factura</TableHead>
-                                    {(canUpdate || isSuperAdmin) && <TableHead>Acciones</TableHead>}
+                                    <TableHead>Estatus</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {cuenta.comisionistas.map((comisionista: any) => (
+                                  {cuenta.comisionistas.map((comisionista: any) => {
+                                    const estatusCom = deriveEstatus(comisionista);
+                                    return (
                                     <TableRow key={comisionista.email}>
                                       <TableCell className="font-medium">
                                         <div className="flex items-center gap-2">
@@ -604,21 +625,12 @@ export default function ComisionesPorPagarTab({
                                           <span className="text-muted-foreground text-xs">-</span>
                                         )}
                                       </TableCell>
-                                      {(canUpdate || isSuperAdmin) && (
-                                        <TableCell>
-                                          <Button
-                                            size="sm"
-                            onClick={() => openPagarDialog(comisionista.email, cuenta.idCuenta)}
-                            disabled={!cuenta.esPagadaComisionVenta}
-                            title={!cuenta.esPagadaComisionVenta ? 'La comisión Sozu debe estar pagada antes de liberar el pago al externo' : ''}
-                                          >
-                                            <Upload className="h-4 w-4 mr-1" />
-                                            Pagar
-                                          </Button>
-                                        </TableCell>
-                                      )}
+                                      <TableCell>
+                                        <EstatusBadge estatus={estatusCom} />
+                                      </TableCell>
                                     </TableRow>
-                                  ))}
+                                    );
+                                  })}
                                 </TableBody>
                               </Table>
                             </div>
@@ -626,7 +638,8 @@ export default function ComisionesPorPagarTab({
                         </TableRow>
                       )}
                     </>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

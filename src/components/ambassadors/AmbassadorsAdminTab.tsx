@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
 import {
   Ambassador, Advisor, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown, Pencil, ShieldCheck } from 'lucide-react';
+import { Info, Plus, Download, Users, AlertTriangle, Check, X, FileText, Bell, UserPlus, ChevronsUpDown, Pencil, ShieldCheck, Mail, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import NuevoEmbajadorDialog from './NuevoEmbajadorDialog';
@@ -336,6 +336,19 @@ export function ReferralFormDialog({
   });
   const [duplicate, setDuplicate] = useState<Referral | null>(null);
   const [loading, setLoading] = useState(false);
+  const [proyectos, setProyectos] = useState<{ id: number; nombre: string }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: rels } = await supabase.from('entidades_relacionadas')
+        .select('id_proyecto').eq('id_tipo_entidad', 5).eq('activo', true);
+      if (!rels?.length) return;
+      const ids = rels.map((r: any) => r.id_proyecto).filter(Boolean);
+      const { data } = await (supabase as any).from('proyectos')
+        .select('id, nombre').in('id', ids).eq('publicar', true).eq('activo', true).order('nombre');
+      if (data) setProyectos(data);
+    })();
+  }, []);
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
@@ -373,20 +386,34 @@ export function ReferralFormDialog({
       const emb = ambassadors.find(a => a.id === form.ambassadorId);
       const adv = form.advisorId ? advisors.find(a => a.id === form.advisorId) : null;
 
-      // Crear persona del cliente
-      const { data: persona, error: personaError } = await supabase
+      const emailNorm = form.email.trim().toLowerCase();
+
+      // Reusar persona existente si el email ya está registrado (evita violar personas_email_key)
+      const { data: personaExistente } = await supabase
         .from('personas')
-        .insert({
-          nombre_legal: form.clientName.trim(),
-          email: form.email.trim().toLowerCase(),
-          telefono: form.phone.trim(),
-          clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
-          tipo_persona: 'pf',
-          activo: true,
-        })
         .select('id')
-        .single();
-      if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
+        .eq('email', emailNorm)
+        .maybeSingle();
+
+      let persona: { id: number } | null = personaExistente ?? null;
+
+      if (!persona) {
+        // Crear persona del cliente
+        const { data: nuevaPersona, error: personaError } = await supabase
+          .from('personas')
+          .insert({
+            nombre_legal: form.clientName.trim(),
+            email: emailNorm,
+            telefono: form.phone.trim(),
+            clave_pais_telefono: form.clavePaisTelefono ?? 'MX',
+            tipo_persona: 'pf',
+            activo: true,
+          })
+          .select('id')
+          .single();
+        if (personaError || !nuevaPersona) throw personaError ?? new Error('Error al crear persona');
+        persona = nuevaPersona;
+      }
 
       // Crear entidad_relacionada tipo Prospecto (id_persona_duena_lead = embajador)
       const { data: erData, error: erError } = await supabase
@@ -408,6 +435,7 @@ export function ReferralFormDialog({
         id_persona_embajador: emb?.idPersona ?? 0,
         tipo_interes: form.interestType,
         producto_interes: form.productInterest || null,
+        id_proyecto_interes: form.proyectoId ? Number(form.proyectoId) : null,
         relacion_embajador: form.relationship || null,
         comentarios: form.comments || null,
         consentimiento: form.consent ?? true,
@@ -420,11 +448,11 @@ export function ReferralFormDialog({
         estatus_asignacion: adv ? 'asignado' : 'sin_asignar',
         fecha_asignacion: adv ? new Date().toISOString() : null,
         audit_trail: [{ timestamp: new Date().toISOString(), actor: 'admin', type: 'creado' }],
-      });
+      } as any);
       if (refError) throw refError;
 
       toast.success('Referido registrado');
-      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '', clavePaisTelefono: 'MX', phone: '' });
+      setForm({ ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '', interestType: 'indefinido', consent: true, advisorId: '', clavePaisTelefono: 'MX', phone: '', proyectoId: '' });
       setDuplicate(null);
       await refresh();
       onOpenChange(false);
@@ -487,6 +515,14 @@ export function ReferralFormDialog({
             </div>
           </div>
           <div><Label>Relación con el embajador</Label><Input value={form.relationship ?? ''} onChange={e => set('relationship', e.target.value)} /></div>
+          <div><Label>Proyecto</Label>
+            <Select value={form.proyectoId ?? ''} onValueChange={v => set('proyectoId', v)}>
+              <SelectTrigger><SelectValue placeholder="Selecciona proyecto" /></SelectTrigger>
+              <SelectContent>
+                {proyectos.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Interés</Label>
               <Select value={form.interestType} onValueChange={v => set('interestType', v)}>
@@ -503,9 +539,13 @@ export function ReferralFormDialog({
               <Select value={form.productInterest ?? ''} onValueChange={v => set('productInterest', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Loft">Loft</SelectItem>
+                  <SelectItem value="1 recámara">1 Recámara</SelectItem>
                   <SelectItem value="2 recámaras">2 recámaras</SelectItem>
                   <SelectItem value="3 recámaras">3 recámaras</SelectItem>
                   <SelectItem value="Residencia grande">Residencia grande</SelectItem>
+                  <SelectItem value="Oficinas">Oficinas</SelectItem>
+                  <SelectItem value="Comercio">Comercio</SelectItem>
                   <SelectItem value="No definido">No definido</SelectItem>
                 </SelectContent>
               </Select>
@@ -1027,7 +1067,14 @@ export default function AmbassadorsAdminTab() {
                       <TableCell className="font-mono text-xs">{a.code}</TableCell>
                       <TableCell>
                         <div>{a.fullName}</div>
-                        <div className="text-xs text-muted-foreground">{a.email} · {a.phone}</div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {a.email && (
+                            <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{a.email}</span>
+                          )}
+                          {a.phone && (
+                            <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{a.phone}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{AMBASSADOR_TYPE_LABEL[a.type]}</TableCell>
                       <TableCell>

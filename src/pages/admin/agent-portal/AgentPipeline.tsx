@@ -10,7 +10,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Clock, Building2, Calendar, FileText, Lock, Mail, Search } from "lucide-react";
+import { Loader2, Plus, User, Clock, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -34,7 +34,7 @@ const STAGES = [
   { key: 'expiradas', label: 'Expiradas', color: 'bg-gray-100 text-gray-500', borderColor: 'border-gray-300' },
 ] as const;
 
-// Same MIN_DATE as WorkflowOfertas: 1 month
+// Same MIN_DATE as WorkflowOffers: 1 month
 const MIN_DATE = (() => {
   const d = new Date();
   d.setMonth(d.getMonth() - 1);
@@ -393,6 +393,11 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
   const hasUrl = !!oferta.url;
 
+  const [apartadoDialogOpen, setApartadoDialogOpen] = useState(false);
+  const [apartadoEmail, setApartadoEmail] = useState("");
+  const [sendingApartado, setSendingApartado] = useState(false);
+
+  // Botón "Enviar" original — envía PDF al email del lead ya registrado
   const handleSendEmail = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasUrl) {
@@ -403,7 +408,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
       });
       return;
     }
-    const { sendOfferEmailDirect } = await import('@/services/ofertaEmailService');
+    const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
     sendOfferEmailDirect({
       offerId: oferta.id,
       propertyNumber: oferta.propiedad_nombre || '',
@@ -411,8 +416,116 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     });
   };
 
+  // Botón "Apartar" nuevo — captura email → crea apartado_provisional → envía PDF + link
+  const handleOpenApartado = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasUrl) {
+      toast({
+        title: "PDF no disponible",
+        description: "Descarga la oferta primero para generar el PDF.",
+        duration: 5000,
+      });
+      return;
+    }
+    setApartadoEmail("");
+    setApartadoDialogOpen(true);
+  };
+
+  const handleConfirmApartado = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const trimmedEmail = apartadoEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast({ title: "Correo inválido", description: "Verifica el formato del correo.", duration: 4000 });
+      return;
+    }
+    setSendingApartado(true);
+    try {
+      const { data: apartado, error: insertError } = await (supabase as any)
+        .from("apartados_provisionales")
+        .insert({ email: trimmedEmail, id_oferta: oferta.id })
+        .select("id")
+        .single();
+
+      if (insertError || !apartado) throw new Error("Error creando apartado");
+
+      const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
+
+      // Enviar PDF al email capturado (fire-and-forget — el servicio muestra su propio toast)
+      import('@/services/offerEmailService').then(({ sendOfferEmailDirect }) => {
+        sendOfferEmailDirect({
+          offerId: oferta.id,
+          propertyNumber: oferta.propiedad_nombre || '',
+          tipo: oferta.is_producto ? 'producto' : 'propiedad',
+          recipientEmail: trimmedEmail,
+        });
+      });
+
+      toast({
+        title: "Apartado creado",
+        description: `Link enviado a ${trimmedEmail} — ${reservationLink}`,
+        duration: 8000,
+      });
+      setApartadoDialogOpen(false);
+    } catch {
+      toast({ title: "Error", description: "No se pudo crear el apartado. Intenta de nuevo.", duration: 4000 });
+    } finally {
+      setSendingApartado(false);
+    }
+  };
+
   return (
-    <div onClick={onClick} className={cn("rounded-xl bg-white border-l-4 border border-gray-100 shadow-sm p-3.5 cursor-pointer active:scale-[0.98] transition-transform", stageInfo.borderColor)}>
+    <div onClick={onClick} className={cn("relative rounded-xl bg-white border-l-4 border border-gray-100 shadow-sm p-3.5 cursor-pointer active:scale-[0.98] transition-transform", stageInfo.borderColor)}>
+      {/* Overlay: captura email para apartado provisional */}
+      {apartadoDialogOpen && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 rounded-xl bg-white z-10 flex flex-col p-3.5 gap-3"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold text-gray-700">Correo del prospecto</p>
+            <button
+              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 -mt-1 leading-snug">
+            Se enviará PDF + link de apartado a este correo.
+          </p>
+          <input
+            autoFocus
+            type="email"
+            value={apartadoEmail}
+            onChange={(e) => setApartadoEmail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); handleConfirmApartado(e as any); }
+              if (e.key === "Escape") { e.stopPropagation(); setApartadoDialogOpen(false); }
+            }}
+            placeholder="email@cliente.com"
+            disabled={sendingApartado}
+            className="w-full h-9 px-2.5 text-[12px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-colors disabled:opacity-50"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
+              disabled={sendingApartado}
+              className="flex-1 h-8 rounded-lg text-[11px] font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmApartado}
+              disabled={!apartadoEmail.trim() || sendingApartado}
+              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[hsl(var(--agent-primary))] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+            >
+              {sendingApartado ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+              {sendingApartado ? "Creando…" : "Enviar link"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] font-mono">
@@ -456,6 +569,14 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
               </span>
             )}
             <button
+              onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
+              title="Ver oferta pública"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors text-violet-600 hover:bg-violet-50"
+            >
+              <Eye className="h-3 w-3" />
+              Ver
+            </button>
+            <button
               onClick={handleSendEmail}
               title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
               className={cn(
@@ -467,6 +588,19 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
             >
               <Mail className="h-3 w-3" />
               Enviar
+            </button>
+            <button
+              onClick={handleOpenApartado}
+              title={hasUrl ? 'Apartar unidad — envía PDF + link de reserva' : 'Descarga la oferta primero'}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
+                hasUrl
+                  ? "text-emerald-600 hover:bg-emerald-50"
+                  : "text-[hsl(var(--agent-muted))] cursor-not-allowed"
+              )}
+            >
+              <Link2 className="h-3 w-3" />
+              Apartar
             </button>
           </div>
           <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5 ml-auto">

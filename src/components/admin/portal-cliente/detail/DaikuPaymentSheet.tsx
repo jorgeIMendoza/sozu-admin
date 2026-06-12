@@ -153,13 +153,11 @@ const DaikuPaymentSheet = ({
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl max-h-[92vh] overflow-y-auto px-5 pb-8"
+        className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
       >
         {/* Header */}
         <div className="flex items-center gap-3 pt-2 mb-4">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <CreditCard className="w-5 h-5 text-primary" />
-          </div>
+          <CreditCard className="w-5 h-5 text-muted-foreground shrink-0" />
           <div className="min-w-0">
             <h3 className="font-display font-semibold text-foreground text-base">
               Pagar parcialidad
@@ -255,9 +253,9 @@ const DaikuPaymentSheet = ({
 
             <button
               onClick={onClose}
-              className="w-full h-12 rounded-xl bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity active:scale-[0.98]"
+              className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
             >
-              Entendido, cerrar
+              Cerrar
             </button>
           </TabsContent>
 

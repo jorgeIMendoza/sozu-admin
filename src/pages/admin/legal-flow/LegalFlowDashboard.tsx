@@ -1,13 +1,8 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, Kanban } from 'lucide-react';
-import KpiCards from '@/components/admin/legal-flow/dashboard/KpiCards';
 import DashboardFilters from '@/components/admin/legal-flow/dashboard/DashboardFilters';
 import PipelineBoard from '@/components/admin/legal-flow/dashboard/PipelineBoard';
-import AttentionPanel from '@/components/admin/legal-flow/dashboard/AttentionPanel';
-import RenewalsPanel from '@/components/admin/legal-flow/dashboard/RenewalsPanel';
-import SignatureTracker from '@/components/admin/legal-flow/dashboard/SignatureTracker';
-import ActivityFeed from '@/components/admin/legal-flow/dashboard/ActivityFeed';
 import WorkloadPanel from '@/components/admin/legal-flow/dashboard/WorkloadPanel';
 import StatusDistribution from '@/components/admin/legal-flow/dashboard/StatusDistribution';
 import CaseDrawer from '@/components/admin/legal-flow/dashboard/CaseDrawer';
@@ -21,26 +16,9 @@ const tabs: { key: ViewMode; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'operative', label: 'Vista Operativa', icon: Kanban },
 ];
 
-const KPI_FILTERS: Record<string, (r: LegalRequest) => boolean> = {
-  active: (r) => !['fully_signed', 'cancelled', 'rejected', 'archived'].includes(r.status),
-  review: (r) => ['in_legal_review', 'missing_information'].includes(r.status),
-  validation: (r) => ['in_validation', 'in_signature_process', 'partially_signed'].includes(r.status),
-  completed: (r) => r.status === 'fully_signed',
-  urgent: (r) => r.priority === 'high' && !['fully_signed', 'cancelled', 'archived'].includes(r.status),
-};
-
-const KPI_DRAWER_TITLES: Record<string, string> = {
-  active: 'Expedientes activos',
-  review: 'Pendientes de revisión',
-  validation: 'Firma titular pendiente',
-  completed: 'Firmados este mes',
-  urgent: 'Expedientes urgentes',
-};
-
 export default function Dashboard() {
   const [view, setView] = useState<ViewMode>('operative');
-  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerCases, setDrawerCases] = useState<LegalRequest[]>([]);
   const [drawerTitle, setDrawerTitle] = useState('');
@@ -50,14 +28,6 @@ export default function Dashboard() {
     setDrawerCases(cases);
     setDrawerOpen(true);
   }, []);
-
-  const handleKpiClick = useCallback((key: string | null) => {
-    setKpiFilter(key);
-    if (key && KPI_FILTERS[key]) {
-      const filtered = mockRequests.filter(KPI_FILTERS[key]);
-      openDrawer(KPI_DRAWER_TITLES[key] || 'Expedientes', filtered);
-    }
-  }, [openDrawer]);
 
   const handleStatusFilter = useCallback((status: CaseStatus) => {
     const filtered = mockRequests.filter(r => r.status === status);
@@ -96,28 +66,12 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Active filter indicator */}
-      {kpiFilter && (
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] text-muted-foreground">Filtro activo:</span>
-          <span className="text-[12px] font-semibold bg-primary/10 text-primary px-3 py-1 rounded-full">
-            {KPI_DRAWER_TITLES[kpiFilter]}
-          </span>
-          <button onClick={() => setKpiFilter(null)} className="text-[12px] text-muted-foreground hover:text-foreground underline cursor-pointer">
-            Limpiar
-          </button>
-        </div>
-      )}
-
-      {/* Filters */}
-      <DashboardFilters filters={filters} onFiltersChange={setFilters} />
-
-      {/* KPIs */}
-      <KpiCards activeFilter={kpiFilter} onFilterChange={handleKpiClick} />
+      {/* Buscador */}
+      <DashboardFilters value={search} onChange={setSearch} />
 
       {/* Views */}
       {view === 'operative' ? (
-        <OperativeView openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
+        <OperativeView search={search} openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
       ) : (
         <ExecutiveView openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
       )}
@@ -137,22 +91,10 @@ interface ViewProps {
   onStatusFilter: (status: CaseStatus) => void;
 }
 
-function OperativeView({ openDrawer, onStatusFilter }: ViewProps) {
+function OperativeView({ search, onStatusFilter }: ViewProps & { search: string }) {
   return (
     <div className="space-y-6">
-      <PipelineBoard onColumnClick={onStatusFilter} />
-      <div className="grid lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-8">
-          <AttentionPanel />
-        </div>
-        <div className="lg:col-span-4">
-          <SignatureTracker openDrawer={openDrawer} />
-        </div>
-      </div>
-      <div className="grid lg:grid-cols-2 gap-5">
-        <RenewalsPanel />
-        <ActivityFeed />
-      </div>
+      <PipelineBoard search={search} onColumnClick={onStatusFilter} />
     </div>
   );
 }
@@ -161,20 +103,12 @@ function ExecutiveView({ openDrawer, onStatusFilter }: ViewProps) {
   return (
     <div className="space-y-6">
       <div className="grid lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-6">
           <StatusDistribution onStatusClick={onStatusFilter} />
         </div>
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-6">
           <WorkloadPanel openDrawer={openDrawer} />
         </div>
-        <div className="lg:col-span-4">
-          <SignatureTracker openDrawer={openDrawer} />
-        </div>
-      </div>
-      <AttentionPanel />
-      <div className="grid lg:grid-cols-2 gap-5">
-        <RenewalsPanel />
-        <ActivityFeed />
       </div>
     </div>
   );

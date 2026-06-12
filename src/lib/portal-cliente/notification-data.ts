@@ -92,7 +92,7 @@ export function useNotifications(): Notification[] {
     queryKey: ["notifications", email],
     queryFn: async (): Promise<Notification[]> => {
       if (!email) return [];
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("notificaciones_cliente")
         .select(
           "id, id_cuenta_cobranza, tipo, categoria, titulo, descripcion, url_accion, etiqueta_accion, leida, descartada, fecha_creacion",
@@ -142,7 +142,7 @@ export function useMarkAsRead() {
   const email = useClientEmail();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("notificaciones_cliente")
         .update({ leida: true, fecha_lectura: new Date().toISOString() })
         .eq("id", Number(id));
@@ -158,7 +158,7 @@ export function useMarkAllAsRead() {
   return useMutation({
     mutationFn: async () => {
       if (!email) return;
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("notificaciones_cliente")
         .update({ leida: true, fecha_lectura: new Date().toISOString() })
         .eq("email_cliente", email)
@@ -175,7 +175,7 @@ export function useDismissNotification() {
   const email = useClientEmail();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("notificaciones_cliente")
         .update({ descartada: true, fecha_descarte: new Date().toISOString() })
         .eq("id", Number(id));

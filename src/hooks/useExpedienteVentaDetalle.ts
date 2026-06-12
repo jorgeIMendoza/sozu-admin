@@ -14,6 +14,8 @@ export interface ComisionistaDetalle {
   aprobada: boolean;
   pagada: boolean;
   url_evidencia_pago: string | null;
+  /** Fecha del pago al comisionista (YYYY-MM-DD) — null si aún no se ha pagado. */
+  fecha_pago_comision: string | null;
 }
 
 export type EstadoTimelineStep =
@@ -113,6 +115,32 @@ export interface ExpedienteVentaDetalle {
   estatus_pago: EstatusPagoFacturaDetalle;
   fecha_pago_comision: string | null;
   notas_rechazo_comision: string | null;
+  /** Datos del pago RECIBIDO POR SOZU del desarrollador (paso 12). Útiles
+   *  para que Alta Dirección valide que el cobro se ejecutó antes de
+   *  autorizar la dispersión interna. */
+  pago_sozu: {
+    /** True si `cuentas_cobranza.es_pagada_comision_venta = true`. */
+    recibido: boolean;
+    fecha: string | null;
+    monto: number | null;
+    /** Clave de rastreo STP del SPEI del desarrollador a SOZU. */
+    clave_rastreo: string | null;
+  };
+  /** Desglose financiero del expediente — alimenta el panel "Estado de
+   *  pagos" del Ciclo de Venta (Portal Alta Dirección / Administración). */
+  financial_breakdown: {
+    total_pagado: number;
+    total_pagado_pct: number;
+    saldo_pendiente: number;
+    saldo_pendiente_pct: number;
+    durante_obra_pendiente: number;
+    a_la_entrega_pendiente: number;
+    parcialidades_restantes: number;
+    efectivo_limite: number;
+    efectivo_pagado: number;
+    efectivo_aun_permitido: number;
+    valor_escrituracion: number;
+  };
 }
 
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -143,7 +171,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const { data: cuenta, error: ccErr } = await supabase
         .from("cuentas_cobranza")
         .select(
-          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion, estatus_autorizacion_comision, notas_rechazo_comision",
+          "id, id_oferta, precio_final, porcentaje_comision_venta, fecha_compra, es_aprobado, activo, iva_incluido, clabe_stp, url_factura_comision, url_factura_xml_comision, es_draft_factura_comision, fecha_pago_comision, es_pagada_comision_venta, monto_comision_pagado, clave_rastreo_comision_venta, fecha_actualizacion, contrato_draft, id_tipo_cancelacion, estatus_autorizacion_comision, notas_rechazo_comision, valor_uma",
         )
         .eq("id", cuentaId)
         .maybeSingle();
@@ -316,7 +344,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         ? await (supabase as any)
             .from("aplicaciones_pago")
             .select(
-              "id_acuerdo_pago, monto, pagos!fk_aplicaciones_pago_pago(id, fecha_pago, monto, url_recibo, url_cep, id_metodos_pago)",
+              "id_acuerdo_pago, monto, es_multa, pagos!fk_aplicaciones_pago_pago(id, fecha_pago, monto, url_recibo, url_cep, id_metodos_pago)",
             )
             .in("id_acuerdo_pago", acuerdoIds)
             .eq("activo", true)
@@ -491,6 +519,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           usuario?.rolId === AGENTE_INMOBILIARIO_ROL_ID && !esDominioInterno(c.email_usuario);
         const esExterno = esInmobiliariaExterna || esAgenteExterno;
         const pct = Number(c.porcentaje_comision) || 0;
+        const fechaPago = (c as any).fecha_pago_comision as string | null | undefined;
         return {
           email: c.email_usuario ?? "",
           nombre: persona?.nombre || usuario?.nombre || c.email_usuario || "",
@@ -501,6 +530,9 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           aprobada: !!c.aprobada,
           pagada: !!c.pagada,
           url_evidencia_pago: (c as any).url_evidencia_pago ?? null,
+          fecha_pago_comision: fechaPago
+            ? new Date(fechaPago).toISOString().slice(0, 10)
+            : null,
         };
       });
 
@@ -938,6 +970,63 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
       const rfcComprador =
         ((personasComp || []) as Array<any>).find((p) => p.rfc)?.rfc ?? "";
 
+      // Desglose financiero (alimenta el panel "Estado de pagos").
+      // Total Pagado = Σ aplicaciones_pago.monto WHERE es_multa = false.
+      // Saldo = precio_final - total_pagado.
+      // Durante obra / a la entrega pendientes = monto de acuerdos no
+      // completados, separados por concepto (3 = a la entrega).
+      // Parcialidades restantes = acuerdos concepto=5 no completados.
+      // Efectivo Límite = valor_uma * 8025 (regla CFDI 2024).
+      // Efectivo Pagado = Σ aplicaciones cuyo pago vino con metodo=1.
+      // Valor escrituración = precio_final (bodegas/estac extras quedan
+      // fuera de scope hasta que se conecten desde ofertas).
+      const aplicacionesPagoRows = (aplicacionesPago || []) as Array<{
+        id_acuerdo_pago: number;
+        monto: number | null;
+        es_multa: boolean | null;
+        pagos: { id_metodos_pago: number | null; monto: number | null } | null;
+      }>;
+      const totalPagadoFin = aplicacionesPagoRows
+        .filter((ap) => !ap.es_multa)
+        .reduce((s, ap) => s + Number(ap.monto ?? 0), 0);
+      const efectivoPagado = aplicacionesPagoRows
+        .filter((ap) => !ap.es_multa && ap.pagos?.id_metodos_pago === 1)
+        .reduce((s, ap) => s + Number(ap.monto ?? 0), 0);
+      const acuerdosArr = (acuerdos || []) as Array<{
+        id: number;
+        id_concepto: number;
+        monto: number | null;
+        pago_completado: boolean | null;
+      }>;
+      const duranteObraPendiente = acuerdosArr
+        .filter((a) => a.id_concepto !== 3 && !a.pago_completado)
+        .reduce((s, a) => s + Number(a.monto ?? 0), 0);
+      const aLaEntregaPendiente = acuerdosArr
+        .filter((a) => a.id_concepto === 3 && !a.pago_completado)
+        .reduce((s, a) => s + Number(a.monto ?? 0), 0);
+      const parcialidadesRestantes = acuerdosArr.filter(
+        (a) => a.id_concepto === 5 && !a.pago_completado,
+      ).length;
+      const valorUma = Number((cuenta as any)?.valor_uma ?? 0);
+      const efectivoLimite = +(valorUma * 8025).toFixed(2);
+      const efectivoAunPermitido = Math.max(0, efectivoLimite - efectivoPagado);
+      const saldoPendiente = Math.max(0, precioFinal - totalPagadoFin);
+      const totalPagadoPct = precioFinal > 0 ? (totalPagadoFin / precioFinal) * 100 : 0;
+      const saldoPendientePct = precioFinal > 0 ? (saldoPendiente / precioFinal) * 100 : 0;
+      const financialBreakdown = {
+        total_pagado: +totalPagadoFin.toFixed(2),
+        total_pagado_pct: +totalPagadoPct.toFixed(2),
+        saldo_pendiente: +saldoPendiente.toFixed(2),
+        saldo_pendiente_pct: +saldoPendientePct.toFixed(2),
+        durante_obra_pendiente: +duranteObraPendiente.toFixed(2),
+        a_la_entrega_pendiente: +aLaEntregaPendiente.toFixed(2),
+        parcialidades_restantes: parcialidadesRestantes,
+        efectivo_limite: efectivoLimite,
+        efectivo_pagado: +efectivoPagado.toFixed(2),
+        efectivo_aun_permitido: +efectivoAunPermitido.toFixed(2),
+        valor_escrituracion: precioFinal,
+      };
+
       return {
         id_cuenta_cobranza: cuentaId,
         folio: formatCuentaCobranzaId(cuentaId, tipoCuenta),
@@ -1011,6 +1100,19 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
           : null,
         notas_rechazo_comision: (cuenta as any)?.notas_rechazo_comision ?? null,
+        pago_sozu: {
+          recibido: !!(cuenta as any)?.es_pagada_comision_venta,
+          fecha: (cuenta as any)?.fecha_pago_comision
+            ? new Date((cuenta as any).fecha_pago_comision).toISOString().slice(0, 10)
+            : null,
+          monto:
+            (cuenta as any)?.monto_comision_pagado != null
+              ? Number((cuenta as any).monto_comision_pagado)
+              : null,
+          clave_rastreo:
+            ((cuenta as any)?.clave_rastreo_comision_venta as string | null) ?? null,
+        },
+        financial_breakdown: financialBreakdown,
       };
     },
   });

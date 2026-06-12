@@ -26,6 +26,7 @@ import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Decision = "pendiente" | "aprobado" | "rechazado";
 
@@ -51,6 +52,7 @@ export function ComisionInternaContent({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { registrarActualizacion } = useActivityLogger();
+  const { user } = useAuth();
 
   // Decisión individual por comisionista (email como key)
   const [decisiones, setDecisiones] = useState<Record<string, Decision>>({});
@@ -121,18 +123,16 @@ export function ComisionInternaContent({
       const aprobados = internos.filter((c) => decisiones[c.email] === "aprobado");
       const rechazados = internos.filter((c) => decisiones[c.email] === "rechazado");
 
-      // 1) Aprobados → marcar aprobada=true Y pagada=true (autorización + dispersión).
-      // El check constraint chk_comisionistas_pagos_coherencia exige que pagada=true
-      // sólo sea válido cuando aprobada=true, por eso se setean ambos en un solo UPDATE.
+      // 1) Aprobados → marcar SOLO aprobada=true. La dispersión efectiva
+      //    (pagada=true + fecha_pago_comision) la ejecuta el Portal de
+      //    Administración en la bandeja "Dispersiones internas pendientes",
+      //    permitiendo separar la autorización (Alta Dirección) del pago
+      //    operativo (Admin).
       if (aprobados.length > 0) {
         const emails = aprobados.map((c) => c.email);
         const { error: errAp } = await (supabase as any)
           .from("comisionistas")
-          .update({
-            aprobada: true,
-            pagada: true,
-            fecha_pago_comision: new Date().toISOString(),
-          })
+          .update({ aprobada: true })
           .eq("id_cuenta_cobranza", cuentaId)
           .eq("activo", true)
           .in("email_usuario", emails);
@@ -161,6 +161,54 @@ export function ComisionInternaContent({
           "rechazar_dispersion_comision_interna",
         );
       }
+
+      // 3) Persistir la decisión a nivel cuenta para que la Bandeja de
+      //    Validaciones sepa si la fila debe seguir visible:
+      //    - "Autorizado": todos los comisionistas internos aprobados →
+      //      la fila debe DESAPARECER del listado de Alta Dirección.
+      //    - "Rechazado": al menos un comisionista rechazado (parcial o
+      //      total) → la fila PERMANECE visible con el badge actualizado.
+      //    El DDL puede no estar aplicado todavía (ver
+      //    Ejecuciones_manuales/autorizacion_comision_sozu.md); en ese caso
+      //    PostgREST devuelve 42703 y silenciamos para no bloquear el flujo
+      //    de aprobación, que sigue siendo válido en BD via `comisionistas`.
+      const nuevoEstatus: "Autorizado" | "Rechazado" =
+        rechazados.length === 0 ? "Autorizado" : "Rechazado";
+      const notasRechazo = rechazados.length
+        ? rechazados
+            .map((c) => `${c.email}: ${notas[c.email] || "(sin nota)"}`)
+            .join(" | ")
+        : null;
+
+      // Intentamos UPDATE escalonado: primero con todas las columnas auxiliares;
+      // si alguna no existe (42703 — DDL parcial), reintentamos sólo con la
+      // columna core `estatus_autorizacion_comision_interna`. Si esa tampoco
+      // existe, silenciamos: el flujo en `comisionistas` ya quedó persistido.
+      const updateCuenta = async (payload: Record<string, unknown>) =>
+        await (supabase as any)
+          .from("cuentas_cobranza")
+          .update(payload)
+          .eq("id", cuentaId);
+
+      const payloadCompleto: Record<string, unknown> = {
+        estatus_autorizacion_comision_interna: nuevoEstatus,
+        fecha_autorizacion_comision_interna: new Date().toISOString(),
+        email_autoriza_comision_interna: user?.email ?? null,
+      };
+      if (notasRechazo != null) {
+        payloadCompleto.notas_rechazo_comision_interna = notasRechazo;
+      }
+
+      let respAuth = await updateCuenta(payloadCompleto);
+      if (respAuth.error && respAuth.error.code === "42703") {
+        // Reintento minimalista — sólo la columna core.
+        respAuth = await updateCuenta({
+          estatus_autorizacion_comision_interna: nuevoEstatus,
+        });
+      }
+      if (respAuth.error && respAuth.error.code !== "42703") {
+        throw respAuth.error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bandeja-comisionistas-pendientes"] });
@@ -168,6 +216,9 @@ export function ComisionInternaContent({
         queryKey: ["expediente_venta_detalle", entity.folio_cuenta],
       });
       queryClient.invalidateQueries({ queryKey: ["comisiones_internas_alta_direccion"] });
+      // Tras aprobar, la cuenta debe aparecer en la bandeja "Dispersiones
+      // internas pendientes" del Portal de Administración.
+      queryClient.invalidateQueries({ queryKey: ["dispersiones_internas_pendientes"] });
       toast({
         title: "Decisiones guardadas",
         description: `${resumen.aprobados} aprobados · ${resumen.rechazados} rechazados.`,
@@ -177,7 +228,7 @@ export function ComisionInternaContent({
     onError: (err: unknown) => {
       toast({
         title: "Error al guardar",
-        description: err instanceof Error ? err.message : "No se pudo guardar las decisiones.",
+        description: pgErrorMessage(err) ?? "No se pudo guardar las decisiones.",
         variant: "destructive",
       });
     },
@@ -355,6 +406,46 @@ export function ComisionInternaContent({
         </div>
       </Section>
 
+      {/* ─── Validación del Pago del desarrollador a SOZU ───
+           Alta Dirección requiere certeza de que el cobro a SOZU ya se ejecutó
+           antes de autorizar la dispersión interna. Mostramos estado,
+           fecha, monto y la clave de rastreo STP del SPEI. */}
+      <Section title="Pago del desarrollador a SOZU">
+        <PagoStatusRow
+          estado={detalle.pago_sozu.recibido ? "recibido" : "pendiente"}
+          labelOk="Recibido"
+          labelPending="Pendiente"
+          fecha={detalle.pago_sozu.fecha}
+          monto={detalle.pago_sozu.monto}
+          claveRastreo={detalle.pago_sozu.clave_rastreo}
+          fallback="No aplica hasta que la factura SOZU sea timbrada."
+        />
+      </Section>
+
+      {/* ─── Pagos a comisionistas externos ───
+           Sólo aplica cuando la cuenta tiene comisionistas externos
+           (inmobiliarias / agentes externos). No todas las cuentas los
+           tienen — en su ausencia esta sección no se muestra.
+           Mostramos por externo: estado de pago + fecha + monto + evidencia. */}
+      {externos.length > 0 && (
+        <Section title="Pagos a comisionistas externos">
+          <div className="space-y-2">
+            {externos.map((c) => (
+              <PagoExternoRow
+                key={c.email}
+                nombre={c.nombre}
+                rol={c.rol}
+                porcentaje={c.porcentaje}
+                monto={c.monto}
+                pagada={c.pagada}
+                fecha={c.fecha_pago_comision}
+                urlEvidencia={c.url_evidencia_pago}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* ─── Comisionistas internos con acciones ─── */}
       <Section
         title="Comisionistas internos"
@@ -370,11 +461,18 @@ export function ComisionInternaContent({
           <>
             {!readOnly && (
               <div className="flex items-center gap-2 mb-3">
-                <Button size="sm" variant="outline" className="h-8" onClick={aprobarTodos}>
+                <Button
+                  data-cta="alta-direccion.comision-interna.aprobar-todos"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={aprobarTodos}
+                >
                   <Check className="h-3.5 w-3.5 mr-1" />
                   Aprobar todos
                 </Button>
                 <Button
+                  data-cta="alta-direccion.comision-interna.rechazar-todos"
                   size="sm"
                   variant="outline"
                   className="h-8 border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
@@ -385,6 +483,7 @@ export function ComisionInternaContent({
                 </Button>
                 {(resumen.aprobados > 0 || resumen.rechazados > 0) && (
                   <Button
+                    data-cta="alta-direccion.comision-interna.limpiar-seleccion"
                     size="sm"
                     variant="ghost"
                     className="h-8 text-xs text-muted-foreground"
@@ -395,6 +494,21 @@ export function ComisionInternaContent({
                 )}
               </div>
             )}
+
+            {/* Totales de la dispersión (sumatoria de % y monto) — útiles
+                para que Alta Dirección vea de un vistazo cuánto se va a
+                dispersar al equipo interno y qué fracción del precio
+                representa. */}
+            <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Total a dispersar ({internos.length}{" "}
+                {internos.length === 1 ? "comisionista" : "comisionistas"})
+              </span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {internos.reduce((s, c) => s + c.porcentaje, 0).toFixed(2)}% ·{" "}
+                {fmtMxn(totalDispersar)}
+              </span>
+            </div>
 
             <ul className="space-y-2">
               {internos.map((c) => {
@@ -523,6 +637,7 @@ export function ComisionInternaContent({
                     Cancelar
                   </Button>
                   <Button
+                    data-cta="alta-direccion.comision-interna.guardar-decisiones"
                     size="sm"
                     disabled={!puedeGuardar || guardarMutation.isPending}
                     onClick={() => guardarMutation.mutate()}
@@ -656,4 +771,162 @@ function DocRow({
       </div>
     </div>
   );
+}
+
+/**
+ * Fila de estado del pago a SOZU. Muestra badge de estado, fecha, monto y
+ * clave de rastreo STP (mono) cuando el pago se ejecutó. Si el pago aún no
+ * llega, muestra el badge "Pendiente" y un fallback explicativo.
+ */
+function PagoStatusRow({
+  estado,
+  labelOk,
+  labelPending,
+  fecha,
+  monto,
+  claveRastreo,
+  fallback,
+}: {
+  estado: "recibido" | "pendiente";
+  labelOk: string;
+  labelPending: string;
+  fecha: string | null;
+  monto: number | null;
+  claveRastreo: string | null;
+  fallback?: string;
+}) {
+  const isOk = estado === "recibido";
+  return (
+    <div className="border border-border rounded-md px-3 py-2 bg-card text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px]",
+              isOk
+                ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+                : "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40",
+            )}
+          >
+            {isOk ? labelOk : labelPending}
+          </Badge>
+          {isOk ? (
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              {fecha && (
+                <div>
+                  <span className="text-muted-foreground">Fecha:</span>{" "}
+                  <span className="tabular-nums">{fecha}</span>
+                </div>
+              )}
+              {monto != null && monto > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Monto:</span>{" "}
+                  <span className="tabular-nums font-semibold">{fmtMxn(monto)}</span>
+                </div>
+              )}
+              {claveRastreo && (
+                <div className="col-span-2 mt-0.5">
+                  <span className="text-muted-foreground">Clave rastreo STP:</span>{" "}
+                  <span className="font-mono break-all">{claveRastreo}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            fallback && (
+              <p className="mt-1.5 text-xs text-muted-foreground">{fallback}</p>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fila de pago a un comisionista externo. Muestra nombre + rol + % + monto +
+ * estado de pago (Pagado/Pendiente) + fecha y link a la evidencia
+ * (comprobante) cuando ya se ejecutó.
+ */
+function PagoExternoRow({
+  nombre,
+  rol,
+  porcentaje,
+  monto,
+  pagada,
+  fecha,
+  urlEvidencia,
+}: {
+  nombre: string;
+  rol: string;
+  porcentaje: number;
+  monto: number;
+  pagada: boolean;
+  fecha: string | null;
+  urlEvidencia: string | null;
+}) {
+  return (
+    <div className="border border-border rounded-md px-3 py-2 bg-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{nombre}</p>
+          <p className="text-xs text-muted-foreground">{rol}</p>
+          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+            {porcentaje.toFixed(2)}% · {fmtMxn(monto)}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[10px] shrink-0",
+            pagada
+              ? "border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40"
+              : "border-amber-400 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40",
+          )}
+        >
+          {pagada ? "Pagado" : "Pendiente"}
+        </Badge>
+      </div>
+      {pagada && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {fecha ? `Fecha: ${fecha}` : "Sin fecha registrada"}
+          </span>
+          {urlEvidencia ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[10px] px-2"
+              title="Ver evidencia de pago"
+              onClick={() => window.open(urlEvidencia, "_blank")}
+            >
+              <FileText className="h-3 w-3 mr-1" />
+              Ver evidencia
+            </Button>
+          ) : (
+            <span className="text-muted-foreground italic">Sin evidencia</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Extrae el mensaje real del error. supabase-js devuelve PostgrestError
+ * como objeto plano (`{ message, details, hint, code }`) — `err instanceof
+ * Error` falla y el mensaje se pierde. Este helper cubre los shapes comunes
+ * (Error, PostgrestError, AuthError, string).
+ */
+function pgErrorMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (parts.length > 0) return parts.join(" — ");
+  }
+  return null;
 }

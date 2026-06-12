@@ -25,8 +25,7 @@ import {
 } from "lucide-react";
 import type { StageInfo, InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import {
-  getEscrituracionData,
-  type EscrituracionData,
+  type AppointmentSlot,
   type ScheduledAppointment,
 } from "@/lib/portal-cliente/escrituracion-data";
 
@@ -43,21 +42,35 @@ const EscrituracionSheet = ({
   open,
   onClose,
 }: EscrituracionSheetProps) => {
-  const data = getEscrituracionData(investment.property.id);
+  const rawNotary = investment.property.notary;
+  const data = rawNotary
+    ? {
+        notary: {
+          name: rawNotary.notaria,
+          notaryName: rawNotary.name,
+          address: rawNotary.address,
+          phone: rawNotary.phone,
+          email: rawNotary.email,
+          mapsUrl: `https://maps.google.com/?q=${encodeURIComponent(rawNotary.address)}`,
+        },
+        costs: { available: false as const, items: [] as { concept: string; amount: number }[], totalAmount: 0, amountPaid: 0, amountPending: 0 },
+        deedDocument: { available: false as const, fileName: undefined as string | undefined },
+        availableSlots: [] as AppointmentSlot[],
+        scheduledAppointment: undefined as ScheduledAppointment | undefined,
+      }
+    : null;
   const [reviewed, setReviewed] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [appointment, setAppointment] = useState<ScheduledAppointment | null>(
-    data?.scheduledAppointment || null
-  );
+  const [appointment, setAppointment] = useState<ScheduledAppointment | null>(null);
 
   if (!data) {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
+          className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
         >
           <div className="flex flex-col items-center text-center pt-8 pb-4 gap-4">
             <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
@@ -100,7 +113,7 @@ const EscrituracionSheet = ({
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
+          className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
         >
           <div className="flex flex-col items-center text-center pt-6 pb-2 gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -156,13 +169,12 @@ const EscrituracionSheet = ({
             <Calendar className="w-4 h-4" />
             Agregar a calendario
           </Button>
-          <Button
-            variant="outline"
-            className="w-full mt-2 rounded-xl h-11 text-sm"
+          <button
             onClick={onClose}
+            className="w-full mt-2 h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
           >
             Cerrar
-          </Button>
+          </button>
         </SheetContent>
       </Sheet>
     );
@@ -212,14 +224,12 @@ const EscrituracionSheet = ({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
+        className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
       >
         {/* Header */}
         <SheetHeader className="text-left pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-              <Scale className="w-5 h-5 text-primary" />
-            </div>
+            <Scale className="w-5 h-5 text-muted-foreground shrink-0" />
             <div>
               <SheetTitle className="text-foreground font-display">
                 Escrituración en proceso

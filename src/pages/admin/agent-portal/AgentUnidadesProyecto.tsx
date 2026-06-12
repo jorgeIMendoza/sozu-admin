@@ -35,6 +35,7 @@ const AgentUnidadesProyecto = () => {
   const navigate = useNavigate();
   const { permissions: agentPerms } = useAgentPortalPermissions();
   const canGenerateOffer = agentPerms['/admin/agent/inventario']?.canGenerateOffer;
+  const canGenerateDigitalOffer = agentPerms['/admin/agent/inventario']?.canGenerateDigitalOffer;
   const { profile } = useAuth();
   const { impersonatedAgentPersonaId, impersonatedAgentName, isImpersonating } = useAgentImpersonation();
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
@@ -693,6 +694,7 @@ const AgentUnidadesProyecto = () => {
                       preSelectedSchemeId={selectedSchemeId}
                       hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
                       forceLight={true}
+                      enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
                         <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-emerald-600 text-white font-semibold text-sm shadow-lg hover:bg-emerald-700 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />

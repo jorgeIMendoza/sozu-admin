@@ -127,6 +127,12 @@ async function fetchAllComisionistas() {
     }
   });
 
+  // SELECT amplía estatus_autorizacion_comision_externa/interna para que
+  // la página Pagar Comisiones pueda mostrar el seguimiento de la
+  // decisión de Alta Dirección (En espera / Autorizado / Rechazado).
+  // El filtro `.eq("aprobada", true)` se removió: la página ahora muestra
+  // TODAS las comisiones pendientes (incluyendo las que aún están en
+  // validación por Alta Dirección) para visibilidad de seguimiento.
   while (hasMore) {
     const { data, error } = await supabase
       .from("comisionistas")
@@ -142,6 +148,8 @@ async function fetchAllComisionistas() {
           precio_final,
           url_factura_comision,
           es_pagada_comision_venta,
+          estatus_autorizacion_comision_externa,
+          estatus_autorizacion_comision_interna,
           acuerdos_pago!fk_acpago_cuenta(
             id_concepto,
             pago_completado,
@@ -172,7 +180,6 @@ async function fetchAllComisionistas() {
         )
       `)
       .eq("activo", true)
-      .eq("aprobada", true)
       .range(from, from + batchSize - 1);
 
     if (error) throw error;
@@ -471,10 +478,18 @@ export default function PagarComisiones() {
           porcentajeComision: com.porcentaje_comision,
           montoComision,
           pagada: com.pagada,
+          aprobada: com.aprobada,
           urlEvidencia: com.url_evidencia_pago,
           urlFacturaExterna: com.urlFacturaExterna,
           facturaComisionSozu: com.facturaComisionSozu,
           esPagadaComisionVenta: cuenta.es_pagada_comision_venta === true,
+          // Estatus de autorización por Alta Dirección — fuente de verdad
+          // del seguimiento que se muestra al equipo de Pagar Comisiones.
+          estatusAutorizacionExterna:
+            (cuenta as any).estatus_autorizacion_comision_externa ?? "En espera",
+          estatusAutorizacionInterna:
+            (cuenta as any).estatus_autorizacion_comision_interna ?? "En espera",
+          esExterno: com.esExterno || false,
           fechaPagoEnganche
         });
 
@@ -536,6 +551,10 @@ export default function PagarComisiones() {
             porcentajeTotalComision: 0,
             facturaComisionSozu: com.facturaComisionSozu || null,
             esPagadaComisionVenta: cuenta.es_pagada_comision_venta === true,
+            estatusAutorizacionExterna:
+              (cuenta as any).estatus_autorizacion_comision_externa ?? "En espera",
+            estatusAutorizacionInterna:
+              (cuenta as any).estatus_autorizacion_comision_interna ?? "En espera",
             comisionistas: []
           };
         }
@@ -555,8 +574,13 @@ export default function PagarComisiones() {
           porcentajeComision: com.porcentaje_comision,
           montoComision,
           pagada: com.pagada,
+          aprobada: com.aprobada,
           urlEvidencia: com.url_evidencia_pago,
-          esPagadaComisionVenta: com.cuentas_cobranza?.es_pagada_comision_venta === true
+          esPagadaComisionVenta: com.cuentas_cobranza?.es_pagada_comision_venta === true,
+          estatusAutorizacionExterna:
+            (com.cuentas_cobranza as any)?.estatus_autorizacion_comision_externa ?? "En espera",
+          estatusAutorizacionInterna:
+            (com.cuentas_cobranza as any)?.estatus_autorizacion_comision_interna ?? "En espera"
         });
 
         return acc;

@@ -1,12 +1,13 @@
 import {
   User, Mail, Phone, FileText, LogOut, Shield, ChevronRight,
-  CheckCircle2, AlertTriangle, Building2, CreditCard,
-  Lock, Eye, BadgeCheck, AlertCircle, Clock, Loader2,
-  Check, X,
+  CheckCircle2, Building2, CreditCard,
+  Lock, Eye, EyeOff, BadgeCheck, AlertCircle, Clock, Loader2,
+  Check, X, Download,
 } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { Progress } from "@/components/ui/progress";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 type VerificationStatus = "verified" | "review" | "incomplete";
+type DocStatus = "verified" | "rejected" | "review" | "missing";
 
 const ClientePerfil = () => {
   const { profile, signOut, signIn, updatePassword } = useAuth();
@@ -28,6 +30,18 @@ const ClientePerfil = () => {
   const effectivePersonaId = isImpersonating ? impersonatedClientePersonaId : profile?.id_persona;
 
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -84,15 +98,13 @@ const ClientePerfil = () => {
     enabled: !!persona?.uso_cfdi,
   });
 
-  // Required document type IDs for client profile (identity, address, fiscal, personal)
-  const REQUIRED_DOC_TYPES = [
-    { id: 2, label: "Frente INE", group: "Identificación" },
-    { id: 3, label: "Reverso INE", group: "Identificación" },
-    { id: 4, label: "Pasaporte", group: "Identificación" },
-    { id: 8, label: "Comprobante de domicilio", group: "Domicilio" },
-    { id: 6, label: "Constancia de situación fiscal", group: "Fiscal" },
-    { id: 5, label: "CURP", group: "Documentos personales" },
-  ];
+  const EXPEDIENTE_SLOTS = [
+    { key: "ine",        label: "INE / Identificación oficial",   tipoIds: [2, 3, 4], required: true  },
+    { key: "curp",       label: "CURP",                           tipoIds: [5],       required: true  },
+    { key: "csf",        label: "Constancia de situación fiscal", tipoIds: [6],       required: true  },
+    { key: "matrimonio", label: "Acta de matrimonio",             tipoIds: [11],      required: false },
+    { key: "domicilio",  label: "Comprobante de domicilio",       tipoIds: [8],       required: true  },
+  ] as const;
 
   // Fetch documents for persona
   const { data: documentos = [] } = useQuery({
@@ -109,7 +121,9 @@ const ClientePerfil = () => {
         id: d.id,
         name: d.tipos_documento?.nombre || "Documento",
         tipoId: d.id_tipo_documento as number,
-        status: d.id_estatus_verificacion === 2 ? "ok" as const : "pending" as const,
+        status: (d.id_estatus_verificacion === 2 ? "verified"
+               : d.id_estatus_verificacion === 3 ? "rejected"
+               : "review") as DocStatus,
         date: d.fecha_creacion ? new Date(d.fecha_creacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : null,
         url: d.url,
       }));
@@ -150,45 +164,35 @@ const ClientePerfil = () => {
 
   const allPasswordChecksPass = passwordChecks.minLength && passwordChecks.hasUpper && passwordChecks.hasLower && passwordChecks.hasNumber && passwordChecks.hasSpecial && passwordChecks.matches;
 
+  // Botón verde: passwords coinciden + mínimo 8 chars + contraseña actual llenada
+  const pwButtonReady = passwordChecks.matches && passwordChecks.minLength && !!currentPassword && !changingPassword;
+
   const handleChangePassword = async () => {
-    if (!allPasswordChecksPass) {
-      toast.error("La contraseña no cumple con todos los requisitos");
-      return;
-    }
-    if (!currentPassword) {
-      toast.error("Ingresa tu contraseña actual");
-      return;
-    }
+    if (!currentPassword) { toast.error("Ingresa tu contraseña actual"); return; }
+    if (!passwordChecks.minLength) { toast.error("La contraseña debe tener al menos 8 caracteres"); return; }
+    if (!passwordChecks.matches) { toast.error("Las contraseñas no coinciden"); return; }
+    if (!allPasswordChecksPass) { toast.error("La contraseña no cumple todos los requisitos de seguridad"); return; }
     setChangingPassword(true);
-    // Verify current password first
-    const email = profile?.email;
-    if (!email) {
-      toast.error("No se pudo obtener el email del usuario");
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        toast.error((error as any)?.message || "Error al cambiar contraseña.");
+        console.error("[updatePassword]", error);
+      } else {
+        toast.success("Contraseña actualizada correctamente");
+        setShowChangePassword(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    } finally {
       setChangingPassword(false);
-      return;
-    }
-    const { error: signInError } = await signIn(email, currentPassword);
-    if (signInError) {
-      toast.error("La contraseña actual es incorrecta");
-      setChangingPassword(false);
-      return;
-    }
-    const { error } = await updatePassword(newPassword);
-    setChangingPassword(false);
-    if (error) {
-      toast.error("Error al cambiar contraseña");
-    } else {
-      toast.success("Contraseña actualizada correctamente");
-      setShowChangePassword(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
     }
   };
 
   // Profile completion
   const uploadedTypeIds = new Set(documentos.map((d) => d.tipoId));
-  const hasIdentification = uploadedTypeIds.has(2) || uploadedTypeIds.has(4);
+  const hasIdentification = uploadedTypeIds.has(2) || uploadedTypeIds.has(3) || uploadedTypeIds.has(4);
   const completionFields = persona ? [
     persona.nombre_legal,
     persona.rfc,
@@ -289,45 +293,54 @@ const ClientePerfil = () => {
         <InfoRow label="Teléfono" value={persona?.telefono ? `${persona.clave_pais_telefono || "+52"} ${persona.telefono}` : "—"} icon={Phone} />
       </Section>
 
-      {/* Docs */}
-      <Section title="Documentación" icon={FileText}>
+      {/* Expediente */}
+      <Section title="Expediente" icon={FileText}>
         <div className="space-y-0">
-          {REQUIRED_DOC_TYPES.map((reqDoc, i) => {
-            const uploaded = documentos.find((d) => d.tipoId === reqDoc.id);
-            const isLast = i === REQUIRED_DOC_TYPES.length - 1;
+          {EXPEDIENTE_SLOTS.map((slot, i) => {
+            const slotDocs = documentos.filter((d) => (slot.tipoIds as readonly number[]).includes(d.tipoId));
+            const bestDoc =
+              slotDocs.find((d) => d.status === "verified") ||
+              slotDocs.find((d) => d.status === "review") ||
+              slotDocs[0];
+            const slotStatus: DocStatus = bestDoc?.status ?? "missing";
+            const isLast = i === EXPEDIENTE_SLOTS.length - 1;
+
+            const cfg: Record<DocStatus, { label: string; badgeCls: string; SlotIcon: React.ElementType; iconCls: string }> = {
+              verified: { label: "Aprobado",    badgeCls: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30", SlotIcon: CheckCircle2,  iconCls: "text-emerald-500" },
+              review:   { label: "En revisión", badgeCls: "bg-amber-50 text-amber-600 dark:bg-amber-950/30",       SlotIcon: Clock,         iconCls: "text-amber-500"  },
+              rejected: { label: "Rechazado",   badgeCls: "bg-red-50 text-red-500 dark:bg-red-950/30",             SlotIcon: X,             iconCls: "text-red-500"    },
+              missing:  {
+                label:     slot.required ? "Falta" : "Opcional",
+                badgeCls:  slot.required ? "bg-red-50 text-red-500 dark:bg-red-950/30" : "bg-muted text-muted-foreground",
+                SlotIcon:  slot.required ? AlertCircle : FileText,
+                iconCls:   slot.required ? "text-muted-foreground/40" : "text-muted-foreground/25",
+              },
+            };
+            const { label, badgeCls, SlotIcon, iconCls } = cfg[slotStatus];
+
             return (
-              <div key={reqDoc.id} className={`flex items-center gap-3 py-3 ${!isLast ? "border-b border-border/60" : ""}`}>
-                {uploaded?.status === "ok" ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                ) : uploaded ? (
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-                )}
+              <div key={slot.key} className={`flex items-center gap-3 py-3 ${!isLast ? "border-b border-border/60" : ""}`}>
+                <SlotIcon className={`w-4 h-4 shrink-0 ${iconCls}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{reqDoc.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{reqDoc.group}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{slot.label}</p>
+                  {bestDoc?.date && (
+                    <p className="text-[11px] text-muted-foreground">{bestDoc.date}</p>
+                  )}
                 </div>
-                {uploaded ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    {uploaded.url && (
-                      <a href={uploaded.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-                        <Eye className="w-4 h-4" />
-                      </a>
-                    )}
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                      uploaded.status === "ok"
-                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30"
-                        : "bg-amber-50 text-amber-600 dark:bg-amber-950/30"
-                    }`}>
-                      {uploaded.status === "ok" ? "Verificado" : "En revisión"}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-500 dark:bg-red-950/30 shrink-0">
-                    Falta
+                <div className="flex items-center gap-2 shrink-0">
+                  {bestDoc?.url && (
+                    <button
+                      onClick={() => setPreviewDoc({ title: slot.label, url: bestDoc.url! })}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Ver ${slot.label}`}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  )}
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${badgeCls}`}>
+                    {label}
                   </span>
-                )}
+                </div>
               </div>
             );
           })}
@@ -368,8 +381,10 @@ const ClientePerfil = () => {
       {/* Security */}
       <Section title="Seguridad" icon={Shield}>
         <button
-          onClick={() => setShowChangePassword(true)}
-          className="w-full flex items-center justify-between py-2.5 hover:bg-accent/30 -mx-1 px-1 rounded-lg transition-colors"
+          data-cta="cliente.perfil.cambiar-password"
+          onClick={isImpersonating ? undefined : () => setShowChangePassword(true)}
+          disabled={isImpersonating}
+          className={`w-full flex items-center justify-between py-2.5 -mx-1 px-1 rounded-lg transition-colors ${isImpersonating ? "opacity-40 cursor-not-allowed" : "hover:bg-accent/30"}`}
         >
           <span className="flex items-center gap-2.5 text-sm text-foreground">
             <Lock className="w-4 h-4 text-muted-foreground" />
@@ -382,6 +397,7 @@ const ClientePerfil = () => {
       {/* Bottom actions */}
       <div className="space-y-0">
         <button
+          data-cta="cliente.perfil.cerrar-sesion"
           onClick={signOut}
           className="w-full flex items-center gap-3 py-3.5 text-left hover:bg-accent/50 transition-colors rounded-lg px-1"
         >
@@ -390,79 +406,173 @@ const ClientePerfil = () => {
         </button>
       </div>
 
-      {/* Change Password Dialog */}
-      <Dialog open={showChangePassword} onOpenChange={(open) => {
-        setShowChangePassword(open);
-        if (!open) {
+      {/* Document Viewer — Dialog en desktop, Sheet en mobile */}
+      {previewDoc && isDesktop ? (
+        <Dialog open={!!previewDoc} onOpenChange={(v) => { if (!v) setPreviewDoc(null); }}>
+          <DialogContent className="p-0 max-w-3xl h-[85vh] flex flex-col [&>button:last-child]:hidden">
+            <DocViewerHeader doc={previewDoc} />
+            <DocViewerBody doc={previewDoc} />
+            <div className="px-4 pb-6 pt-4 border-t border-border/50 space-y-2 shrink-0">
+              <a
+                href={previewDoc.url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Descargar
+              </a>
+              <button
+                onClick={() => setPreviewDoc(null)}
+                className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={!!previewDoc} onOpenChange={(v) => { if (!v) setPreviewDoc(null); }}>
+          <SheetContent side="bottom" className="max-h-[75dvh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden">
+            {previewDoc && (
+              <>
+                <DocViewerHeader doc={previewDoc} />
+                <DocViewerBody doc={previewDoc} />
+                <div className="px-4 pb-6 pt-4 border-t border-border/50 space-y-2 shrink-0">
+                  <a
+                    href={previewDoc.url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar
+                  </a>
+                  <button
+                    onClick={() => setPreviewDoc(null)}
+                    className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Change Password — Dialog desktop / Sheet mobile */}
+      {(() => {
+        const onClose = () => {
+          setShowChangePassword(false);
           setCurrentPassword("");
           setNewPassword("");
           setConfirmPassword("");
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cambiar contraseña</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Contraseña actual</label>
-              <Input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Ingresa tu contraseña actual"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Nueva contraseña</label>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Ingresa la nueva contraseña"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Confirmar contraseña</label>
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repite la nueva contraseña"
-              />
-            </div>
-
-            {/* Password requirements */}
-            {newPassword.length > 0 && (
-              <div className="space-y-1.5 text-xs">
-                <p className="text-muted-foreground font-medium mb-1">La contraseña debe cumplir:</p>
-                <PasswordCheck label="Mínimo 8 caracteres" ok={passwordChecks.minLength} />
-                <PasswordCheck label="Al menos una letra mayúscula" ok={passwordChecks.hasUpper} />
-                <PasswordCheck label="Al menos una letra minúscula" ok={passwordChecks.hasLower} />
-                <PasswordCheck label="Al menos un número" ok={passwordChecks.hasNumber} />
-                <PasswordCheck label="Al menos un carácter especial (!@#$%...)" ok={passwordChecks.hasSpecial} />
-                {confirmPassword.length > 0 && (
-                  <PasswordCheck label="Las contraseñas coinciden" ok={passwordChecks.matches} />
-                )}
+        };
+        const pwContent = (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border">
+              <Lock className="w-5 h-5 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-foreground text-sm leading-tight">Cambiar contraseña</h3>
+                <p className="text-xs text-muted-foreground">Actualiza tu contraseña de acceso</p>
               </div>
-            )}
+            </div>
 
-            <Button
-              onClick={handleChangePassword}
-              disabled={changingPassword || !allPasswordChecksPass || !currentPassword}
-              className="w-full bg-[hsl(var(--inmob-green))] hover:bg-[hsl(var(--inmob-green))]/90"
-            >
-              {changingPassword ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Confirmar cambio de contraseña
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            {/* Form */}
+            <div className="px-5 pt-5 pb-4 space-y-4">
+              <PwField label="Contraseña actual" value={currentPassword} onChange={setCurrentPassword}
+                placeholder="Tu contraseña actual" show={showCurrentPw} onToggle={() => setShowCurrentPw(v => !v)} autoComp="current-password" />
+              <PwField label="Nueva contraseña" value={newPassword} onChange={setNewPassword}
+                placeholder="Nueva contraseña" show={showNewPw} onToggle={() => setShowNewPw(v => !v)} autoComp="new-password" />
+              <PwField label="Confirmar contraseña" value={confirmPassword} onChange={setConfirmPassword}
+                placeholder="Repite la nueva contraseña" show={showConfirmPw} onToggle={() => setShowConfirmPw(v => !v)} autoComp="new-password" />
+
+              {newPassword.length > 0 && (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  <PasswordCheck label="8 caracteres" ok={passwordChecks.minLength} />
+                  <PasswordCheck label="Mayúscula" ok={passwordChecks.hasUpper} />
+                  <PasswordCheck label="Minúscula" ok={passwordChecks.hasLower} />
+                  <PasswordCheck label="Número" ok={passwordChecks.hasNumber} />
+                  <PasswordCheck label="Carácter especial" ok={passwordChecks.hasSpecial} />
+                  {confirmPassword.length > 0 && <PasswordCheck label="Coinciden" ok={passwordChecks.matches} />}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-8 pt-2 space-y-2">
+              <button
+                data-cta="cliente.perfil.confirmar-cambio-password"
+                onClick={handleChangePassword}
+                className={`w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                  pwButtonReady
+                    ? "bg-[hsl(var(--inmob-green))] text-white hover:bg-[hsl(var(--inmob-green))]/90 active:scale-[0.98]"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {changingPassword ? "Guardando..." : "Confirmar cambio"}
+              </button>
+              <button onClick={onClose} className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors">
+                Cerrar
+              </button>
+            </div>
+          </>
+        );
+        return isDesktop ? (
+          <Dialog open={showChangePassword} onOpenChange={(v) => !v && onClose()}>
+            <DialogContent className="p-0 max-w-md max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden">
+              {pwContent}
+            </DialogContent>
+          </Dialog>
+        ) : (
+          <Sheet open={showChangePassword} onOpenChange={(v) => !v && onClose()}>
+            <SheetContent side="bottom" className="p-0 rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden">
+              {pwContent}
+            </SheetContent>
+          </Sheet>
+        );
+      })()}
     </div>
   );
 };
 
 /* Helpers */
+const PwField = ({
+  label, value, onChange, placeholder, show, onToggle, autoComp,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder: string; show: boolean; onToggle: () => void; autoComp: string;
+}) => (
+  <div className="space-y-1.5">
+    <label className="text-sm font-semibold text-foreground block">{label}</label>
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComp}
+        className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 pr-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        tabIndex={-1}
+      >
+        {show
+          ? <EyeOff className="w-4 h-4" />
+          : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  </div>
+);
+
 const PasswordCheck = ({ label, ok }: { label: string; ok: boolean }) => (
   <div className="flex items-center gap-2">
     {ok
@@ -492,6 +602,33 @@ const InfoRow = ({ label, value, icon: Icon }: { label: string; value: string; i
       {label}
     </span>
     <span className="text-sm font-medium text-foreground max-w-[60%] text-right truncate">{value}</span>
+  </div>
+);
+
+type DocViewerDoc = { title: string; url: string };
+
+const DocViewerHeader = ({ doc }: { doc: DocViewerDoc }) => (
+  <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
+    <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+    <div className="min-w-0 flex-1">
+      <p className="text-sm font-semibold text-foreground truncate">{doc.title}</p>
+      <p className="text-xs text-muted-foreground">Vista previa del documento</p>
+    </div>
+  </div>
+);
+
+const DocViewerBody = ({ doc }: { doc: DocViewerDoc }) => (
+  <div className="flex-1 overflow-hidden bg-muted/20 min-h-0">
+    {/\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(doc.url) ? (
+      <img src={doc.url} alt={doc.title} className="w-full h-full object-contain p-4" />
+    ) : (
+      <iframe
+        src={`${doc.url}#toolbar=0&navpanes=0`}
+        title={doc.title}
+        loading="lazy"
+        className="w-full h-full border-0"
+      />
+    )}
   </div>
 );
 

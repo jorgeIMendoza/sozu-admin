@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage } from "./types";
+import type { InvestmentProperty, StageInfo, PaymentRecord, TransactionStage, AdditionalProduct, NotaryData } from "./types";
 
 const IMAGE_GRADIENTS = [
   "from-primary/20 via-primary/10 to-accent",
@@ -117,7 +117,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   // 2. Get approved billing accounts (includes clabe_stp for receipt modal)
   const { data: cuentas } = await supabase
     .from("cuentas_cobranza")
-    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp")
+    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
     .in("id_oferta", offerIds)
     .eq("activo", true)
     .eq("es_aprobado", true);
@@ -127,9 +127,116 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
+  // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
+  const tipoFinMap: Record<number, 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null> = {};
+  try {
+    const { data: tfRows } = await (supabase as any)
+      .from('cuentas_cobranza')
+      .select('id, tipo_financiamiento')
+      .in('id', cuentaIds);
+    for (const r of (tfRows ?? [])) {
+      tipoFinMap[r.id as number] = r.tipo_financiamiento ?? null;
+    }
+  } catch (_) {}
 
-  // 3. Parallel: properties + payments + payment schedule + persona
-  const [propiedadesRes, pagosRes, acuerdosRes, personaRes] = await Promise.all([
+  const enrichedCuentas = (cuentas as Record<string, unknown>[]).map(c => ({
+    ...(c as Record<string, unknown>),
+    tipo_financiamiento: tipoFinMap[c.id as number] ?? null,
+  })) as Record<string, unknown>[];
+
+  // 2.5 Fetch product offers (id_producto IS NOT NULL) and build additionalProducts per propiedad
+  const productsByPropId: Record<number, AdditionalProduct[]> = {};
+  {
+    const { data: productOffers } = await supabase
+      .from("ofertas")
+      .select("id, id_propiedad, id_producto")
+      .eq("id_persona_lead", personaId)
+      .eq("activo", true)
+      .not("id_producto", "is", null);
+
+    if (productOffers?.length) {
+      const productOfferIds = productOffers.map((o) => o.id as number);
+      const productoIds = [...new Set(productOffers.map((o) => o.id_producto as number).filter(Boolean))];
+
+      const [productCuentasRes, productosRes] = await Promise.all([
+        supabase
+          .from("cuentas_cobranza")
+          .select("id, id_oferta, precio_final")
+          .in("id_oferta", productOfferIds)
+          .eq("activo", true)
+          .eq("es_aprobado", true),
+        productoIds.length
+          ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
+          : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
+      ]);
+
+      const productCuentas = productCuentasRes.data ?? [];
+      const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
+        Object.fromEntries(
+          (productosRes.data ?? []).map((p) => [
+            p.id as number,
+            { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
+          ]),
+        );
+
+      const productCuentaIds = productCuentas.map((c) => c.id as number);
+      if (productCuentaIds.length) {
+        const { data: productPagos } = await supabase
+          .from("pagos")
+          .select("id_cuenta_cobranza, monto")
+          .in("id_cuenta_cobranza", productCuentaIds)
+          .eq("activo", true);
+
+        const pagosByCuenta: Record<number, number> = {};
+        for (const p of productPagos ?? []) {
+          const cId = p.id_cuenta_cobranza as number;
+          pagosByCuenta[cId] = (pagosByCuenta[cId] ?? 0) + Number(p.monto);
+        }
+
+        const ofertaMap: Record<number, { propiedadId: number; productoId: number }> =
+          Object.fromEntries(
+            productOffers.map((o) => [
+              o.id as number,
+              { propiedadId: o.id_propiedad as number, productoId: o.id_producto as number },
+            ]),
+          );
+
+        for (const cc of productCuentas) {
+          const oferta = ofertaMap[cc.id_oferta as number];
+          if (!oferta) continue;
+
+          const totalPaid = pagosByCuenta[cc.id as number] ?? 0;
+          const totalPrice = Number(cc.precio_final);
+          const pendingBalance = Math.max(0, totalPrice - totalPaid);
+
+          let status: AdditionalProduct["status"];
+          if (totalPaid === 0) status = "pendiente";
+          else if (pendingBalance > 0) status = "financiado";
+          else status = "pagado";
+
+          const ps = productosMap[oferta.productoId];
+          const prod: AdditionalProduct = {
+            id: String(cc.id),
+            name: ps?.nombre ?? "Producto",
+            description: ps?.descripcion ?? undefined,
+            totalPrice,
+            totalPaid,
+            pendingBalance,
+            status,
+            documents: [],
+          };
+
+          const propId = oferta.propiedadId;
+          if (!productsByPropId[propId]) productsByPropId[propId] = [];
+          productsByPropId[propId].push(prod);
+        }
+      }
+    }
+  }
+
+  // 3. Parallel: properties + payments + payment schedule + persona + notarios
+  const notarioIds = [...new Set(cuentas.map((c) => (c as Record<string, unknown>).id_notario as number).filter(Boolean))];
+  const [propiedadesRes, pagosRes, acuerdosRes, personaRes, notariosRes] = await Promise.all([
     supabase
       .from("propiedades")
       .select("id, numero_propiedad, numero_piso, m2_interiores, id_estatus_disponibilidad, id_edificio_modelo, id_tipo_propiedad, url_imagen_portada")
@@ -147,12 +254,21 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
       .eq("activo", true)
       .order("orden", { ascending: true }),
     supabase.from("personas").select("nombre_legal, rfc").eq("id", personaId).single(),
+    notarioIds.length
+      ? (supabase as any).from("notarios").select("id, nombre, notaria, telefono, email, direccion").in("id", notarioIds)
+      : Promise.resolve({ data: [] as { id: number; nombre: string; notaria: string; telefono: string; email: string; direccion: string }[] }),
   ]);
 
   const propiedades = propiedadesRes.data ?? [];
   const pagos = pagosRes.data ?? [];
   const acuerdos = acuerdosRes.data ?? [];
   const persona = personaRes.data;
+  const notariosMap: Record<number, NotaryData> = Object.fromEntries(
+    ((notariosRes.data as { id: number; nombre: string; notaria: string; telefono: string; email: string; direccion: string }[]) ?? []).map((n) => [
+      n.id,
+      { name: String(n.nombre ?? ""), notaria: String(n.notaria ?? ""), phone: String(n.telefono ?? ""), email: String(n.email ?? ""), address: String(n.direccion ?? "") },
+    ]),
+  );
 
   // 3.5 Link acuerdos_pago → pagos to get tracking info
   const acuerdoIds = acuerdos.map((a) => a.id as number);
@@ -193,7 +309,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
   // 4. Get edificios_modelos for project chain
   const edificioModeloIds = [...new Set(propiedades.map((p) => p.id_edificio_modelo as number).filter(Boolean))];
-  if (!edificioModeloIds.length) return buildFromData(cuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona);
+  if (!edificioModeloIds.length) return buildFromData(enrichedCuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap);
 
   const { data: edificiosModelos } = await supabase
     .from("edificios_modelos")
@@ -228,7 +344,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     : { data: [] };
 
   return buildFromData(
-    cuentas,
+    enrichedCuentas,
     propiedades,
     edificiosModelos ?? [],
     edificios,
@@ -240,6 +356,8 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     pagoInfoPorAcuerdo,
     metodosMap,
     persona,
+    productsByPropId,
+    notariosMap,
   );
 }
 
@@ -264,6 +382,8 @@ function buildFromData(
   pagoInfoPorAcuerdo: Record<number, PagoInfo> = {},
   metodosMap: Record<number, string> = {},
   persona: { nombre_legal: string | null; rfc: string | null } | null = null,
+  productsByPropId: Record<number, AdditionalProduct[]> = {},
+  notariosMap: Record<number, NotaryData> = {},
 ): InvestmentProperty[] {
   const propMap = Object.fromEntries(propiedades.map((p) => [p.id as number, p]));
   const emMap = Object.fromEntries(edificiosModelos.map((em) => [em.id as number, em]));
@@ -342,8 +462,13 @@ function buildFromData(
         image: proyecto?.url_imagen_portada ? String(proyecto.url_imagen_portada) : undefined,
         fechaEscritura: cc.fecha_escritura ? String(cc.fecha_escritura) : undefined,
         projectId: edificio?.id_proyecto as number | undefined,
+        idPropiedad: cc.id_propiedad as number | undefined,
         clientName: persona?.nombre_legal ?? undefined,
         clientRFC: persona?.rfc ?? undefined,
+        notary: cc.id_notario ? notariosMap[cc.id_notario as number] : undefined,
+        tipoFinanciamiento: cc.tipo_financiamiento
+          ? (String(cc.tipo_financiamiento) as 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO')
+          : null,
       },
       financials: {
         initialPrice: Number(cc.precio_final),
@@ -367,7 +492,7 @@ function buildFromData(
               history: [],
             }
           : undefined,
-      additionalProducts: [],
+      additionalProducts: productsByPropId[cc.id_propiedad as number] ?? [],
     };
   });
 }

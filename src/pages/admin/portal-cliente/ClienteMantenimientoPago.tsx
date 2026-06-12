@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Info, ShieldCheck, Loader2 } from "lucide-react";
 import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
-import { fmtMXN as fmt } from "@/lib/clienteMockData";
+import { fmtMXN as fmt } from "@/lib/utils";
 import { toast } from "sonner";
 
 const ClienteMantenimientoPago = () => {
@@ -100,6 +100,7 @@ const ClienteMantenimientoPago = () => {
 
         {/* CTA Button */}
         <button
+          data-cta="cliente.mantenimiento-pago.copiar-clabe"
           onClick={() => copyToClipboard(clabe, "CLABE")}
           className="w-full py-3.5 rounded-xl bg-[hsl(var(--inmob-green))] text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform mt-2"
         >

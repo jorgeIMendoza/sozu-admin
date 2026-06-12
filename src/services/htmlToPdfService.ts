@@ -383,11 +383,11 @@ class HTMLToPDFService {
     };
 
     // Use native PDF generation for faster, text-selectable PDFs
-    const { ofertaPdfNativeService } = await import('./ofertaPdfNativeService');
-    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
+    const { offerPdfNativeService } = await import('./offerPdfNativeService');
+    const { offerPdfStorageService } = await import('./offerPdfStorageService');
     
     // Generate PDF (now returns blob)
-    const { blob, filename } = await ofertaPdfNativeService.generateOfferPDF({
+    const { blob, filename } = await offerPdfNativeService.generateOfferPDF({
       offerData,
       propertyDetails: finalPropertyDetails,
       paymentSchemes,
@@ -400,10 +400,10 @@ class HTMLToPDFService {
     });
     
     // Upload to storage and save URL in DB
-    await ofertaPdfStorageService.uploadAndSave(offerData.id, blob, filename, false);
+    await offerPdfStorageService.uploadAndSave(offerData.id, blob, filename, false);
     
     // Download locally
-    ofertaPdfStorageService.downloadBlob(blob, filename);
+    offerPdfStorageService.downloadBlob(blob, filename);
     
     console.log('Native Sozu PDF generated and stored successfully');
   }
@@ -1504,11 +1504,11 @@ class HTMLToPDFService {
     legalNotices: string[]
   ): Promise<void> {
     // Use native PDF generation for faster, text-selectable PDFs
-    const { ofertaProductoPdfNativeService } = await import('./ofertaProductoPdfNativeService');
-    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
+    const { offerProductPdfNativeService } = await import('./offerProductPdfNativeService');
+    const { offerPdfStorageService } = await import('./offerPdfStorageService');
     
     // Generate PDF (now returns blob)
-    const { blob, filename } = await ofertaProductoPdfNativeService.generateOfferPDF({
+    const { blob, filename } = await offerProductPdfNativeService.generateOfferPDF({
       offerData,
       propertyDetails,
       productDetails,
@@ -1521,10 +1521,10 @@ class HTMLToPDFService {
     });
     
     // Upload to storage and save URL in DB
-    await ofertaPdfStorageService.uploadAndSave(offerData.id, blob, filename, true);
+    await offerPdfStorageService.uploadAndSave(offerData.id, blob, filename, true);
     
     // Download locally
-    ofertaPdfStorageService.downloadBlob(blob, filename);
+    offerPdfStorageService.downloadBlob(blob, filename);
     
     console.log('Native Product PDF generated and stored successfully');
   }
@@ -2197,8 +2197,8 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
       estatus_aprobacion_nombre = estatusData?.nombre || null;
     }
 
-    const { ofertaProductoPdfNativeService } = await import('./ofertaProductoPdfNativeService');
-    const { blob, filename } = await ofertaProductoPdfNativeService.generateOfferPDF({
+    const { offerProductPdfNativeService } = await import('./offerProductPdfNativeService');
+    const { blob, filename } = await offerProductPdfNativeService.generateOfferPDF({
       offerData: {
         id: offerData.offerId,
         fecha_generacion: offerDetails.fecha_generacion,
@@ -2221,8 +2221,8 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
     });
 
     // Upload product offer to storage
-    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
-    const uploadResult = await ofertaPdfStorageService.uploadAndSave(offerData.offerId, blob, filename, true);
+    const { offerPdfStorageService } = await import('./offerPdfStorageService');
+    const uploadResult = await offerPdfStorageService.uploadAndSave(offerData.offerId, blob, filename, true);
 
     let base64: string | undefined;
     try {
@@ -2266,8 +2266,8 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
       }
     };
 
-    const { ofertaPdfNativeService } = await import('./ofertaPdfNativeService');
-    const { blob, filename } = await ofertaPdfNativeService.generateOfferPDF({
+    const { offerPdfNativeService } = await import('./offerPdfNativeService');
+    const { blob, filename } = await offerPdfNativeService.generateOfferPDF({
       offerData: {
         id: offerData.offerId,
         fecha_generacion: offerDetails.fecha_generacion,
@@ -2288,8 +2288,8 @@ export const generateOfferPDFAsBase64 = async (offerData: OfferData): Promise<{ 
     });
 
     // Also upload to storage
-    const { ofertaPdfStorageService } = await import('./ofertaPdfStorageService');
-    const uploadResult = await ofertaPdfStorageService.uploadAndSave(offerData.offerId, blob, filename, false);
+    const { offerPdfStorageService } = await import('./offerPdfStorageService');
+    const uploadResult = await offerPdfStorageService.uploadAndSave(offerData.offerId, blob, filename, false);
 
     let base64: string | undefined;
     try {

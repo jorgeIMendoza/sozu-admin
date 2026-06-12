@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, ExternalLink, FileText, Users, Clock, AlertCircle, CheckCircle2,
   Circle, Download, Eye, ChevronRight, Shield, Fingerprint, PenTool, Zap,
@@ -22,8 +25,11 @@ import {
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
+import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
-import { useCompradoresFullDetail } from '@/hooks/useCompradoresFullDetail';
+import { useCompradoresFullDetail, type CompradorFullDetail } from '@/hooks/useCompradoresFullDetail';
+import { useOfferPaymentMethod, type FormaPagoOferta } from '@/hooks/useOfferPaymentMethod';
 import {
   useBitacoraCuentaCobranza,
   useAppendBitacoraEntry,
@@ -93,12 +99,12 @@ interface ContractTypeDetail {
 }
 
 const CONTRACT_TYPE_DETAILS: Record<string, ContractTypeDetail> = {
-  'new_contract': { name: 'Contrato de promesa de compraventa', category: 'Inmobiliario', description: 'Documento para formalizar la promesa de compraventa de una unidad inmobiliaria previo a escrituración. Incluye condiciones de precio, plazos de pago, penalidades y cláusulas de desistimiento.', relatedTemplate: 'Contrato de promesa de compraventa' },
-  'new_agreement': { name: 'Alianza comercial', category: 'Comercial', description: 'Acuerdo formal para establecer relación comercial con agentes inmobiliarios o inmobiliarias. Define esquemas de comisiones, exclusividad, obligaciones y vigencia de la alianza.', relatedTemplate: 'Alianza comercial' },
-  'amendment': { name: 'Convenio modificatorio', category: 'Corporativo', description: 'Documento que formaliza cambios a un contrato existente. Puede incluir ajustes de precio, plazos de entrega, condiciones de pago o cualquier cláusula previamente acordada.', relatedTemplate: 'Convenio modificatorio comercial' },
-  'renewal': { name: 'Renovación de contrato', category: 'Comercial', description: 'Extensión formal de la vigencia de un contrato o alianza existente, con posibilidad de actualizar condiciones comerciales.', relatedTemplate: 'Renovación de alianza comercial' },
-  'termination': { name: 'Terminación de contrato', category: 'Corporativo', description: 'Documento que formaliza la terminación anticipada o natural de un contrato vigente, estableciendo condiciones de cierre y liquidación.' },
-  'external_validation': { name: 'Validación externa', category: 'Corporativo', description: 'Proceso de validación documental y legal de entidades externas. Incluye revisión de personalidad jurídica, poderes y documentación de soporte.' },
+  'Nuevo contrato': { name: 'Contrato de promesa de compraventa', category: 'Inmobiliario', description: 'Documento para formalizar la promesa de compraventa de una unidad inmobiliaria previo a escrituración. Incluye condiciones de precio, plazos de pago, penalidades y cláusulas de desistimiento.', relatedTemplate: 'Contrato de promesa de compraventa' },
+  'Nuevo convenio': { name: 'Alianza comercial', category: 'Comercial', description: 'Acuerdo formal para establecer relación comercial con agentes inmobiliarios o inmobiliarias. Define esquemas de comisiones, exclusividad, obligaciones y vigencia de la alianza.', relatedTemplate: 'Alianza comercial' },
+  'Modificatorio': { name: 'Convenio modificatorio', category: 'Corporativo', description: 'Documento que formaliza cambios a un contrato existente. Puede incluir ajustes de precio, plazos de entrega, condiciones de pago o cualquier cláusula previamente acordada.', relatedTemplate: 'Convenio modificatorio comercial' },
+  'Renovación': { name: 'Renovación de contrato', category: 'Comercial', description: 'Extensión formal de la vigencia de un contrato o alianza existente, con posibilidad de actualizar condiciones comerciales.', relatedTemplate: 'Renovación de alianza comercial' },
+  'Terminación': { name: 'Terminación de contrato', category: 'Corporativo', description: 'Documento que formaliza la terminación anticipada o natural de un contrato vigente, estableciendo condiciones de cierre y liquidación.' },
+  'Validación externa': { name: 'Validación externa', category: 'Corporativo', description: 'Proceso de validación documental y legal de entidades externas. Incluye revisión de personalidad jurídica, poderes y documentación de soporte.' },
 };
 
 interface CuentaCobranzaDetail {
@@ -365,6 +371,8 @@ function CounterpartyRealDrawer({
   // y documento. Las acciones (validar / rechazar) appendéan una entrada.
   const { entries: bitacora, columnaFaltante } = useBitacoraCuentaCobranza(idCuentaCobranza);
   const appendMutation = useAppendBitacoraEntry(idCuentaCobranza);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [rejectFor, setRejectFor] = useState<{
     scope: BitacoraScope;
@@ -372,6 +380,27 @@ function CounterpartyRealDrawer({
     label: string;
   } | null>(null);
   const [rejectJustification, setRejectJustification] = useState("");
+
+  // Cuando la validación/rechazo es de un documento concreto, también se
+  // actualiza `documentos.id_estatus_verificacion` (1=Pendiente, 2=Validado,
+  // 3=Rechazado) para que el Admin Panel ("Editar cuenta de cobranza →
+  // Documentos") y el Portal del Cliente reflejen el cambio sin depender
+  // de la bitácora.
+  const syncDocumentoEstatus = async (
+    idDocumento: number,
+    nuevoEstatus: 1 | 2 | 3,
+  ) => {
+    const { error } = await (supabase as any)
+      .from("documentos")
+      .update({ id_estatus_verificacion: nuevoEstatus })
+      .eq("id", idDocumento);
+    if (error) throw error;
+    // Refresca las queries que listan documentos en el resto del sistema.
+    queryClient.invalidateQueries({ queryKey: ["documentos"] });
+    queryClient.invalidateQueries({ queryKey: ["cuenta_cobranza"] });
+    queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+    queryClient.invalidateQueries({ queryKey: ["compradores_full_detail"] });
+  };
 
   const validate = (scope: BitacoraScope, label: string, refs: { idDocumento?: number } = {}) => {
     if (columnaFaltante) {
@@ -387,6 +416,17 @@ function CounterpartyRealDrawer({
         idDocumento: refs.idDocumento,
       },
     });
+    if (scope === "documento" && refs.idDocumento) {
+      void syncDocumentoEstatus(refs.idDocumento, 2).catch((err) => {
+        toast({
+          title: "Bitácora guardada, pero el documento no se sincronizó",
+          description:
+            pgErrorMessage(err) ??
+            "No se pudo actualizar id_estatus_verificacion en documentos.",
+          variant: "destructive",
+        });
+      });
+    }
   };
 
   const submitReject = () => {
@@ -400,6 +440,17 @@ function CounterpartyRealDrawer({
         idDocumento: rejectFor.idDocumento,
       },
     });
+    if (rejectFor.scope === "documento" && rejectFor.idDocumento) {
+      void syncDocumentoEstatus(rejectFor.idDocumento, 3).catch((err) => {
+        toast({
+          title: "Bitácora guardada, pero el documento no se sincronizó",
+          description:
+            pgErrorMessage(err) ??
+            "No se pudo actualizar id_estatus_verificacion en documentos.",
+          variant: "destructive",
+        });
+      });
+    }
     setRejectFor(null);
     setRejectJustification("");
   };
@@ -915,6 +966,165 @@ function CuentaCobranzaDrawer({ open, onClose, cuenta }: { open: boolean; onClos
   );
 }
 
+function FormaPagoDrawer({
+  open,
+  onClose,
+  idCuentaCobranza,
+  folioCuenta,
+}: {
+  open: boolean;
+  onClose: () => void;
+  idCuentaCobranza: number | null | undefined;
+  folioCuenta: string | null;
+}) {
+  const { data: forma, isLoading, error } = useOfferPaymentMethod(open ? idCuentaCobranza : null);
+  const fmt = (n: number) =>
+    n > 0
+      ? n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 })
+      : '$0.00';
+  const fmtDate = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="sm:max-w-[520px] p-0 overflow-y-auto">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b">
+          <SheetTitle className="text-[16px]">Forma de pago de la oferta</SheetTitle>
+          {folioCuenta && (
+            <p className="text-[12px] text-muted-foreground font-mono">{folioCuenta}</p>
+          )}
+        </SheetHeader>
+        <div className="px-6 py-5 space-y-5">
+          {isLoading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground inline-flex w-full justify-center items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando forma de pago…
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-[12px] text-destructive">
+              Error al cargar: {(error as Error).message}
+            </div>
+          ) : !forma ? (
+            <p className="text-[13px] text-muted-foreground italic">Sin información de oferta vinculada.</p>
+          ) : (
+            <>
+              {/* Resumen financiero */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Precio final</p>
+                  <p className="text-[15px] font-bold font-mono tabular-nums">{fmt(forma.precioFinal)}</p>
+                  {forma.ivaIncluido && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">IVA incluido</p>
+                  )}
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Suma de pagos</p>
+                  <p className="text-[15px] font-bold font-mono tabular-nums">{fmt(forma.totalAcuerdos)}</p>
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">{forma.acuerdos.length} parcialidades</p>
+                </div>
+              </div>
+
+              {/* Esquema seleccionado */}
+              {forma.esquema ? (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Esquema</p>
+                    {forma.esquema.esManual && (
+                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Manual</span>
+                    )}
+                  </div>
+                  <p className="text-[13px] font-semibold">{forma.esquema.nombre}</p>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Enganche</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEnganche.toFixed(2)}%</p>
+                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroPagosEnganche} pagos</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Mensualidades</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeMensualidades.toFixed(2)}%</p>
+                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroMensualidades} meses</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase">Contra entrega</p>
+                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEntrega.toFixed(2)}%</p>
+                      {forma.esquema.porcentajeDescuentoAumento !== 0 && (
+                        <p className="text-[10px] text-muted-foreground/60">{forma.esquema.porcentajeDescuentoAumento.toFixed(2)}% desc/aum</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[12px] text-muted-foreground italic">Sin esquema de pago seleccionado en la oferta.</p>
+              )}
+
+              {/* Avance de pagos */}
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Pagado</span>
+                  <span className="font-mono tabular-nums text-primary">{fmt(forma.totalPagado)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+                  <span>Pendiente</span>
+                  <span className="font-mono tabular-nums">{fmt(forma.totalPendiente)}</span>
+                </div>
+                {forma.totalAcuerdos > 0 && (
+                  <div className="mt-2 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary"
+                      style={{ width: `${Math.min(100, (forma.totalPagado / forma.totalAcuerdos) * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Cronograma de acuerdos */}
+              <div>
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+                  Cronograma de pagos
+                </p>
+                {forma.acuerdos.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground italic">Sin acuerdos de pago registrados.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {forma.acuerdos.map((a) => (
+                      <div
+                        key={a.id}
+                        className={`flex items-center justify-between rounded-md border p-2.5 ${
+                          a.pagoCompletado ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[11px] font-mono text-muted-foreground/60 w-5 shrink-0 text-right">
+                            {a.orden}.
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-medium truncate">{a.conceptoNombre}</p>
+                            <p className="text-[11px] text-muted-foreground/70 font-mono">
+                              {fmtDate(a.fechaPago)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[13px] font-mono tabular-nums">{fmt(a.monto)}</span>
+                          {a.pagoCompletado ? (
+                            <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/60 uppercase">pend</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 const AVAILABLE_LAWYERS = [
   { id: 'vladimir', name: 'Vladimir Huerta' },
   { id: 'miguel', name: 'Miguel Ochoa' },
@@ -1111,21 +1321,21 @@ function SignerReviewDrawer({ open, onClose, signerName }: { open: boolean; onCl
 }
 
 const PROGRESSION_STEPS = [
-  { key: 'request_received', label: 'Recibida', step: 0 },
-  { key: 'in_legal_review', label: 'Revisión', step: 1 },
-  { key: 'approved_for_generation', label: 'Aprobada', step: 2 },
-  { key: 'client_signature', label: 'Firma de cliente', step: 3 },
-  { key: 'in_validation', label: 'Firma titular', step: 4 },
-  { key: 'fully_signed', label: 'Firmado', step: 5 },
+  { key: 'Solicitud recibida', label: 'Recibida', step: 0 },
+  { key: 'En revisión legal', label: 'Revisión', step: 1 },
+  { key: 'Aprobado', label: 'Aprobada', step: 2 },
+  { key: 'Firma cliente', label: 'Firma de cliente', step: 3 },
+  { key: 'Firma titular', label: 'Firma titular', step: 4 },
+  { key: 'Firmado', label: 'Firmado', step: 5 },
 ];
 
 const NEXT_ACTIONS: Record<string, { label: string; icon: React.ElementType; primary?: boolean }[]> = {
-  missing_information: [{ label: 'Completar información', icon: Info, primary: true }],
-  in_signature_process: [
+  'Información faltante': [{ label: 'Completar información', icon: Info, primary: true }],
+  'En firma': [
     { label: 'Seguimiento de firma', icon: Send, primary: true },
     { label: 'Descargar PDF', icon: Download },
   ],
-  partially_signed: [
+  'Parcialmente firmado': [
     { label: 'Seguimiento de firma', icon: Send, primary: true },
     { label: 'Descargar PDF', icon: Download },
   ],
@@ -1135,7 +1345,7 @@ function StatusStepper({ status }: { status: CaseStatus }) {
   const config = STATUS_CONFIG[status];
   const currentStep = config.step;
   const isTerminal = currentStep === -1;
-  const isArchived = status === 'archived';
+  const isArchived = status === 'Archivado';
 
   return (
     <div className="panel">
@@ -1152,7 +1362,7 @@ function StatusStepper({ status }: { status: CaseStatus }) {
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive/10">
               <AlertCircle className="h-4 w-4 text-destructive" />
             </div>
-            <span className="font-medium">Este expediente ha sido {status === 'rejected' ? 'rechazado' : 'cancelado'}.</span>
+            <span className="font-medium">Este expediente ha sido {status === 'Rechazado' ? 'rechazado' : 'cancelado'}.</span>
           </div>
         ) : (
           <div className="flex items-center">
@@ -1991,15 +2201,27 @@ function FirmaClienteActions({
 
 // ── FirmaTitularActions ──
 function FirmaTitularActions({
-  request, signers, onAdvance, onReturn,
+  request, signers, idCuentaCobranza, onAdvance, onReturn,
 }: {
   request: { title: string; project: string; property?: string; titular?: string; templateName?: string; counterparty: string; counterparties?: string[] };
   signers: { id: string; name: string; signerType: string; role: 'internal' | 'external'; status: string; signedAt?: string; signatureMethod?: 'digital' | 'physical'; uploadedSignedDoc?: { fileName: string; uploadedAt: string; uploadedBy: string; status: string; version?: number } }[];
+  idCuentaCobranza?: number;
   onAdvance: () => void; onReturn: () => void;
 }) {
+  // Flujo real: cuando hay idCuentaCobranza, alimentamos el contrato firmado
+  // por el titular desde `documentos` (tipo 18). Si no hay, conservamos el
+  // flujo mock heredado para expedientes EXP-2025-*.
+  const isReal = !!idCuentaCobranza;
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const [titularSent, setTitularSent] = useState(false);
+  // En el flujo real el proceso es físico por defecto: el contrato se imprime,
+  // se entrega al titular para firma manual y luego se sube al sistema.
   const [titularMethod, setTitularMethod] = useState<'digital' | 'physical'>(
-    signers.find(s => s.role === 'internal')?.signatureMethod || 'digital'
+    isReal
+      ? 'physical'
+      : (signers.find(s => s.role === 'internal')?.signatureMethod || 'digital'),
   );
   const [physDocUploaded, setPhysDocUploaded] = useState(false);
   const [physDocValidated, setPhysDocValidated] = useState(false);
@@ -2008,12 +2230,137 @@ function FirmaTitularActions({
   const internalSigners = signers.filter(s => s.role === 'internal');
   const allExternalSigned = externalSigners.length > 0 && externalSigners.every(s => s.status === 'signed');
 
-  const readinessItems = [
-    { key: 'contract', label: 'Contrato generado', done: true },
-    { key: 'counterparty', label: 'Contraparte firmó', done: allExternalSigned },
-    { key: 'observations', label: 'Observaciones resueltas', done: true },
-    { key: 'ready', label: 'Listo para firma del titular', done: allExternalSigned },
-  ];
+  // Documento "Contrato firmado completamente" (tipo 18) para esta cuenta.
+  const { data: contratoDoc, isLoading: loadingContratoDoc } = useQuery({
+    queryKey: ['firma_titular_contrato', idCuentaCobranza],
+    enabled: isReal,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('documentos')
+        .select('id, url, fecha_creacion, id_estatus_verificacion')
+        .eq('id_cuenta_cobranza', idCuentaCobranza)
+        .eq('id_tipo_documento', 18)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return ((data as any[]) ?? [])[0] ?? null;
+    },
+  });
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadContratoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!idCuentaCobranza) throw new Error('Cuenta no identificada');
+      const ext = file.name.split('.').pop();
+      const fileName = `cuenta_cobranza_${idCuentaCobranza}_contrato_titular_${Date.now()}.${ext}`;
+      const { error: upErr } = await (supabase as any).storage
+        .from('documentos')
+        .upload(fileName, file);
+      if (upErr) throw upErr;
+      const { data: urlData } = (supabase as any).storage
+        .from('documentos')
+        .getPublicUrl(fileName);
+      const url = urlData?.publicUrl;
+      const { error: insErr } = await (supabase as any)
+        .from('documentos')
+        .insert({
+          id_cuenta_cobranza: idCuentaCobranza,
+          id_tipo_documento: 18,
+          url,
+          id_estatus_verificacion: 1, // Pendiente
+          activo: true,
+        });
+      if (insErr) throw insErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      toast({ title: 'Contrato cargado', description: 'Queda pendiente de validación legal.' });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: 'Error al cargar contrato',
+        description: pgErrorMessage(err) ?? 'No se pudo subir el archivo.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const validateContratoMutation = useMutation({
+    mutationFn: async () => {
+      if (!contratoDoc?.id) throw new Error('Documento no identificado');
+      if (!idCuentaCobranza) throw new Error('Cuenta no identificada');
+      // Cambia el estatus a Validado (2) en `documentos`. El mismo update
+      // que ejecuta el Admin Panel desde "Editar Cuenta de Cobranza →
+      // Documentos de la Propiedad", de modo que ambas vistas reflejen
+      // el cambio.
+      const { error: updErr } = await (supabase as any)
+        .from('documentos')
+        .update({ id_estatus_verificacion: 2 })
+        .eq('id', contratoDoc.id);
+      if (updErr) throw updErr;
+
+      // Replica el side-effect del Admin Panel: al validar un contrato
+      // firmado (tipo 18) en una cuenta_cobranza, dispara
+      // `check-property-sold-status` para que la propiedad pueda avanzar
+      // a Vendida si ya cumple las condiciones. La falla del edge function
+      // no debe bloquear la UI: la validación del documento ya quedó
+      // persistida.
+      try {
+        await (supabase as any).functions.invoke('check-property-sold-status', {
+          body: { id_cuenta_cobranza: idCuentaCobranza },
+        });
+      } catch (efErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[firma-titular] check-property-sold-status falló:', efErr);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['firma_titular_contrato', idCuentaCobranza] });
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firma_titular'] });
+      // El expediente avanza a Etapa 6: invalida la query para que la
+      // columna "Firmado" del Pipeline aparezca al instante.
+      queryClient.invalidateQueries({ queryKey: ['legal_flow_firmado'] });
+      // Invalida cualquier query del Admin Panel que liste documentos de
+      // esta cuenta para que su tab de Documentos refleje "Validado".
+      queryClient.invalidateQueries({ queryKey: ['documentos'] });
+      queryClient.invalidateQueries({ queryKey: ['cuenta_cobranza'] });
+      queryClient.invalidateQueries({ queryKey: ['expediente_venta_detalle'] });
+      toast({ title: 'Contrato validado', description: 'Expediente movido a Firmado.' });
+    },
+    onError: (err: unknown) => {
+      const desc = pgErrorMessage(err);
+      const isPrivateSchemaPermission =
+        isPgCode(err, '42501') ||
+        (typeof desc === 'string' && desc.toLowerCase().includes('permission denied for schema private'));
+      toast({
+        title: 'Error al validar contrato',
+        description: isPrivateSchemaPermission
+          ? 'Permiso BD pendiente: el trigger usa pg_net pero el rol no tiene USAGE sobre el schema "private". Pídele a Jorge que ejecute el DDL en Ejecuciones_manuales/fix_permission_denied_private_validar_documento.md.'
+          : desc ?? 'No se pudo actualizar el estatus.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const docPendienteValidacion = isReal && contratoDoc?.id_estatus_verificacion === 1;
+  const docValidado = isReal && contratoDoc?.id_estatus_verificacion === 2;
+
+  const readinessItems = isReal
+    ? [
+        { key: 'contract', label: 'Contrato generado', done: true },
+        { key: 'counterparty', label: 'Contraparte firmó', done: true },
+        { key: 'observations', label: 'Observaciones resueltas', done: true },
+        { key: 'ready', label: 'Listo para firma del titular', done: true },
+      ]
+    : [
+        { key: 'contract', label: 'Contrato generado', done: true },
+        { key: 'counterparty', label: 'Contraparte firmó', done: allExternalSigned },
+        { key: 'observations', label: 'Observaciones resueltas', done: true },
+        { key: 'ready', label: 'Listo para firma del titular', done: allExternalSigned },
+      ];
 
   const allReady = readinessItems.every(r => r.done);
 
@@ -2075,16 +2422,30 @@ function FirmaTitularActions({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-[12px]">
-                  {(request.titular || 'T').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {(request.titular || request.counterparty || 'T').split(' ').map(n => n[0]).join('').slice(0, 2)}
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold">{request.titular || 'Titular'}</p>
+                  <p className="text-[14px] font-semibold">{request.titular || request.counterparty || 'Titular'}</p>
                   <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${titularMethod === 'physical' ? 'bg-muted text-muted-foreground' : 'bg-[hsl(var(--status-info)/0.08)] text-[hsl(var(--status-info))]'}`}>
                     {titularMethod === 'physical' ? <><FileUp className="h-2.5 w-2.5" /> Física</> : <><Zap className="h-2.5 w-2.5" /> Digital</>}
                   </span>
                 </div>
               </div>
-              {physDocValidated ? (
+              {isReal ? (
+                docValidado ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    <CheckCircle2 className="h-3 w-3" /> Validado
+                  </span>
+                ) : docPendienteValidacion ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]">
+                    <Clock className="h-3 w-3" /> Verificación pendiente
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    <Clock className="h-3 w-3" /> Pendiente
+                  </span>
+                )
+              ) : physDocValidated ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                   <CheckCircle2 className="h-3 w-3" /> Validado
                 </span>
@@ -2099,7 +2460,85 @@ function FirmaTitularActions({
               )}
             </div>
 
-            {titularMethod === 'physical' && titularSent && !physDocValidated && (
+            {/* Flujo real: cargar / visualizar / validar contrato firmado */}
+            {isReal && (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-3 space-y-2">
+                {loadingContratoDoc ? (
+                  <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando contrato…
+                  </p>
+                ) : !contratoDoc ? (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      Sube el contrato firmado por el titular para que el área legal lo valide.
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadContratoMutation.mutate(f);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[11px] gap-1.5 rounded-lg w-full"
+                      disabled={uploadContratoMutation.isPending}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {uploadContratoMutation.isPending ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Cargando…</>
+                      ) : (
+                        <><Upload className="h-3 w-3" /> Cargar contrato firmado</>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                        <span className="text-[12px] font-medium truncate">Contrato firmado completamente</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
+                        {new Date(contratoDoc.fecha_creacion).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 rounded-lg flex-1"
+                        onClick={() => window.open(contratoDoc.url, '_blank')}
+                      >
+                        <Eye className="h-2.5 w-2.5" /> Ver contrato
+                      </Button>
+                      {docPendienteValidacion && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-[10px] gap-1 rounded-lg flex-1"
+                          disabled={validateContratoMutation.isPending}
+                          onClick={() => validateContratoMutation.mutate()}
+                        >
+                          {validateContratoMutation.isPending ? (
+                            <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Validando…</>
+                          ) : (
+                            <><CheckCircle2 className="h-2.5 w-2.5" /> Validar</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Flujo mock heredado (EXP-2025-*) */}
+            {!isReal && titularMethod === 'physical' && titularSent && !physDocValidated && (
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-3 space-y-2">
                 {!physDocUploaded ? (
                   <Button variant="outline" size="sm" className="h-8 text-[11px] gap-1.5 rounded-lg w-full" onClick={() => setPhysDocUploaded(true)}>
@@ -2124,12 +2563,17 @@ function FirmaTitularActions({
 
           {/* Actions */}
           <div className="border-t pt-4 space-y-2.5">
-            {allReady && !titularSent && (
+            {!isReal && allReady && !titularSent && (
               <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={() => setTitularSent(true)}>
                 <Send className="h-4 w-4" /> {titularMethod === 'digital' ? 'Enviar a firma digital' : 'Registrar envío de firma física'}
               </Button>
             )}
-            {physDocValidated && (
+            {!isReal && physDocValidated && (
+              <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={onAdvance}>
+                <CheckCircle2 className="h-4 w-4" /> Completar proceso de firma
+              </Button>
+            )}
+            {isReal && docValidado && (
               <Button className="h-10 text-[13px] gap-2 rounded-lg w-full" onClick={onAdvance}>
                 <CheckCircle2 className="h-4 w-4" /> Completar proceso de firma
               </Button>
@@ -2236,13 +2680,30 @@ export default function CaseDetail() {
     isLoading: loadingSolicitudes,
   } = useLegalFlowSolicitudesRecibidas();
   const {
+    data: firmaTitular = [],
+    isLoading: loadingFirmaTitular,
+  } = useLegalFlowFirmaTitular();
+  const {
+    data: firmado = [],
+    isLoading: loadingFirmado,
+  } = useLegalFlowFirmado();
+  const {
     data: archivados = [],
     isLoading: loadingArchivados,
   } = useLegalFlowExpedientesArchivados();
-  const realRequest = [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
+  // Prioridad al resolver el detalle: Firmado (etapa 6) > Firma titular
+  // (etapa 5) > Solicitudes recibidas (etapa 1) > Archivados. Una vez el
+  // contrato se valida, el expediente vive en Firmado y no debe
+  // presentarse de nuevo como Solicitud recibida aunque la propiedad
+  // siga en estatus Apartado.
+  const realRequest =
+    firmado.find((r) => r.id === id) ??
+    firmaTitular.find((r) => r.id === id) ??
+    [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
   const mockRequest = mockRequests.find((r) => r.id === id);
   const request = realRequest ?? mockRequest;
-  const isLoadingReal = loadingSolicitudes || loadingArchivados;
+  const isLoadingReal =
+    loadingSolicitudes || loadingFirmaTitular || loadingFirmado || loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -2272,6 +2733,7 @@ export default function CaseDetail() {
   const [showCounterparty, setShowCounterparty] = useState(false);
   const [showContractType, setShowContractType] = useState(false);
   const [showCuentaCobranza, setShowCuentaCobranza] = useState(false);
+  const [showFormaPago, setShowFormaPago] = useState(false);
 
   // Bitácora + detalle de compradores — sólo para expedientes reales.
   // Se invocan aquí para alimentar el banner de validaciones pendientes
@@ -2281,8 +2743,45 @@ export default function CaseDetail() {
   const { entries: bitacoraEntries } = useBitacoraCuentaCobranza(
     idCuentaCobranzaForBitacora,
   );
+  const appendBitacoraCaseDetail = useAppendBitacoraEntry(idCuentaCobranzaForBitacora);
   const compradorIdsForBanner = realRequest?.compradoresDetalle?.map((c) => c.idPersona) ?? [];
   const { data: compradoresFull } = useCompradoresFullDetail(compradorIdsForBanner);
+
+  // Reconstruye estado local desde la bitácora (única fuente de verdad
+  // para expedientes reales). Las entradas se buscan por scope=expediente
+  // y se filtran por tipo+titulo. Asignar abogado y completar validación
+  // son los dos gates que promueven el expediente a "En revisión legal".
+  useEffect(() => {
+    if (!realRequest) return;
+    if (bitacoraEntries.length === 0) return;
+
+    const lastLawyerEntry = [...bitacoraEntries]
+      .reverse()
+      .find(
+        (e) =>
+          e.tipo === 'sistema' &&
+          e.referencia?.scope === 'expediente' &&
+          (e.titulo === 'Abogado asignado' ||
+            // Detecta el shape antiguo cuando aún no había columna `titulo`.
+            (e.mensaje ?? '').startsWith('Abogado asignado')),
+      );
+    if (lastLawyerEntry) {
+      const fromTitle = lastLawyerEntry.titulo === 'Abogado asignado' ? lastLawyerEntry.mensaje : null;
+      const fromMensaje = (lastLawyerEntry.mensaje ?? '').replace(/^Abogado asignado\s*\n*\s*/, '');
+      const lawyerName = (fromTitle || fromMensaje || '').trim();
+      const match = AVAILABLE_LAWYERS.find((l) => l.name === lawyerName || l.id === lawyerName);
+      if (match) setAssignedLawyer(match.id);
+    }
+
+    const hasIntakeComplete = bitacoraEntries.some(
+      (e) =>
+        e.tipo === 'validacion' &&
+        e.referencia?.scope === 'expediente' &&
+        (e.titulo === 'Validación inicial completa' ||
+          (e.mensaje ?? '').includes('Validación inicial completa')),
+    );
+    if (hasIntakeComplete) setIntakeValidation('complete');
+  }, [bitacoraEntries, realRequest]);
 
   if (!request && isLoadingReal) {
     return (
@@ -2315,13 +2814,13 @@ export default function CaseDetail() {
   const documents = request.documents || [];
   const integrations = request.integrations || { sozu: 'idle', googleDocs: 'idle', mifiel: 'idle', kyc: 'idle' };
   const nextActions = NEXT_ACTIONS[request.status] || [];
-  const priorityLabels: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
-  const isRecibida = request.status === 'request_received';
-  const isRevision = request.status === 'in_legal_review';
-  const isAprobada = request.status === 'approved_for_generation';
-  const isClientSignature = request.status === 'client_signature';
-  const isFirmaTitular = request.status === 'in_validation';
-  const isFirmado = request.status === 'fully_signed';
+  const priorityLabels: Record<string, string> = { 'Alto': 'Alta', 'Medio': 'Media', 'Bajo': 'Baja' };
+  const isRecibida = request.status === 'Solicitud recibida';
+  const isRevision = request.status === 'En revisión legal';
+  const isAprobada = request.status === 'Aprobado';
+  const isClientSignature = request.status === 'Firma cliente';
+  const isFirmaTitular = request.status === 'Firma titular';
+  const isFirmado = request.status === 'Firmado';
 
   // Conteos de validación (sólo expedientes reales) — alimentan el banner
   // y se derivan de la bitácora. Cada comprador aporta 3 secciones
@@ -2423,9 +2922,34 @@ export default function CaseDetail() {
       {isRecibida && (
         <RecibidaActions
           assignedLawyer={assignedLawyer}
-          onAssignLawyer={setAssignedLawyer}
+          onAssignLawyer={(id: string) => {
+            setAssignedLawyer(id);
+            // Persistir asignación en bitácora para expedientes reales —
+            // alimenta la promoción a "En revisión legal" en el pipeline.
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              const lawyer = AVAILABLE_LAWYERS.find((l) => l.id === id);
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'sistema',
+                titulo: 'Abogado asignado',
+                mensaje: lawyer?.name ?? id,
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           intakeValidation={intakeValidation}
-          onMarkComplete={() => setIntakeValidation('complete')}
+          onMarkComplete={() => {
+            setIntakeValidation('complete');
+            // Persistir validación inicial completa — segundo gate para
+            // promover a "En revisión legal".
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'validacion',
+                titulo: 'Validación inicial completa',
+                mensaje: 'La información de la solicitud quedó marcada como completa.',
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           onMarkMissing={() => { setIntakeValidation('missing'); setShowMissingInfoDialog(true); }}
           onAdvance={() => {/* advance status */}}
         />
@@ -2467,6 +2991,7 @@ export default function CaseDetail() {
         <FirmaTitularActions
           request={request}
           signers={signers}
+          idCuentaCobranza={realRequest?.idCuentaCobranza}
           onAdvance={() => {/* advance */}}
           onReturn={() => {/* return */}}
         />
@@ -2495,7 +3020,28 @@ export default function CaseDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMissingInfoDialog(false)} className="h-9 text-[13px]">Cancelar</Button>
-            <Button variant="destructive" onClick={() => { setShowMissingInfoDialog(false); setMissingTitle(''); setMissingDesc(''); }} disabled={!missingTitle.trim()} className="h-9 text-[13px] gap-1">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                // Para expedientes reales (CC-XXXXXX) persistir la nota
+                // en legal_flow_bitacora con tipo 'informacion_faltante'.
+                // Para mocks legacy (EXP-2025-*) seguir el flujo anterior:
+                // solo cerrar el dialog y limpiar state.
+                if (realRequest && idCuentaCobranzaForBitacora) {
+                  appendBitacoraCaseDetail.mutate({
+                    tipo: 'informacion_faltante',
+                    titulo: missingTitle.trim() || 'Información faltante para revisión',
+                    mensaje: missingDesc.trim(),
+                    referencia: { scope: 'expediente' },
+                  });
+                }
+                setShowMissingInfoDialog(false);
+                setMissingTitle('');
+                setMissingDesc('');
+              }}
+              disabled={!missingTitle.trim() || appendBitacoraCaseDetail.isPending}
+              className="h-9 text-[13px] gap-1"
+            >
               <CircleAlert className="h-3.5 w-3.5" /> Registrar
             </Button>
           </DialogFooter>
@@ -2656,7 +3202,13 @@ export default function CaseDetail() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-6">
                     <DossierField icon={Receipt} label="Cuenta cobranza" value={request.cuentaCobranza || '—'} mono onClick={request.cuentaCobranza ? () => setShowCuentaCobranza(true) : undefined} />
                     <DossierField icon={Building2} label="Proyecto" value={request.project} sub={request.property} />
-                    <DossierField icon={Hash} label="Valor estimado" value={formatCurrency(request.estimatedValue)} mono />
+                    <DossierField
+                      icon={Hash}
+                      label="Valor estimado"
+                      value={formatCurrency(request.estimatedValue)}
+                      mono
+                      onClick={realRequest?.idCuentaCobranza ? () => setShowFormaPago(true) : undefined}
+                    />
                     <DossierField icon={FileText} label="Plantilla" value={request.templateName || 'Sin asignar'} />
                   </div>
                 </div>
@@ -2697,95 +3249,111 @@ export default function CaseDetail() {
             </TabsContent>
 
             <TabsContent value="documents" className="mt-0">
-              <div className="panel">
-                {documents.length === 0 ? (
-                  <div className="panel-body text-center py-20">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
-                      <FileText className="h-6 w-6 text-muted-foreground/50" />
+              {realRequest ? (
+                <ContrapartesDocumentos
+                  compradores={realRequest?.compradoresDetalle ?? []}
+                  fullByPersona={compradoresFull ?? {}}
+                  bitacora={bitacoraEntries}
+                />
+              ) : (
+                <div className="panel">
+                  {documents.length === 0 ? (
+                    <div className="panel-body text-center py-20">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+                        <FileText className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Sin documentos generados</p>
+                      <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">Aparecerán una vez aprobado para generación.</p>
                     </div>
-                    <p className="text-sm font-medium text-foreground">Sin documentos generados</p>
-                    <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">Aparecerán una vez aprobado para generación.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/50">
-                    {documents.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(28_72%_94%)]">
-                            <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
-                          </div>
-                          <div>
-                            <p className="text-[14px] font-medium">{doc.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`status-badge ${DOCUMENT_STATUS_CONFIG[doc.status].style}`}>
-                                {DOCUMENT_STATUS_CONFIG[doc.status].label}
-                              </span>
-                              {doc.generatedAt && <span className="text-[11px] text-muted-foreground/60">{formatDate(doc.generatedAt)}</span>}
+                  ) : (
+                    <div className="divide-y divide-border/50">
+                      {documents.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(28_72%_94%)]">
+                              <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
+                            </div>
+                            <div>
+                              <p className="text-[14px] font-medium">{doc.name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`status-badge ${DOCUMENT_STATUS_CONFIG[doc.status].style}`}>
+                                  {DOCUMENT_STATUS_CONFIG[doc.status].label}
+                                </span>
+                                {doc.generatedAt && <span className="text-[11px] text-muted-foreground/60">{formatDate(doc.generatedAt)}</span>}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            {doc.pdfUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Download className="h-4 w-4" /></Button>}
+                            {doc.googleDocUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Eye className="h-4 w-4" /></Button>}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {doc.pdfUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Download className="h-4 w-4" /></Button>}
-                          {doc.googleDocUrl && <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Eye className="h-4 w-4" /></Button>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="signers" className="mt-0">
-              <div className="panel">
-                {signers.length === 0 ? (
-                  <div className="panel-body text-center py-20">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
-                      <Users className="h-6 w-6 text-muted-foreground/50" />
+              {realRequest ? (
+                <ContrapartesFirmantes
+                  compradores={realRequest?.compradoresDetalle ?? []}
+                  fullByPersona={compradoresFull ?? {}}
+                  bitacora={bitacoraEntries}
+                />
+              ) : (
+                <div className="panel">
+                  {signers.length === 0 ? (
+                    <div className="panel-body text-center py-20">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+                        <Users className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Sin firmantes configurados</p>
                     </div>
-                    <p className="text-sm font-medium text-foreground">Sin firmantes configurados</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left border-b">
-                          <th className="table-head">Nombre</th>
-                          <th className="table-head">Rol</th>
-                          <th className="table-head">KYC</th>
-                          <th className="table-head">Biométrico</th>
-                          <th className="table-head">Firma</th>
-                          <th className="table-head">Fecha</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {signers.map((s) => (
-                          <tr key={s.id} className="border-t border-border/50 table-row-hover" style={{ height: '52px' }}>
-                            <td className="table-cell">
-                              <p className="font-medium text-[14px]">{s.name}</p>
-                              <p className="text-[12px] text-muted-foreground/60 mt-0.5">{s.email}</p>
-                            </td>
-                            <td className="table-cell">
-                              <span className={`badge-base ${s.role === 'internal' ? 'badge-case' : 'badge-signer'}`}>
-                                {s.role === 'internal' ? 'Interno' : 'Externo'}
-                              </span>
-                            </td>
-                            <td className="table-cell"><MicroStatus status={s.kycStatus || 'not_required'} /></td>
-                            <td className="table-cell"><MicroStatus status={s.biometricStatus || 'not_required'} /></td>
-                            <td className="table-cell">
-                              <span className={`status-badge ${SIGNER_STATUS_CONFIG[s.status].style}`}>
-                                {SIGNER_STATUS_CONFIG[s.status].label}
-                              </span>
-                            </td>
-                            <td className="table-cell text-[13px] text-muted-foreground font-mono tabular-nums">
-                              {s.signedAt ? formatTime(s.signedAt) : '—'}
-                            </td>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left border-b">
+                            <th className="table-head">Nombre</th>
+                            <th className="table-head">Rol</th>
+                            <th className="table-head">KYC</th>
+                            <th className="table-head">Biométrico</th>
+                            <th className="table-head">Firma</th>
+                            <th className="table-head">Fecha</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                        </thead>
+                        <tbody>
+                          {signers.map((s) => (
+                            <tr key={s.id} className="border-t border-border/50 table-row-hover" style={{ height: '52px' }}>
+                              <td className="table-cell">
+                                <p className="font-medium text-[14px]">{s.name}</p>
+                                <p className="text-[12px] text-muted-foreground/60 mt-0.5">{s.email}</p>
+                              </td>
+                              <td className="table-cell">
+                                <span className={`badge-base ${s.role === 'internal' ? 'badge-case' : 'badge-signer'}`}>
+                                  {s.role === 'internal' ? 'Interno' : 'Externo'}
+                                </span>
+                              </td>
+                              <td className="table-cell"><MicroStatus status={s.kycStatus || 'not_required'} /></td>
+                              <td className="table-cell"><MicroStatus status={s.biometricStatus || 'not_required'} /></td>
+                              <td className="table-cell">
+                                <span className={`status-badge ${SIGNER_STATUS_CONFIG[s.status].style}`}>
+                                  {SIGNER_STATUS_CONFIG[s.status].label}
+                                </span>
+                              </td>
+                              <td className="table-cell text-[13px] text-muted-foreground font-mono tabular-nums">
+                                {s.signedAt ? formatTime(s.signedAt) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="integrations" className="mt-0">
@@ -2860,6 +3428,12 @@ export default function CaseDetail() {
       />
       <ContractTypeDrawer open={showContractType} onClose={() => setShowContractType(false)} type={request.type} />
       <CuentaCobranzaDrawer open={showCuentaCobranza} onClose={() => setShowCuentaCobranza(false)} cuenta={request.cuentaCobranza || ''} />
+      <FormaPagoDrawer
+        open={showFormaPago}
+        onClose={() => setShowFormaPago(false)}
+        idCuentaCobranza={realRequest?.idCuentaCobranza}
+        folioCuenta={request.cuentaCobranza ?? null}
+      />
     </div>
   );
 }
@@ -2932,7 +3506,8 @@ function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal 
       // Persistir en BD para expedientes reales.
       appendMutation.mutate({
         tipo: 'nota',
-        mensaje: noteDesc ? `${noteTitle}\n${noteDesc}` : noteTitle,
+        titulo: noteTitle,
+        mensaje: noteDesc,
         referencia: { scope: 'expediente' },
       });
     } else {
@@ -2954,41 +3529,54 @@ function BitacoraPanel({ caseId, timeline, formatTime, idCuentaCobranza, isReal 
   const renderBitacoraEntry = (entry: UnifiedEntry) => {
     const e = entry.data as BitacoraEntry;
     const isRechazo = e.tipo === 'rechazo';
+    const isFaltante = e.tipo === 'informacion_faltante';
     const isValidacion = e.tipo === 'validacion';
-    const dotColor = isRechazo
+    const isWarning = isRechazo || isFaltante;
+    const dotColor = isWarning
       ? 'bg-destructive'
       : isValidacion
         ? 'bg-primary'
         : 'bg-muted-foreground';
-    const Icon = isRechazo ? XCircle : isValidacion ? CheckCircle : MessageSquare;
+    const Icon = isWarning ? XCircle : isValidacion ? CheckCircle : MessageSquare;
     const tipoLabel =
       e.tipo === 'rechazo' ? 'Rechazo'
+      : e.tipo === 'informacion_faltante' ? 'Información faltante'
       : e.tipo === 'validacion' ? 'Validación'
       : e.tipo === 'sistema' ? 'Sistema'
       : 'Nota';
+    const fecha = new Date(e.timestamp);
+    const fechaTxt = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+    const horaTxt = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     return (
       <div key={entry.id} className="relative pl-7 pb-5 last:pb-0">
         <div className={`absolute left-0 top-1 flex h-[15px] w-[15px] items-center justify-center rounded-full ${dotColor}`}>
           <Icon className="h-[8px] w-[8px] text-white" />
         </div>
         <div className={`rounded-lg border ${
-          isRechazo ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
+          isWarning ? 'border-destructive/30 bg-destructive/5' : 'border-border/60 bg-muted/20'
         } p-3 transition-colors hover:bg-muted/40`}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className={`text-[13px] font-semibold ${isRechazo ? 'text-destructive' : 'text-foreground'}`}>
+              <p className={`text-[11px] font-semibold uppercase tracking-wider ${isWarning ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                 {tipoLabel}
                 {e.referencia && (
-                  <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                  <span className="ml-1.5 text-[11px] font-normal opacity-70">
                     · {e.referencia.scope.replace('_', ' ')}
                   </span>
                 )}
               </p>
-              <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+              {e.titulo && (
+                <p className={`text-[13px] font-semibold mt-1 ${isWarning ? 'text-destructive' : 'text-foreground'}`}>
+                  {e.titulo}
+                </p>
+              )}
+              {e.mensaje && (
+                <p className="text-[12px] text-foreground/80 mt-1 leading-relaxed whitespace-pre-line">{e.mensaje}</p>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground/50 mt-2">
-            {e.autorNombre || e.autorEmail} · {formatTime(e.timestamp)}
+            {e.autorNombre || e.autorEmail} · {fechaTxt} · {horaTxt}
           </p>
         </div>
       </div>
@@ -3184,4 +3772,348 @@ function MicroStatus({ status }: { status: string }) {
   };
   const s = styles[status] || styles.not_required;
   return <span className={`text-[13px] font-medium ${s.cls}`}>{s.label}</span>;
+}
+
+function ContrapartesDocumentos({
+  compradores,
+  fullByPersona,
+  bitacora,
+}: {
+  compradores: CompradorDetalle[];
+  fullByPersona: Record<number, CompradorFullDetail>;
+  bitacora: BitacoraEntry[];
+}) {
+  if (compradores.length === 0) {
+    return (
+      <div className="panel">
+        <div className="panel-body text-center py-20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+            <Users className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Sin contrapartes registradas</p>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
+            Los documentos de los involucrados que firmarán el contrato aparecerán aquí.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {compradores.map((cp) => {
+        const full = fullByPersona[cp.idPersona];
+        const docs = full?.documentos ?? [];
+        const isPm = cp.tipoPersona === 'pm';
+        const initials = cp.name
+          .split(' ')
+          .map((n) => n[0])
+          .filter(Boolean)
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+        return (
+          <div key={cp.idPersona} className="panel">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center gap-3">
+              <div
+                className={`h-10 w-10 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                  isPm
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {isPm ? <Building2 className="h-4 w-4" /> : initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold leading-tight truncate">{cp.name}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                      isPm
+                        ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {isPm ? 'Persona moral' : cp.tipoPersona === 'pe' ? 'Persona extranjera' : 'Persona física'}
+                  </span>
+                  {cp.rfc && (
+                    <span className="text-[11px] text-muted-foreground/60 font-mono">{cp.rfc}</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Documentos</p>
+                <p className="text-[14px] font-semibold tabular-nums">{docs.length}</p>
+              </div>
+            </div>
+            {docs.length === 0 ? (
+              <div className="px-5 py-6 text-[13px] text-muted-foreground italic">
+                Documentación pendiente de cargar.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {docs.map((doc) => {
+                  const st = getValidationState(bitacora, 'documento', {
+                    idPersona: cp.idPersona,
+                    idDocumento: doc.id,
+                  });
+                  return (
+                    <div key={doc.id} className="flex items-center justify-between px-5 py-3 gap-3">
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 min-w-0 flex-1 group"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[hsl(28_72%_94%)] shrink-0">
+                          <FileText className="h-4 w-4 text-[hsl(28_72%_40%)]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium truncate group-hover:text-primary group-hover:underline underline-offset-2 decoration-primary/40">
+                            {doc.tipoDocumentoNombre}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground/60">
+                            {new Date(doc.fechaCreacion).toLocaleDateString('es-MX', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                      </a>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <ValidationStatusBadge status={st.status} />
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted/60 text-muted-foreground"
+                          title="Ver documento"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ContrapartesFirmantes({
+  compradores,
+  fullByPersona,
+  bitacora,
+}: {
+  compradores: CompradorDetalle[];
+  fullByPersona: Record<number, CompradorFullDetail>;
+  bitacora: BitacoraEntry[];
+}) {
+  if (compradores.length === 0) {
+    return (
+      <div className="panel">
+        <div className="panel-body text-center py-20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+            <Users className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Sin contrapartes registradas</p>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
+            Las personas y empresas que firmarán el contrato aparecerán aquí.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isCopropiedad = compradores.length > 1;
+
+  return (
+    <div className="space-y-4">
+      {isCopropiedad && (
+        <div className="rounded-lg border border-[hsl(var(--status-info)/0.4)] bg-[hsl(var(--status-info)/0.05)] px-4 py-3 flex items-start gap-2">
+          <Info className="h-4 w-4 text-[hsl(var(--status-info))] mt-0.5 shrink-0" />
+          <p className="text-[12px] text-foreground/80">
+            <span className="font-medium">Copropiedad:</span> {compradores.length} firmantes deberán
+            firmar el contrato. Cada uno aparece como una sección independiente con su información y
+            documentación.
+          </p>
+        </div>
+      )}
+
+      {compradores.map((cp, idx) => {
+        const full = fullByPersona[cp.idPersona];
+        const docs = full?.documentos ?? [];
+        const isPm = cp.tipoPersona === 'pm';
+        const initials = cp.name
+          .split(' ')
+          .map((n) => n[0])
+          .filter(Boolean)
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+
+        const basicaState = getValidationState(bitacora, 'comprador_basica', { idPersona: cp.idPersona });
+        const direccionState = getValidationState(bitacora, 'comprador_direccion', { idPersona: cp.idPersona });
+        const fiscalState = getValidationState(bitacora, 'comprador_fiscal', { idPersona: cp.idPersona });
+
+        return (
+          <div key={cp.idPersona} className="panel">
+            <div className="px-5 py-4 border-b border-border/50 flex items-start gap-3">
+              <div
+                className={`h-11 w-11 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 ${
+                  isPm
+                    ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {isPm ? <Building2 className="h-5 w-5" /> : initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[14px] font-semibold leading-tight truncate">{cp.name}</p>
+                  {isCopropiedad && (
+                    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      Firmante {idx + 1} de {compradores.length}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span
+                    className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                      isPm
+                        ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {isPm ? 'Persona moral' : cp.tipoPersona === 'pe' ? 'Persona extranjera' : 'Persona física'}
+                  </span>
+                  {cp.porcentajeCopropiedad != null && (
+                    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]">
+                      {cp.porcentajeCopropiedad}% copropiedad
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <InfoCell label="RFC" value={cp.rfc || full?.basica.rfc || '—'} mono />
+                <InfoCell label="Email" value={cp.email || full?.basica.email || '—'} />
+                <InfoCell label="Teléfono" value={cp.phone || full?.basica.telefono || '—'} mono />
+                {isPm && full?.basica.representanteLegal && (
+                  <InfoCell label="Representante legal" value={full.basica.representanteLegal} />
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <ValidationChip label="Información básica" status={basicaState.status} />
+                <ValidationChip label="Dirección" status={direccionState.status} />
+                <ValidationChip label="Fiscal" status={fiscalState.status} />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">
+                    Documentos del firmante
+                  </p>
+                  <span className="text-[11px] text-muted-foreground/60 tabular-nums">{docs.length}</span>
+                </div>
+                {docs.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground italic">
+                    Documentación pendiente de cargar.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {docs.map((doc) => {
+                      const st = getValidationState(bitacora, 'documento', {
+                        idPersona: cp.idPersona,
+                        idDocumento: doc.id,
+                      });
+                      return (
+                        <a
+                          key={doc.id}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/30 transition-colors gap-2 group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                            <span className="text-[13px] truncate group-hover:text-primary group-hover:underline underline-offset-2 decoration-primary/40">
+                              {doc.tipoDocumentoNombre}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <ValidationStatusBadge status={st.status} />
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ValidationChip({
+  label,
+  status,
+}: {
+  label: string;
+  status: 'validado' | 'rechazado' | 'pendiente';
+}) {
+  const styles = {
+    validado: 'bg-primary/10 text-primary border-primary/20',
+    rechazado: 'bg-destructive/10 text-destructive border-destructive/30',
+    pendiente: 'bg-muted text-muted-foreground border-border',
+  } as const;
+  const labelMap = {
+    validado: 'Validado',
+    rechazado: 'Rechazado',
+    pendiente: 'Pendiente',
+  } as const;
+  return (
+    <div className={`rounded-md border px-2 py-1.5 text-center ${styles[status]}`}>
+      <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70">{label}</p>
+      <p className="text-[12px] font-semibold mt-0.5">{labelMap[status]}</p>
+    </div>
+  );
+}
+
+/**
+ * Extrae un mensaje legible para el toast a partir de cualquier shape de
+ * error. supabase-js devuelve `PostgrestError` como objeto plano
+ * (`{ message, details, hint, code }`), por lo que `err instanceof Error`
+ * es false y `err.message` se pierde. Este helper cubre ambos casos.
+ */
+function pgErrorMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (parts.length > 0) return parts.join(' — ');
+  }
+  return null;
+}
+
+/** True si el error es un `PostgrestError` con `code === expected`. */
+function isPgCode(err: unknown, expected: string): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as Record<string, unknown>;
+  return typeof e.code === 'string' && e.code === expected;
 }

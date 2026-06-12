@@ -20,7 +20,7 @@ import { DrawerActionFooter } from "../DrawerActionFooter";
 import { Section, KV, Timeline, TimelineItem } from "./_shared";
 import type { VentaContext, VentaParaFacturarEntity } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
-import { OfertaPdfEdgeFunctionService } from "@/services/ofertaPdfEdgeFunctionService";
+import { OfertaPdfEdgeFunctionService } from "@/services/offerPdfEdgeFunctionService";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -382,6 +382,15 @@ export function VentaParaFacturarContent({
         </div>
       </Section>
 
+      {/* ─── Cálculo de comisión ─── */}
+      <Section title="Cálculo de comisión">
+        <CalculoComisionPanel
+          precioFinal={detalle.precio_final}
+          porcentajeComision={detalle.porcentaje_comision_venta}
+          subtotal={detalle.comision_total_sozu}
+        />
+      </Section>
+
       {/* ─── Impacto financiero ─── */}
       <Section
         title="Impacto de la decisión"
@@ -598,6 +607,68 @@ function DocRow({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function CalculoComisionPanel({
+  precioFinal,
+  porcentajeComision,
+  subtotal,
+}: {
+  precioFinal: number;
+  porcentajeComision: number;
+  subtotal: number;
+}) {
+  // El subtotal ya viene calculado en el hook como `precio_final * pct / 100`.
+  // IVA y total se calculan en cliente para que el desglose sea explícito.
+  const iva = +(subtotal * 0.16).toFixed(2);
+  const totalConIva = +(subtotal + iva).toFixed(2);
+  return (
+    <div className="rounded-lg border bg-card/50 divide-y divide-border">
+      <CalcRow label="Precio final" value={fmtMxn(precioFinal)} />
+      <CalcRow
+        label="% Comisión SOZU"
+        value={`${(porcentajeComision || 0).toFixed(2)}%`}
+      />
+      <CalcRow label="Subtotal comisión" value={fmtMxn(subtotal)} />
+      <CalcRow label="IVA (16%)" value={fmtMxn(iva)} />
+      <CalcRow
+        label="Total a facturar (IVA incluido)"
+        value={fmtMxn(totalConIva)}
+        emphasis
+      />
+    </div>
+  );
+}
+
+function CalcRow({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5">
+      <span
+        className={cn(
+          "text-[13px]",
+          emphasis ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-[14px] tabular-nums",
+          emphasis ? "font-bold text-foreground" : "font-medium text-foreground",
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }

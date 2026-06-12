@@ -76,7 +76,9 @@ const GroupSection = ({
       {!collapsed && (
         <div className="space-y-2">
           {docs.map((doc) => (
-            <DocumentListItem key={doc.id} document={doc} onClick={() => onSelectDoc(doc.id)} />
+            <div key={doc.id} data-cta="cliente.documentos.abrir">
+              <DocumentListItem document={doc} onClick={() => onSelectDoc(doc.id)} />
+            </div>
           ))}
         </div>
       )}
@@ -105,6 +107,7 @@ const EmptyState = ({
     </p>
     {hasFilters && (
       <button
+        data-cta="cliente.documentos.limpiar-filtros"
         onClick={onClearFilters}
         className="mt-4 text-sm text-primary font-semibold hover:underline"
       >
@@ -188,15 +191,6 @@ const ClienteDocumentos = () => {
               Todos los documentos de tus propiedades en un solo lugar.
             </p>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
-            <span>Agrupar por:</span>
-            <button
-              onClick={() => updateFilter("agrupar", groupBy === "property" ? "status" : "property")}
-              className="px-2.5 py-1 rounded-md border border-border hover:bg-muted/50 transition-colors font-medium text-foreground"
-            >
-              {groupBy === "property" ? "Propiedad" : "Estado"}
-            </button>
-          </div>
         </div>
       </header>
 
@@ -209,8 +203,10 @@ const ClienteDocumentos = () => {
         portfolio={portfolio}
         filterProperty={filterProperty}
         filterType={filterType}
+        groupBy={groupBy}
         onChangeProperty={(v) => updateFilter("propiedad", v)}
         onChangeType={(v) => updateFilter("tipo", v)}
+        onChangeGroupBy={(v) => updateFilter("agrupar", v)}
         hasActiveFilters={hasActiveFilters}
         onClearAll={() => setSearchParams({}, { replace: true })}
       />

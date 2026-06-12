@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sheet,
   SheetContent,
@@ -95,6 +97,8 @@ const toneIcon = (tone: StatusTone) => {
 
 import MortgageBankSelector from "./MortgageBankSelector";
 
+const PREFERRED_BANK_IDS: Record<string, number> = { BBVA: 1, Santander: 2, Banorte: 3 };
+
 const PagoFinalSheet = ({
   stage,
   investment,
@@ -103,6 +107,8 @@ const PagoFinalSheet = ({
   onViewPaymentInstructions,
 }: PagoFinalSheetProps) => {
   const { financials, property } = investment;
+  const cuentaId = Number(property.id);
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<PaymentMethod>(null);
   const [process, setProcess] = useState<MortgageProcess | null>(null);
@@ -128,14 +134,19 @@ const PagoFinalSheet = ({
     onClose();
   };
 
-  const handlePropiosAction = () => {
+  const handlePropiosAction = async () => {
+    await (supabase as any)
+      .from('cuentas_cobranza')
+      .update({ tipo_financiamiento: 'RECURSOS_PROPIOS' })
+      .eq('id', cuentaId);
+    queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     if (onViewPaymentInstructions) {
       onClose();
       setTimeout(() => onViewPaymentInstructions(), 200);
     }
   };
 
-  const handleConfirmMortgage = (choice: MortgageChoice) => {
+  const handleConfirmMortgage = async (choice: MortgageChoice) => {
     const newProcess: MortgageProcess = {
       propertyId: property.id,
       declaredAt: new Date().toISOString(),
@@ -145,6 +156,25 @@ const PagoFinalSheet = ({
     };
     saveMortgageProcess(newProcess);
     setProcess(newProcess);
+
+    await (supabase as any)
+      .from('cuentas_cobranza')
+      .update({ tipo_financiamiento: 'CREDITO_HIPOTECARIO' })
+      .eq('id', cuentaId);
+
+    if (choice.type === 'preferred') {
+      const bankId = PREFERRED_BANK_IDS[choice.bankId];
+      if (bankId) {
+        await (supabase as any)
+          .from('creditos_hipotecarios')
+          .upsert(
+            { id_cuenta_cobranza: cuentaId, id_banco: bankId, monto_credito: 0 },
+            { onConflict: 'id_cuenta_cobranza' },
+          );
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     setStep(choice.type === "preferred" ? "prequalification" : "status");
   };
 
@@ -175,7 +205,7 @@ const PagoFinalSheet = ({
       <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl max-h-[85vh] overflow-y-auto px-5 pb-8"
+          className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8"
         >
           <div className="flex flex-col items-center text-center pt-6 pb-4 gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -379,13 +409,12 @@ const PagoFinalSheet = ({
             <RefreshCcw className="w-3.5 h-3.5" />
             Cambiar banco
           </Button>
-          <Button
-            variant="ghost"
-            className="w-full rounded-xl h-10 text-sm"
+          <button
             onClick={handleClose}
+            className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
           >
             Cerrar
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -493,13 +522,11 @@ const PagoFinalSheet = ({
     <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-5 pb-8"
+        className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
       >
         <SheetHeader className="text-left pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-warning/15 flex items-center justify-center flex-shrink-0">
-              <CreditCard className="w-5 h-5 text-warning" />
-            </div>
+            <CreditCard className="w-5 h-5 text-muted-foreground shrink-0" />
             <div>
               <SheetTitle className="text-foreground font-display">
                 Pago final

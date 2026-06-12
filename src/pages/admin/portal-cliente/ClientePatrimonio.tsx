@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Wallet, CheckCircle2, AlertCircle, Calendar, ChevronRight, TrendingUp } from "lucide-react";
+import { Wallet, CheckCircle2, AlertCircle, Calendar, ChevronRight, TrendingUp, Search } from "lucide-react";
 import { filterPortfolioByCategory } from "@/lib/portal-cliente/mock-data";
 import type { InvestmentProperty } from "@/lib/portal-cliente/types";
 import { fmtMXN as fmt } from "@/lib/utils";
@@ -27,6 +28,7 @@ function PatrimonyCard({
 
   return (
     <div
+      data-cta="cliente.patrimonio.ver-propiedad"
       onClick={onClick}
       className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
     >
@@ -177,8 +179,14 @@ const SkeletonCard = () => (
 const ClientePatrimonio = () => {
   const navigate = useNavigate();
   const { data: portfolio, isLoading } = usePortfolioCliente();
+  const [search, setSearch] = useState("");
 
   const items = portfolio ? filterPortfolioByCategory(portfolio, "active_patrimony") : [];
+  const filtered = items.filter((inv) =>
+    `${inv.property.projectName} ${inv.property.unitNumber} ${inv.property.location}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
 
   const totalValue = items.reduce((s, p) => s + p.financials.currentEstimatedValue, 0);
   const totalPlusvalia = items.reduce(
@@ -233,8 +241,22 @@ const ClientePatrimonio = () => {
             {items.length === 0 ? (
               <EmptyState />
             ) : (
+              <>
+                <div className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar propiedad…"
+                    className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                {filtered.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>
+                ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {items.map((inv) => (
+                {filtered.map((inv) => (
                   <PatrimonyCard
                     key={inv.property.id}
                     inv={inv}
@@ -246,6 +268,8 @@ const ClientePatrimonio = () => {
                   />
                 ))}
               </div>
+                )}
+              </>
             )}
           </>
         )}

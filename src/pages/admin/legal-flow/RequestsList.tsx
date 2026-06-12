@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Eye, Loader2 } from 'lucide-react';
+import { Search, Eye, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
 
-const PRIORITY_LABELS: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
+const PRIORITY_LABELS: Record<string, string> = { 'Alto': 'Alta', 'Medio': 'Media', 'Bajo': 'Baja' };
 
 /**
  * Solicitudes Legales — lista plana de todas las cuentas de cobranza
@@ -45,7 +45,7 @@ export default function RequestsList() {
 
   const counts = {
     all: list.length,
-    active: list.filter((r) => !['fully_signed', 'cancelled', 'archived', 'rejected'].includes(r.status)).length,
+    active: list.filter((r) => !['Firmado', 'Cancelado', 'Archivado', 'Rechazado'].includes(r.status)).length,
   };
 
   return (
@@ -62,9 +62,6 @@ export default function RequestsList() {
             {isLoading ? 'Cargando…' : `${counts.active} activas · ${counts.all} total`}
           </p>
         </div>
-        <Button asChild className="h-9 text-[13px] gap-1.5 rounded-lg">
-          <Link to="/admin/legal-flow/requests/new"><Plus className="h-4 w-4" /> Nueva Solicitud</Link>
-        </Button>
       </motion.div>
 
       {/* Filters */}
@@ -100,9 +97,9 @@ export default function RequestsList() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas las prioridades</SelectItem>
-            <SelectItem value="high">Alta</SelectItem>
-            <SelectItem value="medium">Media</SelectItem>
-            <SelectItem value="low">Baja</SelectItem>
+            <SelectItem value="Alto">Alta</SelectItem>
+            <SelectItem value="Medio">Media</SelectItem>
+            <SelectItem value="Bajo">Baja</SelectItem>
           </SelectContent>
         </Select>
       </motion.div>

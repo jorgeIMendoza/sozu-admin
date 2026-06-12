@@ -42,10 +42,11 @@ export function getValidationState(
 }
 
 /**
- * Lee la bitácora de una cuenta de cobranza desde la columna jsonb
- * `cuentas_cobranza.bitacora`. Si la columna aún no existe en BD
- * (DDL pendiente — ver `Ejecuciones_manuales/bitacora_cuenta_cobranza.md`)
- * el hook devuelve `[]` sin romper.
+ * Lee la bitácora de una cuenta de cobranza desde la tabla dedicada
+ * `legal_flow_bitacora` (una fila por entrada). Si la tabla aún no existe
+ * en BD (migración pendiente — ver
+ * `sozu-supabase-migrations/.../20260601000002_legal_flow_bitacora.sql`)
+ * el hook devuelve `[]` sin romper y marca `columnaFaltante`.
  */
 
 export interface UseBitacoraResult {
@@ -55,7 +56,63 @@ export interface UseBitacoraResult {
   columnaFaltante: boolean;
 }
 
-const POSTGREST_COL_NOT_FOUND = "42703";
+// PostgREST: relación (tabla/vista) inexistente. Antes se detectaba 42703
+// (columna inexistente) con el enfoque jsonb; ahora es 42P01 (tabla faltante).
+const POSTGREST_TABLE_NOT_FOUND = "42P01";
+
+// Shape de una fila de legal_flow_bitacora.
+// `titulo` aún no existe en BD (DDL incremental pendiente). Una vez que
+// se agregue la columna, sumarla aquí y en el SELECT/INSERT más abajo;
+// el shape de `BitacoraEntry` en types ya lo soporta.
+interface BitacoraRow {
+  id: string;
+  tipo: BitacoraEntry["tipo"];
+  mensaje: string;
+  scope: BitacoraScope | null;
+  id_persona: number | null;
+  id_documento: number | null;
+  autor_email: string | null;
+  autor_nombre: string | null;
+  fecha_creacion: string;
+}
+
+// Mensajes con encabezado se escriben como "Título\n\nDescripción".
+// Se separa al renderizar para mostrar título prominente.
+function splitTituloMensaje(raw: string): { titulo?: string; mensaje: string } {
+  const idx = raw.indexOf("\n\n");
+  if (idx <= 0) return { mensaje: raw };
+  const titulo = raw.slice(0, idx).trim();
+  const mensaje = raw.slice(idx + 2);
+  return titulo ? { titulo, mensaje } : { mensaje: raw };
+}
+
+function joinTituloMensaje(titulo: string | undefined, mensaje: string): string {
+  const t = (titulo ?? "").trim();
+  const m = (mensaje ?? "").trim();
+  if (!t) return m;
+  if (!m) return t;
+  return `${t}\n\n${m}`;
+}
+
+function mapRow(row: BitacoraRow): BitacoraEntry {
+  const { titulo, mensaje } = splitTituloMensaje(row.mensaje);
+  return {
+    id: row.id,
+    timestamp: row.fecha_creacion,
+    autorEmail: row.autor_email ?? "desconocido",
+    autorNombre: row.autor_nombre ?? undefined,
+    tipo: row.tipo,
+    titulo,
+    mensaje,
+    referencia: row.scope
+      ? {
+          scope: row.scope,
+          idPersona: row.id_persona ?? undefined,
+          idDocumento: row.id_documento ?? undefined,
+        }
+      : undefined,
+  };
+}
 
 export function useBitacoraCuentaCobranza(
   idCuentaCobranza: number | null | undefined,
@@ -67,19 +124,22 @@ export function useBitacoraCuentaCobranza(
     queryFn: async (): Promise<{ entries: BitacoraEntry[]; columnaFaltante: boolean }> => {
       if (!idCuentaCobranza) return { entries: [], columnaFaltante: false };
       const { data, error } = (await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("bitacora")
-        .eq("id", idCuentaCobranza)
-        .maybeSingle()) as any;
+        .from("legal_flow_bitacora")
+        .select(
+          "id, tipo, mensaje, scope, id_persona, id_documento, autor_email, autor_nombre, fecha_creacion",
+        )
+        .eq("id_cuenta_cobranza", idCuentaCobranza)
+        .eq("activo", true)
+        .order("fecha_creacion", { ascending: true })) as any;
       if (error) {
-        if (error.code === POSTGREST_COL_NOT_FOUND) {
-          // DDL pendiente — devolvemos vacío, la UI lo señaliza.
+        if (error.code === POSTGREST_TABLE_NOT_FOUND) {
+          // Migración pendiente — devolvemos vacío, la UI lo señaliza.
           return { entries: [], columnaFaltante: true };
         }
         throw error;
       }
-      const arr = Array.isArray(data?.bitacora) ? (data.bitacora as BitacoraEntry[]) : [];
-      return { entries: arr, columnaFaltante: false };
+      const rows = (Array.isArray(data) ? data : []) as BitacoraRow[];
+      return { entries: rows.map(mapRow), columnaFaltante: false };
     },
   });
 
@@ -93,12 +153,9 @@ export function useBitacoraCuentaCobranza(
 
 /**
  * Mutación: append de una entrada a la bitácora.
- * Lee el array actual, le concatena la entrada nueva con id + timestamp
- * + autor (del AuthContext) y reescribe la columna.
- *
- * No es transaccional contra ediciones concurrentes — si dos usuarios
- * escriben simultáneamente el último gana. Para volumen real conviene
- * mover a una stored procedure con `||` directo en SQL.
+ * Es un único INSERT atómico en `legal_flow_bitacora` (sin read-modify-write),
+ * por lo que escrituras concurrentes ya no se pisan. El autor se firma desde
+ * el AuthContext.
  */
 export function useAppendBitacoraEntry(idCuentaCobranza: number | null | undefined) {
   const queryClient = useQueryClient();
@@ -107,47 +164,49 @@ export function useAppendBitacoraEntry(idCuentaCobranza: number | null | undefin
   return useMutation({
     mutationFn: async (input: BitacoraEntryInput): Promise<BitacoraEntry> => {
       if (!idCuentaCobranza) throw new Error("idCuentaCobranza requerido");
-      // 1) Leer bitácora actual.
-      const { data: row, error: readErr } = (await (supabase as any)
-        .from("cuentas_cobranza")
-        .select("bitacora")
-        .eq("id", idCuentaCobranza)
-        .maybeSingle()) as any;
-      if (readErr) {
-        if (readErr.code === POSTGREST_COL_NOT_FOUND) {
+
+      // BD aún no acepta `tipo: 'informacion_faltante'` (CHECK constraint
+      // sólo permite nota/validacion/rechazo/sistema). Mapeamos al tipo
+      // aceptado más cercano hasta que se aplique el DDL incremental.
+      const tipoDb = input.tipo === "informacion_faltante" ? "rechazo" : input.tipo;
+      const mensajeDb = joinTituloMensaje(input.titulo, input.mensaje);
+
+      const { data, error } = (await (supabase as any)
+        .from("legal_flow_bitacora")
+        .insert({
+          id_cuenta_cobranza: idCuentaCobranza,
+          tipo: tipoDb,
+          mensaje: mensajeDb,
+          scope: input.referencia?.scope ?? null,
+          id_persona: input.referencia?.idPersona ?? null,
+          id_documento: input.referencia?.idDocumento ?? null,
+          autor_email: profile?.email ?? "desconocido",
+          autor_nombre: profile?.nombre ?? null,
+        })
+        .select(
+          "id, tipo, mensaje, scope, id_persona, id_documento, autor_email, autor_nombre, fecha_creacion",
+        )
+        .single()) as any;
+
+      if (error) {
+        if (error.code === POSTGREST_TABLE_NOT_FOUND) {
           throw new Error(
-            "La columna `bitacora` no existe en cuentas_cobranza. Aplica el DDL de Ejecuciones_manuales/bitacora_cuenta_cobranza.md.",
+            "La tabla `legal_flow_bitacora` no existe. Aplica la migración 20260601000002_legal_flow_bitacora.sql.",
           );
         }
-        throw readErr;
+        throw error;
       }
-      const current = (Array.isArray(row?.bitacora) ? row.bitacora : []) as BitacoraEntry[];
-
-      // 2) Construir entrada.
-      const entry: BitacoraEntry = {
-        id: typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date().toISOString(),
-        autorEmail: profile?.email ?? "desconocido",
-        autorNombre: profile?.nombre ?? undefined,
-        tipo: input.tipo,
-        mensaje: input.mensaje,
-        referencia: input.referencia,
-      };
-
-      // 3) Escribir.
-      const next = [...current, entry];
-      const { error: writeErr } = (await (supabase as any)
-        .from("cuentas_cobranza")
-        .update({ bitacora: next })
-        .eq("id", idCuentaCobranza)) as any;
-      if (writeErr) throw writeErr;
-      return entry;
+      return mapRow(data as BitacoraRow);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["bitacora_cuenta_cobranza", idCuentaCobranza],
+      });
+      // Las entradas de bitácora pueden cambiar la etapa del expediente
+      // (p.ej. asignar abogado + validación inicial completa promueven a
+      // "En revisión legal"). Invalidamos también el listado del pipeline.
+      queryClient.invalidateQueries({
+        queryKey: ["legal_flow_solicitudes_recibidas"],
       });
     },
   });
