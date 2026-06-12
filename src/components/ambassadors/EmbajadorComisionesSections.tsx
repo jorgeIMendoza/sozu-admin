@@ -8,7 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useEmbajadorComisiones, EmbComisionStatus, EmbComision } from '@/hooks/useEmbajadorComisiones';
+import { useEmbajadorComisiones, useReferidosFacturaColExists, EmbComisionStatus, EmbComision } from '@/hooks/useEmbajadorComisiones';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -75,10 +75,22 @@ function InlineFacturaButton({ c, email, idPersona, onUploaded }: {
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const referidosFacturaColExists = useReferidosFacturaColExists();
 
   if (c.status === 'pendiente') return null;
 
   const isReferral = c.id_cuenta_cobranza === 0 && !!c.referralId;
+  // Si la columna url_factura aún no existe en BD, bloquear el botón para referidos
+  if (isReferral && !referidosFacturaColExists) {
+    return (
+      <div className="mt-3">
+        <Button size="sm" variant="outline" disabled title="Pendiente de configuración en BD">
+          <Upload className="h-3.5 w-3.5 mr-1" />
+          Subir factura
+        </Button>
+      </div>
+    );
+  }
   const hasFactura = !!c.factura_url;
 
   const handleUpload = async (file: File) => {

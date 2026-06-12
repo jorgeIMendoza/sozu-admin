@@ -2,6 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 
+/** Detecta si la columna url_factura ya existe en embajadores_referidos.
+ *  Se cachea por 5 min para no repetir el probe en cada render. */
+export function useReferidosFacturaColExists() {
+  const { data } = useQuery({
+    queryKey: ['emb-referidos-url-factura-probe'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { error } = await (supabase as any)
+        .from('embajadores_referidos').select('url_factura').limit(0);
+      return { exists: !error };
+    },
+  });
+  return data?.exists ?? false;
+}
+
 // Comisiones del embajador entendido como COMISIONISTA (igual que un agente externo):
 // filas en `comisionistas` ligadas a una cuenta de cobranza, enriquecidas con la venta
 // (proyecto/propiedad/producto), la factura (documentos tipo 46) y el recibo de pago
