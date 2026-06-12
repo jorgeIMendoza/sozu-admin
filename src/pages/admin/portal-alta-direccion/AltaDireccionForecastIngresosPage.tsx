@@ -137,12 +137,10 @@ export default function AltaDireccionForecastIngresosPage() {
   }, [rows, proyectoFilter, tipoFilter, desarrolladorFilter, search]);
 
   const totalForecast = filtered.reduce((s, r) => s + r.monto, 0);
-  const totalCuentas = filtered
-    .filter((r) => r.fuente === "cuenta")
-    .reduce((s, r) => s + r.monto, 0);
-  const totalInventario = filtered
-    .filter((r) => r.fuente === "inventario")
-    .reduce((s, r) => s + r.monto, 0);
+  const filasCuentas = filtered.filter((r) => r.fuente === "cuenta");
+  const filasInventario = filtered.filter((r) => r.fuente === "inventario");
+  const totalCuentas = filasCuentas.reduce((s, r) => s + r.monto, 0);
+  const totalInventario = filasInventario.reduce((s, r) => s + r.monto, 0);
 
   // Breakdowns
   const porProyecto = useMemo(() => agruparMonto(filtered, (r) => r.proyecto_nombre || "Sin proyecto"), [filtered]);
@@ -191,14 +189,14 @@ export default function AltaDireccionForecastIngresosPage() {
           tone="blue"
           label="Cuentas con flujo"
           value={fmtMxn(totalCuentas)}
-          sub="Apartadas, Vendidas, Pagadas, Entregadas, En demanda, Inventario, Escrituración"
+          sub={`${filasCuentas.length} cuentas · Apartadas, Vendidas, Pagadas, Entregadas, En demanda, Inventario, Escrituración`}
         />
         <KpiTile
           icon={Layers3}
           tone="amber"
           label="Inventario disponible"
           value={fmtMxn(totalInventario)}
-          sub="Propiedades en venta — precio de lista"
+          sub={`${filasInventario.length} ${filasInventario.length === 1 ? "propiedad" : "propiedades"} en venta · precio de lista`}
         />
       </div>
 
@@ -563,17 +561,21 @@ async function fetchForecast(): Promise<ForecastRow[]> {
   const propIdsOf = ofertas.map((o) => o.id_propiedad).filter((x): x is number => !!x);
   const propIdsCuentas = Array.from(new Set([...propIdsCc, ...propIdsOf]));
 
-  // 3) También cargamos todas las propiedades con estatus Disponible (2)
-  //    para sumar el inventario que aún no tiene cuenta de cobranza.
-  const { data: propiedadesDisponibles, error: pdErr } = await (supabase as any)
-    .from("propiedades")
-    .select(
-      "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
-    )
-    .eq("activo", true)
-    .eq("id_estatus_disponibilidad", ESTATUS_DISPONIBLE);
-  if (pdErr) throw pdErr;
-  const propIdsDisp = (propiedadesDisponibles ?? []).map((p: any) => p.id);
+  // 3) Cargar TODAS las propiedades con estatus Disponible (2) para
+  //    sumar el inventario que aún no tiene cuenta de cobranza.
+  //    fetchAllRows pagina hasta agotar — sin esto, PostgREST corta a
+  //    1000 filas y el KPI "Inventario disponible" sale subestimado.
+  const propiedadesDisponibles = await fetchAllRows<any>((from, to) =>
+    (supabase as any)
+      .from("propiedades")
+      .select(
+        "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
+      )
+      .eq("activo", true)
+      .eq("id_estatus_disponibilidad", ESTATUS_DISPONIBLE)
+      .range(from, to),
+  );
+  const propIdsDisp = propiedadesDisponibles.map((p: any) => p.id);
 
   const allPropIds = Array.from(new Set([...propIdsCuentas, ...propIdsDisp]));
   const propiedades = await fetchInBatches<any>(allPropIds, (batch) =>
@@ -692,9 +694,12 @@ async function fetchForecast(): Promise<ForecastRow[]> {
   }
 
   // 7) Compilar filas de inventario disponible.
-  for (const p of propiedadesDisponibles ?? []) {
+  //    Incluimos TODAS las propiedades activas con estatus Disponible —
+  //    el KPI suma `precio_lista` (NULL/0 → 0, no afectan el total).
+  //    Mantener visibles las de precio 0 ayuda a detectar propiedades
+  //    con precio_lista sin capturar que deberían tenerlo.
+  for (const p of propiedadesDisponibles) {
     const precio = Number(p.precio_lista ?? 0);
-    if (precio <= 0) continue;
     const dims = resolverDimensiones(p);
     rows.push({
       fuente: "inventario",

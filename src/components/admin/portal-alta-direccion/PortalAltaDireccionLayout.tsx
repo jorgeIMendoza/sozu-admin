@@ -175,15 +175,13 @@ export const PortalAltaDireccionLayout = () => {
 
   const sidebar = (
     <>
-      <div className="px-4 pt-4 pb-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">
-            S
-          </div>
-          <div className="min-w-0">
-            <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">Alta Dirección</p>
-          </div>
+      <div className="px-4 pt-5 pb-5 border-b border-border">
+        <div className="flex items-center justify-center">
+          <img
+            src="/sozu-logo.png"
+            alt="SOZU"
+            className="h-9 w-auto object-contain dark:invert"
+          />
         </div>
       </div>
 
@@ -210,7 +208,7 @@ export const PortalAltaDireccionLayout = () => {
                         )}
                       >
                         <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={groupActive ? 2 : 1.75} />
-                        <span className="flex-1 text-left">{item.label}</span>
+                        <span className="flex-1 text-left leading-tight">{item.label}</span>
                         {expanded
                           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
                           : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />}
@@ -230,7 +228,7 @@ export const PortalAltaDireccionLayout = () => {
                                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                                 )}
                               >
-                                {child.label}
+                                <span className="flex-1 text-left leading-tight">{child.label}</span>
                               </button>
                             );
                           })}
@@ -245,14 +243,14 @@ export const PortalAltaDireccionLayout = () => {
                     key={item.path}
                     onClick={() => handleNavigate(item.path)}
                     className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
+                      "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150 text-left",
                       active
                         ? "bg-primary/10 text-primary font-semibold"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
-                    {item.label}
+                    <span className="flex-1 text-left leading-tight">{item.label}</span>
                   </button>
                 );
               })}
