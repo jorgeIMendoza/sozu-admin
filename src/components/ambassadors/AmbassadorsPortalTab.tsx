@@ -585,7 +585,7 @@ export default function AmbassadorsPortalTab() {
   );
 
   // ─── Section: Comisiones ───
-  const CommissionsSection = <EmbajadorComisionesSection email={active.email} ambassadorId={active.id} />;
+  const CommissionsSection = <EmbajadorComisionesSection email={active.email} ambassadorId={active.id} idPersona={active.idPersona} />;
 
   // ─── Section: Pagos ───
   const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} ambassadorId={active.id} />;

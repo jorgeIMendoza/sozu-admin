@@ -37,9 +37,9 @@ const REF_STATUS_MAP: Record<string, EmbComisionStatus> = {
   pagada:    'pagada',
 };
 
-export function useEmbajadorComisiones(email?: string | null) {
+export function useEmbajadorComisiones(email?: string | null, ambassadorId?: string | null) {
   const query = useQuery({
-    queryKey: ['embajador-comisiones', email ?? null],
+    queryKey: ['embajador-comisiones', email ?? null, ambassadorId ?? null],
     enabled: !!email,
     staleTime: 30_000,
     queryFn: async (): Promise<EmbComision[]> => {
@@ -52,9 +52,9 @@ export function useEmbajadorComisiones(email?: string | null) {
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
 
-      if (!comisionistas || comisionistas.length === 0) return [];
+      const comisionistasArr = comisionistas ?? [];
 
-      const cuentaIds = [...new Set(comisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
+      const cuentaIds = [...new Set(comisionistasArr.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
       const cuentaMap = new Map<number, any>();
 
       if (cuentaIds.length > 0) {
@@ -141,7 +141,7 @@ export function useEmbajadorComisiones(email?: string | null) {
         }
       }
 
-      const cuentaIdsForFactura = comisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean);
+      const cuentaIdsForFactura = comisionistasArr.map((c: any) => c.id_cuenta_cobranza).filter(Boolean);
       const { data: facturas } = cuentaIdsForFactura.length > 0
         ? await (supabase as any)
             .from('documentos')
@@ -155,7 +155,7 @@ export function useEmbajadorComisiones(email?: string | null) {
         if (f.id_cuenta_cobranza) facturaUrlMap.set(f.id_cuenta_cobranza, f.url || '');
       });
 
-      const comisionistasResult: EmbComision[] = comisionistas.map((c: any): EmbComision => {
+      const comisionistasResult: EmbComision[] = comisionistasArr.map((c: any): EmbComision => {
         const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
         const precioFinal = cuenta?.precio_final || 0;
         const montoComision = precioFinal * (c.porcentaje_comision || 0) / 100;
@@ -188,13 +188,30 @@ export function useEmbajadorComisiones(email?: string | null) {
       });
 
       // ── Referral-sourced commissions (embajadores_referidos.estatus_comision) ──
-      const { data: refRows } = await (supabase as any)
-        .from('embajadores_referidos')
-        .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes')
-        .eq('email_asesor', email)
-        .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
-        .eq('activo', true)
-        .order('fecha_creacion', { ascending: false });
+      // ambassadorId = entidades_relacionadas.id del embajador (id_entidad_relacionada_emb)
+      // Si no se pasa, intentar resolverlo por email via personas
+      let embajadorErId: number | null = ambassadorId ? Number(ambassadorId) : null;
+      if (!embajadorErId) {
+        const { data: personaRow } = await (supabase as any)
+          .from('personas').select('id').eq('email', email).maybeSingle();
+        if (personaRow?.id) {
+          const { data: erRow } = await (supabase as any)
+            .from('entidades_relacionadas').select('id')
+            .eq('id_persona', personaRow.id).eq('id_tipo_entidad', 2).maybeSingle();
+          embajadorErId = erRow?.id ?? null;
+        }
+      }
+
+      const refQuery = embajadorErId
+        ? (supabase as any)
+            .from('embajadores_referidos')
+            .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes')
+            .eq('id_entidad_relacionada_emb', embajadorErId)
+            .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
+            .eq('activo', true)
+            .order('fecha_creacion', { ascending: false })
+        : { data: null };
+      const { data: refRows } = await refQuery;
 
       const referralCommissions: EmbComision[] = [];
       if (refRows && refRows.length > 0) {

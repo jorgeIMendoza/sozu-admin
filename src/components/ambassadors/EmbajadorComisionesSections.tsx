@@ -21,7 +21,11 @@ const STATUS: Record<EmbComisionStatus, { label: string; tone: string; icon: typ
   pagada:            { label: 'Pagada',            tone: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30', icon: CheckCircle2 },
 };
 
-function ComisionRow({ c, children }: { c: EmbComision; children?: React.ReactNode }) {
+function ComisionRow({ c, hideInlineFacturaLink, children }: {
+  c: EmbComision;
+  hideInlineFacturaLink?: boolean;
+  children?: React.ReactNode;
+}) {
   const st = STATUS[c.status];
   const Icon = st.icon;
   return (
@@ -43,7 +47,7 @@ function ComisionRow({ c, children }: { c: EmbComision; children?: React.ReactNo
           <Badge variant="outline" className={cn('text-[10px] gap-1', st.tone)}>
             <Icon className="h-3 w-3" />{st.label}
           </Badge>
-          {c.factura_url && (
+          {!hideInlineFacturaLink && c.factura_url && (
             <a href={c.factura_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary font-medium underline">
               Ver factura
             </a>
@@ -63,9 +67,88 @@ function ComisionRow({ c, children }: { c: EmbComision; children?: React.ReactNo
   );
 }
 
+function InlineFacturaButton({ c, email, idPersona, onUploaded }: {
+  c: EmbComision;
+  email: string;
+  idPersona: number;
+  onUploaded: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Solo aplica a comisiones con cuenta de cobranza real; referidos sin cuenta no tienen dónde adjuntar
+  if (c.id_cuenta_cobranza === 0 || c.status === 'pendiente') return null;
+
+  const hasFactura = !!c.factura_url;
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const path = `facturas-comision/${c.id_cuenta_cobranza}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file);
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+
+      if (hasFactura) {
+        await (supabase as any).from('documentos')
+          .update({ activo: false })
+          .eq('id_cuenta_cobranza', c.id_cuenta_cobranza)
+          .eq('id_tipo_documento', 46)
+          .eq('activo', true);
+      }
+
+      const { error: insErr } = await (supabase as any).from('documentos').insert({
+        id_cuenta_cobranza: c.id_cuenta_cobranza,
+        id_tipo_documento: 46,
+        url: publicUrl,
+        id_persona: idPersona,
+        numero: email,
+        activo: true,
+      });
+      if (insErr) throw insErr;
+      toast.success(hasFactura ? 'Factura actualizada correctamente.' : 'Factura subida correctamente.');
+      onUploaded();
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al subir la factura.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 flex items-center gap-2 flex-wrap">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf,.xml"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ''; }}
+      />
+      {hasFactura && (
+        <Button size="sm" variant="outline" onClick={() => window.open(c.factura_url!, '_blank')}>
+          <FileText className="h-3.5 w-3.5 mr-1" />
+          Ver factura
+        </Button>
+      )}
+      <Button size="sm" variant="outline" disabled={uploading} onClick={() => fileRef.current?.click()}>
+        {uploading
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+          : <Upload className="h-3.5 w-3.5 mr-1" />}
+        {uploading
+          ? (hasFactura ? 'Actualizando…' : 'Subiendo…')
+          : (hasFactura ? 'Cambiar factura' : 'Subir factura')}
+      </Button>
+    </div>
+  );
+}
+
 // ─────────────────────────── Comisiones ───────────────────────────
-export function EmbajadorComisionesSection({ email }: { email?: string | null }) {
-  const { comisiones, totals, isLoading } = useEmbajadorComisiones(email);
+export function EmbajadorComisionesSection({ email, ambassadorId, idPersona }: {
+  email?: string | null;
+  ambassadorId?: string | null;
+  idPersona?: number | null;
+}) {
+  const { comisiones, totals, isLoading, refetch } = useEmbajadorComisiones(email, ambassadorId);
 
   return (
     <div className="space-y-4">
@@ -92,7 +175,18 @@ export function EmbajadorComisionesSection({ email }: { email?: string | null })
           <p className="text-sm text-muted-foreground text-center py-8">Aún no tienes comisiones generadas.</p>
         ) : (
           <div className="space-y-2.5">
-            {comisiones.map((c, i) => <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c} />)}
+            {comisiones.map((c, i) => (
+              <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c} hideInlineFacturaLink>
+                {email && idPersona ? (
+                  <InlineFacturaButton
+                    c={c}
+                    email={email}
+                    idPersona={idPersona}
+                    onUploaded={() => refetch()}
+                  />
+                ) : null}
+              </ComisionRow>
+            ))}
           </div>
         )}
       </Card>
@@ -144,8 +238,8 @@ function FacturaUploadButton({ cuentaId, email, idPersona, onUploaded }: {
   );
 }
 
-export function EmbajadorPagosSection({ email, idPersona }: { email?: string | null; idPersona?: number | null }) {
-  const { comisiones, isLoading, refetch } = useEmbajadorComisiones(email);
+export function EmbajadorPagosSection({ email, idPersona, ambassadorId }: { email?: string | null; idPersona?: number | null; ambassadorId?: string | null }) {
+  const { comisiones, isLoading, refetch } = useEmbajadorComisiones(email, ambassadorId);
   // Pagos = comisiones ya autorizadas (en el flujo de cobro): factura_requerida, programada, pagada
   const pagos = comisiones.filter((c) => ['factura_requerida', 'programada', 'pagada'].includes(c.status));
 
