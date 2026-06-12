@@ -609,13 +609,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       // Create, get, or update person
       if (!personId) {
         console.log("No person ID, checking for existing person...");
-        // Check if person already exists by RFC
-        const { data: existingPerson } = await supabase
-          .from("personas")
-          .select("id")
-          .eq("rfc", data.rfc)
-          .eq("activo", true)
-          .maybeSingle();
+        // Check if person already exists by RFC, then by email
+        let existingPerson: { id: number } | null = null;
+        if (data.rfc) {
+          const { data: byRfc } = await supabase
+            .from("personas")
+            .select("id")
+            .eq("rfc", data.rfc)
+            .eq("activo", true)
+            .maybeSingle();
+          existingPerson = byRfc;
+        }
+        if (!existingPerson && data.email) {
+          const { data: byEmail } = await supabase
+            .from("personas")
+            .select("id")
+            .eq("email", data.email)
+            .eq("activo", true)
+            .maybeSingle();
+          existingPerson = byEmail;
+        }
 
         if (existingPerson) {
           console.log("Found existing person:", existingPerson);
@@ -628,7 +641,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             nombre_legal: data.nombre_completo,
             email: data.email,
             clave_pais_telefono: data.clave_pais_telefono || 'MX',
-            telefono: data.telefono,
+            telefono: data.telefono || null,
             rfc: data.rfc || null,
             curp: data.curp || null,
             activo: true
@@ -664,7 +677,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             tipo_persona: data.tipo_persona,
             nombre_legal: data.nombre_completo,
             email: data.email,
-            telefono: data.telefono,
+            telefono: data.telefono || null,
             rfc: data.rfc || null,
             curp: data.curp || null
           };
@@ -1018,6 +1031,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       
       // Generate PDFs client-side and download
       let allOfferIdsForEmail: number[] = [];
+      let digitalAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
       const emailServicePromise = import('@/services/offerEmailService');
       try {
         const allOfferIds = [result.offerId];
@@ -1092,6 +1106,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             console.error('Error downloading PDF:', dlErr);
           }
         }
+        digitalAttachments = preGeneratedAttachments;
         toast({
           title: "Oferta generada",
           description: `Se descargaron ${generatedPdfFiles.length} PDF(s).`,
@@ -1134,13 +1149,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
       if (variables.data.digital) {
         try {
-          const { data: apartado, error: aptError } = await (supabase as any)
-            .from('apartados_provisionales')
+          const { data: reservacion, error: aptError } = await (supabase as any)
+            .from('reservaciones')
             .insert({ email: result.leadEmail, id_oferta: result.offerId })
             .select('id')
             .single();
           if (aptError) throw aptError;
-          const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
+          const reservationLink = `${window.location.origin}/reservar/RES-${String(reservacion.id).padStart(6, "0")}`;
           const { sendMultipleOffersEmailDirect } = await emailServicePromise;
           await sendMultipleOffersEmailDirect({
             offerIds: allOfferIdsForEmail,
@@ -1148,17 +1163,18 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
             reservationLink,
+            preGeneratedAttachments: digitalAttachments.length > 0 ? digitalAttachments : undefined,
           });
           toast({
             title: "Oferta digital enviada",
-            description: `Link de apartado enviado a ${result.leadEmail}`,
+            description: `Link de reservación enviado a ${result.leadEmail}`,
           });
         } catch (digitalErr: any) {
           console.error('Error en flujo oferta digital:', digitalErr);
           toast({
             title: "Oferta generada",
             description: digitalErr?.code === '42P01'
-              ? "DDL apartados_provisionales pendiente de ejecutar en BD."
+              ? "DDL reservaciones pendiente de ejecutar en BD."
               : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
             variant: "destructive",
           });
@@ -2489,6 +2505,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               >
                 Cancelar
               </Button>
+              {!(hideManualMode && enableDigitalOffer) && (
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
@@ -2497,6 +2514,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               >
                 {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
               </button>
+              )}
               {enableDigitalOffer && (
                 <button
                   type="button"

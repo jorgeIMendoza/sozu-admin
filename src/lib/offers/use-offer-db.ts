@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
-import { buildStorageImageUrl } from "@/lib/supabase-storage";
 
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
@@ -376,7 +375,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     development: {
       website:        (proyectoMkt as any)?.url_sitio_web ?? undefined,
       tagline:        (proyectoMkt as any)?.slogan ?? undefined,
-      logoUrl:        buildStorageImageUrl((proyecto as any).url_logo, { width: 240, quality: 85 }),
+      logoUrl:        (proyecto as any).url_logo ?? undefined,
       logoUrlInverse: undefined,
       legalName:      (proyecto as any).nombre,
       socials: ((proyectoMkt as any)?.instagram_handle ||
