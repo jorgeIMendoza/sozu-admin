@@ -27,7 +27,7 @@ import {
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
 import { AlertCircle, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Instagram, Loader2, MapPin, Sparkles, Youtube } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 const NAV_SECTIONS = [
@@ -129,11 +129,26 @@ const OfferPage = () => {
     s.reservations.find((r) => r.preReservationId === preReservation?.id)
   );
 
+  const visibleNavSections = useMemo(() => {
+    if (!offer) return [] as { id: string; label: string }[];
+    return [...NAV_SECTIONS].filter(({ id }) => {
+      if (import.meta.env.DEV) return true;
+      switch (id) {
+        case "agent":         return !!agent;
+        case "floor-plan":    return !!offer.floorPlanUrl;
+        case "tour-360":      return !!offer.tour360;
+        case "highlights":    return !!(offer.highlights && offer.highlights.length > 0);
+        case "development":   return !!offer.development;
+        default:              return true;
+      }
+    });
+  }, [offer, agent]);
+
   useEffect(() => {
     if (!offer) return;
     const observers: IntersectionObserver[] = [];
 
-    NAV_SECTIONS.forEach(({ id }) => {
+    visibleNavSections.forEach(({ id }) => {
       const el = document.getElementById(id);
       if (!el) return;
       const obs = new IntersectionObserver(
@@ -155,7 +170,7 @@ const OfferPage = () => {
     });
 
     return () => observers.forEach((o) => o.disconnect());
-  }, [offer]);
+  }, [offer, visibleNavSections]);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -239,7 +254,7 @@ const OfferPage = () => {
       agent={agent}
       developmentLogoUrl={offer.development?.logoUrl ?? offer.development?.logoUrlInverse}
       developmentName={offer.property.projectName}
-      navSections={NAV_SECTIONS as unknown as { id: string; label: string }[]}
+      navSections={visibleNavSections}
       onNavClick={scrollToSection}
       activeSectionId={activeSection}
     >
@@ -252,7 +267,7 @@ const OfferPage = () => {
               Contenido
             </p>
             <nav className="space-y-0.5">
-              {NAV_SECTIONS.map((s) => {
+              {visibleNavSections.map((s) => {
                 const isActive = activeSection === s.id;
                 return (
                   <button
@@ -406,7 +421,7 @@ const OfferPage = () => {
             <div id="agent" className={sectionClass("agent")}>
               {agent ? (
                 <AgentCard agent={agent} offerId={offer.id} offerLabel={formatPropertyTitle(offer.property)} />
-              ) : (
+              ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-border bg-card overflow-hidden">
                   <div className="bg-muted/30 border-b border-border/50 px-5 py-2">
                     <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">
@@ -424,7 +439,7 @@ const OfferPage = () => {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* DETAILS */}
@@ -447,7 +462,7 @@ const OfferPage = () => {
                   view={offer.property.view}
                   floor={offer.property.level}
                 />
-              ) : (
+              ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden">
                   <div className="px-5 py-4 border-b border-border/40 flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
@@ -471,7 +486,7 @@ const OfferPage = () => {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* TOUR 360 */}
@@ -481,7 +496,7 @@ const OfferPage = () => {
                 developmentName={offer.property.projectName}
                 propertyLabel={`${offer.property.unitModel} ${offer.property.unitNumber}`}
               />
-            ) : (
+            ) : import.meta.env.DEV ? (
               <div id="tour-360" className={`${sectionClass("tour-360")} rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden`}>
                 <div className="px-5 py-4 border-b border-border/40 bg-muted/10 flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
@@ -501,7 +516,7 @@ const OfferPage = () => {
                   </p>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* PAYMENT PLANS */}
             <div id="payment-plans" className={`${sectionClass("payment-plans")} space-y-5`}>
@@ -532,7 +547,7 @@ const OfferPage = () => {
                     ))}
                   </ul>
                 </div>
-              ) : (
+              ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 md:p-6">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="w-4 h-4 text-muted-foreground/40" />
@@ -550,7 +565,7 @@ const OfferPage = () => {
                     Las características destacadas serán agregadas próximamente por el asesor.
                   </p>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* CONSTRUCTION */}
@@ -591,7 +606,7 @@ const OfferPage = () => {
                   developmentName={offer.property.projectName}
                   agent={agent}
                 />
-              ) : (
+              ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center">
                   <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/50 mb-2">
                     Información del desarrollo
@@ -601,7 +616,7 @@ const OfferPage = () => {
                     Redes sociales, showroom y sitio web disponibles próximamente.
                   </p>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Mobile-only: social links + website (on desktop shown in aside/nav) */}

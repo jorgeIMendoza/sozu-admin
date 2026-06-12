@@ -13,6 +13,7 @@ import {
   buildAgentWhatsAppLink,
   buildAgentPhoneLink,
   buildAgentEmailLink,
+  AGENT_PHOTO_FALLBACK,
 } from "@/lib/offers/agent-data";
 
 interface Props {
@@ -61,9 +62,10 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
           {/* Foto + identidad */}
           <div className="flex-shrink-0">
             <img
-              src={agent.photoUrl}
+              src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
               alt={agent.fullName}
               className="w-20 h-20 md:w-32 md:h-32 rounded-xl object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).src = AGENT_PHOTO_FALLBACK; }}
             />
           </div>
 

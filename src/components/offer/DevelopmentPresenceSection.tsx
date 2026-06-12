@@ -36,7 +36,7 @@ const DevelopmentPresenceSection = ({ development, developmentName, agent }: Pro
           developmentName={developmentName}
           agent={agent}
         />
-      ) : (
+      ) : import.meta.env.DEV ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4">
           <div className="flex items-center gap-2 mb-3">
             <MapPin className="w-4 h-4 text-muted-foreground/40" />
@@ -55,7 +55,7 @@ const DevelopmentPresenceSection = ({ development, developmentName, agent }: Pro
             </p>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
