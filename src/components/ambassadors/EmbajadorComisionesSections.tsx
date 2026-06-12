@@ -76,36 +76,47 @@ function InlineFacturaButton({ c, email, idPersona, onUploaded }: {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  // Solo aplica a comisiones con cuenta de cobranza real; referidos sin cuenta no tienen dónde adjuntar
-  if (c.id_cuenta_cobranza === 0 || c.status === 'pendiente') return null;
+  if (c.status === 'pendiente') return null;
 
+  const isReferral = c.id_cuenta_cobranza === 0 && !!c.referralId;
   const hasFactura = !!c.factura_url;
 
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `facturas-comision/${c.id_cuenta_cobranza}/${Date.now()}-${file.name}`;
+      const storageKey = isReferral ? `ref-${c.referralId}` : String(c.id_cuenta_cobranza);
+      const path = `facturas-comision/${storageKey}/${Date.now()}-${file.name}`;
       const { error: upErr } = await supabase.storage.from('documentos').upload(path, file);
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
 
-      if (hasFactura) {
-        await (supabase as any).from('documentos')
-          .update({ activo: false })
-          .eq('id_cuenta_cobranza', c.id_cuenta_cobranza)
-          .eq('id_tipo_documento', 46)
-          .eq('activo', true);
+      if (isReferral) {
+        // Referidos: guardar URL directamente en la fila de embajadores_referidos
+        const { error: updErr } = await (supabase as any)
+          .from('embajadores_referidos')
+          .update({ url_factura: publicUrl })
+          .eq('id', Number(c.referralId));
+        if (updErr) throw updErr;
+      } else {
+        // Comisionistas: gestionar en tabla documentos (tipo 46)
+        if (hasFactura) {
+          await (supabase as any).from('documentos')
+            .update({ activo: false })
+            .eq('id_cuenta_cobranza', c.id_cuenta_cobranza)
+            .eq('id_tipo_documento', 46)
+            .eq('activo', true);
+        }
+        const { error: insErr } = await (supabase as any).from('documentos').insert({
+          id_cuenta_cobranza: c.id_cuenta_cobranza,
+          id_tipo_documento: 46,
+          url: publicUrl,
+          id_persona: idPersona,
+          numero: email,
+          activo: true,
+        });
+        if (insErr) throw insErr;
       }
 
-      const { error: insErr } = await (supabase as any).from('documentos').insert({
-        id_cuenta_cobranza: c.id_cuenta_cobranza,
-        id_tipo_documento: 46,
-        url: publicUrl,
-        id_persona: idPersona,
-        numero: email,
-        activo: true,
-      });
-      if (insErr) throw insErr;
       toast.success(hasFactura ? 'Factura actualizada correctamente.' : 'Factura subida correctamente.');
       onUploaded();
     } catch (err: any) {

@@ -205,7 +205,7 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
       const refQuery = embajadorErId
         ? (supabase as any)
             .from('embajadores_referidos')
-            .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes')
+            .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes, url_factura')
             .eq('id_entidad_relacionada_emb', embajadorErId)
             .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
             .eq('activo', true)
@@ -252,7 +252,7 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
             monto_comision: r.monto_comision || 0,
             status: REF_STATUS_MAP[s] ?? 'en_revision',
             cuenta_cobranza_label: `Referido · ${clientName}`,
-            factura_url: null,
+            factura_url: r.url_factura || null,
           });
         }
       }
