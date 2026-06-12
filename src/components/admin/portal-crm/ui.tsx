@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 export function PageHeader({
   title,
@@ -35,6 +37,77 @@ export function MockBadge({ className }: { className?: string }) {
       <Sparkles className="h-3 w-3" />
       Mock
     </span>
+  );
+}
+
+type DataSource = "mock" | "sandbox" | "imported" | "manual" | "mixed";
+
+const DATA_SOURCE_TONE: Record<DataSource, string> = {
+  mock: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  sandbox: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  imported: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  manual: "bg-slate-500/15 text-slate-700 dark:text-slate-400",
+  mixed: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
+};
+
+export function DataSourceBadge({ source = "mock", note }: { source?: DataSource; note?: string }) {
+  return (
+    <Badge variant="outline" className={`text-[10px] inline-flex items-center gap-1 ${DATA_SOURCE_TONE[source]}`}>
+      <FlaskConical className="h-3 w-3" />
+      <span className="capitalize">{source}</span>
+      {note && <span className="opacity-70">· {note}</span>}
+    </Badge>
+  );
+}
+
+export function MockDataDisclaimer({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-[11px] text-muted-foreground ${className}`}>
+      Mock data — production values may differ. Las métricas se recalcularán automáticamente al conectar datos reales post-deploy.
+    </p>
+  );
+}
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon?: any;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Card className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      {Icon && (
+        <div className="rounded-full bg-muted p-3">
+          <Icon className="h-6 w-6 text-muted-foreground" />
+        </div>
+      )}
+      <div>
+        <p className="font-medium">{title}</p>
+        {description && <p className="text-sm text-muted-foreground mt-1 max-w-md">{description}</p>}
+      </div>
+      {action}
+    </Card>
+  );
+}
+
+export function ComingSoon({ title, items }: { title: string; items: string[] }) {
+  return (
+    <Card className="p-6">
+      <p className="font-medium">{title}</p>
+      <p className="text-sm text-muted-foreground mt-1">
+        Esta pantalla se construye en una sub-fase posterior. Lo que incluirá:
+      </p>
+      <ul className="mt-3 space-y-1 text-sm text-muted-foreground list-disc list-inside">
+        {items.map((i) => (
+          <li key={i}>{i}</li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
