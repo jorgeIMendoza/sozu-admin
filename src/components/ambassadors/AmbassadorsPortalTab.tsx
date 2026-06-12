@@ -65,6 +65,26 @@ const NOTIF_MSG: Record<string, string> = {
   duplicado: 'Posible duplicado detectado',
   comision_generada: 'Comisión generada',
   comision_pagada: '¡Comisión pagada!',
+  // audit trail types from setCommissionStatus
+  'comision:potencial':  'Comisión en proceso',
+  'comision:generada':   'Comisión generada',
+  'comision:autorizada': 'Comisión autorizada',
+  'comision:pagada':     '¡Comisión pagada!',
+  'comision:cancelada':  'Comisión cancelada',
+  // audit trail types from updateReferralStatus
+  'status:registrado':        'Referido registrado',
+  'status:validado':          'Referido validado',
+  'status:contactado':        'Referido contactado',
+  'status:cita_agendada':     'Cita agendada',
+  'status:cita_realizada':    'Cita realizada',
+  'status:en_seguimiento':    'En seguimiento',
+  'status:apartado':          'Propiedad apartada',
+  'status:promesa_firmada':   'Promesa firmada',
+  'status:venta_cerrada':     'Venta cerrada',
+  'status:comision_generada': 'Comisión generada',
+  'status:comision_pagada':   '¡Comisión pagada!',
+  'status:no_viable':         'No viable',
+  'status:duplicado':         'Marcado como duplicado',
 };
 
 const NOTIF_DOT: Record<string, string> = {
@@ -78,6 +98,11 @@ const NOTIF_DOT: Record<string, string> = {
   duplicado: 'bg-orange-500',
   comision_generada: 'bg-teal-500',
   comision_pagada: 'bg-teal-600',
+  'comision:potencial':  'bg-muted-foreground',
+  'comision:generada':   'bg-teal-500',
+  'comision:autorizada': 'bg-violet-500',
+  'comision:pagada':     'bg-teal-600',
+  'comision:cancelada':  'bg-destructive',
 };
 
 const commLabelForAmb = (s: string) => s === 'potencial' ? 'Sin comisión generada' : COMMISSION_STATUS_LABEL[s as keyof typeof COMMISSION_STATUS_LABEL];
@@ -137,6 +162,7 @@ export default function AmbassadorsPortalTab() {
   const [showForm, setShowForm] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [openRefId, setOpenRefId] = useState<string | null>(null);
+  const [showAllNotifs, setShowAllNotifs] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReferralStatus>('all');
 
@@ -249,7 +275,7 @@ export default function AmbassadorsPortalTab() {
           {/* Left column: copy */}
           <div className="flex flex-col gap-4">
             <h2 className="text-[1.35rem] sm:text-[1.65rem] md:text-[1.85rem] font-bold leading-[1.2] tracking-tight text-foreground">
-              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con SOZU es <span className="text-primary font-extrabold">POSIBLE</span>
+              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con <img src="/sozu-logo.png" alt="SOZU" className="inline-block h-[1.1em] w-auto align-middle" /> es <span className="text-primary font-extrabold">POSIBLE</span>
             </h2>
             <p className="text-sm sm:text-[0.95rem] text-muted-foreground leading-relaxed max-w-md">
               Recomienda nuestros proyectos inmobiliarios y nosotros hacemos el resto.
@@ -367,31 +393,43 @@ export default function AmbassadorsPortalTab() {
             <p className="text-[11px] text-muted-foreground">Los cambios en el estado de tus referidos aparecerán aquí.</p>
           </div>
         ) : (
-          <ul className="space-y-2">
-            {notifFeed.slice(0, 8).map((item) => (
-              <li
-                key={item.id}
-                onClick={() => setOpenRefId(item.referralId)}
-                className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/40 cursor-pointer transition"
+          <>
+            <ul className="space-y-2">
+              {(showAllNotifs ? notifFeed : notifFeed.slice(0, 3)).map((item) => (
+                <li
+                  key={item.id}
+                  onClick={() => setOpenRefId(item.referralId)}
+                  className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/40 cursor-pointer transition"
+                >
+                  <span className={cn('mt-1.5 h-2 w-2 rounded-full shrink-0', NOTIF_DOT[item.type] ?? 'bg-muted-foreground')} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium truncate">{item.clientName}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                        {mapStatusForAmbassador(item.status)}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {NOTIF_MSG[item.type] ?? item.type}
+                      {item.details ? ` · ${item.details}` : ''}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/60 mt-0.5">{dateRelative(item.timestamp)}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                </li>
+              ))}
+            </ul>
+            {notifFeed.length > 3 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 text-xs text-muted-foreground"
+                onClick={() => setShowAllNotifs(v => !v)}
               >
-                <span className={cn('mt-1.5 h-2 w-2 rounded-full shrink-0', NOTIF_DOT[item.type] ?? 'bg-muted-foreground')} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium truncate">{item.clientName}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                      {mapStatusForAmbassador(item.status)}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    {NOTIF_MSG[item.type] ?? item.type}
-                    {item.details ? ` · ${item.details}` : ''}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">{dateRelative(item.timestamp)}</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-              </li>
-            ))}
-          </ul>
+                {showAllNotifs ? 'Ver menos ▲' : `Ver ${notifFeed.length - 3} más ▼`}
+              </Button>
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -547,10 +585,10 @@ export default function AmbassadorsPortalTab() {
   );
 
   // ─── Section: Comisiones ───
-  const CommissionsSection = <EmbajadorComisionesSection email={active.email} />;
+  const CommissionsSection = <EmbajadorComisionesSection email={active.email} ambassadorId={active.id} />;
 
   // ─── Section: Pagos ───
-  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} />;
+  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} ambassadorId={active.id} />;
 
   // ─── Section: Perfil ───
   const ProfileSection = (
