@@ -48,10 +48,13 @@ interface DocItem {
   idTipoDocumento: number;
   tipoNombre: string;
   estatusNombre: string;
+  estatusId: number;
   url: string;
   fecha: string | null;
-  isLatest: boolean;        // es el más reciente cargado de su tipo
-  hasOlderValidado: boolean; // hay versión anterior Validada pero la vigente no lo está
+  isLatest: boolean;
+  hasOlderValidado: boolean;
+  personaId: number;
+  personaNombre: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -94,6 +97,76 @@ const ALL_OBLIGATORIO_IDS: number[] = OBLIGATORIO_GRUPOS.flatMap(g => [...g.ids]
 const ID_TO_GROUP_KEY: Record<number, string> = {};
 OBLIGATORIO_GRUPOS.forEach(g => g.ids.forEach(id => { ID_TO_GROUP_KEY[id] = g.key; }));
 
+// ─── Funciones centralizadas de documentación ─────────────────────────────────
+
+// Construye el mapa "personaId__grupoKey" → doc más reciente
+// NULL fecha_creacion → sentinel '9999' (NULLS FIRST, igual que PostgreSQL DESC)
+function buildLatestDocByKey(
+  docs: Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>
+): Record<string, { id: number; estatusId: number; fecha: string }> {
+  const map: Record<string, { id: number; estatusId: number; fecha: string }> = {};
+  docs.forEach(d => {
+    if (!d.id_persona) return;
+    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+    if (!groupKey) return;
+    const key = `${d.id_persona}__${groupKey}`;
+    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
+    const ex = map[key];
+    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+    }
+  });
+  return map;
+}
+
+// Cuenta grupos obligatorios validados (id_estatus_verificacion === 2) para una sola persona
+function countValidatedGroups(
+  personaId: number,
+  latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }>
+): number {
+  let count = 0;
+  for (const grupo of OBLIGATORIO_GRUPOS) {
+    const latest = latestDocByKey[`${personaId}__${grupo.key}`];
+    if (latest && latest.estatusId === 2) count++;
+  }
+  return count;
+}
+
+// Calcula el avance documental de una cuenta: mínimo entre todos sus compradores
+// (conservador para copropiedad — todos deben tener sus docs validados)
+function calcCuentaDocStats(
+  compradorPersonaIds: number[],
+  latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }>
+): { completos: number; total: number } {
+  const total = OBLIGATORIO_GRUPOS.length;
+  if (!compradorPersonaIds.length) return { completos: 0, total };
+  const counts = compradorPersonaIds.map(pid => countValidatedGroups(pid, latestDocByKey));
+  return { completos: Math.min(...counts), total };
+}
+
+// Fetchea documentos obligatorios en chunks de 100 para evitar truncación silenciosa
+// de Supabase/PostgREST (max_rows default = 1000 filas por respuesta REST)
+async function fetchObligatoriosDocs(
+  personaIds: number[]
+): Promise<Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>> {
+  if (!personaIds.length) return [];
+  const CHUNK = 100;
+  const results: Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }> = [];
+  for (let i = 0; i < personaIds.length; i += CHUNK) {
+    const chunk = personaIds.slice(i, i + CHUNK);
+    const { data } = await (supabase as any)
+      .from('documentos')
+      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+      .in('id_persona', chunk)
+      .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+      .eq('activo', true)
+      .eq('es_draft', false)
+      .limit(5000);
+    if (data) results.push(...data);
+  }
+  return results;
+}
+
 // Normalización de nombres para display (panel de detalle)
 function normTipoDoc(s: string): string {
   return (s ?? '')
@@ -106,17 +179,16 @@ function normTipoDoc(s: string): string {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-// Regla: LISTO cuando el ÚLTIMO documento cargado de cada tipo obligatorio
-// está en estatus VALIDADO. Si el último es Expirado/Rechazado/Pendiente,
-// el tipo no se considera cumplido, aunque exista una versión anterior Validada.
-function deriveEstatusExpediente(
-  estatusDisponibilidadId: number,
-  docsCompletos: number,
-): EstatusExpediente {
-  if (estatusDisponibilidadId === 11) return 'CON_OBSERVACIONES'; // En demanda
-  // Escriturado (7) o Entregado (8) → LISTO siempre
-  if (estatusDisponibilidadId === 7 || estatusDisponibilidadId === 8) return 'LISTO';
-  // Para el resto: LISTO solo si todos los obligatorios tienen su último doc Validado
+// Estado DOCUMENTAL del expediente — independiente del estado operativo de la unidad.
+// LISTO = 5/5 grupos obligatorios tienen su doc más reciente con id_estatus_verificacion=2.
+// PENDIENTE = al menos un grupo falta o no está validado.
+// (CON_OBSERVACIONES / EN_REVISION / VENCIDO: reservados para uso manual futuro.)
+//
+// IMPORTANTE: id_estatus_disponibilidad de la propiedad (Escrituración, Entregado, etc.)
+// NO influye en este cálculo. Son conceptos separados:
+//   estatusExpediente      → estado DOCUMENTAL (¿están los 5 docs validados?)
+//   id_estatus_disponibilidad → estado OPERATIVO/COMERCIAL/LEGAL de la unidad
+function deriveEstatusExpediente(docsCompletos: number): EstatusExpediente {
   if (docsCompletos >= OBLIGATORIO_GRUPOS.length) return 'LISTO';
   return 'PENDIENTE';
 }
@@ -240,56 +312,48 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   const [markingListo, setMarkingListo] = useState(false);
 
   async function handleMarcarListo() {
-    if (!row.personaId) {
-      toast.error('No se encontró el identificador del comprador para este expediente.');
+    const compradores = row.compradores;
+    if (!compradores.length) {
+      toast.error('No se encontraron compradores activos para este expediente.');
       return;
     }
     setMarkingListo(true);
     try {
-      const { data: docs, error } = await supabase
-        .from('documentos')
-        .select('id, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
-        .eq('id_persona', row.personaId)
-        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
-        .eq('activo', true)
-        .eq('es_draft', false);
-
-      if (error) throw error;
-
-      // Último doc por grupo — misma lógica y mismo sentinel que el query principal
-      const latestByGroup: Record<string, { id: number; estatusId: number; fecha: string }> = {};
-      (docs || []).forEach((d: any) => {
-        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
-        if (!groupKey) return;
-        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-        const ex = latestByGroup[groupKey];
-        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-          latestByGroup[groupKey] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
-        }
-      });
+      // Revalida docs reales de TODOS los compradores (misma lógica que la tabla)
+      const allPersonaIds = compradores.map(c => c.id_persona);
+      const rawDocs = await fetchObligatoriosDocs(allPersonaIds);
+      const latestByKey = buildLatestDocByKey(rawDocs);
 
       const ESTATUS_LABEL: Record<number, string> = { 1: 'Pendiente', 3: 'Rechazado', 4: 'Expirado' };
-      const faltantes: string[] = [];
-      const noValidados: string[] = [];
+      const problemasPorComprador: string[] = [];
 
-      for (const grupo of OBLIGATORIO_GRUPOS) {
-        const latest = latestByGroup[grupo.key];
-        if (!latest) {
-          faltantes.push(grupo.label);
-        } else if (latest.estatusId !== 2) {
-          noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
+      for (const comp of compradores) {
+        const faltantes: string[] = [];
+        const noValidados: string[] = [];
+        for (const grupo of OBLIGATORIO_GRUPOS) {
+          const latest = latestByKey[`${comp.id_persona}__${grupo.key}`];
+          if (!latest) {
+            faltantes.push(grupo.label);
+          } else if (latest.estatusId !== 2) {
+            noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
+          }
+        }
+        if (faltantes.length > 0 || noValidados.length > 0) {
+          const partes: string[] = [];
+          if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
+          if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
+          problemasPorComprador.push(
+            compradores.length > 1 ? `${comp.nombre}: ${partes.join('. ')}` : partes.join('. ')
+          );
         }
       }
 
-      if (faltantes.length > 0 || noValidados.length > 0) {
-        const partes: string[] = [];
-        if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
-        if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
-        toast.error(`No se puede marcar como listo. ${partes.join('. ')}.`);
+      if (problemasPorComprador.length > 0) {
+        toast.error(`No se puede marcar como listo. ${problemasPorComprador.join(' | ')}.`);
         return;
       }
 
-      // Actualización optimista: tabla y panel reflejan LISTO inmediatamente
+      // Todos los compradores cumplen — actualización optimista
       qcPanel.setQueryData(
         ['expedientes-dashboard', row.proyectoId],
         (old: ExpedienteRow[] | undefined) => {
@@ -302,10 +366,9 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         },
       );
 
-      // Invalida con la key correcta para refetch en background
       await Promise.all([
         qcPanel.invalidateQueries({ queryKey: ['expedientes-dashboard', row.proyectoId] }),
-        qcPanel.invalidateQueries({ queryKey: ['exp-docs-persona', row.personaId] }),
+        qcPanel.invalidateQueries({ queryKey: ['exp-docs-cuenta', row.cuentaId] }),
       ]);
       toast.success('Expediente marcado como listo correctamente.');
     } catch {
@@ -316,69 +379,81 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   }
 
   const { data: checklist = [], isLoading: loadingDocs } = useQuery({
-    queryKey: ['exp-docs-persona', row.personaId ?? row.cuentaId],
+    queryKey: ['exp-docs-cuenta', row.cuentaId],
     queryFn: async (): Promise<DocItem[]> => {
-      // Los documentos en BD están vinculados por id_persona, no id_cuenta_cobranza
-      if (!row.personaId) return [];
+      // Consulta todos los compradores activos de la cuenta (fix copropiedad)
+      const personaIds = row.compradores.map(c => c.id_persona).filter(Boolean);
+      if (!personaIds.length) return [];
+
       const { data } = await supabase
         .from('documentos')
         .select(`
-          id, id_tipo_documento, url, fecha_creacion, fecha_actualizacion, es_draft,
+          id, id_tipo_documento, id_persona, url, fecha_creacion, fecha_actualizacion, es_draft,
           tipos_documento:documentos_id_tipo_documento_fkey(nombre),
           estatus_verificacion:documentos_id_estatus_verificacion_fkey(nombre)
         `)
-        .eq('id_persona', row.personaId)
+        .in('id_persona', personaIds)
         .eq('activo', true)
         .eq('es_draft', false)
+        .order('id_persona', { ascending: true })
         .order('fecha_creacion', { ascending: false })
         .order('id', { ascending: false });
+
+      const compradorNombre: Record<number, string> = {};
+      row.compradores.forEach(c => { compradorNombre[c.id_persona] = c.nombre; });
 
       const items: DocItem[] = (data || []).map((d: any) => ({
         id: d.id,
         idTipoDocumento: d.id_tipo_documento,
         tipoNombre: d.tipos_documento?.nombre ?? 'Documento',
         estatusNombre: d.estatus_verificacion?.nombre ?? 'Pendiente',
+        estatusId: d.id_estatus_verificacion,
         url: d.url,
         fecha: d.fecha_creacion ?? d.fecha_actualizacion,
         isLatest: false,
         hasOlderValidado: false,
+        personaId: d.id_persona,
+        personaNombre: compradorNombre[d.id_persona] ?? '—',
       }));
 
-      // isLatest: el más reciente por id_tipo_documento (ya ordenados desc por fecha_creacion/id)
-      const latestIdByTipoId: Record<number, number> = {};
-      const tipoIdGroups: Record<number, DocItem[]> = {};
+      // isLatest: más reciente por (id_persona, id_tipo_documento)
+      const latestIdByPersonaTipo: Record<string, number> = {};
+      const groupsByPersonaTipo: Record<string, DocItem[]> = {};
       items.forEach(d => {
-        if (!tipoIdGroups[d.idTipoDocumento]) tipoIdGroups[d.idTipoDocumento] = [];
-        tipoIdGroups[d.idTipoDocumento].push(d);
+        const gKey = `${d.personaId}__${d.idTipoDocumento}`;
+        if (!groupsByPersonaTipo[gKey]) groupsByPersonaTipo[gKey] = [];
+        groupsByPersonaTipo[gKey].push(d);
       });
-      Object.values(tipoIdGroups).forEach(group => {
-        latestIdByTipoId[group[0].idTipoDocumento] = group[0].id;
+      Object.entries(groupsByPersonaTipo).forEach(([gKey, group]) => {
+        latestIdByPersonaTipo[gKey] = group[0].id;
       });
-
-      const isValidado = (s: string) =>
-        s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
 
       return items.map(d => {
-        const isLatest = latestIdByTipoId[d.idTipoDocumento] === d.id;
-        const latestId = latestIdByTipoId[d.idTipoDocumento];
-        const hasOlderValidado = isLatest && !isValidado(d.estatusNombre) &&
-          (tipoIdGroups[d.idTipoDocumento] ?? []).some(x => x.id !== latestId && isValidado(x.estatusNombre));
+        const gKey = `${d.personaId}__${d.idTipoDocumento}`;
+        const isLatest = latestIdByPersonaTipo[gKey] === d.id;
+        const latestId = latestIdByPersonaTipo[gKey];
+        const hasOlderValidado = isLatest && d.estatusId !== 2 &&
+          (groupsByPersonaTipo[gKey] ?? []).some(x => x.id !== latestId && x.estatusId === 2);
         return { ...d, isLatest, hasOlderValidado };
       });
     },
     staleTime: 30_000,
   });
 
-  // Contar obligatorios cumplidos: último doc de cada grupo obligatorio en estatus Validado
-  // Grupos: items ya vienen ordenados desc por fecha_creacion → el primero de cada grupo es el vigente
-  const isValidadoNombre = (s: string) =>
-    s.toLowerCase().includes('validado') || s.toLowerCase().includes('aprobado');
-
-  const obligatoriosCumplidos = OBLIGATORIO_GRUPOS.filter(grupo => {
-    const grupoItems = checklist.filter(d => (grupo.ids as readonly number[]).includes(d.idTipoDocumento));
-    if (!grupoItems.length) return false;
-    return isValidadoNombre(grupoItems[0].estatusNombre); // [0] = más reciente (desc)
-  }).length;
+  // Reutiliza la misma función centralizada que la tabla — mínimo entre todos los compradores
+  const panelLatestByKey = buildLatestDocByKey(
+    checklist.map(d => ({
+      id: d.id,
+      id_persona: d.personaId,
+      id_tipo_documento: d.idTipoDocumento,
+      id_estatus_verificacion: d.estatusId,
+      fecha_creacion: d.fecha,
+    }))
+  );
+  const { completos: obligatoriosCumplidos } = calcCuentaDocStats(
+    row.compradores.map(c => c.id_persona),
+    panelLatestByKey
+  );
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
@@ -458,11 +533,12 @@ function DetailPanel({ row, onClose, onEditComprador }: {
           ) : (
             <div className="space-y-1.5">
               {checklist.map(doc => {
-                const validated =
-                  doc.estatusNombre.toLowerCase().includes('validado') ||
-                  doc.estatusNombre.toLowerCase().includes('aprobado');
+                const validated = doc.estatusId === 2;
                 return (
                   <div key={doc.id} className={`rounded-xl px-3 py-2 border ${doc.isLatest ? 'bg-white border-slate-200' : 'bg-slate-50/50 border-transparent opacity-60'}`}>
+                    {row.compradores.length > 1 && doc.isLatest && (
+                      <p className="text-[10px] text-slate-400 font-semibold mb-1 uppercase tracking-wide">{doc.personaNombre}</p>
+                    )}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <p className="text-xs text-slate-700 truncate">{doc.tipoNombre}</p>
@@ -712,58 +788,27 @@ export function ExpedientesDashboard() {
         });
       });
 
-      // Paso 4: Documentos — query por id_persona (relación real en BD)
-      // Verificado: id_cuenta_cobranza es NULL en ~99.9% de documentos obligatorios.
-      // El campo de vinculación real es id_persona → compradores → cuentas_cobranza.
-      // Campo de fecha real para "último cargado": fecha_creacion (fecha_carga no existe en BD).
-      const personaIdsForDocs = [...new Set(Object.values(primerPersonaIdByCuenta))];
+      // Paso 4: Documentos — TODOS los compradores activos de cada cuenta
+      // Chunks de 100 personas para evitar truncación silenciosa de Supabase (max_rows ≤ 1000)
+      // Usa funciones centralizadas para garantizar la misma regla que el panel lateral.
+      const allPersonaIds = [...new Set(
+        Object.values(comprsByCuenta).flat().map(c => c.id_persona)
+      )];
 
-      const { data: docs } = await (supabase as any)
-        .from('documentos')
-        .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
-        .in('id_persona', personaIdsForDocs)
-        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
-        .eq('activo', true)
-        .eq('es_draft', false);
-
-      // latestDocByKey: "personaId__grupoKey" → doc más reciente de ese grupo obligatorio
-      // Null fecha_creacion → sentinel '9999' para que sea NULLS FIRST igual que PostgreSQL DESC
-      const latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }> = {};
-      (docs || []).forEach((d: any) => {
-        if (!d.id_persona) return;
-        const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
-        if (!groupKey) return;
-        const key = `${d.id_persona}__${groupKey}`;
-        const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-        const ex = latestDocByKey[key];
-        if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-          latestDocByKey[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
-        }
-      });
+      const rawDocs = await fetchObligatoriosDocs(allPersonaIds);
+      const latestDocByKey = buildLatestDocByKey(rawDocs);
 
       const docsByCuenta: Record<number, { total: number; completos: number }> = {};
       cuentaIds.forEach(cuentaId => {
-        const personaId = primerPersonaIdByCuenta[cuentaId];
-        let cumplidos = 0;
-        if (personaId) {
-          for (const grupo of OBLIGATORIO_GRUPOS) {
-            const latest = latestDocByKey[`${personaId}__${grupo.key}`];
-            if (latest && latest.estatusId === 2) cumplidos++; // 2 = Validado
-          }
-        }
-        docsByCuenta[cuentaId] = { total: OBLIGATORIO_GRUPOS.length, completos: cumplidos };
+        const compradores = (comprsByCuenta[cuentaId] || []).map(c => c.id_persona);
+        docsByCuenta[cuentaId] = calcCuentaDocStats(compradores, latestDocByKey);
 
         if (process.env.NODE_ENV !== 'production') {
-          const latestRequiredDocs = OBLIGATORIO_GRUPOS.map(g => ({
-            grupo: g.key,
-            doc: personaId ? (latestDocByKey[`${personaId}__${g.key}`] ?? null) : null,
-          }));
-          console.debug('[Expedientes] documentos por cuenta', {
+          console.debug('[Expedientes] stats por cuenta', {
             cuentaId,
-            personaId: personaId ?? null,
-            latestRequiredDocs,
-            completed: cumplidos,
-            status: cumplidos >= OBLIGATORIO_GRUPOS.length ? 'LISTO' : 'PENDIENTE',
+            compradores,
+            ...docsByCuenta[cuentaId],
+            estatus: docsByCuenta[cuentaId].completos >= OBLIGATORIO_GRUPOS.length ? 'LISTO' : 'PENDIENTE',
           });
         }
       });
@@ -776,7 +821,7 @@ export function ExpedientesDashboard() {
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
           const docStats = docsByCuenta[cuenta.id] || { total: OBLIGATORIO_GRUPOS.length, completos: 0 };
-          const estatusExpediente = deriveEstatusExpediente(p.id_estatus_disponibilidad, docStats.completos);
+          const estatusExpediente = deriveEstatusExpediente(docStats.completos);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
             cuentaId: cuenta.id,
@@ -864,10 +909,10 @@ export function ExpedientesDashboard() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['expedientes-real', proyectoId] });
+      qc.invalidateQueries({ queryKey: ['expedientes-dashboard', proyectoId] });
       if (editingPersonaId) {
         qc.invalidateQueries({ queryKey: ['expedientes-persona-edit', editingPersonaId] });
-        qc.invalidateQueries({ queryKey: ['exp-docs-persona', editingPersonaId] });
+        qc.invalidateQueries({ queryKey: ['exp-docs-cuenta'] });
       }
       setIsEditPersonaOpen(false);
       setEditingPersonaId(null);
