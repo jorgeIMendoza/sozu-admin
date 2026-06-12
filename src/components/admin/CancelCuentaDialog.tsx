@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,6 +88,9 @@ export function CancelCuentaDialog({
   // Cálculos
   const montoDevolucion = totalPagado - montoCancelacion;
 
+  // Todo tipo de cancelación excepto Cesión de derechos (1) usa el flujo normal
+  const isTipoNormal = tipoCancelacion !== "" && tipoCancelacion !== "1";
+
   useEffect(() => {
     if (isOpen) {
       fetchMetodosPago();
@@ -144,18 +146,18 @@ export function CancelCuentaDialog({
   };
 
   const fetchTiposCancelacion = async () => {
-    // Para Propiedad: 1 (Cesión), 4, 5, 6
-    // Para Producto/Servicio: 4, 5, 6
-    const idsPermitidos = tipoCuenta === 'Propiedad' 
-      ? [1, 4, 5, 6] 
-      : [4, 5, 6];
-    
-    const { data, error } = await supabase
+    // Propiedad: todos los tipos activos. Producto/Servicio: todos excepto Cesión de derechos (1)
+    let query = supabase
       .from('tipos_cancelacion')
       .select('id, nombre')
       .eq('activo', true)
-      .in('id', idsPermitidos)
       .order('id');
+
+    if (tipoCuenta !== 'Propiedad') {
+      query = query.neq('id', 1);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       setTiposCancelacion(data);
@@ -283,8 +285,8 @@ export function CancelCuentaDialog({
       }
     }
 
-    // Para tipos 4, 5, 6 se requiere evidencia
-    if (['4', '5', '6'].includes(tipoCancelacion) && !evidenciaFile) {
+    // Para todos los tipos excepto Cesión (1) se requiere evidencia
+    if (isTipoNormal && !evidenciaFile) {
       return "La evidencia es obligatoria";
     }
 
@@ -453,8 +455,8 @@ export function CancelCuentaDialog({
         await subirConvenio();
       }
 
-      // Tipos 4, 5, 6 - Cancelación normal con pagos de cancelación/devolución
-      if (['4', '5', '6'].includes(tipoCancelacion)) {
+      // Todos los tipos excepto Cesión (1) - Cancelación normal con pagos de cancelación/devolución
+      if (isTipoNormal) {
         // Agregar pagos de cancelación y devolución si hay monto
         if (montoCancelacion > 0 || montoDevolucion > 0) {
           await agregarPagosCancelacionYDevolucion();
@@ -645,8 +647,6 @@ export function CancelCuentaDialog({
     }
   };
 
-  const isTipoNormal = ['4', '5', '6'].includes(tipoCancelacion);
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -658,14 +658,18 @@ export function CancelCuentaDialog({
           {/* Tipo de Cancelación */}
           <div className="space-y-2">
             <Label>Tipo de Cancelación *</Label>
-            <RadioGroup value={tipoCancelacion} onValueChange={setTipoCancelacion}>
-              {tiposCancelacion.map((tipo) => (
-                <div key={tipo.id} className="flex items-center space-x-2">
-                  <RadioGroupItem value={String(tipo.id)} id={`tipo-${tipo.id}`} />
-                  <Label htmlFor={`tipo-${tipo.id}`}>{tipo.nombre}</Label>
-                </div>
-              ))}
-            </RadioGroup>
+            <Select value={tipoCancelacion} onValueChange={setTipoCancelacion}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar tipo de cancelación" />
+              </SelectTrigger>
+              <SelectContent>
+                {tiposCancelacion.map((tipo) => (
+                  <SelectItem key={tipo.id} value={String(tipo.id)}>
+                    {tipo.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Información de pagos y monto de cancelación - Solo para tipos 4, 5, 6 */}
