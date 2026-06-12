@@ -5,11 +5,11 @@ import { CheckCircle2, Clock, Loader2, AlertCircle, Mail } from "lucide-react";
 import { HOLD_AMOUNT_MXN } from "@/lib/offers/card-hold-processor";
 
 type Apartado = {
-  id: string;
+  id: number;
   email: string;
   nombre: string | null;
-  hold_expira_at: string | null;
-  hold_activado_at: string | null;
+  fecha_expiracion: string | null;
+  fecha_activacion: string | null;
 };
 
 function formatDate(iso: string | null) {
@@ -31,12 +31,14 @@ export default function ConfirmacionApartadoPage() {
 
   useEffect(() => {
     if (!apartadoId) { setLoadError("Link inválido."); setLoading(false); return; }
+    const numericId = parseInt(apartadoId.replace(/^[A-Z]+-/, ""), 10);
+    if (!numericId) { setLoadError("Link inválido."); setLoading(false); return; }
 
     (async () => {
       const { data, error } = await (supabase as any)
-        .from("apartados_provisionales")
-        .select("id, email, nombre, hold_expira_at, hold_activado_at")
-        .eq("id", apartadoId)
+        .from("reservaciones")
+        .select("id, email, nombre, fecha_expiracion, fecha_activacion")
+        .eq("id", numericId)
         .maybeSingle();
 
       if (error || !data) { setLoadError("No se encontró el apartado."); setLoading(false); return; }
@@ -64,7 +66,7 @@ export default function ConfirmacionApartadoPage() {
     );
   }
 
-  const folio = apartado.id.split("-")[0].toUpperCase();
+  const folio = `RES-${String(apartado.id).padStart(6, "0")}`;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -112,7 +114,7 @@ export default function ConfirmacionApartadoPage() {
         </div>
 
         {/* Expiry */}
-        {apartado.hold_expira_at && (
+        {apartado.fecha_expiracion && (
           <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 flex gap-3">
             <Clock className="w-4 h-4 text-warning shrink-0 mt-0.5" />
             <div>
@@ -120,7 +122,7 @@ export default function ConfirmacionApartadoPage() {
                 Retención activa hasta:
               </p>
               <p className="text-[12px] text-muted-foreground mt-0.5">
-                {formatDate(apartado.hold_expira_at)}
+                {formatDate(apartado.fecha_expiracion)}
               </p>
               <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
                 Si no completas el proceso antes de esta fecha, la retención expira

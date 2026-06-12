@@ -404,25 +404,26 @@ export async function sendMultipleOffersEmailDirect(params: {
       recipientName: recipientName || '',
       propertyNumber: propertyNumber || '',
       ...(reservationLink ? { reservationLink } : {}),
+      ...(preGeneratedAttachments && preGeneratedAttachments.length > 0 ? { preGeneratedAttachments } : {}),
     };
 
-    // Priorizar PDFs ya persistidos en Storage para evitar payloads grandes en mobile/iPhone.
     const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
 
     if (error) {
       console.error('[ofertaEmail] Error al enviar email múltiple directo:', error);
       toast({
-        title: "Email no enviado",
-        description: "No se pudieron enviar las ofertas por correo.",
-        duration: 4000,
+        title: "Error al enviar correo",
+        description: `Las ofertas se generaron correctamente pero el email a ${recipientEmail} no pudo enviarse. Avisa a soporte técnico.`,
+        variant: "destructive",
+        duration: 12000,
       });
       return;
     }
 
     toast({
-      title: "Ofertas enviadas por correo",
-      description: `Se enviaron ${preGeneratedAttachments?.length || offerIds.length} oferta(s) a ${recipientEmail}`,
-      duration: 4000,
+      title: "Correo enviado",
+      description: `${preGeneratedAttachments?.length || offerIds.length} oferta(s) enviada(s) a ${recipientEmail}`,
+      duration: 5000,
     });
   } catch (err) {
     console.error('[ofertaEmail] Error inesperado en envío múltiple directo:', err);
