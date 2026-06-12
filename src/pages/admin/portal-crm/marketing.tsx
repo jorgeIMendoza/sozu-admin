@@ -1,12 +1,22 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useCrmOrgId } from "@/hooks/useCrmOrgId";
 import {
   Megaphone, Users2, GitBranch, Image as ImageIcon, Link2, FlaskConical,
   LayoutTemplate, FileInput, Plug, Wallet, TrendingUp, TrendingDown,
   CheckCircle2, AlertTriangle, Eye, Copy, Play, Pause, Plus, ExternalLink,
+  Search, RefreshCw, X as XIcon, Database, BarChart2, ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PageHeader, MockBadge, Panel } from "@/components/admin/portal-crm/ui";
+import { PageHeader, MockBadge, Panel, ComingSoon } from "@/components/admin/portal-crm/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,11 +26,12 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { fmtMXN, fmtNum, fmtPct, fmtDateTime, relTime } from "@/data/portal-crm/mockData";
+import { type DateRange, RANGE_LABEL, rangeToSince } from "@/lib/crm-marketing";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 
@@ -880,6 +891,605 @@ export function CrmBudget() {
           </Table>
         </div>
       </Panel>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMarketingPerformance
+// ===================================================================
+export function CrmMarketingPerformance() {
+  const [range, setRange] = useState<DateRange>("30d");
+
+  const totals = useMemo(() => {
+    const active = CAMPAIGNS.filter(c => c.status !== "ended");
+    const totalSpend = CAMPAIGNS.reduce((s, c) => s + c.spend, 0);
+    const totalLeads = CAMPAIGNS.reduce((s, c) => s + c.leads, 0);
+    const totalQL = CAMPAIGNS.reduce((s, c) => s + c.ql, 0);
+    const totalAppts = CAMPAIGNS.reduce((s, c) => s + c.appts, 0);
+    const totalRes = CAMPAIGNS.reduce((s, c) => s + c.reservations, 0);
+    return {
+      active: active.length,
+      totalSpend, totalLeads, totalQL, totalAppts, totalRes,
+      cpl: totalLeads ? totalSpend / totalLeads : 0,
+      cpql: totalQL ? totalSpend / totalQL : 0,
+      cpAppt: totalAppts ? totalSpend / totalAppts : 0,
+      cpRes: totalRes ? totalSpend / totalRes : 0,
+      qlRate: totalLeads ? totalQL / totalLeads : 0,
+      apptRate: totalQL ? totalAppts / totalQL : 0,
+      resRate: totalAppts ? totalRes / totalAppts : 0,
+    };
+  }, []);
+
+  const KPIS = [
+    { label: "Gasto total", value: fmtMXN(totals.totalSpend) },
+    { label: "Campañas activas", value: fmtNum(totals.active) },
+    { label: "Leads", value: fmtNum(totals.totalLeads) },
+    { label: "Leads calificados", value: fmtNum(totals.totalQL) },
+    { label: "Citas", value: fmtNum(totals.totalAppts) },
+    { label: "Apartados", value: fmtNum(totals.totalRes) },
+    { label: "CPL", value: fmtMXN(totals.cpl) },
+    { label: "CPQL", value: fmtMXN(totals.cpql) },
+    { label: "Costo/Cita", value: fmtMXN(totals.cpAppt) },
+    { label: "Costo/Apartado", value: totals.totalRes ? fmtMXN(totals.cpRes) : "—" },
+    { label: "Tasa calificación", value: fmtPct(totals.qlRate) },
+    { label: "Lead→Cita", value: fmtPct(totals.apptRate) },
+  ];
+
+  const ranked = [...CAMPAIGNS].sort((a, b) => {
+    const scoreFn = (c: Campaign) => c.leads ? (c.reservations * 3 + c.appts * 1.5 + c.ql * 0.5) / (c.spend / 1000) : 0;
+    return scoreFn(b) - scoreFn(a);
+  });
+  const top3 = ranked.slice(0, 3);
+  const bot3 = [...ranked].reverse().slice(0, 3);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Resumen de desempeño" subtitle="KPIs consolidados de marketing">
+        <MockBadge />
+        <Select value={range} onValueChange={v => setRange(v as DateRange)}>
+          <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>{(Object.entries(RANGE_LABEL) as [DateRange,string][]).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+      </PageHeader>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {KPIS.map(k => (
+          <Card key={k.label} className="p-3">
+            <p className="text-xs text-muted-foreground leading-tight">{k.label}</p>
+            <p className="text-lg font-bold mt-0.5">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-1"><TrendingUp className="w-4 h-4 text-emerald-500" />Top 3 campañas</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {top3.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">{i+1}</span>
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <Badge className={`text-[10px] ${platformTone(c.platform)}`}>{platformLabel(c.platform)}</Badge>
+                  <span className="text-xs text-muted-foreground">{c.reservations} apart.</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-1"><TrendingDown className="w-4 h-4 text-red-500" />Bottom 3 campañas</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {bot3.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-5 h-5 rounded-full bg-red-500/15 text-red-700 dark:text-red-400 flex items-center justify-center text-xs font-bold">{i+1}</span>
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <Badge className={`text-[10px] ${platformTone(c.platform)}`}>{platformLabel(c.platform)}</Badge>
+                  <span className="text-xs text-muted-foreground">{fmtMXN(c.leads ? c.spend/c.leads : 0)} CPL</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMetaAds
+// ===================================================================
+export function CrmMetaAds() {
+  const metaCampaigns = CAMPAIGNS.filter(c => c.platform === "meta_ads");
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Meta Ads" subtitle="Campañas activas en Facebook / Instagram">
+        <MockBadge />
+        <Button size="sm" variant="outline" onClick={() => toast.info("Sync Meta Ads (mock)")}>
+          <RefreshCw className="w-4 h-4 mr-1" />Sincronizar
+        </Button>
+      </PageHeader>
+
+      <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
+        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-amber-800 dark:text-amber-400">Conexión en modo mock</p>
+          <p className="text-amber-700 dark:text-amber-500 text-xs mt-0.5">Para conectar Meta Ads en vivo, configura las credenciales en <strong>Ajustes → Conexiones</strong>.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Campañas activas", value: metaCampaigns.filter(c=>c.status==="active").length },
+          { label: "Gasto total", value: fmtMXN(metaCampaigns.reduce((s,c)=>s+c.spend,0)) },
+          { label: "Leads", value: metaCampaigns.reduce((s,c)=>s+c.leads,0) },
+        ].map(k => (
+          <Card key={k.label} className="p-3">
+            <p className="text-xs text-muted-foreground">{k.label}</p>
+            <p className="text-xl font-bold mt-0.5">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Campaña</TableHead>
+            <TableHead>Estatus</TableHead>
+            <TableHead className="text-right">Presupuesto</TableHead>
+            <TableHead className="text-right">Gasto</TableHead>
+            <TableHead className="text-right">Leads</TableHead>
+            <TableHead className="text-right">QL</TableHead>
+            <TableHead className="text-right">CPL</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {metaCampaigns.map(c => (
+              <TableRow key={c.id}>
+                <TableCell className="font-medium text-sm truncate max-w-[200px]">{c.name}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{c.status}</Badge></TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(c.budget)}</TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(c.spend)}</TableCell>
+                <TableCell className="text-right text-sm">{c.leads}</TableCell>
+                <TableCell className="text-right text-sm">{c.ql}</TableCell>
+                <TableCell className="text-right text-sm">{c.leads ? fmtMXN(c.spend/c.leads) : "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmGoogleAds
+// ===================================================================
+export function CrmGoogleAds() {
+  const googleCampaigns = CAMPAIGNS.filter(c => c.platform === "google_ads");
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Google Ads" subtitle="Campañas activas en Google Search / Display">
+        <MockBadge />
+        <Button size="sm" variant="outline" onClick={() => toast.info("Sync Google Ads (mock)")}>
+          <RefreshCw className="w-4 h-4 mr-1" />Sincronizar
+        </Button>
+      </PageHeader>
+
+      <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
+        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-amber-800 dark:text-amber-400">Conexión en modo mock</p>
+          <p className="text-amber-700 dark:text-amber-500 text-xs mt-0.5">Para conectar Google Ads en vivo, configura las credenciales en <strong>Ajustes → Conexiones</strong>.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Campañas activas", value: googleCampaigns.filter(c=>c.status==="active").length },
+          { label: "Gasto total", value: fmtMXN(googleCampaigns.reduce((s,c)=>s+c.spend,0)) },
+          { label: "Leads", value: googleCampaigns.reduce((s,c)=>s+c.leads,0) },
+        ].map(k => (
+          <Card key={k.label} className="p-3">
+            <p className="text-xs text-muted-foreground">{k.label}</p>
+            <p className="text-xl font-bold mt-0.5">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Campaña</TableHead>
+            <TableHead>Estatus</TableHead>
+            <TableHead className="text-right">Presupuesto</TableHead>
+            <TableHead className="text-right">Gasto</TableHead>
+            <TableHead className="text-right">Leads</TableHead>
+            <TableHead className="text-right">QL</TableHead>
+            <TableHead className="text-right">CPL</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {googleCampaigns.map(c => (
+              <TableRow key={c.id}>
+                <TableCell className="font-medium text-sm truncate max-w-[200px]">{c.name}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{c.status}</Badge></TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(c.budget)}</TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(c.spend)}</TableCell>
+                <TableCell className="text-right text-sm">{c.leads}</TableCell>
+                <TableCell className="text-right text-sm">{c.ql}</TableCell>
+                <TableCell className="text-right text-sm">{c.leads ? fmtMXN(c.spend/c.leads) : "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMarketingDevelopments
+// ===================================================================
+export function CrmMarketingDevelopments() {
+  const byDev = useMemo(() => {
+    const map: Record<string, { dev: string; campaigns: Campaign[] }> = {};
+    for (const c of CAMPAIGNS) {
+      if (!map[c.development]) map[c.development] = { dev: c.development, campaigns: [] };
+      map[c.development].campaigns.push(c);
+    }
+    return Object.values(map).map(({ dev, campaigns }) => {
+      const spend = campaigns.reduce((s,c)=>s+c.spend,0);
+      const leads = campaigns.reduce((s,c)=>s+c.leads,0);
+      const ql = campaigns.reduce((s,c)=>s+c.ql,0);
+      const appts = campaigns.reduce((s,c)=>s+c.appts,0);
+      const res = campaigns.reduce((s,c)=>s+c.reservations,0);
+      return { dev, spend, leads, ql, appts, res, cpl: leads?spend/leads:0, cpql: ql?spend/ql:0 };
+    });
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Por desarrollo" subtitle="Performance de marketing segmentado por proyecto">
+        <MockBadge />
+      </PageHeader>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {byDev.map(d => (
+          <Card key={d.dev} className="p-4">
+            <p className="text-sm font-semibold truncate mb-3">{d.dev}</p>
+            <div className="space-y-2">
+              {[
+                { label: "Gasto", value: fmtMXN(d.spend), bar: null },
+                { label: "Leads", value: fmtNum(d.leads), bar: d.leads },
+                { label: "QL", value: fmtNum(d.ql), bar: d.ql },
+                { label: "Citas", value: fmtNum(d.appts), bar: d.appts },
+                { label: "Apartados", value: fmtNum(d.res), bar: d.res },
+              ].map(row => (
+                <div key={row.label} className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-16">{row.label}</span>
+                  {row.bar != null && <Progress value={Math.min(100, (row.bar / Math.max(1, d.leads)) * 100)} className="flex-1 h-1.5" />}
+                  <span className="text-xs font-medium ml-auto">{row.value}</span>
+                </div>
+              ))}
+            </div>
+            <Separator className="my-2" />
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span>CPL: <strong className="text-foreground">{fmtMXN(d.cpl)}</strong></span>
+              <span>CPQL: <strong className="text-foreground">{fmtMXN(d.cpql)}</strong></span>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Desarrollo</TableHead>
+            <TableHead className="text-right">Gasto</TableHead>
+            <TableHead className="text-right">Leads</TableHead>
+            <TableHead className="text-right">QL</TableHead>
+            <TableHead className="text-right">Citas</TableHead>
+            <TableHead className="text-right">Apartados</TableHead>
+            <TableHead className="text-right">CPL</TableHead>
+            <TableHead className="text-right">CPQL</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {byDev.map(d => (
+              <TableRow key={d.dev}>
+                <TableCell className="font-medium text-sm">{d.dev}</TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(d.spend)}</TableCell>
+                <TableCell className="text-right text-sm">{d.leads}</TableCell>
+                <TableCell className="text-right text-sm">{d.ql}</TableCell>
+                <TableCell className="text-right text-sm">{d.appts}</TableCell>
+                <TableCell className="text-right text-sm">{d.res}</TableCell>
+                <TableCell className="text-right text-sm">{fmtMXN(d.cpl)}</TableCell>
+                <TableCell className="text-right text-sm">{d.ql ? fmtMXN(d.cpql) : "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMarketingFunnel
+// ===================================================================
+export function CrmMarketingFunnel() {
+  const [platform, setPlatform] = useState<string>("all");
+  const [development, setDevelopment] = useState<string>("all");
+
+  const filtered = useMemo(() => CAMPAIGNS.filter(c =>
+    (platform === "all" || c.platform === platform) &&
+    (development === "all" || c.development === development)
+  ), [platform, development]);
+
+  const totals = useMemo(() => ({
+    leads: filtered.reduce((s,c)=>s+c.leads,0),
+    ql: filtered.reduce((s,c)=>s+c.ql,0),
+    appts: filtered.reduce((s,c)=>s+c.appts,0),
+    res: filtered.reduce((s,c)=>s+c.reservations,0),
+  }), [filtered]);
+
+  const devOptions = [...new Set(CAMPAIGNS.map(c => c.development))];
+
+  const STAGES = [
+    { label: "Leads captados", value: totals.leads, color: "bg-blue-500" },
+    { label: "Leads calificados", value: totals.ql, color: "bg-violet-500" },
+    { label: "Citas realizadas", value: totals.appts, color: "bg-amber-500" },
+    { label: "Apartados", value: totals.res, color: "bg-emerald-500" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Embudo Mkt → CRM" subtitle="Conversión por etapa desde campaña hasta apartado">
+        <MockBadge />
+      </PageHeader>
+
+      <div className="flex flex-wrap gap-2">
+        <Select value={platform} onValueChange={setPlatform}>
+          <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="Plataforma" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las plataformas</SelectItem>
+            {PLATFORMS.map(p => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={development} onValueChange={setDevelopment}>
+          <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Desarrollo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los desarrollos</SelectItem>
+            {devOptions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-3">
+        {STAGES.map((stage, i) => {
+          const pct = i === 0 ? 100 : totals.leads ? (stage.value / totals.leads) * 100 : 0;
+          const prevStage = i > 0 ? STAGES[i-1] : null;
+          const stepConv = prevStage && prevStage.value ? (stage.value / prevStage.value * 100) : null;
+          return (
+            <div key={stage.label} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{stage.label}</span>
+                <div className="flex items-center gap-3">
+                  {stepConv != null && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <ArrowRight className="w-3 h-3" />{fmtPct(stepConv/100)} desde etapa anterior
+                    </span>
+                  )}
+                  <span className="font-bold">{fmtNum(stage.value)}</span>
+                </div>
+              </div>
+              <div className="w-full bg-muted rounded-full h-6 overflow-hidden">
+                <div className={`h-full ${stage.color} rounded-full flex items-center justify-end pr-2 transition-all`} style={{ width: `${Math.max(2, pct)}%` }}>
+                  <span className="text-[10px] text-white font-medium">{fmtPct(pct/100)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        {[
+          { label: "Calificación", value: totals.leads ? fmtPct(totals.ql/totals.leads) : "—" },
+          { label: "Lead→Cita", value: totals.ql ? fmtPct(totals.appts/totals.ql) : "—" },
+          { label: "Cita→Apartado", value: totals.appts ? fmtPct(totals.res/totals.appts) : "—" },
+          { label: "Lead→Apartado", value: totals.leads ? fmtPct(totals.res/totals.leads) : "—" },
+        ].map(k => (
+          <Card key={k.label} className="p-3 text-center">
+            <p className="text-xs text-muted-foreground">{k.label}</p>
+            <p className="text-xl font-bold mt-0.5">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMarketingCampaignMapping
+// ===================================================================
+export function CrmMarketingCampaignMapping() {
+  const orgId = useCrmOrgId();
+  const [search, setSearch] = useState("");
+
+  const { data: dbCampaigns = [], isLoading } = useQuery({
+    queryKey: ["crm-campaigns-mapping", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await (supabase as any).from("crm_campaigns")
+        .select("id,name,platform,status,external_campaign_id,utm_source,utm_medium,utm_campaign,created_at").eq("organization_id", orgId).limit(100);
+      return data ?? [];
+    },
+    enabled: !!orgId,
+  });
+
+  const display = dbCampaigns.length ? dbCampaigns : CAMPAIGNS.map(c => ({
+    id: c.id, name: c.name, platform: c.platform, status: c.status,
+    external_campaign_id: `ext_${c.id}`, utm_source: c.platform.replace("_ads",""),
+    utm_medium: "cpc", utm_campaign: c.name.toLowerCase().replace(/\s+/g,"-"),
+    created_at: c.start, isMock: true,
+  }));
+
+  const filtered = display.filter((c: any) => !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.utm_campaign?.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Mapeo de campañas" subtitle="Mapeo de IDs externos y UTMs por campaña">
+        <MockBadge />
+      </PageHeader>
+
+      {dbCampaigns.length === 0 && (
+        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />Mostrando datos mock. Tabla <code>crm_campaigns</code> no encontrada o vacía.
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-2 w-4 h-4 text-muted-foreground" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar campaña…" className="w-full h-8 pl-8 pr-3 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+      </div>
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Campaña</TableHead>
+            <TableHead>Plataforma</TableHead>
+            <TableHead>ID externo</TableHead>
+            <TableHead>utm_source</TableHead>
+            <TableHead>utm_medium</TableHead>
+            <TableHead>utm_campaign</TableHead>
+            <TableHead>Estatus</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({length:5}).map((_,i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
+            ) : filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Sin campañas</TableCell></TableRow>
+            ) : filtered.map((c: any) => (
+              <TableRow key={c.id}>
+                <TableCell className="font-medium text-sm max-w-[180px] truncate">{c.name}</TableCell>
+                <TableCell><Badge className={`text-[10px] ${platformTone(c.platform)}`}>{platformLabel(c.platform)}</Badge></TableCell>
+                <TableCell className="text-xs font-mono text-muted-foreground">{c.external_campaign_id ?? "—"}</TableCell>
+                <TableCell className="text-xs">{c.utm_source ?? "—"}</TableCell>
+                <TableCell className="text-xs">{c.utm_medium ?? "—"}</TableCell>
+                <TableCell className="text-xs max-w-[140px] truncate">{c.utm_campaign ?? "—"}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{c.status}</Badge></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmMarketingSyncJobs
+// ===================================================================
+export function CrmMarketingSyncJobs() {
+  const orgId = useCrmOrgId();
+  const [detailJob, setDetailJob] = useState<any>(null);
+
+  const { data: jobs = [], isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["crm-sync-jobs", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await (supabase as any).from("crm_sync_jobs")
+        .select("id,connector_key,status,started_at,finished_at,rows_synced,error_message,payload").eq("organization_id", orgId)
+        .order("started_at", { ascending: false }).limit(50);
+      return data ?? [];
+    },
+    enabled: !!orgId,
+  });
+
+  const MOCK_JOBS = [
+    { id: "j1", connector_key: "meta_ads", status: "success", started_at: new Date(Date.now()-2*3600000).toISOString(), finished_at: new Date(Date.now()-2*3600000+45000).toISOString(), rows_synced: 142, error_message: null, payload: { campaigns_fetched: 5, leads_fetched: 142 } },
+    { id: "j2", connector_key: "google_ads", status: "success", started_at: new Date(Date.now()-3*3600000).toISOString(), finished_at: new Date(Date.now()-3*3600000+30000).toISOString(), rows_synced: 87, error_message: null, payload: { campaigns_fetched: 3, conversions_fetched: 87 } },
+    { id: "j3", connector_key: "meta_ads", status: "error", started_at: new Date(Date.now()-26*3600000).toISOString(), finished_at: new Date(Date.now()-26*3600000+2000).toISOString(), rows_synced: 0, error_message: "Token expired: OAuthException code 190", payload: null },
+  ];
+
+  const display = jobs.length ? jobs : MOCK_JOBS;
+
+  const STATUS_TONE: Record<string, string> = {
+    success: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    error: "bg-red-500/15 text-red-700 dark:text-red-400",
+    running: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+    pending: "bg-muted text-muted-foreground",
+  };
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Sincronizaciones" subtitle="Historial de jobs de sincronización con plataformas">
+        <MockBadge />
+        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />Refrescar
+        </Button>
+        <Button size="sm" onClick={() => toast.info("Re-sync manual (mock)")}>
+          <Play className="w-4 h-4 mr-1" />Forzar sync
+        </Button>
+      </PageHeader>
+
+      {jobs.length === 0 && (
+        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
+          <Database className="w-4 h-4 shrink-0" />Mostrando datos mock. Tabla <code>crm_sync_jobs</code> no encontrada o vacía.
+        </div>
+      )}
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Conector</TableHead>
+            <TableHead>Estatus</TableHead>
+            <TableHead>Inicio</TableHead>
+            <TableHead>Duración</TableHead>
+            <TableHead className="text-right">Filas</TableHead>
+            <TableHead>Error</TableHead>
+            <TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({length:3}).map((_,i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
+            ) : display.map((j: any) => {
+              const durSec = j.started_at && j.finished_at ? Math.round((new Date(j.finished_at).getTime() - new Date(j.started_at).getTime()) / 1000) : null;
+              return (
+                <TableRow key={j.id}>
+                  <TableCell className="font-medium text-sm">{j.connector_key}</TableCell>
+                  <TableCell><Badge className={`text-xs ${STATUS_TONE[j.status ?? "pending"]}`}>{j.status}</Badge></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{fmtDateTime(j.started_at)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{durSec != null ? `${durSec}s` : "—"}</TableCell>
+                  <TableCell className="text-right text-sm">{j.rows_synced ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-red-500 max-w-[200px] truncate">{j.error_message ?? "—"}</TableCell>
+                  <TableCell>
+                    {j.payload && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setDetailJob(j)}>
+                        <BarChart2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={!!detailJob} onOpenChange={() => setDetailJob(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Detalle del job — {detailJob?.connector_key}</DialogTitle></DialogHeader>
+          <pre className="text-xs bg-muted rounded-md p-3 overflow-auto max-h-64 whitespace-pre-wrap">
+            {JSON.stringify(detailJob?.payload, null, 2)}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

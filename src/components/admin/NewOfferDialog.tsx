@@ -1126,27 +1126,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         return;
       }
 
-      try {
-        // Solo enviar por correo si el usuario marcó explícitamente el checkbox.
-        // Nunca enviar de forma automática.
-        if (sendEmailOnGenerate) {
-          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
-          await sendMultipleOffersEmailDirect({
-            offerIds: allOfferIdsForEmail,
-            propertyNumber,
-            recipientEmail: result.leadEmail,
-            recipientName: result.leadName,
-          });
-        }
-      } catch (emailErr) {
-        console.error('Error sending offer email after PDF generation:', emailErr);
-        toast({
-          title: "PDFs generados",
-          description: "Los PDFs se generaron correctamente, pero no se pudo completar el envío por correo.",
-          variant: "destructive",
-        });
-      }
-
       if (variables.data.digital) {
         try {
           const { data: reservacion, error: aptError } = await (supabase as any)
@@ -1155,19 +1134,20 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             .select('id')
             .single();
           if (aptError) throw aptError;
-          const reservationLink = `${window.location.origin}/reservar/RES-${String(reservacion.id).padStart(6, "0")}`;
+          const ofertaLink = `${window.location.origin}/oferta/O-${String(result.offerId).padStart(6, "0")}/RES-${String(reservacion.id).padStart(6, "0")}`;
+          if (import.meta.env.DEV) {
+            console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
+          }
           const { sendMultipleOffersEmailDirect } = await emailServicePromise;
           await sendMultipleOffersEmailDirect({
             offerIds: allOfferIdsForEmail,
             propertyNumber,
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
-            reservationLink,
-            preGeneratedAttachments: digitalAttachments.length > 0 ? digitalAttachments : undefined,
-          });
-          toast({
-            title: "Oferta digital enviada",
-            description: `Link de reservación enviado a ${result.leadEmail}`,
+            reservationLink: ofertaLink,
+            preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
+              ? digitalAttachments.filter(a => a.tipo === 'propiedad')
+              : digitalAttachments.length > 0 ? digitalAttachments : undefined,
           });
         } catch (digitalErr: any) {
           console.error('Error en flujo oferta digital:', digitalErr);
@@ -1176,6 +1156,23 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             description: digitalErr?.code === '42P01'
               ? "DDL reservaciones pendiente de ejecutar en BD."
               : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
+            variant: "destructive",
+          });
+        }
+      } else if (sendEmailOnGenerate) {
+        try {
+          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
+          await sendMultipleOffersEmailDirect({
+            offerIds: allOfferIdsForEmail,
+            propertyNumber,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+          });
+        } catch (emailErr) {
+          console.error('Error sending offer email after PDF generation:', emailErr);
+          toast({
+            title: "PDFs generados",
+            description: "Los PDFs se generaron correctamente, pero no se pudo completar el envío por correo.",
             variant: "destructive",
           });
         }

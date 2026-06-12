@@ -84,9 +84,9 @@ export function CrmImpersonationSelector() {
   });
 
   return (
-    <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-primary/20 bg-primary/5">
-      <UserSearch className="h-4 w-4 text-primary shrink-0" />
-      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+    <div className="flex items-center gap-2">
+      <UserSearch className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-sm text-muted-foreground whitespace-nowrap">
         Ver como:
       </span>
       <Popover open={open} onOpenChange={setOpen}>

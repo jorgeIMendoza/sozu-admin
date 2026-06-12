@@ -1,23 +1,36 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, Target, LineChart as LineChartIcon, Briefcase,
   Activity, Users2, AlertTriangle, FileText, Download, Filter,
+  Plus, Edit2, Trash2, CheckCircle2, X as XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PageHeader, MockBadge, Panel } from "@/components/admin/portal-crm/ui";
-import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useCrmOrgId } from "@/hooks/useCrmOrgId";
+import { PageHeader, MockBadge, Panel, ComingSoon } from "@/components/admin/portal-crm/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { fmtMXN, fmtNum, fmtPct } from "@/data/portal-crm/mockData";
+import { enrichDeal, stalledDeals, RISK_TONE, type Scenario, SCENARIO_TONE } from "@/lib/crm-forecasting";
+import { type DateRange, RANGE_LABEL, rangeToSince } from "@/lib/crm-marketing";
 
 // ===================================================================
 // Mock data — Fase 4 (Dirección · Inteligencia de ingresos)
@@ -526,6 +539,361 @@ export function CrmReporting() {
           </TableBody>
         </Table>
       </Panel>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmRevenueAttribution
+// ===================================================================
+const ATTRIBUTION_MOCK = [
+  { source: "Meta Ads", platform: "meta_ads", deals: 14, revenue: 28_700_000, pct: 0.38, avg_deal: 2_050_000, first_touch: 0.41, last_touch: 0.35 },
+  { source: "Google Ads", platform: "google_ads", deals: 9, revenue: 19_400_000, pct: 0.26, avg_deal: 2_155_000, first_touch: 0.28, last_touch: 0.31 },
+  { source: "Referidos", platform: "referral", deals: 7, revenue: 16_100_000, pct: 0.21, avg_deal: 2_300_000, first_touch: 0.18, last_touch: 0.22 },
+  { source: "Orgánico", platform: "organic", deals: 4, revenue: 7_800_000, pct: 0.10, avg_deal: 1_950_000, first_touch: 0.09, last_touch: 0.08 },
+  { source: "Directo", platform: "direct", deals: 2, revenue: 3_600_000, pct: 0.05, avg_deal: 1_800_000, first_touch: 0.04, last_touch: 0.04 },
+];
+
+const PLATFORM_TONE: Record<string, string> = {
+  meta_ads: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  google_ads: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  referral: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  organic: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  direct: "bg-muted text-muted-foreground",
+};
+
+export function CrmRevenueAttribution() {
+  const [model, setModel] = useState<"first_touch" | "last_touch" | "linear">("last_touch");
+  const totalRevenue = ATTRIBUTION_MOCK.reduce((s, r) => s + r.revenue, 0);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Atribución de ingresos" subtitle="Ingresos por canal de adquisición">
+        <MockBadge />
+        <Select value={model} onValueChange={v => setModel(v as typeof model)}>
+          <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="last_touch">Last touch</SelectItem>
+            <SelectItem value="first_touch">First touch</SelectItem>
+            <SelectItem value="linear">Lineal</SelectItem>
+          </SelectContent>
+        </Select>
+      </PageHeader>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Revenue total", value: fmtMXN(totalRevenue) },
+          { label: "Deals cerrados", value: fmtNum(ATTRIBUTION_MOCK.reduce((s,r)=>s+r.deals,0)) },
+          { label: "Ticket promedio", value: fmtMXN(totalRevenue / Math.max(1, ATTRIBUTION_MOCK.reduce((s,r)=>s+r.deals,0))) },
+          { label: "Canales", value: fmtNum(ATTRIBUTION_MOCK.length) },
+        ].map(k => (
+          <Card key={k.label} className="p-3">
+            <p className="text-xs text-muted-foreground">{k.label}</p>
+            <p className="text-xl font-bold mt-0.5">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {ATTRIBUTION_MOCK.map(row => {
+          const weight = model === "first_touch" ? row.first_touch : model === "last_touch" ? row.last_touch : row.pct;
+          const attributed = totalRevenue * weight;
+          return (
+            <div key={row.source} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge className={`text-[10px] ${PLATFORM_TONE[row.platform]}`}>{row.source}</Badge>
+                  <span className="text-xs text-muted-foreground">{row.deals} deals</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted-foreground">{fmtPct(weight)}</span>
+                  <span className="font-semibold">{fmtMXN(attributed)}</span>
+                </div>
+              </div>
+              <Progress value={weight * 100} className="h-2" />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="rounded-md border overflow-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Canal</TableHead>
+            <TableHead className="text-right">Deals</TableHead>
+            <TableHead className="text-right">Revenue</TableHead>
+            <TableHead className="text-right">Ticket prom.</TableHead>
+            <TableHead className="text-right">First touch</TableHead>
+            <TableHead className="text-right">Last touch</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {ATTRIBUTION_MOCK.map(r => (
+              <TableRow key={r.source}>
+                <TableCell><Badge className={`text-[10px] ${PLATFORM_TONE[r.platform]}`}>{r.source}</Badge></TableCell>
+                <TableCell className="text-right">{r.deals}</TableCell>
+                <TableCell className="text-right font-medium">{fmtMXN(r.revenue)}</TableCell>
+                <TableCell className="text-right">{fmtMXN(r.avg_deal)}</TableCell>
+                <TableCell className="text-right">{fmtPct(r.first_touch)}</TableCell>
+                <TableCell className="text-right">{fmtPct(r.last_touch)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmRevenueVelocity
+// ===================================================================
+const VELOCITY_MOCK = [
+  { stage: "new → qualified", days_avg: 1.2, deals: 48, bottleneck: false },
+  { stage: "qualified → appointment_scheduled", days_avg: 3.8, deals: 31, bottleneck: false },
+  { stage: "appointment_scheduled → appointment_attended", days_avg: 2.1, deals: 22, bottleneck: false },
+  { stage: "appointment_attended → offer_sent", days_avg: 8.4, deals: 14, bottleneck: true },
+  { stage: "offer_sent → reservation", days_avg: 12.2, deals: 9, bottleneck: true },
+  { stage: "reservation → contract", days_avg: 5.6, deals: 7, bottleneck: false },
+];
+
+const ADVISOR_VEL_MOCK = [
+  { name: "Ana García", avg_days_to_close: 22, deals: 8, stalled: 1 },
+  { name: "Carlos López", avg_days_to_close: 19, deals: 11, stalled: 0 },
+  { name: "María Torres", avg_days_to_close: 31, deals: 5, stalled: 3 },
+];
+
+export function CrmRevenueVelocity() {
+  const orgId = useCrmOrgId();
+
+  const { data: deals = [], isLoading } = useQuery({
+    queryKey: ["crm-velocity-deals", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await (supabase as any).from("crm_deals")
+        .select("id,deal_stage,value,close_date,created_at,deal_owner,contacts(full_name),probability,risk_level")
+        .eq("organization_id", orgId).limit(200);
+      return (data ?? []).map(enrichDeal);
+    },
+    enabled: !!orgId,
+  });
+
+  const stalled = useMemo(() => stalledDeals(deals), [deals]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Velocidad del pipeline" subtitle="Tiempo promedio por etapa y cuellos de botella">
+        <MockBadge />
+      </PageHeader>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">Tiempo promedio entre etapas</p>
+        {VELOCITY_MOCK.map(v => (
+          <div key={v.stage} className="flex items-center gap-3">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${v.bottleneck ? "bg-red-500" : "bg-emerald-500"}`} />
+            <span className="text-sm flex-1 truncate">{v.stage.replace(/_/g," ")}</span>
+            <span className="text-xs text-muted-foreground">{v.deals} deals</span>
+            <div className="flex items-center gap-1 w-32">
+              <Progress value={Math.min(100, (v.days_avg / 15) * 100)} className={`flex-1 h-1.5 ${v.bottleneck ? "[&>div]:bg-red-500" : ""}`} />
+              <span className={`text-xs font-medium w-12 text-right ${v.bottleneck ? "text-red-500" : ""}`}>{v.days_avg}d</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {stalled.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Deals estancados (BD)</p>
+          <div className="rounded-md border overflow-auto">
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>Contacto</TableHead>
+                <TableHead>Etapa</TableHead>
+                <TableHead>Riesgo</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Días sin avance</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {isLoading ? <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                : stalled.slice(0, 10).map((d: any) => (
+                  <TableRow key={d.id}>
+                    <TableCell className="text-sm">{d.contacts?.full_name ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{d.deal_stage?.replace(/_/g," ")}</TableCell>
+                    <TableCell><Badge className={`text-xs ${RISK_TONE[d.risk_level ?? "medium"]}`}>{d.risk_level ?? "medium"}</Badge></TableCell>
+                    <TableCell className="text-right text-sm">{fmtMXN(Number(d.value ?? 0))}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{d.days_in_stage ? `${d.days_in_stage}d` : "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">Velocidad por asesor</p>
+        <div className="rounded-md border overflow-auto">
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Asesor</TableHead>
+              <TableHead className="text-right">Deals activos</TableHead>
+              <TableHead className="text-right">Días prom. cierre</TableHead>
+              <TableHead className="text-right">Estancados</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {ADVISOR_VEL_MOCK.map(a => (
+                <TableRow key={a.name}>
+                  <TableCell className="font-medium text-sm">{a.name}</TableCell>
+                  <TableCell className="text-right">{a.deals}</TableCell>
+                  <TableCell className="text-right">{a.avg_days_to_close}d</TableCell>
+                  <TableCell className="text-right">
+                    <span className={a.stalled > 0 ? "text-red-500 font-medium" : ""}>{a.stalled}</span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmRevenueGoals
+// ===================================================================
+type GoalRow = {
+  id: string; name: string; metric: string; target: number; current: number;
+  period: string; assignee: string; status: "on_track" | "at_risk" | "missed" | "achieved";
+};
+
+const GOALS_MOCK: GoalRow[] = [
+  { id: "g1", name: "Reservas Q2", metric: "reservations", target: 18, current: 12, period: "Q2-2025", assignee: "Equipo completo", status: "on_track" },
+  { id: "g2", name: "Revenue Junio", metric: "revenue", target: 15_000_000, current: 10_800_000, period: "Jun-2025", assignee: "Equipo completo", status: "at_risk" },
+  { id: "g3", name: "Citas Ana", metric: "appointments", target: 20, current: 17, period: "Jun-2025", assignee: "Ana García", status: "on_track" },
+  { id: "g4", name: "Deals Carlos", metric: "deals", target: 8, current: 6, period: "Jun-2025", assignee: "Carlos López", status: "on_track" },
+  { id: "g5", name: "Revenue Mayo", metric: "revenue", target: 12_000_000, current: 12_400_000, period: "May-2025", assignee: "Equipo completo", status: "achieved" },
+];
+
+const GOAL_STATUS_TONE: Record<GoalRow["status"], string> = {
+  on_track: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  at_risk: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  missed: "bg-red-500/15 text-red-700 dark:text-red-400",
+  achieved: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+};
+
+export function CrmRevenueGoals() {
+  const orgId = useCrmOrgId();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [editGoal, setEditGoal] = useState<GoalRow | null>(null);
+  const [form, setForm] = useState({ name: "", metric: "reservations", target: "", period: "", assignee: "" });
+
+  const { data: dbGoals = [], isLoading } = useQuery({
+    queryKey: ["crm-goals", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await (supabase as any).from("crm_sales_goals").select("*").eq("organization_id", orgId).order("created_at");
+      return data ?? [];
+    },
+    enabled: !!orgId,
+  });
+
+  const goals: GoalRow[] = dbGoals.length > 0 ? dbGoals : GOALS_MOCK;
+
+  const saveGoal = useMutation({
+    mutationFn: async () => {
+      if (!orgId) return;
+      const payload = { organization_id: orgId, name: form.name, metric: form.metric, target: Number(form.target), current: 0, period: form.period, assignee: form.assignee, status: "on_track" };
+      if (editGoal && !editGoal.id.startsWith("g")) {
+        await (supabase as any).from("crm_sales_goals").update(payload).eq("id", editGoal.id);
+      } else {
+        await (supabase as any).from("crm_sales_goals").insert(payload);
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-goals", orgId] }); setOpen(false); toast.success("Meta guardada"); },
+  });
+
+  const deleteGoal = useMutation({
+    mutationFn: async (id: string) => { await (supabase as any).from("crm_sales_goals").delete().eq("id", id); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-goals", orgId] }),
+  });
+
+  const openCreate = () => { setEditGoal(null); setForm({ name: "", metric: "reservations", target: "", period: "", assignee: "" }); setOpen(true); };
+  const openEdit = (g: GoalRow) => { setEditGoal(g); setForm({ name: g.name, metric: g.metric, target: String(g.target), period: g.period, assignee: g.assignee }); setOpen(true); };
+
+  const METRICS = ["reservations","deals","revenue","appointments","leads","ql"];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Metas y cuotas" subtitle="Objetivos de ventas por agente y equipo">
+        <MockBadge />
+        <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1" />Nueva meta</Button>
+      </PageHeader>
+
+      {dbGoals.length === 0 && (
+        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />Mostrando metas de ejemplo. Crea metas reales con el botón de arriba.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {goals.map(g => {
+          const pct = g.target > 0 ? Math.min(1, g.current / g.target) : 0;
+          const metricFmt = g.metric === "revenue" ? fmtMXN(g.target) : fmtNum(g.target);
+          const currentFmt = g.metric === "revenue" ? fmtMXN(g.current) : fmtNum(g.current);
+          return (
+            <Card key={g.id} className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="text-sm font-semibold">{g.name}</p>
+                  <p className="text-xs text-muted-foreground">{g.assignee} · {g.period}</p>
+                </div>
+                <Badge className={`text-[10px] ${GOAL_STATUS_TONE[g.status]}`}>{g.status.replace("_"," ")}</Badge>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Avance</span>
+                  <span className="font-medium">{currentFmt} / {metricFmt}</span>
+                </div>
+                <Progress value={pct * 100} className="h-2" />
+                <p className="text-xs text-right text-muted-foreground">{fmtPct(pct)}</p>
+              </div>
+              <div className="flex gap-1 mt-3">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openEdit(g)}>
+                  <Edit2 className="w-3 h-3 mr-1" />Editar
+                </Button>
+                {!g.id.startsWith("g") && (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => deleteGoal.mutate(g.id)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editGoal ? "Editar meta" : "Nueva meta"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label>Nombre</Label><Input value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} placeholder="Reservas Q3" /></div>
+            <div><Label>Métrica</Label>
+              <Select value={form.metric} onValueChange={v => setForm(f=>({...f,metric:v}))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{METRICS.map(m=><SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label>Objetivo</Label><Input type="number" value={form.target} onChange={e => setForm(f=>({...f,target:e.target.value}))} placeholder="20" /></div>
+            <div><Label>Período</Label><Input value={form.period} onChange={e => setForm(f=>({...f,period:e.target.value}))} placeholder="Jun-2025" /></div>
+            <div><Label>Asignado a</Label><Input value={form.assignee} onChange={e => setForm(f=>({...f,assignee:e.target.value}))} placeholder="Equipo completo" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button onClick={() => saveGoal.mutate()} disabled={saveGoal.isPending}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
