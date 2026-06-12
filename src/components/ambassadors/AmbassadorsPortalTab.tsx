@@ -42,6 +42,68 @@ import { toast } from 'sonner';
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0);
 const dateShort = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('es-MX') : '—');
+const dateRelative = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Hace un momento';
+  if (mins < 60) return `Hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Hace ${hrs} h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `Hace ${days} día${days !== 1 ? 's' : ''}`;
+  return new Date(iso).toLocaleDateString('es-MX');
+};
+
+const NOTIF_MSG: Record<string, string> = {
+  creado: 'Referido registrado',
+  estado_cambiado: 'Estado actualizado',
+  asesor_asignado: 'Asesor asignado',
+  asesor_reasignado: 'Asesor reasignado',
+  nota_agregada: 'Nueva nota del equipo',
+  comentario_publico: 'Mensaje del equipo SOZU',
+  validado: 'Referido validado',
+  duplicado: 'Posible duplicado detectado',
+  comision_generada: 'Comisión generada',
+  comision_pagada: '¡Comisión pagada!',
+  // audit trail types from setCommissionStatus
+  'comision:potencial':  'Comisión en proceso',
+  'comision:generada':   'Comisión generada',
+  'comision:autorizada': 'Comisión autorizada',
+  'comision:pagada':     '¡Comisión pagada!',
+  'comision:cancelada':  'Comisión cancelada',
+  // audit trail types from updateReferralStatus
+  'status:registrado':        'Referido registrado',
+  'status:validado':          'Referido validado',
+  'status:contactado':        'Referido contactado',
+  'status:cita_agendada':     'Cita agendada',
+  'status:cita_realizada':    'Cita realizada',
+  'status:en_seguimiento':    'En seguimiento',
+  'status:apartado':          'Propiedad apartada',
+  'status:promesa_firmada':   'Promesa firmada',
+  'status:venta_cerrada':     'Venta cerrada',
+  'status:comision_generada': 'Comisión generada',
+  'status:comision_pagada':   '¡Comisión pagada!',
+  'status:no_viable':         'No viable',
+  'status:duplicado':         'Marcado como duplicado',
+};
+
+const NOTIF_DOT: Record<string, string> = {
+  creado: 'bg-emerald-500',
+  estado_cambiado: 'bg-blue-500',
+  asesor_asignado: 'bg-violet-500',
+  asesor_reasignado: 'bg-violet-400',
+  nota_agregada: 'bg-amber-500',
+  comentario_publico: 'bg-amber-500',
+  validado: 'bg-emerald-500',
+  duplicado: 'bg-orange-500',
+  comision_generada: 'bg-teal-500',
+  comision_pagada: 'bg-teal-600',
+  'comision:potencial':  'bg-muted-foreground',
+  'comision:generada':   'bg-teal-500',
+  'comision:autorizada': 'bg-violet-500',
+  'comision:pagada':     'bg-teal-600',
+  'comision:cancelada':  'bg-destructive',
+};
 
 const commLabelForAmb = (s: string) => s === 'potencial' ? 'Sin comisión generada' : COMMISSION_STATUS_LABEL[s as keyof typeof COMMISSION_STATUS_LABEL];
 
@@ -100,6 +162,7 @@ export default function AmbassadorsPortalTab() {
   const [showForm, setShowForm] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [openRefId, setOpenRefId] = useState<string | null>(null);
+  const [showAllNotifs, setShowAllNotifs] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReferralStatus>('all');
 
@@ -158,6 +221,34 @@ export default function AmbassadorsPortalTab() {
     };
   }, [myRefs]);
 
+  const notifFeed = useMemo(() => {
+    const events = myRefs.flatMap(r =>
+      (r.auditTrail ?? []).map(e => ({
+        id: `${r.id}-${e.timestamp}-${e.type}`,
+        referralId: r.id,
+        clientName: r.clientName,
+        status: r.status,
+        timestamp: e.timestamp,
+        type: e.type,
+        details: e.details,
+      }))
+    );
+    myRefs.forEach(r => {
+      if (r.publicComments && r.lastAdvisorUpdate) {
+        events.push({
+          id: `${r.id}-pub`,
+          referralId: r.id,
+          clientName: r.clientName,
+          status: r.status,
+          timestamp: r.lastAdvisorUpdate,
+          type: 'comentario_publico',
+          details: r.publicComments.slice(0, 80),
+        });
+      }
+    });
+    return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [myRefs]);
+
   if (!active) {
     return (
       <Card className="p-8 text-center">
@@ -184,7 +275,7 @@ export default function AmbassadorsPortalTab() {
           {/* Left column: copy */}
           <div className="flex flex-col gap-4">
             <h2 className="text-[1.35rem] sm:text-[1.65rem] md:text-[1.85rem] font-bold leading-[1.2] tracking-tight text-foreground">
-              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con SOZU es <span className="text-primary font-extrabold">POSIBLE</span>
+              <span className="text-primary font-extrabold">REFERIR</span> a tus <span className="text-primary font-extrabold">AMIGOS</span> y ganar de tus <span className="text-primary font-extrabold">RELACIONES</span> con <img src="/sozu-logo.png" alt="SOZU" className="inline-block h-[1.1em] w-auto align-middle" /> es <span className="text-primary font-extrabold">POSIBLE</span>
             </h2>
             <p className="text-sm sm:text-[0.95rem] text-muted-foreground leading-relaxed max-w-md">
               Recomienda nuestros proyectos inmobiliarios y nosotros hacemos el resto.
@@ -279,37 +370,66 @@ export default function AmbassadorsPortalTab() {
         <KpiCard label="Documentación" value={pendingDocs === 0 ? 'Al día' : `${pendingDocs} pend.`} sub={pendingDocs === 0 ? 'Todo en orden' : 'Revisa tu perfil'} />
       </div>
 
-      {/* Resumen referidos recientes */}
+      {/* Feed de notificaciones */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">Tus últimos referidos</h3>
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Notificaciones</h3>
+            {notifFeed.length > 0 && (
+              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-semibold bg-primary text-primary-foreground">
+                {notifFeed.length}
+              </span>
+            )}
+          </div>
           <Button variant="ghost" size="sm" onClick={() => setSection('referrals')}>
-            Ver todos <ChevronRight className="h-3 w-3 ml-1" />
+            Ver referidos <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>
-        {myRefs.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Aún no has registrado referidos. Toca <strong>Registrar</strong> abajo para empezar.
-          </p>
+        {notifFeed.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-center">
+            <Bell className="h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">Sin notificaciones aún.</p>
+            <p className="text-[11px] text-muted-foreground">Los cambios en el estado de tus referidos aparecerán aquí.</p>
+          </div>
         ) : (
-          <ul className="space-y-2">
-            {myRefs.slice(0, 4).map((r) => (
-              <li
-                key={r.id}
-                onClick={() => setOpenRefId(r.id)}
-                className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/40 cursor-pointer transition"
+          <>
+            <ul className="space-y-2">
+              {(showAllNotifs ? notifFeed : notifFeed.slice(0, 3)).map((item) => (
+                <li
+                  key={item.id}
+                  onClick={() => setOpenRefId(item.referralId)}
+                  className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/40 cursor-pointer transition"
+                >
+                  <span className={cn('mt-1.5 h-2 w-2 rounded-full shrink-0', NOTIF_DOT[item.type] ?? 'bg-muted-foreground')} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium truncate">{item.clientName}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                        {mapStatusForAmbassador(item.status)}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {NOTIF_MSG[item.type] ?? item.type}
+                      {item.details ? ` · ${item.details}` : ''}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/60 mt-0.5">{dateRelative(item.timestamp)}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                </li>
+              ))}
+            </ul>
+            {notifFeed.length > 3 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 text-xs text-muted-foreground"
+                onClick={() => setShowAllNotifs(v => !v)}
               >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{r.clientName}</div>
-                  <div className="text-[11px] text-muted-foreground">{nextStepFor(r.status)}</div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="outline">{mapStatusForAmbassador(r.status)}</Badge>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </li>
-            ))}
-          </ul>
+                {showAllNotifs ? 'Ver menos ▲' : `Ver ${notifFeed.length - 3} más ▼`}
+              </Button>
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -465,10 +585,10 @@ export default function AmbassadorsPortalTab() {
   );
 
   // ─── Section: Comisiones ───
-  const CommissionsSection = <EmbajadorComisionesSection email={active.email} />;
+  const CommissionsSection = <EmbajadorComisionesSection email={active.email} ambassadorId={active.id} idPersona={active.idPersona} />;
 
   // ─── Section: Pagos ───
-  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} />;
+  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} ambassadorId={active.id} />;
 
   // ─── Section: Perfil ───
   const ProfileSection = (
