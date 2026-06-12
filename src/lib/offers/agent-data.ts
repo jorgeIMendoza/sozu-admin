@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import sozuLogo from "@/assets/sozu-logo.png";
 
 // ── Tipos del dominio ──
 
@@ -28,71 +27,11 @@ export interface Agent {
   bio?: string;
 }
 
-// ── Mock de agentes ──
+// Imagen fallback para foto de agente — logo SOZU desde Storage prod con transform WebP
+export const AGENT_PHOTO_FALLBACK =
+  "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/render/image/public/imagenes_generales/Sozu_logo_n.png?width=120&height=120&quality=80&format=webp";
 
-const initialAgents: Agent[] = [
-  {
-    id: "AGT-RAMON",
-    fullName: "Ramón Escobar",
-    firstName: "Ramón",
-    title: "Agente Inmobiliario Senior",
-    photoUrl: "/images/agents/ramon-escobar.png",
-    email: "joseramon.escobar@sozu.com",
-    phone: "+52 33 1013 7670",
-    whatsapp: "523310137670",
-    brokerage: "SOZU",
-    brokerageLogo: sozuLogo,
-    isAllied: false,
-    yearsExperience: 7,
-    unitsClosedTotal: 84,
-    unitsManagedInProject: 12,
-    languages: ["Español", "Inglés"],
-    specialization: "Preventa Zona Norte Guadalajara",
-    responseTimeAvg: "Responde en menos de 30 min",
-    bio: "Llevo 7 años acompañando a familias e inversionistas en la decisión más importante de su patrimonio. Mi compromiso: cero presión, máxima claridad. Conozco cada unidad de Daiku como si fuera mía.",
-  },
-  {
-    id: "AGT-LUZ",
-    fullName: "Luz Ochoa",
-    firstName: "Luz",
-    title: "Coordinadora de Pagos · Equipo SOZU",
-    photoUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=face&q=80",
-    email: "luz.ochoa@sozu.mx",
-    phone: "+52 33 3306 6660",
-    whatsapp: "523333066660",
-    brokerage: "SOZU",
-    brokerageLogo: sozuLogo,
-    isAllied: false,
-    yearsExperience: 5,
-    unitsClosedTotal: 62,
-    unitsManagedInProject: 18,
-    languages: ["Español"],
-    specialization: "Comercialización Daiku · Bottura",
-    responseTimeAvg: "Responde en menos de 1 hora",
-    bio: "Soy parte del equipo interno SOZU. Te acompaño desde la preventa hasta que recibas tus llaves. Mi prioridad es que entiendas cada peso y cada paso.",
-  },
-  {
-    id: "AGT-ALIADO-CARLOS",
-    fullName: "Carlos Mendoza Velázquez",
-    firstName: "Carlos",
-    title: "Agente Aliado SOZU",
-    photoUrl:
-      "https://images.unsplash.com/photo-1556157382-97eda2d62296?w=400&h=400&fit=crop&crop=face&q=80",
-    email: "carlos.mendoza@inmoaliados.mx",
-    phone: "+52 33 2145 8730",
-    whatsapp: "523321458730",
-    brokerage: "Inmobiliaria Aliados GDL",
-    isAllied: true,
-    yearsExperience: 12,
-    unitsClosedTotal: 210,
-    unitsManagedInProject: 4,
-    languages: ["Español", "Inglés", "Italiano"],
-    specialization: "Inversión patrimonial · Patrimonio multinacional",
-    responseTimeAvg: "Responde en menos de 2 horas",
-    bio: "Como agente aliado de SOZU, te acompaño en SOZU pero también en cualquier proyecto que se ajuste a tu perfil. Mi enfoque: tu patrimonio crece más allá de una unidad.",
-  },
-];
+const initialAgents: Agent[] = [];
 
 // ── Store ──
 

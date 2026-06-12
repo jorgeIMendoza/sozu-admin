@@ -1,5 +1,6 @@
 import { Phone, Video, MoreVertical, CheckCheck, Mic, Paperclip, Smile, ArrowLeft } from "lucide-react";
 import type { Agent } from "@/lib/offers/agent-data";
+import { AGENT_PHOTO_FALLBACK } from "@/lib/offers/agent-data";
 
 interface Props {
   agent?: Agent;
@@ -18,9 +19,7 @@ const WhatsAppBubblePreview = ({
 }: Props) => {
   const senderName = agent?.fullName ?? "SOZU";
   const senderSubtext = agent?.title ?? "Equipo SOZU";
-  const photoUrl =
-    agent?.photoUrl ??
-    "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&crop=face&q=80";
+  const photoUrl = agent?.photoUrl || AGENT_PHOTO_FALLBACK;
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);

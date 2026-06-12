@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
+import { buildStorageImageUrl } from "@/lib/supabase-storage";
 
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
@@ -94,7 +95,7 @@ export interface OfferWithAgent {
 }
 
 async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | null> {
-  const numId = parseInt(ofertaId, 10);
+  const numId = parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10);
   if (isNaN(numId)) return null;
 
   // 1. Oferta base
@@ -375,7 +376,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     development: {
       website:        (proyectoMkt as any)?.url_sitio_web ?? undefined,
       tagline:        (proyectoMkt as any)?.slogan ?? undefined,
-      logoUrl:        (proyecto as any).url_logo ?? undefined,
+      logoUrl:        buildStorageImageUrl((proyecto as any).url_logo, { width: 240, quality: 85 }),
       logoUrlInverse: undefined,
       legalName:      (proyecto as any).nombre,
       socials: ((proyectoMkt as any)?.instagram_handle ||
@@ -492,7 +493,7 @@ export function useOfferFromDB(ofertaId: string) {
   return useQuery({
     queryKey: ["oferta-db", ofertaId],
     queryFn:  () => fetchOfertaFromDB(ofertaId),
-    enabled:  !!ofertaId && !isNaN(parseInt(ofertaId, 10)),
+    enabled:  !!ofertaId && !isNaN(parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10)),
     staleTime: 5 * 60 * 1000,
   });
 }
