@@ -749,7 +749,7 @@ const OfferPage = () => {
                   <p className="text-[1.75rem] font-bold tabular-nums text-foreground leading-none tracking-tight">
                     {formattedPrice}
                   </p>
-                  {offer.property.pricePerM2 && offer.property.area && (
+                  {!!offer.property.pricePerM2 && offer.property.area && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
                       {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(offer.property.pricePerM2)} /m²
                     </p>

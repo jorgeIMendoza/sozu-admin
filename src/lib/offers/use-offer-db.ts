@@ -388,14 +388,19 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           }
         : undefined,
       showroom: (showroom as any)?.descripcion_direccion
-        ? {
-            address:          (showroom as any).descripcion_direccion,
-            googleMapsUrl:    undefined,
-            googleMapsEmbedUrl: undefined,
-            schedule:         (showroom as any).horarios
-              ? [{ daysLabel: "Horarios", hours: (showroom as any).horarios }]
-              : [],
-          }
+        ? (() => {
+            const lat = (showroom as any).latitud;
+            const lon = (showroom as any).longitud;
+            const hasCoords = lat != null && lon != null;
+            return {
+              address:            (showroom as any).descripcion_direccion,
+              googleMapsUrl:      hasCoords ? `https://www.google.com/maps?q=${lat},${lon}` : undefined,
+              googleMapsEmbedUrl: hasCoords ? `https://www.google.com/maps?q=${lat},${lon}&output=embed` : undefined,
+              schedule:           (showroom as any).horarios
+                ? [{ daysLabel: "Horarios", hours: (showroom as any).horarios }]
+                : [],
+            };
+          })()
         : undefined,
     },
     // tour360: del modelo — fallback undefined muestra card "próximamente"
