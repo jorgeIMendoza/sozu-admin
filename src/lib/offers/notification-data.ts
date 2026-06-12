@@ -5,7 +5,6 @@
 import { create } from "zustand";
 import type { InvestmentProperty } from "@/lib/offers/mock-data";
 import { mockPortfolio } from "@/lib/offers/mock-data";
-import { getPaymentPlan, getAccelerationState, usePaymentStore } from "@/lib/offers/payment-data";
 import { getMaintenanceAccount, getAccountStatus, useMaintenanceStore } from "@/lib/offers/maintenance-data";
 import { getAllDocuments, useDocumentStore } from "@/lib/offers/document-data";
 import { getConstructionProgress } from "@/lib/offers/construction-progress-data";
@@ -66,9 +65,7 @@ export function getAllNotifications(): Notification[] {
   const notifications: Notification[] = [];
 
   for (const inv of mockPortfolio) {
-    notifications.push(...buildPaymentNotifications(inv));
     notifications.push(...buildMaintenanceNotifications(inv));
-    notifications.push(...buildDeliveryNotifications(inv));
     notifications.push(...buildConstructionNotifications(inv));
   }
   notifications.push(...buildDocumentNotifications());
@@ -94,69 +91,6 @@ export function getAllNotifications(): Notification[] {
     });
 }
 
-function buildPaymentNotifications(inv: InvestmentProperty): Notification[] {
-  const out: Notification[] = [];
-  const plan = getPaymentPlan(inv.property.id);
-  if (!plan) return out;
-
-  for (const inst of plan.installments) {
-    if (inst.status === "vencido") {
-      out.push({
-        id: `pay-overdue-${inv.property.id}-${inst.number}`,
-        type: "urgent", category: "payments",
-        title: `Parcialidad ${inst.number} vencida`,
-        description: `${inv.property.projectName} ${inv.property.unitNumber} · Vencida hace ${Math.abs(inst.daysUntilDue)} días`,
-        createdAt: inst.dueDate,
-        actionLabel: "Pagar ahora",
-        actionUrl: `/propiedades/${inv.property.id}`,
-        propertyId: inv.property.id,
-      });
-    } else if (inst.status === "cercano") {
-      out.push({
-        id: `pay-near-${inv.property.id}-${inst.number}`,
-        type: "actionable", category: "payments",
-        title: `Parcialidad ${inst.number} próxima a vencer`,
-        description: `${inv.property.projectName} ${inv.property.unitNumber} · Vence ${inst.dueDateDisplay}`,
-        createdAt: new Date().toISOString(),
-        actionLabel: "Ver detalle",
-        actionUrl: `/propiedades/${inv.property.id}`,
-        propertyId: inv.property.id,
-      });
-    }
-
-    if (inst.confirmationStatus === "validando") {
-      out.push({
-        id: `pay-validating-${inv.property.id}-${inst.number}`,
-        type: "informative", category: "payments",
-        title: "Pago detectado, validando con banco",
-        description: `${inv.property.projectName} ${inv.property.unitNumber} · Parcialidad ${inst.number}`,
-        createdAt: inst.paidAt ?? new Date().toISOString(),
-        actionLabel: "Ver",
-        actionUrl: `/propiedades/${inv.property.id}`,
-        propertyId: inv.property.id,
-      });
-    }
-
-    if (inst.confirmationStatus === "confirmado" && inst.confirmationTimestamp) {
-      const confirmedAt = new Date(inst.confirmationTimestamp);
-      const daysSince = (Date.now() - confirmedAt.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSince <= 7) {
-        out.push({
-          id: `pay-confirmed-${inv.property.id}-${inst.number}`,
-          type: "success", category: "payments",
-          title: "Pago confirmado",
-          description: `${inv.property.projectName} ${inv.property.unitNumber} · Parcialidad ${inst.number} aplicada`,
-          createdAt: inst.confirmationTimestamp,
-          actionLabel: "Ver historial",
-          actionUrl: `/historial-de-pagos/${inv.property.id}`,
-          propertyId: inv.property.id,
-        });
-      }
-    }
-  }
-
-  return out;
-}
 
 function buildMaintenanceNotifications(inv: InvestmentProperty): Notification[] {
   const out: Notification[] = [];
@@ -191,49 +125,6 @@ function buildMaintenanceNotifications(inv: InvestmentProperty): Notification[] 
   return out;
 }
 
-function buildDeliveryNotifications(inv: InvestmentProperty): Notification[] {
-  const out: Notification[] = [];
-  const plan = getPaymentPlan(inv.property.id);
-  if (!plan) return out;
-  const accel = getAccelerationState(plan);
-
-  if (accel.tier === "critical") {
-    out.push({
-      id: `delivery-critical-${inv.property.id}`,
-      type: "urgent", category: "delivery",
-      title: "Tu propiedad está lista para entrega",
-      description: `${inv.property.projectName} ${inv.property.unitNumber} · Liquidación pendiente`,
-      createdAt: new Date().toISOString(),
-      actionLabel: "Coordinar liquidación",
-      actionUrl: `/propiedades/${inv.property.id}`,
-      propertyId: inv.property.id,
-    });
-  } else if (accel.tier === "urgent") {
-    out.push({
-      id: `delivery-urgent-${inv.property.id}`,
-      type: "actionable", category: "delivery",
-      title: `Entrega en ${accel.daysUntilDelivery} días`,
-      description: `${inv.property.projectName} ${inv.property.unitNumber} · Define método de liquidación`,
-      createdAt: new Date().toISOString(),
-      actionLabel: "Ver opciones",
-      actionUrl: `/propiedades/${inv.property.id}`,
-      propertyId: inv.property.id,
-    });
-  } else if (accel.tier === "informative") {
-    out.push({
-      id: `delivery-info-${inv.property.id}`,
-      type: "informative", category: "delivery",
-      title: "Tu propiedad estará lista antes de tiempo",
-      description: `${inv.property.projectName} ${inv.property.unitNumber} · ${accel.daysUntilDelivery} días para entrega`,
-      createdAt: new Date().toISOString(),
-      actionLabel: "Conocer opciones",
-      actionUrl: `/propiedades/${inv.property.id}`,
-      propertyId: inv.property.id,
-    });
-  }
-
-  return out;
-}
 
 function buildConstructionNotifications(inv: InvestmentProperty): Notification[] {
   const out: Notification[] = [];
@@ -347,12 +238,11 @@ export function getUnreadCount(): number {
 export function useNotifications(): Notification[] {
   const readAt = useNotificationReadStore((s) => s.readAt);
   const dismissedAt = useNotificationReadStore((s) => s.dismissedAt);
-  const plans = usePaymentStore((s) => s.plans);
   const documents = useDocumentStore((s) => s.documents);
   const accounts = useMaintenanceStore((s) => s.accounts);
   const incidents = usePostDeliveryStore((s) => s.incidents);
   const warranties = usePostDeliveryStore((s) => s.warranties);
-  void readAt; void dismissedAt; void plans; void documents; void accounts; void incidents; void warranties;
+  void readAt; void dismissedAt; void documents; void accounts; void incidents; void warranties;
   return getAllNotifications();
 }
 
