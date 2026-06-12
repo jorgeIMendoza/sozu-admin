@@ -324,7 +324,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
       const { data } = await supabase
         .from('documentos')
         .select(`
-          id, id_tipo_documento, url, fecha_creacion, fecha_actualizacion, es_draft,
+          id, id_tipo_documento, id_estatus_verificacion, url, fecha_creacion, fecha_actualizacion, es_draft,
           tipos_documento:documentos_id_tipo_documento_fkey(nombre),
           estatus_verificacion:documentos_id_estatus_verificacion_fkey(nombre)
         `)
