@@ -202,10 +202,21 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
         }
       }
 
+      // DDL probe: url_factura puede no existir aún si el ALTER TABLE no se ha ejecutado
+      const facturaColProbe = await (supabase as any)
+        .from('embajadores_referidos').select('url_factura').limit(0);
+      const hasFacturaCol = !facturaColProbe.error;
+
+      const refSelect = [
+        'id', 'estatus_comision', 'monto_comision', 'monto_venta',
+        'id_entidad_relacionada', 'producto_interes',
+        ...(hasFacturaCol ? ['url_factura'] : []),
+      ].join(', ');
+
       const refQuery = embajadorErId
         ? (supabase as any)
             .from('embajadores_referidos')
-            .select('id, estatus_comision, monto_comision, monto_venta, id_entidad_relacionada, producto_interes, url_factura')
+            .select(refSelect)
             .eq('id_entidad_relacionada_emb', embajadorErId)
             .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
             .eq('activo', true)
@@ -252,7 +263,7 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
             monto_comision: r.monto_comision || 0,
             status: REF_STATUS_MAP[s] ?? 'en_revision',
             cuenta_cobranza_label: `Referido · ${clientName}`,
-            factura_url: r.url_factura || null,
+            factura_url: hasFacturaCol ? (r.url_factura || null) : null,
           });
         }
       }
