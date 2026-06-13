@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car } from 'lucide-react';
+import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -49,6 +49,18 @@ type EstacionamientoDetalle = {
   tieneCuenta: boolean;
 };
 
+/** Detalle de un paquete amueblado vinculado a su cuenta de cobranza (producto). */
+type PaqueteDetalle = {
+  id: number;
+  nombre: string;
+  precioFinal: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  compradores: Person[];
+  cuentaId: number;
+  cuentaLabel: string;
+};
+
 type ExpedienteRow = {
   cuentaId: number;
   cuentaLabel: string;
@@ -56,6 +68,8 @@ type ExpedienteRow = {
   propietario: string;
   propietarioRfc: string | null;
   tipo: string;
+  estatusId: number | null;
+  estatus: string;
   unidad: string;
   piso: string;
   proyectoId: number | null;
@@ -65,6 +79,7 @@ type ExpedienteRow = {
   modelo: string;
   estacionamientos: EstacionamientoDetalle[];
   bodegas: BodegaDetalle[];
+  paquetes: PaqueteDetalle[];
   productos: string[];
   fechaVenta: string | null;
   precioFinal: number;
@@ -76,7 +91,6 @@ type ExpedienteRow = {
   relatedAccounts: RelatedAccount[];
 };
 
-const ELIGIBLE_STATUS = [5, 7, 8, 9];
 const ALL_VALUE = 'all';
 
 const fmtMxn = (value: number) =>
@@ -106,10 +120,11 @@ function DetailItem({ label, value }: { label: string; value: React.ReactNode })
 function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [showBodegas, setShowBodegas] = useState(false);
   const [showEstac, setShowEstac] = useState(false);
+  const [showPaquete, setShowPaquete] = useState(false);
   if (!row) return null;
   return (
     <>
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); } onOpenChange(o); }}>
       <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -136,6 +151,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
               <DetailItem label="Modelo" value={row.modelo} />
               <DetailItem label="No. Depto" value={row.unidad} />
               <DetailItem label="Tipo" value={row.tipo} />
+              <DetailItem label="Estatus de Propiedad" value={<span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[12px] font-medium">{row.estatus}</span>} />
               <DetailItem label="Metraje" value={`${(row.m2Interiores + row.m2Exteriores).toLocaleString('es-MX')} m²`} />
               <DetailItem
                 label="Estacionamientos"
@@ -159,6 +175,19 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                     className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
                   >
                     {row.bodegas.map((b) => b.nombre).join(', ')}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </button>
+                ) : '—'}
+              />
+              <DetailItem
+                label="Paquete amueblado"
+                value={row.paquetes.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPaquete(true)}
+                    className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                  >
+                    {row.paquetes.map((p) => p.nombre).join(', ')}
                     <ExternalLink className="h-3 w-3 shrink-0" />
                   </button>
                 ) : '—'}
@@ -227,7 +256,53 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
 
     <BodegasModal row={row} open={showBodegas} onOpenChange={setShowBodegas} />
     <EstacionamientosModal row={row} open={showEstac} onOpenChange={setShowEstac} />
+    <PaquetesModal row={row} open={showPaquete} onOpenChange={setShowPaquete} />
     </>
+  );
+}
+
+function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+  if (!row) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sofa className="h-5 w-5 text-primary" /> Paquete amueblado · Propiedad {row.unidad}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="overflow-hidden rounded-xl border border-border/60">
+          <table className="w-full">
+            <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">Paquete</th>
+                <th className="px-4 py-2 font-medium text-right">Precio Final</th>
+                <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
+                <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Compradores</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.paquetes.length ? row.paquetes.map((paq) => (
+                <tr key={paq.id} className="border-t border-border/60 text-[13px]">
+                  <td className="px-4 py-2 font-medium">
+                    {paq.nombre}
+                    <span className="ml-2 font-mono text-[11px] text-muted-foreground">{paq.cuentaLabel}</span>
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(paq.precioFinal)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(paq.totalPagado)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(paq.saldoPendiente)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{paq.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -340,6 +415,7 @@ export default function LegalFlowEscrituracionExpedientes() {
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState(ALL_VALUE);
   const [bodegaFilter, setBodegaFilter] = useState(ALL_VALUE);
+  const [paqueteFilter, setPaqueteFilter] = useState(ALL_VALUE);
   const [modelFilter, setModelFilter] = useState(ALL_VALUE);
   const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
   const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
@@ -368,6 +444,8 @@ export default function LegalFlowEscrituracionExpedientes() {
       if (ownerFilter !== ALL_VALUE && row.propietario !== ownerFilter) return false;
       if (bodegaFilter === 'with' && row.bodegas.length === 0) return false;
       if (bodegaFilter === 'without' && row.bodegas.length > 0) return false;
+      if (paqueteFilter === 'with' && row.paquetes.length === 0) return false;
+      if (paqueteFilter === 'without' && row.paquetes.length > 0) return false;
       if (!q) return true;
       return [
         row.cuentaLabel,
@@ -380,16 +458,14 @@ export default function LegalFlowEscrituracionExpedientes() {
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter]);
+  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter]);
 
   return (
     <div className="max-w-[1600px] space-y-6 px-10 py-8">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.24em] text-primary">SOZU Legal Flow</p>
-          <h1 className="text-[24px] font-bold tracking-tight">Escrituración · Expedientes</h1>
           <p className="text-[13px] text-muted-foreground">
-            Cuentas de cobranza de propiedades vendidas o en proceso de escrituración, con bodegas, estacionamientos y productos ligados.
+            Cuentas de cobranza de propiedades (todos los estatus), con bodegas, estacionamientos y productos ligados.
           </p>
         </div>
         <div className="rounded-xl border border-border/60 bg-card px-4 py-3 text-right shadow-sm">
@@ -420,6 +496,10 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[160px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Bodega" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todas</SelectItem><SelectItem value="with">Con bodega</SelectItem><SelectItem value="without">Sin bodega</SelectItem></SelectContent>
         </Select>
+        <Select value={paqueteFilter} onValueChange={setPaqueteFilter}>
+          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Paquete de muebles" /></SelectTrigger>
+          <SelectContent><SelectItem value={ALL_VALUE}>Todos</SelectItem><SelectItem value="with">Con paquete de muebles</SelectItem><SelectItem value="without">Sin paquete de muebles</SelectItem></SelectContent>
+        </Select>
         <Select value={modelFilter} onValueChange={setModelFilter}>
           <SelectTrigger className="h-[38px] w-[190px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Modelo" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los modelos</SelectItem>{options.models.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
@@ -439,32 +519,42 @@ export default function LegalFlowEscrituracionExpedientes() {
                 <th className="table-head">Compradores</th>
                 <th className="table-head">Propietario</th>
                 <th className="table-head">Tipo</th>
+                <th className="table-head">Estatus</th>
                 <th className="table-head">Unidad</th>
                 <th className="table-head">Proyecto</th>
                 <th className="table-head">Modelo</th>
                 <th className="table-head">Estacionamientos</th>
                 <th className="table-head">Bodegas</th>
+                <th className="table-head">Muebles</th>
                 <th className="table-head text-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={10} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={10} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
                   <td className="table-cell text-[13px]">{row.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.propietario}</td>
                   <td className="table-cell text-[13px]">{row.tipo}</td>
+                  <td className="table-cell text-[13px]"><span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium">{row.estatus}</span></td>
                   <td className="table-cell text-[13px] font-medium">{row.unidad}</td>
                   <td className="table-cell text-[13px]">{row.proyecto}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.modelo}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.estacionamientos.length ? row.estacionamientos.map((e) => e.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.bodegas.length ? row.bodegas.map((b) => b.nombre).join(', ') : '—'}</td>
+                  <td className="table-cell text-[13px]">
+                    {row.paquetes.length ? (
+                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
+                    )}
+                  </td>
                   <td className="table-cell text-right">
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => setSelected(row)}>
                       <Eye className="h-3.5 w-3.5" /> Ver detalle
@@ -493,6 +583,7 @@ function uniqueOptions(options: Option[]): Option[] {
 
 const BODEGA_RE = /bodega/i;
 const ESTAC_RE = /estacionamiento/i;
+const PAQUETE_RE = /amueblad/i;
 
 async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   // 1) TODAS las cuentas de cobranza activas (paginado — PostgREST corta a 1000).
@@ -515,7 +606,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const offerById = new Map<number, any>(ofertas.map((o: any) => [o.id, o]));
   const ofertaProductIds = [...new Set(ofertas.map((o: any) => o.id_producto).filter(Boolean))] as number[];
 
-  // 3) Propiedades referenciadas por las cuentas, filtradas a estatus elegibles.
+  // 3) Propiedades referenciadas por las cuentas. Se muestran TODAS las cuentas
+  //    sin importar el estatus de disponibilidad de la propiedad.
   const propIds = [...new Set(cuentas.map((c) => c.id_propiedad).filter(Boolean))] as number[];
   const propiedades = await fetchInBatches<any>(propIds, (batch) =>
     (supabase as any)
@@ -524,11 +616,11 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
       .eq('activo', true)
       .in('id', batch as number[]),
   );
-  const eligibleProps = propiedades.filter((p: any) => ELIGIBLE_STATUS.includes(p.id_estatus_disponibilidad));
+  const eligibleProps = propiedades;
   if (!eligibleProps.length) return [];
   const eligiblePropIds = new Set<number>(eligibleProps.map((p: any) => p.id));
 
-  // Solo cuentas cuya propiedad es elegible.
+  // Solo cuentas cuya propiedad fue cargada (activa).
   const relevantCuentas = cuentas.filter((c) => c.id_propiedad && eligiblePropIds.has(c.id_propiedad));
 
   // 4) Dimensiones de la propiedad (edificio → proyecto), dueño y tipo.
@@ -548,6 +640,11 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const estacTipoIds = [...new Set(estacionamientos.map((e: any) => e.id_tipo).filter(Boolean))] as number[];
   const tiposEstac = await fetchInBatches<any>(estacTipoIds, (b) => (supabase as any).from('tipos_estacionamiento').select('id, nombre').in('id', b as number[]));
   const tipoEstacById = new Map<number, string>(tiposEstac.map((t: any) => [t.id, t.nombre as string]));
+
+  // Catálogo de estatus de disponibilidad (Inventario, Disponible, Vendido, etc.).
+  const estatusIds = [...new Set(eligibleProps.map((p: any) => p.id_estatus_disponibilidad).filter(Boolean))] as number[];
+  const estatusCat = await fetchInBatches<any>(estatusIds, (b) => (supabase as any).from('estatus_disponibilidad').select('id, nombre').in('id', b as number[]));
+  const estatusById = new Map<number, string>(estatusCat.map((s: any) => [s.id, s.nombre as string]));
 
   const linkRows = edificiosModelos;
   const buildingIds = [...new Set(linkRows.map((m: any) => m.id_edificio).filter(Boolean))] as number[];
@@ -582,13 +679,15 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const esCuentaUnidad = (c: any) => !c.id_cuenta_cobranza_padre && productoDeCuenta(c) == null;
   const esCuentaBodega = (c: any) => { const n = productoDeCuenta(c); return !!n && BODEGA_RE.test(n); };
   const esCuentaEstacionamiento = (c: any) => { const n = productoDeCuenta(c); return !!n && ESTAC_RE.test(n); };
+  const esCuentaPaquete = (c: any) => { const n = productoDeCuenta(c); return !!n && PAQUETE_RE.test(n); };
 
   // 6) Agrupar cuentas por propiedad y clasificar.
   const cuentasByProp = groupByProp(relevantCuentas);
   const mainByProp = new Map<number, any>();        // cuenta de la unidad (venta principal)
   const bodegaCuentasByProp = new Map<number, any[]>();
   const estacCuentasByProp = new Map<number, any[]>();
-  const productCuentasByProp = new Map<number, any[]>(); // hermanas con producto (incl. bodegas/estac)
+  const paqueteCuentasByProp = new Map<number, any[]>();
+  const productCuentasByProp = new Map<number, any[]>(); // hermanas con producto (incl. bodegas/estac/paquetes)
   for (const [propId, list] of cuentasByProp) {
     for (const c of list) {
       if (esCuentaUnidad(c)) {
@@ -603,23 +702,30 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           bodegaCuentasByProp.set(propId, [...(bodegaCuentasByProp.get(propId) || []), c]);
         } else if (esCuentaEstacionamiento(c)) {
           estacCuentasByProp.set(propId, [...(estacCuentasByProp.get(propId) || []), c]);
+        } else if (esCuentaPaquete(c)) {
+          paqueteCuentasByProp.set(propId, [...(paqueteCuentasByProp.get(propId) || []), c]);
         }
       }
     }
   }
 
-  // 7) Compradores, documentos (de la cuenta de la unidad) y pagos (de bodegas).
+  // 7) Compradores, documentos y pagos. Los compradores se piden tanto de la
+  //    cuenta de la unidad como de las cuentas de paquete amueblado; los pagos
+  //    de bodegas y paquetes (para Total Pagado / Saldo).
   const mainAccountIds = [...mainByProp.values()].map((c) => c.id as number);
   const bodegaCuentaIds = [...new Set([...bodegaCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
+  const paqueteCuentaIds = [...new Set([...paqueteCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
+  const compradorCuentaIds = [...new Set([...mainAccountIds, ...paqueteCuentaIds])];
+  const pagoCuentaIds = [...new Set([...bodegaCuentaIds, ...paqueteCuentaIds])];
 
   const [compradores, docs, acuerdos] = await Promise.all([
-    fetchInBatches<any>(mainAccountIds, (b) => (supabase as any).from('compradores').select('id_cuenta_cobranza, id_persona').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
+    fetchInBatches<any>(compradorCuentaIds, (b) => (supabase as any).from('compradores').select('id_cuenta_cobranza, id_persona').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
     fetchInBatches<any>(mainAccountIds, (b) => (supabase as any).from('documentos').select('id, id_cuenta_cobranza, id_tipo_documento, id_estatus_verificacion').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
-    fetchInBatches<any>(bodegaCuentaIds, (b) => (supabase as any).from('acuerdos_pago').select('id, id_cuenta_cobranza').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
+    fetchInBatches<any>(pagoCuentaIds, (b) => (supabase as any).from('acuerdos_pago').select('id, id_cuenta_cobranza').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
   ]);
 
-  // Total pagado por cuenta de bodega — Σ aplicaciones_pago.monto (es_multa=false)
-  // vía acuerdos_pago (fuente de verdad, CLAUDE.md).
+  // Total pagado por cuenta (bodega/paquete) — Σ aplicaciones_pago.monto
+  // (es_multa=false) vía acuerdos_pago (fuente de verdad, CLAUDE.md).
   const acuerdoIds = [...new Set(acuerdos.map((a: any) => a.id).filter(Boolean))] as number[];
   const aplicaciones = await fetchInBatches<any>(acuerdoIds, (b) =>
     (supabase as any).from('aplicaciones_pago').select('id_acuerdo_pago, monto, es_multa').eq('activo', true).in('id_acuerdo_pago', b as number[]),
@@ -727,6 +833,23 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         });
       }
 
+      // Paquetes amueblados: cuentas de producto vinculadas a la propiedad.
+      const paqueteCuentas = paqueteCuentasByProp.get(property.id) || [];
+      const paquetesDetalle: PaqueteDetalle[] = paqueteCuentas.map((c: any) => {
+        const precioFinal = Number(c.precio_final || 0);
+        const totalPagado = pagadoPorCuenta.get(c.id) || 0;
+        return {
+          id: c.id,
+          nombre: productoDeCuenta(c) || 'Paquete amueblado',
+          precioFinal,
+          totalPagado,
+          saldoPendiente: precioFinal - totalPagado,
+          compradores: buyersByAccount.get(c.id) || [],
+          cuentaId: c.id,
+          cuentaLabel: ccLabel(c.id),
+        };
+      });
+
       const productNames = new Set<string>();
       for (const item of propertyEstacionamientos) {
         const name = item.id_producto ? productById.get(item.id_producto) : null;
@@ -746,6 +869,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         propietario: owner?.nombre_legal || '—',
         propietarioRfc: owner?.rfc || null,
         tipo: (property.id_tipo_propiedad && tipoById.get(property.id_tipo_propiedad)) || 'Propiedad',
+        estatusId: property.id_estatus_disponibilidad ?? null,
+        estatus: (property.id_estatus_disponibilidad && estatusById.get(property.id_estatus_disponibilidad)) || '—',
         unidad: property.numero_propiedad || '—',
         piso: property.numero_piso || '',
         proyectoId: project?.id ?? null,
@@ -755,6 +880,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         modelo: model?.nombre || '—',
         estacionamientos: estacionamientosDetalle,
         bodegas: bodegasDetalle,
+        paquetes: paquetesDetalle,
         productos: Array.from(productNames),
         fechaVenta: account.fecha_compra,
         precioFinal: Number(account.precio_final || 0),
