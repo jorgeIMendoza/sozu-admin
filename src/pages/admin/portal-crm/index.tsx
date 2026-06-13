@@ -299,9 +299,9 @@ export function CrmAlertas() {
                   <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
                     <span>{relTime(a.created_at)}</span>
                     {a.metric_name && <span>· {a.metric_name}: {a.current_value} {a.previous_value ? `(prev ${a.previous_value})` : ""}</span>}
-                    {a.related_contact_id && <Link to={`/admin/portal-crm/crm/contacts/${a.related_contact_id}`} className="hover:text-foreground underline">Ver contacto →</Link>}
-                    {a.related_campaign_id && <Link to="/admin/portal-crm/marketing/campaigns" className="hover:text-foreground underline">Ver campaña →</Link>}
-                    {a.alert_type === "conversion_event" && <Link to="/admin/portal-crm/conversion-events" className="hover:text-foreground underline">Ver eventos →</Link>}
+                    {a.related_contact_id && <Link to={`/admin/portal-crm/ventas/contactos/${a.related_contact_id}`} className="hover:text-foreground underline">Ver contacto →</Link>}
+                    {a.related_campaign_id && <Link to="/admin/portal-crm/marketing/campanas" className="hover:text-foreground underline">Ver campaña →</Link>}
+                    {a.alert_type === "conversion_event" && <Link to="/admin/portal-crm/eventos-conversion" className="hover:text-foreground underline">Ver eventos →</Link>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -506,7 +506,7 @@ function TrackingContactList({ rows, extraCol, extraLabel }: { rows: any[]; extr
       <TableBody>
         {rows.slice(0, 100).map((c: any) => (
           <TableRow key={`${c.id}-${c[extraCol ?? "id"] ?? ""}`}>
-            <TableCell className="font-medium"><Link to={`/admin/portal-crm/crm/contacts/${c.id}`} className="hover:underline">{c.full_name}</Link></TableCell>
+            <TableCell className="font-medium"><Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="hover:underline">{c.full_name}</Link></TableCell>
             <TableCell className="text-xs text-muted-foreground">{c.email ?? "—"}</TableCell>
             <TableCell className="text-xs text-muted-foreground">{c.phone ?? "—"}</TableCell>
             <TableCell className="text-xs">{c.source_platform ?? "—"}</TableCell>
@@ -578,7 +578,7 @@ export function CrmConversionEvents() {
                   <TableCell className="font-medium">{e.event_name}</TableCell>
                   <TableCell>
                     {e.contact ? (
-                      <Link to={`/admin/portal-crm/crm/contacts/${e.contact.id}`} className="hover:underline">{e.contact.full_name}</Link>
+                      <Link to={`/admin/portal-crm/ventas/contactos/${e.contact.id}`} className="hover:underline">{e.contact.full_name}</Link>
                     ) : "—"}
                   </TableCell>
                   <TableCell>{e.event_value ? fmtMXN(Number(e.event_value)) : "—"}</TableCell>

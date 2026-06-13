@@ -102,17 +102,17 @@ export function CrmExecutiveDashboard() {
         actions={
           <div className="flex gap-2">
             <Button asChild variant="outline" size="sm">
-              <Link to="/admin/portal-crm/executive/decision-queue">
+              <Link to="/admin/portal-crm/direccion/cola-decisiones">
                 <Activity className="h-4 w-4 mr-1" />Decision Queue
               </Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link to="/admin/portal-crm/executive/weekly-digest">
+              <Link to="/admin/portal-crm/direccion/resumen-semanal">
                 <Sparkles className="h-4 w-4 mr-1" />Weekly Digest
               </Link>
             </Button>
             <Button asChild size="sm">
-              <Link to="/admin/portal-crm/operations/copilot">
+              <Link to="/admin/portal-crm/operacion/copiloto">
                 <Bot className="h-4 w-4 mr-1" />Ask Copilot
               </Link>
             </Button>
@@ -225,7 +225,7 @@ export function CrmExecutiveDashboard() {
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-sm">Decision Queue (top 8)</CardTitle>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/admin/portal-crm/executive/decision-queue">Ver todas</Link>
+            <Link to="/admin/portal-crm/direccion/cola-decisiones">Ver todas</Link>
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -330,16 +330,16 @@ export function CrmExecutiveDecisionQueue() {
               <div className="flex gap-2 mt-2 flex-wrap">
                 {d.related_contact_id && (
                   <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                    <Link to={`/admin/portal-crm/crm/contacts/${d.related_contact_id}`}>Abrir contacto</Link>
+                    <Link to={`/admin/portal-crm/ventas/contactos/${d.related_contact_id}`}>Abrir contacto</Link>
                   </Button>
                 )}
                 {d.related_campaign_id && (
                   <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                    <Link to="/admin/portal-crm/marketing/campaigns">Abrir campaña</Link>
+                    <Link to="/admin/portal-crm/marketing/campanas">Abrir campaña</Link>
                   </Button>
                 )}
                 <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                  <Link to="/admin/portal-crm/operations/copilot">Analizar con AI</Link>
+                  <Link to="/admin/portal-crm/operacion/copiloto">Analizar con AI</Link>
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDone(new Set([...done, d.id]))}>Marcar done</Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setDismissed(new Set([...dismissed, d.id]))}>Dismiss</Button>
@@ -409,7 +409,7 @@ export function CrmExecutiveWeeklyDigest() {
               <Sparkles className="h-4 w-4 mr-1" />Create tasks
             </Button>
             <Button asChild size="sm">
-              <Link to="/admin/portal-crm/operations/copilot">
+              <Link to="/admin/portal-crm/operacion/copiloto">
                 <Bot className="h-4 w-4 mr-1" />Ask Copilot to rewrite
               </Link>
             </Button>
