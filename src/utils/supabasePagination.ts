@@ -55,6 +55,43 @@ export async function fetchAllRows<T = any>(
  * key (ej. `id_cuenta_cobranza`), el builder hace todo el query — el helper
  * sólo provee el slice de IDs.
  */
+/**
+ * Como `fetchInBatches`, pero además pagina las FILAS dentro de cada lote.
+ * Necesario cuando la tabla tiene muchas filas por cada id del `.in(...)`
+ * (ej. `documentos` por cuenta, `acuerdos_pago` por cuenta): un solo lote
+ * puede devolver más de 1000 filas y PostgREST las cortaría silenciosamente.
+ *
+ * El builder recibe `(batch, from, to)` y debe aplicar `.in(...)`, `.range(from, to)`
+ * y un `.order(...)` estable (por una columna única, ej. `id`) para que la
+ * paginación no repita ni omita filas entre páginas.
+ *
+ * Los lotes se procesan en serie (cada uno pagina hasta agotar). Usa un
+ * `batchSize` menor (~300) para acotar el número de páginas por lote.
+ */
+export async function fetchInBatchesPaged<T = any>(
+  ids: ReadonlyArray<number | string>,
+  build: (batch: Array<number | string>, from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  options: { batchSize?: number; pageSize?: number } = {},
+): Promise<T[]> {
+  const batchSize = options.batchSize ?? 300;
+  const pageSize = options.pageSize ?? 1000;
+  if (!ids.length) return [];
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batch = ids.slice(i, i + batchSize) as Array<number | string>;
+    for (let page = 0; ; page++) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error } = await build(batch, from, to);
+      if (error) throw error;
+      const rows = (data ?? []) as T[];
+      out.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+  }
+  return out;
+}
+
 export async function fetchInBatches<T = any>(
   ids: ReadonlyArray<number | string>,
   build: (batch: Array<number | string>) => PromiseLike<{ data: T[] | null; error: any }>,

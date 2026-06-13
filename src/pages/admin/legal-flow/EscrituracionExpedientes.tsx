@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa } from 'lucide-react';
+import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchAllRows, fetchInBatches } from '@/utils/supabasePagination';
+import { fetchAllRows, fetchInBatches, fetchInBatchesPaged } from '@/utils/supabasePagination';
+import { useToast } from '@/hooks/use-toast';
+import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
+import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
+import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
+import { cn } from '@/lib/utils';
 
 type Person = { id: number; nombre_legal: string | null; rfc: string | null };
 type Option = { id: string; label: string };
@@ -87,6 +93,7 @@ type ExpedienteRow = {
   m2Exteriores: number;
   precioM2: number | null;
   contratoFirmado: boolean;
+  contratoUrl: string | null;
   documentosCount: number;
   relatedAccounts: RelatedAccount[];
 };
@@ -104,7 +111,37 @@ const fmtM2 = (value: number) => `${(value || 0).toLocaleString('es-MX', { maxim
 const fmtDate = (value: string | null) =>
   value ? new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
+const fmtFechaHora = (value: string) =>
+  new Date(value).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 const ccLabel = (id: number) => `CC-${String(id).padStart(6, '0')}`;
+
+/**
+ * Tipos de nota de bitácora (mismas categorías que el composer de Casos).
+ * `legal_flow_bitacora.tipo` sólo admite nota/validacion/rechazo/sistema, así
+ * que la categoría se persiste como marcador al inicio del título y se parsea
+ * al mostrar.
+ */
+const NOTE_TYPES = [
+  { value: 'nota_interna', label: 'Nota interna', icon: StickyNote, color: 'bg-muted text-muted-foreground' },
+  { value: 'observacion_legal', label: 'Observación legal', icon: MessageSquare, color: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' },
+  { value: 'riesgo', label: 'Riesgo', icon: AlertTriangle, color: 'bg-destructive/10 text-destructive' },
+  { value: 'acuerdo', label: 'Acuerdo', icon: Handshake, color: 'bg-primary/10 text-primary' },
+  { value: 'seguimiento', label: 'Seguimiento', icon: Bell, color: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
+] as const;
+type NoteTypeValue = typeof NOTE_TYPES[number]['value'];
+const NOTE_TYPE_BY_VALUE = new Map(NOTE_TYPES.map((t) => [t.value, t]));
+
+const CAT_RE = /^«cat:([a-z_]+)»\s?/;
+const encodeCategoria = (cat: NoteTypeValue, titulo: string) => `«cat:${cat}» ${titulo}`.trim();
+const decodeCategoria = (titulo?: string): { categoria: NoteTypeValue; titulo: string } => {
+  if (!titulo) return { categoria: 'nota_interna', titulo: '' };
+  const m = titulo.match(CAT_RE);
+  if (m && NOTE_TYPE_BY_VALUE.has(m[1] as NoteTypeValue)) {
+    return { categoria: m[1] as NoteTypeValue, titulo: titulo.replace(CAT_RE, '') };
+  }
+  return { categoria: 'nota_interna', titulo };
+};
 
 const joinNames = (items: string[]) => items.length ? items.join(', ') : '—';
 
@@ -121,10 +158,12 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [showBodegas, setShowBodegas] = useState(false);
   const [showEstac, setShowEstac] = useState(false);
   const [showPaquete, setShowPaquete] = useState(false);
+  const [showPagos, setShowPagos] = useState(false);
+  const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
   return (
     <>
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); setShowPagos(false); setCompradorSel(null); } onOpenChange(o); }}>
       <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -138,8 +177,33 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <DetailItem label="Fecha venta reconocida" value={fmtDate(row.fechaVenta)} />
               <DetailItem label="Desarrollador (Receptor)" value={row.propietario} />
-              <DetailItem label="Precio final" value={fmtMxn(row.precioFinal)} />
-              <DetailItem label="Contrato firmado completamente" value={row.contratoFirmado ? 'Validado' : 'Pendiente'} />
+              <DetailItem
+                label="Precio final"
+                value={
+                  <button
+                    type="button"
+                    onClick={() => setShowPagos(true)}
+                    className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                  >
+                    {fmtMxn(row.precioFinal)}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </button>
+                }
+              />
+              <DetailItem
+                label="Contrato firmado completamente"
+                value={row.contratoUrl ? (
+                  <a
+                    href={row.contratoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                  >
+                    {row.contratoFirmado ? 'Validado · Ver contrato' : 'Ver contrato'}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : (row.contratoFirmado ? 'Validado' : 'Pendiente')}
+              />
             </div>
           </section>
 
@@ -209,7 +273,16 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 <tbody>
                   {row.compradores.length ? row.compradores.map((buyer) => (
                     <tr key={buyer.id} className="border-t border-border/60 text-[13px]">
-                      <td className="px-4 py-2">{buyer.nombre_legal || '—'}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setCompradorSel(buyer.id)}
+                          className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                        >
+                          {buyer.nombre_legal || '—'}
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </button>
+                      </td>
                       <td className="px-4 py-2 font-mono text-muted-foreground">{buyer.rfc || '—'}</td>
                     </tr>
                   )) : (
@@ -250,6 +323,8 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
               </div>
             )}
           </section>
+
+          <BitacoraSection cuentaId={row.cuentaId} />
         </div>
       </DialogContent>
     </Dialog>
@@ -257,7 +332,267 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
     <BodegasModal row={row} open={showBodegas} onOpenChange={setShowBodegas} />
     <EstacionamientosModal row={row} open={showEstac} onOpenChange={setShowEstac} />
     <PaquetesModal row={row} open={showPaquete} onOpenChange={setShowPaquete} />
+    <PagosDetalleModal folio={row.cuentaLabel} unidad={row.unidad} open={showPagos} onOpenChange={setShowPagos} />
+    {compradorSel != null && (
+      <CompradorDetalleSheet
+        open={compradorSel != null}
+        onOpenChange={(o) => { if (!o) setCompradorSel(null); }}
+        idCuentaCobranza={row.cuentaId}
+        compradores={row.compradores.map((b) => ({ idPersona: b.id, nombre: b.nombre_legal || '—' }))}
+        initialPersonaId={compradorSel}
+      />
+    )}
     </>
+  );
+}
+
+/**
+ * Bitácora del expediente — reutiliza la tabla `legal_flow_bitacora`
+ * (keyed por id_cuenta_cobranza). Permite ver notas anteriores y dar de
+ * alta una nota nueva.
+ */
+function BitacoraSection({ cuentaId }: { cuentaId: number }) {
+  const { entries, isLoading, columnaFaltante } = useBitacoraCuentaCobranza(cuentaId);
+  const { toast } = useToast();
+  const [openNota, setOpenNota] = useState(false);
+
+  const ordenadas = [...entries].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <StickyNote className="h-4 w-4 text-primary" /> Bitácora
+        </h3>
+        {!columnaFaltante && (
+          <Button size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => setOpenNota(true)}>
+            <Plus className="h-3.5 w-3.5" /> Nueva nota
+          </Button>
+        )}
+      </div>
+
+      {columnaFaltante ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+          La bitácora no está habilitada en este ambiente (tabla <code>legal_flow_bitacora</code> pendiente de migración).
+        </div>
+      ) : isLoading ? (
+        <div className="py-4 text-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando bitácora…
+        </div>
+      ) : ordenadas.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 py-6 text-center text-sm text-muted-foreground">
+          Sin notas en la bitácora.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {ordenadas.map((e) => {
+            const { categoria, titulo } = decodeCategoria(e.titulo);
+            const tipo = NOTE_TYPE_BY_VALUE.get(categoria)!;
+            const Icon = tipo.icon;
+            return (
+              <li key={e.id} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium', tipo.color)}>
+                    <Icon className="h-3 w-3" /> {tipo.label}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">{fmtFechaHora(e.timestamp)}</span>
+                </div>
+                {titulo && <p className="mt-1.5 text-[13px] font-semibold">{titulo}</p>}
+                <p className="mt-0.5 whitespace-pre-wrap text-[13px]">{e.mensaje}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">— {e.autorNombre || e.autorEmail}</p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <NuevaNotaDialog cuentaId={cuentaId} open={openNota} onOpenChange={setOpenNota} onSaved={() => toast({ title: 'Nota agregada', description: 'La nota se guardó en la bitácora.' })} />
+    </section>
+  );
+}
+
+function NuevaNotaDialog({
+  cuentaId, open, onOpenChange, onSaved,
+}: {
+  cuentaId: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const append = useAppendBitacoraEntry(cuentaId);
+  const { toast } = useToast();
+  const [titulo, setTitulo] = useState('');
+  const [categoria, setCategoria] = useState<NoteTypeValue>('nota_interna');
+  const [descripcion, setDescripcion] = useState('');
+
+  const reset = () => { setTitulo(''); setCategoria('nota_interna'); setDescripcion(''); };
+
+  const guardar = () => {
+    const desc = descripcion.trim();
+    const tit = titulo.trim();
+    if (!tit && !desc) return;
+    append.mutate(
+      { tipo: 'nota', titulo: encodeCategoria(categoria, tit), mensaje: desc },
+      {
+        onSuccess: () => { reset(); onOpenChange(false); onSaved(); },
+        onError: (e) => toast({ title: 'No se pudo guardar la nota', description: (e as Error).message, variant: 'destructive' }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-[16px]">Nueva nota</DialogTitle>
+          <DialogDescription className="text-[13px]">Registra una observación o seguimiento.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-medium">Título</label>
+            <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej: Documentación pendiente" className="text-[13px]" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-medium">Tipo</label>
+            <div className="flex flex-wrap gap-2">
+              {NOTE_TYPES.map((t) => {
+                const Icon = t.icon;
+                const active = categoria === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setCategoria(t.value)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors',
+                      active ? 'border-primary text-primary bg-primary/5' : 'border-border text-muted-foreground hover:bg-accent',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-medium">Descripción</label>
+            <Textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Describe la observación…" rows={4} className="text-[13px]" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={append.isPending}>Cancelar</Button>
+          <Button size="sm" className="gap-1.5" onClick={guardar} disabled={append.isPending || (!titulo.trim() && !descripcion.trim())}>
+            {append.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PagoCard({
+  tone, label, value, sub, rows,
+}: {
+  tone: 'emerald' | 'amber' | 'purple' | 'blue';
+  label: string;
+  value: string;
+  sub: string;
+  rows?: Array<{ k: string; v: string }>;
+}) {
+  const cls = {
+    emerald: 'ring-emerald-200 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/20 dark:ring-emerald-900/40 dark:text-emerald-300',
+    amber: 'ring-amber-200 bg-amber-50/60 text-amber-700 dark:bg-amber-950/20 dark:ring-amber-900/40 dark:text-amber-300',
+    purple: 'ring-purple-200 bg-purple-50/60 text-purple-700 dark:bg-purple-950/20 dark:ring-purple-900/40 dark:text-purple-300',
+    blue: 'ring-blue-200 bg-blue-50/60 text-blue-700 dark:bg-blue-950/20 dark:ring-blue-900/40 dark:text-blue-300',
+  }[tone];
+  return (
+    <div className={cn('rounded-xl ring-1 p-4', cls)}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider opacity-80">{label}</p>
+      <p className="mt-1.5 text-2xl font-bold tabular-nums">{value}</p>
+      <p className="mt-1 text-[12px] opacity-80">{sub}</p>
+      {rows && rows.length > 0 && (
+        <div className="mt-3 space-y-1 border-t border-current/10 pt-2">
+          {rows.map((r) => (
+            <div key={r.k} className="flex items-center justify-between gap-2 text-[12px]">
+              <span className="opacity-80">{r.k}</span>
+              <span className="tabular-nums font-medium text-foreground">{r.v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PagosDetalleModal({ folio, unidad, open, onOpenChange }: { folio: string; unidad: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { data, isLoading, error } = useExpedienteVentaDetalle(open ? folio : null);
+  const fb = data?.financial_breakdown;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-primary" /> Detalle de pagos · Propiedad {unidad}
+          </DialogTitle>
+          <DialogDescription className="text-[13px]">
+            Total pagado, saldo pendiente, efectivo permitido y valor de escrituración.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando detalle de pagos…
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-sm text-destructive">No se pudo cargar: {(error as Error).message}</div>
+        ) : !fb ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">Sin información de pagos para esta cuenta.</div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PagoCard
+              tone="emerald"
+              label="Total pagado"
+              value={fmtMxn2(fb.total_pagado)}
+              sub={`${fb.total_pagado_pct.toFixed(1)}% del total`}
+            />
+            <PagoCard
+              tone="amber"
+              label="Saldo pendiente"
+              value={fmtMxn2(fb.saldo_pendiente)}
+              sub={`${fb.saldo_pendiente_pct.toFixed(1)}% del total`}
+              rows={[
+                { k: 'Durante obra:', v: fmtMxn2(fb.durante_obra_pendiente) },
+                { k: 'A la entrega:', v: fmtMxn2(fb.a_la_entrega_pendiente) },
+                { k: 'Parcialidades restantes:', v: String(fb.parcialidades_restantes) },
+              ]}
+            />
+            <PagoCard
+              tone="purple"
+              label="Pago en efectivo"
+              value={fmtMxn2(fb.efectivo_aun_permitido)}
+              sub="Aún permitido"
+              rows={[
+                { k: 'Límite:', v: fmtMxn2(fb.efectivo_limite) },
+                { k: 'Pagado:', v: fmtMxn2(fb.efectivo_pagado) },
+              ]}
+            />
+            <PagoCard
+              tone="blue"
+              label="Valor de escrituración"
+              value={fmtMxn2(fb.valor_escrituracion)}
+              sub="Precio final de la cuenta"
+            />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -632,8 +967,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
     fetchInBatches<any>(modelLinkIds, (b) => (supabase as any).from('edificios_modelos').select('id, id_edificio, id_modelo').in('id', b as number[])),
     fetchInBatches<any>(ownerEntityIds, (b) => (supabase as any).from('entidades_relacionadas').select('id, id_persona').in('id', b as number[])),
     fetchInBatches<any>(tipoIds, (b) => (supabase as any).from('tipos_propiedad').select('id, nombre').in('id', b as number[])),
-    fetchInBatches<any>([...eligiblePropIds], (b) => (supabase as any).from('bodegas').select('id, id_propiedad, id_producto, nombre, m2, ubicacion').eq('activo', true).in('id_propiedad', b as number[])),
-    fetchInBatches<any>([...eligiblePropIds], (b) => (supabase as any).from('estacionamientos').select('id, id_propiedad, id_producto, nombre, id_tipo, m2, ubicacion, es_incluido').eq('activo', true).in('id_propiedad', b as number[])),
+    fetchInBatchesPaged<any>([...eligiblePropIds], (b, from, to) => (supabase as any).from('bodegas').select('id, id_propiedad, id_producto, nombre, m2, ubicacion').eq('activo', true).in('id_propiedad', b as number[]).order('id').range(from, to)),
+    fetchInBatchesPaged<any>([...eligiblePropIds], (b, from, to) => (supabase as any).from('estacionamientos').select('id, id_propiedad, id_producto, nombre, id_tipo, m2, ubicacion, es_incluido').eq('activo', true).in('id_propiedad', b as number[]).order('id').range(from, to)),
   ]);
 
   // Catálogo de tipos de estacionamiento (Normal, Tandem, Doble, Carlift).
@@ -683,7 +1018,9 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
 
   // 6) Agrupar cuentas por propiedad y clasificar.
   const cuentasByProp = groupByProp(relevantCuentas);
+  const fechaDe = (c: any) => c.fecha_compra || c.fecha_creacion || '';
   const mainByProp = new Map<number, any>();        // cuenta de la unidad (venta principal)
+  const bestByProp = new Map<number, any>();        // mejor cuenta disponible (fallback)
   const bodegaCuentasByProp = new Map<number, any[]>();
   const estacCuentasByProp = new Map<number, any[]>();
   const paqueteCuentasByProp = new Map<number, any[]>();
@@ -692,9 +1029,14 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
     for (const c of list) {
       if (esCuentaUnidad(c)) {
         const prev = mainByProp.get(propId);
-        if (!prev || (c.fecha_compra || c.fecha_creacion || '') > (prev.fecha_compra || prev.fecha_creacion || '')) {
-          mainByProp.set(propId, c);
-        }
+        if (!prev || fechaDe(c) > fechaDe(prev)) mainByProp.set(propId, c);
+      }
+      // Mejor cuenta de la propiedad (fallback cuando no hay cuenta de unidad):
+      // se prefieren las de nivel principal (sin padre) y la más reciente.
+      const prevBest = bestByProp.get(propId);
+      const score = (x: any) => (x.id_cuenta_cobranza_padre ? 0 : 1);
+      if (!prevBest || score(c) > score(prevBest) || (score(c) === score(prevBest) && fechaDe(c) > fechaDe(prevBest))) {
+        bestByProp.set(propId, c);
       }
       if (productoDeCuenta(c) != null) {
         productCuentasByProp.set(propId, [...(productCuentasByProp.get(propId) || []), c]);
@@ -709,26 +1051,38 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
     }
   }
 
+  // Cuenta representativa por propiedad: la de la unidad si existe; si no
+  // (p.ej. propiedades en Inventario que solo tienen cuenta de producto),
+  // la mejor cuenta disponible — así se muestran TODOS los estatus.
+  const representativeByProp = new Map<number, any>();
+  for (const propId of cuentasByProp.keys()) {
+    const rep = mainByProp.get(propId) ?? bestByProp.get(propId);
+    if (rep) representativeByProp.set(propId, rep);
+  }
+
   // 7) Compradores, documentos y pagos. Los compradores se piden tanto de la
   //    cuenta de la unidad como de las cuentas de paquete amueblado; los pagos
   //    de bodegas y paquetes (para Total Pagado / Saldo).
-  const mainAccountIds = [...mainByProp.values()].map((c) => c.id as number);
+  const repAccountIds = [...new Set([...representativeByProp.values()].map((c: any) => c.id as number))];
   const bodegaCuentaIds = [...new Set([...bodegaCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
   const paqueteCuentaIds = [...new Set([...paqueteCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
-  const compradorCuentaIds = [...new Set([...mainAccountIds, ...paqueteCuentaIds])];
+  const compradorCuentaIds = [...new Set([...repAccountIds, ...paqueteCuentaIds])];
   const pagoCuentaIds = [...new Set([...bodegaCuentaIds, ...paqueteCuentaIds])];
 
   const [compradores, docs, acuerdos] = await Promise.all([
-    fetchInBatches<any>(compradorCuentaIds, (b) => (supabase as any).from('compradores').select('id_cuenta_cobranza, id_persona').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
-    fetchInBatches<any>(mainAccountIds, (b) => (supabase as any).from('documentos').select('id, id_cuenta_cobranza, id_tipo_documento, id_estatus_verificacion').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
-    fetchInBatches<any>(pagoCuentaIds, (b) => (supabase as any).from('acuerdos_pago').select('id, id_cuenta_cobranza').eq('activo', true).in('id_cuenta_cobranza', b as number[])),
+    // compradores no tiene PK simple; lotes chicos para no superar 1000 filas/lote.
+    fetchInBatches<any>(compradorCuentaIds, (b) => (supabase as any).from('compradores').select('id_cuenta_cobranza, id_persona').eq('activo', true).in('id_cuenta_cobranza', b as number[]), { batchSize: 200 }),
+    // documentos: muchas filas por cuenta → paginar filas dentro del lote.
+    fetchInBatchesPaged<any>(repAccountIds, (b, from, to) => (supabase as any).from('documentos').select('id, id_cuenta_cobranza, id_tipo_documento, id_estatus_verificacion, url').eq('activo', true).in('id_cuenta_cobranza', b as number[]).order('id').range(from, to)),
+    // acuerdos_pago: varias parcialidades por cuenta → paginar filas.
+    fetchInBatchesPaged<any>(pagoCuentaIds, (b, from, to) => (supabase as any).from('acuerdos_pago').select('id, id_cuenta_cobranza').eq('activo', true).in('id_cuenta_cobranza', b as number[]).order('id').range(from, to)),
   ]);
 
   // Total pagado por cuenta (bodega/paquete) — Σ aplicaciones_pago.monto
   // (es_multa=false) vía acuerdos_pago (fuente de verdad, CLAUDE.md).
   const acuerdoIds = [...new Set(acuerdos.map((a: any) => a.id).filter(Boolean))] as number[];
-  const aplicaciones = await fetchInBatches<any>(acuerdoIds, (b) =>
-    (supabase as any).from('aplicaciones_pago').select('id_acuerdo_pago, monto, es_multa').eq('activo', true).in('id_acuerdo_pago', b as number[]),
+  const aplicaciones = await fetchInBatchesPaged<any>(acuerdoIds, (b, from, to) =>
+    (supabase as any).from('aplicaciones_pago').select('id, id_acuerdo_pago, monto, es_multa').eq('activo', true).in('id_acuerdo_pago', b as number[]).order('id').range(from, to),
   );
   const acuerdoToCuenta = new Map<number, number>(acuerdos.map((a: any) => [a.id, a.id_cuenta_cobranza]));
   const pagadoPorCuenta = new Map<number, number>();
@@ -767,8 +1121,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
 
   return eligibleProps
     .map((property: any) => {
-      const account = mainByProp.get(property.id);
-      if (!account) return null; // sin venta de unidad → no es expediente de escrituración
+      const account = representativeByProp.get(property.id);
+      if (!account) return null; // propiedad sin ninguna cuenta de cobranza
       const link = linkById.get(property.id_edificio_modelo);
       const building = link ? buildingById.get(link.id_edificio) : null;
       const model = link ? modelById.get(link.id_modelo) : null;
@@ -888,6 +1242,10 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         m2Exteriores,
         precioM2: m2Interiores > 0 ? Number(account.precio_final || 0) / m2Interiores : null,
         contratoFirmado: docsForAccount.some((doc: any) => doc.id_tipo_documento === 18 && doc.id_estatus_verificacion === 2),
+        contratoUrl: (
+          docsForAccount.find((doc: any) => doc.id_tipo_documento === 18 && doc.id_estatus_verificacion === 2) ||
+          docsForAccount.find((doc: any) => doc.id_tipo_documento === 18)
+        )?.url ?? null,
         documentosCount: docsForAccount.length,
         relatedAccounts: productCuentas.map((c: any) => ({
           id: c.id,
