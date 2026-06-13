@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowLeft,
   LogOut,
+  Stamp,
 } from 'lucide-react';
 import { NavLink } from '@/components/admin/legal-flow/NavLink';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +31,10 @@ const BASE = '/admin/legal-flow';
 const mainNav = [
   { title: 'Panel de Operaciones', url: `${BASE}`, icon: LayoutDashboard, end: true },
   { title: 'Solicitudes Legales', url: `${BASE}/requests`, icon: Inbox },
+];
+
+const escrituracionNav = [
+  { title: 'Expedientes', url: `${BASE}/escrituracion/expedientes`, icon: Stamp },
 ];
 
 const catalogNav = [
@@ -65,6 +70,7 @@ export function LegalFlowSidebar() {
 
       <SidebarContent className="scrollbar-thin px-2 py-3">
         <NavGroup label="Operaciones" items={mainNav} collapsed={collapsed} />
+        <NavGroup label="Escrituración" items={escrituracionNav} collapsed={collapsed} />
         <NavGroup label="Registro Legal" items={catalogNav} collapsed={collapsed} />
         <NavGroup label="Sistema" items={systemNav} collapsed={collapsed} />
         {isSuperAdmin && (
