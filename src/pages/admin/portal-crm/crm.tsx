@@ -10,6 +10,7 @@ import {
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
+  Calendar, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,8 +18,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
 import { PageHeader, EmptyState, ComingSoon } from "@/components/admin/portal-crm/ui";
-import { LeadIntelligencePanel } from "@/components/admin/portal-crm/LeadIntelligencePanel";
-import { RevenueIntelligencePanel } from "@/components/admin/portal-crm/RevenueIntelligencePanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,22 +64,32 @@ type ContactRow = {
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
 
+type StageTab = "all" | "lead" | "customer";
+
+function DateChip({ date }: { date: string | null }) {
+  if (!date) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className="flex items-center justify-center w-[22px] h-[22px] rounded bg-purple-100 dark:bg-purple-950/70 shrink-0">
+        <Calendar className="h-3 w-3 text-foreground" />
+      </span>
+      <span className="text-xs text-muted-foreground">{fmtDate(date)}</span>
+    </div>
+  );
+}
+
 export function CrmContacts() {
   const orgId = useCrmOrgId();
-  const { user } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [view, setView] = useState<View>("all");
+  const [stageTab, setStageTab] = useState<StageTab>("all");
   const [search, setSearch] = useState("");
-  const [filterOwner, setFilterOwner] = useState("all");
   const [filterDev, setFilterDev] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterStage, setFilterStage] = useState("all");
-  const [filterSource, setFilterSource] = useState("all");
-  const [filterCampaign, setFilterCampaign] = useState("all");
+  const [filterLifecycle, setFilterLifecycle] = useState("all");
   const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const pageSize = 25;
 
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
@@ -90,33 +99,16 @@ export function CrmContacts() {
     },
   });
 
-  const { data: universe } = useQuery({
-    queryKey: ["contact-universe", orgId], enabled: !!orgId,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("contacts").select("source_platform, source_name").eq("organization_id", orgId!).limit(5000);
-      const sp = new Set<string>(); const sn = new Set<string>();
-      (data ?? []).forEach((r: any) => { if (r.source_platform) sp.add(r.source_platform); if (r.source_name) sn.add(r.source_name); });
-      return { sources: Array.from(sp).sort(), campaigns: Array.from(sn).sort() };
-    },
-  });
-
-  const { data: owners } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).eq("rol_id", 3);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
-
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", view, search, filterOwner, filterDev, filterStatus, filterStage, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, page],
     queryFn: async () => {
-      const tipoFilter = filterStage === "lead" ? [7] : filterStage === "customer" ? [2] : [2, 7];
+      const tipoFilter = filterLifecycle !== "all"
+        ? filterLifecycle === "customer" ? [2] : [7]
+        : stageTab === "lead" ? [7] : stageTab === "customer" ? [2] : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
 
-      // Search: resolve persona IDs first
       let searchPersonaIds: number[] | null = null;
-      if (search) {
+      if (search.trim()) {
         const { data: matchPers } = await (supabase as any).from("personas")
           .select("id").eq("activo", true)
           .or(`nombre_legal.ilike.%${search}%,nombre_comercial.ilike.%${search}%,email.ilike.%${search}%,telefono.ilike.%${search}%`);
@@ -176,106 +168,111 @@ export function CrmContacts() {
     },
   });
 
-  const rows = contacts?.rows ?? [];
+  const allRows = contacts?.rows ?? [];
+  const rows = allRows.filter((c) => {
+    if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
+    return true;
+  });
   const totalCount = contacts?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const sources = universe?.sources ?? [];
-  const campaigns = universe?.campaigns ?? [];
-
-  const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? "—";
-  const ownerLabel = (id: string | null) => {
-    if (!id) return "Sin asignar";
-    const o = (owners ?? []).find((x: any) => x.id === id);
-    return (o as any)?.full_name ?? (o as any)?.email ?? "—";
-  };
+  const rangeStart = totalCount === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
+  const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Contactos" description="CRM · filtros, vistas y segmentación"
+    <div className="space-y-4">
+      <PageHeader title="Contactos" description="Leads y compradores · SOZU"
         actions={<CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />}
       />
 
-      <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-        <TabsList>
-          <TabsTrigger value="all">Todos</TabsTrigger>
-          <TabsTrigger value="mine">Mis contactos</TabsTrigger>
-          <TabsTrigger value="unassigned">Sin asignar</TabsTrigger>
-          <TabsTrigger value="no_followup">Sin seguimiento</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
+      {/* Fila 1: tabs + búsqueda */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
+        <Tabs value={stageTab} onValueChange={(v) => { setStageTab(v as StageTab); setPage(0); }}>
+          <TabsList>
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="lead">Prospectos</TabsTrigger>
+            <TabsTrigger value="customer">Compradores</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative flex-1 min-w-[180px] max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nombre, email o teléfono…" className="pl-8" />
+          <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder="Nombre, email o teléfono…" className="pl-8 h-9" />
         </div>
-        <FilterIcon className="h-4 w-4 text-muted-foreground hidden md:block" />
-        <CFilter value={filterOwner} onChange={setFilterOwner} placeholder="Propietario"
-          options={[{ v: "all", l: "Todos los propietarios" }, { v: "none", l: "Sin asignar" }, ...(owners ?? []).map((o: any) => ({ v: o.id, l: o.full_name ?? o.email }))]} />
-        <CFilter value={filterDev} onChange={setFilterDev} placeholder="Desarrollo"
-          options={[{ v: "all", l: "Todos los desarrollos" }, ...(developments ?? []).map((d: any) => ({ v: d.id, l: d.name }))]} />
-        <CFilter value={filterStatus} onChange={setFilterStatus} placeholder="Estado"
-          options={[{ v: "all", l: "Estado: todos" }, ...Object.entries(leadStatusLabel).map(([v, l]) => ({ v, l }))]} />
-        <CFilter value={filterStage} onChange={setFilterStage} placeholder="Etapa"
-          options={[{ v: "all", l: "Lifecycle: todos" }, ...Object.entries(lifecycleLabel).map(([v, l]) => ({ v, l }))]} />
-        <CFilter value={filterSource} onChange={setFilterSource} placeholder="Fuente"
-          options={[{ v: "all", l: "Fuente: todas" }, ...sources.map((s: string) => ({ v: s, l: s }))]} />
-        <CFilter value={filterCampaign} onChange={setFilterCampaign} placeholder="Campaña"
-          options={[{ v: "all", l: "Campaña: todas" }, ...campaigns.map((s: string) => ({ v: s, l: s }))]} />
       </div>
 
-      <div className="rounded-md border bg-card">
+      {/* Fila 2: selects */}
+      <div className="flex flex-wrap gap-2">
+        <CFilter value={filterDev} onChange={(v) => { setFilterDev(v); setPage(0); }} placeholder="Proyecto"
+          options={[{ v: "all", l: "Todos los proyectos" }, ...(developments ?? []).map((d: any) => ({ v: d.id, l: d.name }))]} />
+        <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado"
+          options={[{ v: "all", l: "Todos los estados" }, ...Object.entries(leadStatusLabel).map(([v, l]) => ({ v, l }))]} />
+        <CFilter value={filterLifecycle} onChange={(v) => { setFilterLifecycle(v); setPage(0); }} placeholder="Lifecycle"
+          options={[{ v: "all", l: "Todo el lifecycle" }, ...Object.entries(lifecycleLabel).map(([v, l]) => ({ v, l }))]} />
+      </div>
+
+      {/* Info bar */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
+        <span>
+          {totalCount === 0
+            ? "Sin resultados"
+            : <>{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} de {totalCount.toLocaleString()} contactos</>}
+        </span>
+        <span>Pág. {page + 1} / {totalPages}</span>
+      </div>
+
+      <div className="rounded-md border bg-card overflow-x-auto">
         {isLoading ? (
-          <div className="p-6 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          <div className="p-6 space-y-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
         ) : !rows.length ? (
           <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
         ) : (
-          <Table>
+          <Table className="min-w-[860px]">
             <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead className="hidden lg:table-cell">Email</TableHead>
-                <TableHead className="hidden md:table-cell">Desarrollo</TableHead>
+              <TableRow className="whitespace-nowrap text-xs">
+                <TableHead className="w-[200px]">Nombre</TableHead>
+                <TableHead>Lifecycle</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="hidden lg:table-cell">Lifecycle</TableHead>
-                <TableHead className="hidden xl:table-cell">Fuente</TableHead>
-                <TableHead className="hidden xl:table-cell">Campaña</TableHead>
-                <TableHead className="hidden lg:table-cell">Propietario</TableHead>
-                <TableHead className="hidden md:table-cell">Última actividad</TableHead>
-                <TableHead className="hidden lg:table-cell">Próxima tarea</TableHead>
-                <TableHead className="text-right">Score</TableHead>
-                <TableHead className="sticky right-0 z-10 bg-card text-right shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.35)]">Acción</TableHead>
+                <TableHead>Teléfono</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Proyecto</TableHead>
+                <TableHead>Alta</TableHead>
+                <TableHead>Últ. actividad</TableHead>
+                <TableHead className="w-10 sticky right-0 z-10 bg-card shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.25)]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/40 transition-colors"
+                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap text-sm"
                   onClick={(e) => {
                     const t = e.target as HTMLElement;
-                    if (t.closest('a,button,input,select,textarea,[role="menuitem"],[role="checkbox"],[role="combobox"]')) return;
+                    if (t.closest('a,button,input,select,textarea,[role="combobox"]')) return;
                     navigate(`/admin/portal-crm/crm/contacts/${c.id}`);
                   }}
                 >
-                  <TableCell className="font-medium">
-                    <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline underline-offset-2">{c.full_name}</Link>
+                  <TableCell className="font-medium w-[200px] max-w-[200px] truncate">
+                    <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()}
+                      className="text-primary hover:underline underline-offset-2">{c.full_name}</Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{c.phone ?? "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">{c.email ?? "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell">{devName(c.development_id)}</TableCell>
-                  <TableCell><Badge variant="outline">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge></TableCell>
-                  <TableCell className="hidden lg:table-cell">{lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}</TableCell>
-                  <TableCell className="hidden xl:table-cell text-muted-foreground">{c.source_platform ?? "—"}</TableCell>
-                  <TableCell className="hidden xl:table-cell text-muted-foreground truncate max-w-[160px]">{c.source_name ?? "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell">{ownerLabel(c.contact_owner)}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{relTime(c.last_activity_at ?? c.created_at)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">{fmtDate(c.next_task_at)}</TableCell>
-                  <TableCell className="text-right">
-                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${leadScoreColor(c.lead_score)}`}>{c.lead_score}</span>
+                  <TableCell>
+                    <Badge variant={c.lifecycle_stage === "customer" ? "default" : "secondary"} className="text-xs font-medium">
+                      {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                    </Badge>
                   </TableCell>
-                  <TableCell className="sticky right-0 z-10 bg-card text-right shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.35)]">
-                    <Button size="sm" variant="outline" asChild>
-                      <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()}>Abrir ficha</Link>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{c.phone ?? <NoReg />}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.email ?? <NoReg />}</TableCell>
+                  <TableCell className="text-muted-foreground">{devName(c.development_id) ?? <NoReg />}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.created_at ? fmtDate(c.created_at) : <NoReg />}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.last_activity_at ? fmtDate(c.last_activity_at) : <NoReg />}</TableCell>
+                  <TableCell className="sticky right-0 z-10 bg-card shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.25)] text-right pr-3">
+                    <Button size="icon" variant="outline" className="h-7 w-7 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
+                      <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()}
+                        aria-label="Ver detalle">
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -284,21 +281,23 @@ export function CrmContacts() {
           </Table>
         )}
       </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{totalCount} contactos · página {page + 1} de {totalPages}</span>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>Anterior</Button>
-          <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</Button>
-        </div>
+
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" className="hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors" disabled={page === 0} onClick={() => setPage(page - 1)}>Anterior</Button>
+        <Button size="sm" variant="outline" className="hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</Button>
       </div>
     </div>
   );
 }
 
+function NoReg() {
+  return <span className="text-xs italic text-muted-foreground/40">Sin registro</span>;
+}
+
 function CFilter({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string; options: { v: string; l: string }[] }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-[170px] h-9 text-sm"><SelectValue placeholder={placeholder} /></SelectTrigger>
+      <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder={placeholder} /></SelectTrigger>
       <SelectContent>{options.map((o) => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}</SelectContent>
     </Select>
   );
@@ -475,14 +474,23 @@ export function CrmContactDetail() {
     );
   };
 
-  if (isLoading) return <div className="space-y-3"><Skeleton className="h-10 w-64" /><Skeleton className="h-96" /></div>;
+  if (isLoading) return (
+    <div className="space-y-4">
+      <Skeleton className="h-5 w-28" />
+      <Skeleton className="h-28 w-full rounded-xl" />
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-2"><Skeleton className="h-96 w-full" /></div>
+        <div className="lg:col-span-3"><Skeleton className="h-64 w-full" /></div>
+      </div>
+    </div>
+  );
 
   if (contactError) {
     const msg = (contactError as any).message?.toLowerCase() ?? "";
     const isPerm = msg.includes("permission") || msg.includes("forbidden") || msg.includes("rls") || msg.includes("not allowed");
     return (
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><TriangleAlert className="h-4 w-4" />{isPerm ? "Sin permiso para ver este contacto" : "Error cargando contacto"}</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><TriangleAlert className="h-4 w-4 text-destructive" />{isPerm ? "Sin permiso" : "Error al cargar"}</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>{isPerm ? "Tu usuario no tiene acceso a esta ficha." : "Ocurrió un problema al cargar la ficha."}</p>
           <div className="flex gap-2">
@@ -506,16 +514,44 @@ export function CrmContactDetail() {
     );
   }
 
+  const initials = contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("").toUpperCase() || "?";
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild><Link to="/admin/portal-crm/crm/contacts"><ArrowLeft className="h-4 w-4 mr-1" />Contactos</Link></Button>
-          <h1 className="text-xl font-semibold">{contact.full_name}</h1>
-          <Badge variant="outline">{leadStatusLabel[contact.lead_status] ?? contact.lead_status}</Badge>
-          <Badge variant="secondary">{lifecycleLabel[contact.lifecycle_stage] ?? contact.lifecycle_stage}</Badge>
+    <div className="space-y-6">
+      {/* Back */}
+      <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground" asChild>
+        <Link to="/admin/portal-crm/crm/contacts"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
+      </Button>
+
+      {/* Hero */}
+      <div className="flex items-start gap-5 flex-wrap rounded-xl border bg-card p-5 shadow-sm">
+        <div className="h-14 w-14 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold select-none ring-2 ring-primary/20">
+          {initials}
         </div>
-        <div className="flex gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">{contact.full_name}</h1>
+            <Badge variant={contact.lifecycle_stage === "customer" ? "default" : "secondary"} className="shrink-0 text-xs">
+              {contact.lifecycle_stage === "customer" ? "Comprador" : "Prospecto"}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+            {contact.email && (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Mail className="h-3.5 w-3.5 shrink-0" />{contact.email}
+              </span>
+            )}
+            {contact.phone && (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Phone className="h-3.5 w-3.5 shrink-0" />{contact.phone}
+              </span>
+            )}
+            {!contact.email && !contact.phone && (
+              <span className="text-sm text-muted-foreground">Sin datos de contacto</span>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap shrink-0">
           <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
           <TaskDialog contactId={contactId!} orgId={orgId} owners={owners ?? []} onSaved={invalidateAll} />
           <AppointmentDialog contactId={contactId!} orgId={orgId} developmentId={contact.development_id} owners={owners ?? []} onSaved={invalidateAll} />
@@ -523,29 +559,46 @@ export function CrmContactDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-3 space-y-4">
+      {/* Body: 2 columns */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        {/* Left: info panel */}
+        <div className="lg:col-span-2">
           <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} />
         </div>
 
-        <div className="lg:col-span-6">
-          <Timeline
-            notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
-            deals={deals ?? []} pipelineEvents={pipelineEvents ?? []} conversionEvents={conversionEvents ?? []}
-          />
-        </div>
-
-        <div className="lg:col-span-3 space-y-4">
-          <LeadIntelligencePanel
-            contact={contact} attribution={attribution}
-            notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
-            deals={deals ?? []} conversionEvents={conversionEvents ?? []}
-          />
-          <RevenueIntelligencePanel deals={deals ?? []} attribution={attribution} />
-          <RightPanel
-            deals={deals ?? []} appointments={appointments ?? []}
-            conversionEvents={conversionEvents ?? []} attribution={attribution} contact={contact}
-          />
+        {/* Right: activity + attribution tabs */}
+        <div className="lg:col-span-3">
+          <Tabs defaultValue="actividad">
+            <TabsList className="w-full justify-start mb-4">
+              <TabsTrigger value="actividad">Actividad</TabsTrigger>
+              <TabsTrigger value="atribucion">Atribución</TabsTrigger>
+            </TabsList>
+            <TabsContent value="actividad">
+              <Timeline
+                notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
+                deals={deals ?? []} pipelineEvents={pipelineEvents ?? []} conversionEvents={conversionEvents ?? []}
+                contact={contact}
+              />
+            </TabsContent>
+            <TabsContent value="atribucion">
+              <Card>
+                <CardContent className="pt-5 space-y-2 text-sm">
+                  {!attribution ? (
+                    <p className="text-muted-foreground">Sin datos de atribución para este contacto.</p>
+                  ) : (
+                    <>
+                      <ARow label="UTM source" v={attribution.first_touch_source ?? contact.source_platform} />
+                      <ARow label="UTM medium" v={attribution.first_touch_medium} />
+                      <ARow label="UTM campaign" v={attribution.first_touch_campaign ?? contact.source_name} />
+                      <ARow label="fbclid" v={attribution.fbclid} mono />
+                      <ARow label="gclid" v={attribution.gclid} mono />
+                      <ARow label="Landing" v={attribution.landing_page} mono />
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
@@ -571,87 +624,155 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
     toast.success("Contacto actualizado"); setEditing(false); onSaved();
   };
 
+  const devName = (developments as any[]).find((d: any) => d.id === contact.development_id)?.name ?? "—";
+  const ownerName = (owners as any[]).find((o: any) => o.id === contact.contact_owner)?.full_name ?? "Sin asignar";
+
   return (
-    <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">Información</CardTitle>
-        {editing ? <Button size="sm" onClick={save}><Save className="h-3 w-3 mr-1" />Guardar</Button>
-          : <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Editar</Button>}
+    <Card className="sticky top-4">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-semibold">Información</CardTitle>
+        {editing
+          ? <Button size="sm" onClick={save}><Save className="h-3.5 w-3.5 mr-1.5" />Guardar</Button>
+          : <Button size="sm" variant="ghost" className="h-8 px-3 text-xs" onClick={() => setEditing(true)}>Editar</Button>}
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="flex items-center gap-3 rounded-md border p-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold uppercase">
-            {contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("") || "—"}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate font-medium">{contact.full_name}</div>
-            <div className="truncate text-xs text-muted-foreground">{contact.email ?? contact.phone ?? "Sin dato"}</div>
-          </div>
-        </div>
-        <DField label="Nombre">{editing ? <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /> : <div>{contact.full_name}</div>}</DField>
-        <DField label="Email">{editing ? <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /> : <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" />{contact.email ?? "—"}</div>}</DField>
-        <DField label="Teléfono">{editing ? <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /> : <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" />{contact.phone ?? "—"}</div>}</DField>
-        <DField label="Lead status">
-          {editing ? <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-            : <Badge variant="outline">{leadStatusLabel[contact.lead_status]}</Badge>}
-        </DField>
-        <DField label="Lifecycle">
-          {editing ? <Select value={form.lifecycle_stage} onValueChange={(v) => setForm({ ...form, lifecycle_stage: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-            : <Badge variant="secondary">{lifecycleLabel[contact.lifecycle_stage]}</Badge>}
-        </DField>
-        <DField label="Desarrollo">
-          {editing ? <Select value={form.development_id} onValueChange={(v) => setForm({ ...form, development_id: v })}><SelectTrigger><SelectValue placeholder="—" /></SelectTrigger><SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select>
-            : <div>{(developments as any[]).find((d: any) => d.id === contact.development_id)?.name ?? "—"}</div>}
-        </DField>
-        <DField label="Propietario">
-          {editing ? <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}><SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger><SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent></Select>
-            : <div>{(owners as any[]).find((o: any) => o.id === contact.contact_owner)?.full_name ?? "Sin asignar"}</div>}
-        </DField>
-        <DField label="Fuente · Campaña"><div className="text-muted-foreground">{contact.source_platform ?? "—"} · {contact.source_name ?? "—"}</div></DField>
-        <DField label="Lead score"><span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${leadScoreColor(contact.lead_score)}`}>{contact.lead_score} pts</span></DField>
+      <CardContent className="pt-2 space-y-5 text-sm">
+        {/* Contacto */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Contacto</p>
+          <DField label="Nombre">
+            {editing
+              ? <Input className="h-8 text-sm" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+              : <span className="font-medium">{contact.full_name}</span>}
+          </DField>
+          <DField label="Email">
+            {editing
+              ? <Input className="h-8 text-sm" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} type="email" />
+              : <span className="flex items-center gap-1.5 text-muted-foreground"><Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />{contact.email ?? "—"}</span>}
+          </DField>
+          <DField label="Teléfono">
+            {editing
+              ? <Input className="h-8 text-sm" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} type="tel" />
+              : <span className="flex items-center gap-1.5 text-muted-foreground"><Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />{contact.phone ?? "—"}</span>}
+          </DField>
+        </section>
+
+        <Separator />
+
+        {/* Asignación */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Asignación</p>
+          <DField label="Proyecto">
+            {editing
+              ? <Select value={form.development_id} onValueChange={(v) => setForm({ ...form, development_id: v })}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger><SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select>
+              : <span>{devName}</span>}
+          </DField>
+          <DField label="Asesor">
+            {editing
+              ? <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger><SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent></Select>
+              : <span>{ownerName}</span>}
+          </DField>
+        </section>
+
+        <Separator />
+
+        {/* Clasificación */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Clasificación</p>
+          <DField label="Tipo">
+            {editing
+              ? <Select value={form.lifecycle_stage} onValueChange={(v) => setForm({ ...form, lifecycle_stage: v })}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
+              : <Badge variant={contact.lifecycle_stage === "customer" ? "default" : "secondary"} className="text-xs font-medium">{lifecycleLabel[contact.lifecycle_stage] ?? contact.lifecycle_stage}</Badge>}
+          </DField>
+          <DField label="Estado">
+            {editing
+              ? <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
+              : <Badge variant="outline" className="text-xs">{leadStatusLabel[contact.lead_status] ?? contact.lead_status}</Badge>}
+          </DField>
+          <DField label="Lead score">
+            <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${leadScoreColor(contact.lead_score)}`}>{contact.lead_score} pts</span>
+          </DField>
+        </section>
+
+        <Separator />
+
+        {/* Registro */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Registro</p>
+          <DField label="Alta"><DateChip date={contact.created_at} /></DField>
+          <DField label="Últ. actividad"><DateChip date={contact.last_activity_at} /></DField>
+        </section>
       </CardContent>
     </Card>
   );
 }
 
 function DField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="grid gap-1"><Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label><div>{children}</div></div>;
+  return (
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <div>{children}</div>
+    </div>
+  );
 }
 
 type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; icon: any; tone?: string };
 
-function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents }: any) {
+function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact }: any) {
+  const synthetic: TLItem = {
+    id: "contact-created",
+    ts: contact.created_at,
+    kind: "Sistema",
+    title: "Contacto registrado en SOZU",
+    icon: UserPlus,
+    tone: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
+  };
+
   const items: TLItem[] = [
     ...notes.map((n: any) => ({ id: `n-${n.id}`, ts: n.created_at, kind: "Nota", title: n.content.slice(0, 120), icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
     ...tasks.map((t: any) => ({ id: `t-${t.id}`, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
     ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
     ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
-    ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Conv event", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
+    ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Evento", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
+    synthetic,
   ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
+  const hasRealActivity = items.length > 1;
 
   return (
     <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-sm">Timeline</CardTitle></CardHeader>
-      <CardContent>
-        {!items.length ? <p className="text-sm text-muted-foreground">Sin actividad todavía.</p> : (
-          <div className="space-y-4">
-            {items.map((it) => {
-              const Icon = it.icon;
-              return (
-                <div key={it.id} className="flex gap-3">
-                  <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center ${it.tone ?? "bg-muted"}`}><Icon className="h-3.5 w-3.5" /></div>
-                  <div className="flex-1 min-w-0 border-b pb-3">
-                    <div className="flex justify-between items-baseline gap-2">
-                      <span className="text-xs text-muted-foreground uppercase tracking-wide">{it.kind}</span>
-                      <span className="text-xs text-muted-foreground">{relTime(it.ts)}</span>
-                    </div>
-                    <div className="text-sm mt-0.5">{it.title}</div>
-                    {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
-                  </div>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-sm font-semibold">Actividad</CardTitle>
+      </CardHeader>
+      <CardContent className="pb-6">
+        <div className="space-y-0">
+          {items.map((it, i) => {
+            const Icon = it.icon;
+            return (
+              <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0">
+                {i < items.length - 1 && (
+                  <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border" />
+                )}
+                <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background ${it.tone ?? "bg-muted"}`}>
+                  <Icon className="h-3.5 w-3.5" />
                 </div>
-              );
-            })}
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{it.kind}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{relTime(it.ts)}</span>
+                  </div>
+                  <div className="text-sm mt-0.5">{it.title}</div>
+                  {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {!hasRealActivity && (
+          <div className="mt-6 text-center py-6 border border-dashed rounded-lg">
+            <MessageSquare className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Sin actividad registrada aún.</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Agrega una nota, tarea o cita para comenzar.</p>
           </div>
         )}
       </CardContent>
@@ -659,84 +780,11 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   );
 }
 
-function RightPanel({ deals, appointments, conversionEvents, attribution, contact }: any) {
-  const qc = useQueryClient();
-  const updateApptStatus = async (id: string, status: string) => {
-    const { error } = await (supabase as any).from("appointments").update({ status }).eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Cita actualizada");
-    qc.invalidateQueries({ queryKey: ["contact-appts", contact?.id] });
-  };
-  return (
-    <>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-1"><Briefcase className="h-4 w-4" />Deals ({deals.length})</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {!deals.length && <p className="text-xs text-muted-foreground">Sin deals.</p>}
-          {deals.map((d: any) => (
-            <div key={d.id} className="text-sm border rounded p-2">
-              <div className="font-medium truncate">{d.deal_name}</div>
-              <div className="flex justify-between items-center mt-1">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${stageColor(d.deal_stage)}`}>{DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}</span>
-                <span className="text-xs text-muted-foreground">{d.value ? fmtMXN(Number(d.value)) : "—"}</span>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-1"><CalendarClock className="h-4 w-4" />Citas ({appointments.length})</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {!appointments.length && <p className="text-xs text-muted-foreground">Sin citas.</p>}
-          {appointments.slice(0, 5).map((a: any) => (
-            <div key={a.id} className="text-sm border rounded p-2">
-              <div className="font-medium">{a.appointment_type}</div>
-              <div className="text-xs text-muted-foreground">{fmtDateTime(a.scheduled_at)}</div>
-              <Select value={a.status} onValueChange={(v) => updateApptStatus(a.id, v)}>
-                <SelectTrigger className="mt-1 h-7 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>{Object.entries(apptStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l as string}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-1"><Zap className="h-4 w-4" />Conv events ({conversionEvents.length})</CardTitle></CardHeader>
-        <CardContent className="space-y-1.5">
-          {!conversionEvents.length && <p className="text-xs text-muted-foreground">Sin eventos.</p>}
-          {conversionEvents.slice(0, 6).map((c: any) => (
-            <div key={c.id} className="text-xs flex justify-between border-b pb-1.5 last:border-0">
-              <span>{c.event_name}</span><span className="text-muted-foreground">{relTime(c.event_time)}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Atribución</CardTitle></CardHeader>
-        <CardContent className="space-y-1 text-xs">
-          {!attribution && <p className="text-muted-foreground">Sin datos de atribución.</p>}
-          {attribution && <>
-            <ARow label="UTM source" v={attribution.first_touch_source ?? contact?.source_platform} />
-            <ARow label="UTM medium" v={attribution.first_touch_medium} />
-            <ARow label="UTM campaign" v={attribution.first_touch_campaign ?? contact?.source_name} />
-            <ARow label="fbclid" v={attribution.fbclid} mono />
-            <ARow label="gclid" v={attribution.gclid} mono />
-            <ARow label="Landing" v={attribution.landing_page} mono />
-          </>}
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
 function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
   return (
-    <div className="flex justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`truncate max-w-[140px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
+    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
     </div>
   );
 }
