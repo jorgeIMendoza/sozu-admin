@@ -10,6 +10,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/legal-flow/requests': 'Solicitudes Legales',
   '/admin/legal-flow/requests/new': 'Nueva Solicitud',
   '/admin/legal-flow/templates': 'Catálogo de Plantillas',
+  '/admin/legal-flow/escrituracion/expedientes': 'Escrituración · Expedientes',
   '/admin/legal-flow/archived': 'Expedientes Archivados',
   '/admin/legal-flow/notifications': 'Notificaciones',
   '/admin/legal-flow/settings': 'Configuración',
