@@ -21,6 +21,8 @@ import {
   Briefcase,
   RefreshCw,
   X,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell, CartesianGrid,
@@ -34,6 +36,12 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
@@ -202,17 +210,15 @@ export default function AltaDireccionForecastIngresosPage() {
 
       {/* Filtros */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <Select value={proyectoFilter} onValueChange={setProyectoFilter}>
-          <SelectTrigger className="h-9 w-[220px] text-xs">
-            <SelectValue placeholder="Todos los proyectos" />
-          </SelectTrigger>
-          <SelectContent className="max-h-[320px]">
-            <SelectItem value={ALL}>Todos los proyectos</SelectItem>
-            {proyectoOptions.map((p) => (
-              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={proyectoFilter}
+          onValueChange={setProyectoFilter}
+          options={proyectoOptions.map((p) => ({ value: String(p.id), label: p.nombre }))}
+          allLabel="Todos los proyectos"
+          searchPlaceholder="Buscar proyecto…"
+          emptyText="No se encontró el proyecto."
+          triggerClassName="w-[220px]"
+        />
 
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
           <SelectTrigger className="h-9 w-[160px] text-xs">
@@ -226,17 +232,15 @@ export default function AltaDireccionForecastIngresosPage() {
           </SelectContent>
         </Select>
 
-        <Select value={desarrolladorFilter} onValueChange={setDesarrolladorFilter}>
-          <SelectTrigger className="h-9 w-[260px] text-xs">
-            <SelectValue placeholder="Todos los desarrolladores" />
-          </SelectTrigger>
-          <SelectContent className="max-h-[320px]">
-            <SelectItem value={ALL}>Todos los desarrolladores</SelectItem>
-            {desarrolladorOptions.map((d) => (
-              <SelectItem key={d.id} value={String(d.id)}>{d.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={desarrolladorFilter}
+          onValueChange={setDesarrolladorFilter}
+          options={desarrolladorOptions.map((d) => ({ value: String(d.id), label: d.nombre }))}
+          allLabel="Todos los desarrolladores"
+          searchPlaceholder="Buscar desarrollador…"
+          emptyText="No se encontró el desarrollador."
+          triggerClassName="w-[260px]"
+        />
 
         <div className="relative w-full sm:w-[260px]">
           <Input
@@ -367,6 +371,82 @@ export default function AltaDireccionForecastIngresosPage() {
 /* ──────────────────────────────────────────────────────────
    Helpers visuales
    ────────────────────────────────────────────────────────── */
+
+/**
+ * Filtro tipo combobox con búsqueda. Muestra todas las opciones al abrir y
+ * permite escribir para acotar la lista (cmdk filtra por el texto visible).
+ * El valor sentinela `ALL` representa "Todos…".
+ */
+function SearchableSelect({
+  value,
+  onValueChange,
+  options,
+  allLabel,
+  searchPlaceholder = "Buscar…",
+  emptyText = "Sin resultados.",
+  triggerClassName,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  allLabel: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  triggerClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  const display = value === ALL ? allLabel : selected?.label ?? allLabel;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("h-9 justify-between text-xs font-normal", triggerClassName)}
+        >
+          <span className="truncate text-left">{display}</span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} className="text-xs" />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value={allLabel}
+                onSelect={() => {
+                  onValueChange(ALL);
+                  setOpen(false);
+                }}
+              >
+                <Check className={cn("mr-2 h-3.5 w-3.5", value === ALL ? "opacity-100" : "opacity-0")} />
+                <span className="truncate">{allLabel}</span>
+              </CommandItem>
+              {options.map((o) => (
+                <CommandItem
+                  key={o.value}
+                  value={`${o.label} ${o.value}`}
+                  onSelect={() => {
+                    onValueChange(o.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("mr-2 h-3.5 w-3.5", value === o.value ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{o.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function KpiTile({
   icon: Icon, tone, label, value, sub,
@@ -508,6 +588,25 @@ function agruparMonto(
    ────────────────────────────────────────────────────────── */
 
 async function fetchForecast(): Promise<ForecastRow[]> {
+  // 0) Proyectos comercializados por SOZU (entidad relacionada tipo 5).
+  //    El forecast se limita a estos — NO a todos los proyectos de la BD.
+  //    Patrón "Filtro proyectos SOZU" (CLAUDE.md).
+  const relsSozu = await fetchAllRows<any>((from, to) =>
+    (supabase as any)
+      .from("entidades_relacionadas")
+      .select("id_proyecto")
+      .eq("id_tipo_entidad", 5)
+      .eq("activo", true)
+      .range(from, to),
+  );
+  const sozuProyectoIds = new Set<number>(
+    relsSozu
+      .map((r: any) => r.id_proyecto)
+      .filter((x: any): x is number => !!x),
+  );
+  const esProyectoSozu = (proyectoId: number | null) =>
+    proyectoId != null && sozuProyectoIds.has(proyectoId);
+
   // 1) Cuentas de cobranza con estatus de flujo elegible (a través de propiedades).
   //    Traemos sólo cuentas activas con cuenta padre nula (excluir mantenimiento)
   //    y precio_final > 0.
@@ -678,6 +777,9 @@ async function fetchForecast(): Promise<ForecastRow[]> {
     if (!esProductoServicioPuro && !estatusElegibles.has(estatusId ?? -1)) continue;
 
     const dims = resolverDimensiones(prop);
+    // Solo proyectos comercializados por SOZU. Producto/Servicio puro (sin
+    // propiedad ni proyecto) se mantiene como flujo esperado.
+    if (!esProductoServicioPuro && !esProyectoSozu(dims.proyecto_id)) continue;
     rows.push({
       fuente: "cuenta",
       id: c.id,
@@ -699,8 +801,10 @@ async function fetchForecast(): Promise<ForecastRow[]> {
   //    Mantener visibles las de precio 0 ayuda a detectar propiedades
   //    con precio_lista sin capturar que deberían tenerlo.
   for (const p of propiedadesDisponibles) {
-    const precio = Number(p.precio_lista ?? 0);
     const dims = resolverDimensiones(p);
+    // Solo proyectos comercializados por SOZU.
+    if (!esProyectoSozu(dims.proyecto_id)) continue;
+    const precio = Number(p.precio_lista ?? 0);
     rows.push({
       fuente: "inventario",
       id: p.id,
