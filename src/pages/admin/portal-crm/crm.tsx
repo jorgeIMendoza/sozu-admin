@@ -247,11 +247,11 @@ export function CrmContacts() {
                   onClick={(e) => {
                     const t = e.target as HTMLElement;
                     if (t.closest('a,button,input,select,textarea,[role="combobox"]')) return;
-                    navigate(`/admin/portal-crm/crm/contacts/${c.id}`);
+                    navigate(`/admin/portal-crm/ventas/contactos/${c.id}`);
                   }}
                 >
                   <TableCell className="font-medium w-[200px] max-w-[200px] truncate">
-                    <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()}
+                    <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} onClick={(e) => e.stopPropagation()}
                       className="text-primary hover:underline underline-offset-2">{c.full_name}</Link>
                   </TableCell>
                   <TableCell>
@@ -269,7 +269,7 @@ export function CrmContacts() {
                   <TableCell className="text-muted-foreground">{c.last_activity_at ? fmtDate(c.last_activity_at) : <NoReg />}</TableCell>
                   <TableCell className="sticky right-0 z-10 bg-card shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.25)] text-right pr-3">
                     <Button size="icon" variant="outline" className="h-7 w-7 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
-                      <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} onClick={(e) => e.stopPropagation()}
+                      <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} onClick={(e) => e.stopPropagation()}
                         aria-label="Ver detalle">
                         <ChevronRight className="h-4 w-4" />
                       </Link>
@@ -494,7 +494,7 @@ export function CrmContactDetail() {
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>{isPerm ? "Tu usuario no tiene acceso a esta ficha." : "Ocurrió un problema al cargar la ficha."}</p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/crm/contacts"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
+            <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
             <Button size="sm" onClick={invalidateAll}>Reintentar</Button>
           </div>
         </CardContent>
@@ -508,7 +508,7 @@ export function CrmContactDetail() {
         <CardHeader><CardTitle className="text-base">Contacto no encontrado</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>Este contacto no existe o no pertenece a tu organización.</p>
-          <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/crm/contacts"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
+          <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
         </CardContent>
       </Card>
     );
@@ -520,7 +520,7 @@ export function CrmContactDetail() {
     <div className="space-y-6">
       {/* Back */}
       <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground" asChild>
-        <Link to="/admin/portal-crm/crm/contacts"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
+        <Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
       </Button>
 
       {/* Hero */}
@@ -1098,7 +1098,7 @@ function DealCard({ deal, dragging }: { deal: KanbanDeal; dragging?: boolean }) 
       <div className="text-sm font-medium truncate">{deal.deal_name}</div>
       <div className="text-xs text-muted-foreground truncate mt-0.5">
         {deal.contact ? (
-          <Link to={`/admin/portal-crm/crm/contacts/${deal.contact.id}`} className="hover:underline" onPointerDown={(e) => e.stopPropagation()}>
+          <Link to={`/admin/portal-crm/ventas/contactos/${deal.contact.id}`} className="hover:underline" onPointerDown={(e) => e.stopPropagation()}>
             {deal.contact.full_name}
           </Link>
         ) : "Sin contacto"}
@@ -1768,7 +1768,7 @@ export function CrmLeadIntelligence() {
                     {bucket.slice(0, 30).map(({ c, intel }) => (
                       <TableRow key={c.id}>
                         <TableCell>
-                          <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
+                          <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
                         </TableCell>
                         <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
                         <TableCell>
@@ -1958,7 +1958,7 @@ export function CrmSalesOperations() {
             ) : queue.map(({ c, intel, sla, priority }) => (
               <TableRow key={c.id}>
                 <TableCell>
-                  <Link to={`/admin/portal-crm/crm/contacts/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
+                  <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
                 </TableCell>
                 <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
                 <TableCell><Badge className={`text-xs ${SLA_TONE[sla.status]}`}>{sla.status.replace(/_/g," ")}</Badge></TableCell>

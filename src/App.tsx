@@ -826,87 +826,87 @@ const App = () => (
                   {/* Portal CRM Sozu — Resumen */}
                   <Route path="portal-crm/dashboard" element={<CrmDashboard />} />
                   <Route path="portal-crm/alertas" element={<CrmAlertas />} />
-                  <Route path="portal-crm/tracking-health" element={<CrmTrackingHealth />} />
-                  <Route path="portal-crm/conversion-events" element={<CrmConversionEvents />} />
+                  <Route path="portal-crm/salud-tracking" element={<CrmTrackingHealth />} />
+                  <Route path="portal-crm/eventos-conversion" element={<CrmConversionEvents />} />
 
                   {/* Portal CRM Sozu — Dirección */}
-                  <Route path="portal-crm/executive/dashboard"     element={<CrmExecutiveDashboard />} />
-                  <Route path="portal-crm/executive/decision-queue" element={<CrmExecutiveDecisionQueue />} />
-                  <Route path="portal-crm/executive/weekly-digest"  element={<CrmExecutiveWeeklyDigest />} />
+                  <Route path="portal-crm/direccion/dashboard"     element={<CrmExecutiveDashboard />} />
+                  <Route path="portal-crm/direccion/cola-decisiones" element={<CrmExecutiveDecisionQueue />} />
+                  <Route path="portal-crm/direccion/resumen-semanal"  element={<CrmExecutiveWeeklyDigest />} />
 
                   {/* Portal CRM Sozu — CRM */}
-                  <Route path="portal-crm/crm/contacts" element={<CrmContacts />} />
-                  <Route path="portal-crm/crm/contacts/:contactId" element={<CrmContactDetail />} />
-                  <Route path="portal-crm/crm/deals" element={<CrmDeals />} />
-                  <Route path="portal-crm/crm/tasks" element={<CrmTasks />} />
-                  <Route path="portal-crm/crm/appointments" element={<CrmAppointments />} />
-                  <Route path="portal-crm/crm/agent-performance" element={<CrmAgentPerformance />} />
-                  <Route path="portal-crm/crm/lead-intelligence" element={<CrmLeadIntelligence />} />
-                  <Route path="portal-crm/crm/routing" element={<CrmRouting />} />
-                  <Route path="portal-crm/crm/sales-operations" element={<CrmSalesOperations />} />
-                  <Route path="portal-crm/crm/automation-rules" element={<CrmAutomationRules />} />
-                  <Route path="portal-crm/crm/sequences" element={<CrmSequences />} />
-                  <Route path="portal-crm/crm/escalations" element={<CrmEscalations />} />
+                  <Route path="portal-crm/ventas/contactos" element={<CrmContacts />} />
+                  <Route path="portal-crm/ventas/contactos/:contactId" element={<CrmContactDetail />} />
+                  <Route path="portal-crm/ventas/negocios" element={<CrmDeals />} />
+                  <Route path="portal-crm/ventas/tareas" element={<CrmTasks />} />
+                  <Route path="portal-crm/ventas/citas" element={<CrmAppointments />} />
+                  <Route path="portal-crm/ventas/rendimiento-asesores" element={<CrmAgentPerformance />} />
+                  <Route path="portal-crm/ventas/inteligencia-prospectos" element={<CrmLeadIntelligence />} />
+                  <Route path="portal-crm/ventas/asignacion" element={<CrmRouting />} />
+                  <Route path="portal-crm/ventas/operacion-comercial" element={<CrmSalesOperations />} />
+                  <Route path="portal-crm/ventas/reglas-automatizacion" element={<CrmAutomationRules />} />
+                  <Route path="portal-crm/ventas/secuencias" element={<CrmSequences />} />
+                  <Route path="portal-crm/ventas/escalamientos" element={<CrmEscalations />} />
 
                   {/* Portal CRM Sozu — Inteligencia de marketing */}
-                  <Route path="portal-crm/marketing/performance"      element={<CrmMarketingPerformance />} />
-                  <Route path="portal-crm/marketing/attribution"      element={<CrmAttribution />} />
-                  <Route path="portal-crm/marketing/campaigns"        element={<CrmCampaigns />} />
-                  <Route path="portal-crm/marketing/creatives"        element={<CrmCreatives />} />
+                  <Route path="portal-crm/marketing/rendimiento"      element={<CrmMarketingPerformance />} />
+                  <Route path="portal-crm/marketing/atribucion"      element={<CrmAttribution />} />
+                  <Route path="portal-crm/marketing/campanas"        element={<CrmCampaigns />} />
+                  <Route path="portal-crm/marketing/creativos"        element={<CrmCreatives />} />
                   <Route path="portal-crm/marketing/meta"             element={<CrmMetaAds />} />
                   <Route path="portal-crm/marketing/google"           element={<CrmGoogleAds />} />
-                  <Route path="portal-crm/marketing/developments"     element={<CrmMarketingDevelopments />} />
-                  <Route path="portal-crm/marketing/funnel"           element={<CrmMarketingFunnel />} />
-                  <Route path="portal-crm/marketing/campaign-mapping" element={<CrmMarketingCampaignMapping />} />
-                  <Route path="portal-crm/marketing/sync-jobs"        element={<CrmMarketingSyncJobs />} />
+                  <Route path="portal-crm/marketing/desarrollos"     element={<CrmMarketingDevelopments />} />
+                  <Route path="portal-crm/marketing/embudo"           element={<CrmMarketingFunnel />} />
+                  <Route path="portal-crm/marketing/mapeo-campanas" element={<CrmMarketingCampaignMapping />} />
+                  <Route path="portal-crm/marketing/sincronizaciones"        element={<CrmMarketingSyncJobs />} />
                   {/* rutas antiguas (conservadas) */}
-                  <Route path="portal-crm/marketing/audiences"     element={<CrmAudiences />} />
+                  <Route path="portal-crm/marketing/audiencias"     element={<CrmAudiences />} />
                   <Route path="portal-crm/marketing/utms"          element={<CrmUtms />} />
-                  <Route path="portal-crm/marketing/ab-tests"      element={<CrmMarketingAbTests />} />
-                  <Route path="portal-crm/marketing/landing-pages" element={<CrmLandingPages />} />
-                  <Route path="portal-crm/marketing/forms"         element={<CrmForms />} />
-                  <Route path="portal-crm/marketing/integrations"  element={<CrmAdIntegrations />} />
-                  <Route path="portal-crm/marketing/budget"        element={<CrmBudget />} />
+                  <Route path="portal-crm/marketing/pruebas-ab"      element={<CrmMarketingAbTests />} />
+                  <Route path="portal-crm/marketing/paginas-aterrizaje" element={<CrmLandingPages />} />
+                  <Route path="portal-crm/marketing/formularios"         element={<CrmForms />} />
+                  <Route path="portal-crm/marketing/integraciones"  element={<CrmAdIntegrations />} />
+                  <Route path="portal-crm/marketing/presupuesto"        element={<CrmBudget />} />
 
                   {/* Portal CRM Sozu — Inteligencia de ingresos */}
-                  <Route path="portal-crm/revenue/forecast"     element={<CrmForecast />} />
-                  <Route path="portal-crm/revenue/attribution"  element={<CrmRevenueAttribution />} />
-                  <Route path="portal-crm/revenue/velocity"     element={<CrmRevenueVelocity />} />
-                  <Route path="portal-crm/revenue/goals"        element={<CrmRevenueGoals />} />
+                  <Route path="portal-crm/ingresos/pronostico"     element={<CrmForecast />} />
+                  <Route path="portal-crm/ingresos/atribucion"  element={<CrmRevenueAttribution />} />
+                  <Route path="portal-crm/ingresos/velocidad"     element={<CrmRevenueVelocity />} />
+                  <Route path="portal-crm/ingresos/metas"        element={<CrmRevenueGoals />} />
                   {/* rutas antiguas (conservadas) */}
-                  <Route path="portal-crm/revenue/executive-kpis"  element={<CrmExecutiveKpis />} />
-                  <Route path="portal-crm/revenue/pipeline-review" element={<CrmPipelineReview />} />
-                  <Route path="portal-crm/revenue/revenue-ops"     element={<CrmRevenueOps />} />
-                  <Route path="portal-crm/revenue/cohorts"         element={<CrmCohorts />} />
-                  <Route path="portal-crm/revenue/churn"           element={<CrmChurn />} />
-                  <Route path="portal-crm/revenue/reporting"       element={<CrmReporting />} />
+                  <Route path="portal-crm/ingresos/kpis-ejecutivos"  element={<CrmExecutiveKpis />} />
+                  <Route path="portal-crm/ingresos/revision-pipeline" element={<CrmPipelineReview />} />
+                  <Route path="portal-crm/ingresos/operaciones"     element={<CrmRevenueOps />} />
+                  <Route path="portal-crm/ingresos/cohortes"         element={<CrmCohorts />} />
+                  <Route path="portal-crm/ingresos/desercion"           element={<CrmChurn />} />
+                  <Route path="portal-crm/ingresos/reportes"       element={<CrmReporting />} />
 
                   {/* Portal CRM Sozu — Operación */}
-                  <Route path="portal-crm/operations/builder"     element={<CrmCampaignBuilder />} />
-                  <Route path="portal-crm/operations/copilot"     element={<CrmAiCopilot />} />
-                  <Route path="portal-crm/operations/developments" element={<CrmOperationsDevelopments />} />
+                  <Route path="portal-crm/operacion/constructor"     element={<CrmCampaignBuilder />} />
+                  <Route path="portal-crm/operacion/copiloto"     element={<CrmAiCopilot />} />
+                  <Route path="portal-crm/operacion/desarrollos" element={<CrmOperationsDevelopments />} />
                   {/* rutas antiguas (conservadas) */}
-                  <Route path="portal-crm/operations/inbox"   element={<CrmUnifiedInbox />} />
-                  <Route path="portal-crm/operations/queues"  element={<CrmQueues />} />
-                  <Route path="portal-crm/operations/sla"     element={<CrmSlaMonitor />} />
+                  <Route path="portal-crm/operacion/bandeja"   element={<CrmUnifiedInbox />} />
+                  <Route path="portal-crm/operacion/colas"  element={<CrmQueues />} />
+                  <Route path="portal-crm/operacion/sla"     element={<CrmSlaMonitor />} />
 
                   {/* Portal CRM Sozu — Configuración */}
-                  <Route path="portal-crm/settings/connections"           element={<CrmSettingsConnections />} />
-                  <Route path="portal-crm/settings/deployment-readiness"  element={<CrmSettingsDeploymentReadiness />} />
-                  <Route path="portal-crm/settings/api-logs"              element={<CrmSettingsApiLogs />} />
-                  <Route path="portal-crm/settings/integration-checklist" element={<CrmSettingsIntegrationChecklist />} />
-                  <Route path="portal-crm/settings/organization"          element={<CrmSettingsOrganization />} />
-                  <Route path="portal-crm/settings/users"                 element={<CrmSettingsUsers />} />
-                  <Route path="portal-crm/settings/developments"          element={<CrmSettingsDevelopments />} />
-                  <Route path="portal-crm/settings/pipelines"             element={<CrmSettingsPipelines />} />
+                  <Route path="portal-crm/configuracion/conexiones"           element={<CrmSettingsConnections />} />
+                  <Route path="portal-crm/configuracion/preparacion-despliegue"  element={<CrmSettingsDeploymentReadiness />} />
+                  <Route path="portal-crm/configuracion/registros-api"              element={<CrmSettingsApiLogs />} />
+                  <Route path="portal-crm/configuracion/checklist-integracion" element={<CrmSettingsIntegrationChecklist />} />
+                  <Route path="portal-crm/configuracion/organizacion"          element={<CrmSettingsOrganization />} />
+                  <Route path="portal-crm/configuracion/usuarios"                 element={<CrmSettingsUsers />} />
+                  <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
+                  <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
                   {/* rutas antiguas (conservadas) */}
-                  <Route path="portal-crm/settings/roles"                       element={<CrmSettingsRoles />} />
-                  <Route path="portal-crm/settings/pipeline-stages"             element={<CrmSettingsPipelineStages />} />
-                  <Route path="portal-crm/settings/custom-fields"               element={<CrmSettingsCustomFields />} />
-                  <Route path="portal-crm/settings/webhooks"                    element={<CrmSettingsWebhooks />} />
-                  <Route path="portal-crm/settings/connections/google/callback" element={<CrmSettingsGoogleCallback />} />
-                  <Route path="portal-crm/settings/connections/meta/callback"   element={<CrmSettingsMetaCallback />} />
-                  <Route path="portal-crm/settings/audit-log"                   element={<CrmSettingsAuditLog />} />
+                  <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
+                  <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />
+                  <Route path="portal-crm/configuracion/campos-personalizados"               element={<CrmSettingsCustomFields />} />
+                  <Route path="portal-crm/configuracion/webhooks"                    element={<CrmSettingsWebhooks />} />
+                  <Route path="portal-crm/configuracion/conexiones/google/callback" element={<CrmSettingsGoogleCallback />} />
+                  <Route path="portal-crm/configuracion/conexiones/meta/callback"   element={<CrmSettingsMetaCallback />} />
+                  <Route path="portal-crm/configuracion/auditoria"                   element={<CrmSettingsAuditLog />} />
 
                   {/* Portal Bancos */}
                   <Route path="portal-bancos/bandeja"  element={<BancosBandeja />} />

@@ -77,7 +77,7 @@ export function LeadIntelligencePanel(p: Props) {
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild>
-            <Link to="/admin/portal-crm/crm/tasks">
+            <Link to="/admin/portal-crm/ventas/tareas">
               <ClipboardList className="h-3 w-3 mr-1" />Crear tarea
             </Link>
           </Button>
