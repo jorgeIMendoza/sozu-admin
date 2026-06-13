@@ -285,6 +285,7 @@ const LegalFlowTemplateStudio  = lazyRetry(() => import("./pages/admin/legal-flo
 const LegalFlowArchived        = lazyRetry(() => import("./pages/admin/legal-flow/ArchivedRequests"));
 const LegalFlowNotifications   = lazyRetry(() => import("./pages/admin/legal-flow/Notifications"));
 const LegalFlowSettings        = lazyRetry(() => import("./pages/admin/legal-flow/Settings"));
+const LegalFlowEscExpedientes  = lazyRetry(() => import("./pages/admin/legal-flow/EscrituracionExpedientes"));
 
 // Portal CRM Sozu
 const CrmDashboard         = lazyRetry(() => import("./pages/admin/portal-crm/index").then(m => ({ default: m.CrmDashboard })));
@@ -999,6 +1000,7 @@ const App = () => (
                  <Route path="legal-flow/archived"              element={<LegalFlowArchived />} />
                  <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
                  <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
+                 <Route path="legal-flow/escrituracion/expedientes" element={<LegalFlowEscExpedientes />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
