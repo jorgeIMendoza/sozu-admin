@@ -100,7 +100,7 @@ function DevelopmentSocialLinks({ socials, variant = "desktop" }: {
 }
 
 const OfferPage = () => {
-  const { offerId } = useParams<{ offerId: string }>();
+  const { offerId, reservationId } = useParams<{ offerId: string; reservationId?: string }>();
   const { data: offerResult, isLoading: dbLoading } = useOfferFromDB(offerId ?? "");
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
@@ -171,6 +171,14 @@ const OfferPage = () => {
 
     return () => observers.forEach((o) => o.disconnect());
   }, [offer, visibleNavSections]);
+
+  const handleCtaClick = () => {
+    if (reservationId) {
+      navigate(`/reservar/${reservationId}`);
+    } else {
+      setGateModalOpen(true);
+    }
+  };
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -741,7 +749,7 @@ const OfferPage = () => {
                   <p className="text-[1.75rem] font-bold tabular-nums text-foreground leading-none tracking-tight">
                     {formattedPrice}
                   </p>
-                  {offer.property.pricePerM2 && offer.property.area && (
+                  {!!offer.property.pricePerM2 && offer.property.area && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
                       {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(offer.property.pricePerM2)} /m²
                     </p>
@@ -782,26 +790,28 @@ const OfferPage = () => {
                   )}
                 </div>
 
-                {/* CTA */}
-                <div className="pt-4">
-                  <button
-                    onClick={ctaDisabled ? undefined : () => setGateModalOpen(true)}
-                    disabled={ctaDisabled}
-                    className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                      ctaDisabled
-                        ? "bg-muted text-muted-foreground cursor-not-allowed"
-                        : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
-                    }`}
-                  >
-                    {ctaLabel}
-                    {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                  {!ctaDisabled && (
-                    <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-                      Apartado reembolsable · Sin compromiso
-                    </p>
-                  )}
-                </div>
+                {/* CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
+                {!reservationId && (
+                  <div className="pt-4">
+                    <button
+                      onClick={ctaDisabled ? undefined : handleCtaClick}
+                      disabled={ctaDisabled}
+                      className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                        ctaDisabled
+                          ? "bg-muted text-muted-foreground cursor-not-allowed"
+                          : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
+                      }`}
+                    >
+                      {ctaLabel}
+                      {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
+                    </button>
+                    {!ctaDisabled && (
+                      <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
+                        Apartado reembolsable · Sin compromiso
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Offer ID */}
@@ -818,30 +828,34 @@ const OfferPage = () => {
         </div>{/* /lg:grid */}
       </div>{/* /max-w-7xl */}
 
-      {/* Mobile sticky CTA */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
-        <div className="px-4 py-3">
-          <button
-            onClick={ctaDisabled ? undefined : () => setGateModalOpen(true)}
-            disabled={ctaDisabled}
-            className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-              ctaDisabled
-                ? "bg-muted text-muted-foreground cursor-not-allowed"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            }`}
-          >
-            {ctaLabel}
-            {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
-          </button>
+      {/* Mobile sticky CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
+      {!reservationId && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
+          <div className="px-4 py-3">
+            <button
+              onClick={ctaDisabled ? undefined : handleCtaClick}
+              disabled={ctaDisabled}
+              className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                ctaDisabled
+                  ? "bg-muted text-muted-foreground cursor-not-allowed"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }`}
+            >
+              {ctaLabel}
+              {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <FormalReservationGateModal
-        open={gateModalOpen}
-        onClose={() => setGateModalOpen(false)}
-        offer={offer}
-        onStartFormal={() => navigate(`/reservar/${offer.id}/datos`)}
-      />
+      {!reservationId && (
+        <FormalReservationGateModal
+          open={gateModalOpen}
+          onClose={() => setGateModalOpen(false)}
+          offer={offer}
+          onStartFormal={() => navigate(`/reservar/${offer.id}/datos`)}
+        />
+      )}
     </PublicShell>
   );
 };

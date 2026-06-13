@@ -1,24 +1,37 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Inbox, Mail, MessageSquare, Phone, Users, Clock, AlertTriangle,
   CheckCircle2, Filter, ListChecks, Timer, Search,
+  Plus, Sparkles, Bot, RefreshCw, Send, Building2, Layers, Copy,
+  PlayCircle, ChevronRight, Wand2, Edit2, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PageHeader, MockBadge, Panel } from "@/components/admin/portal-crm/ui";
-import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useCrmOrgId } from "@/hooks/useCrmOrgId";
+import { PageHeader, MockBadge, Panel, ComingSoon } from "@/components/admin/portal-crm/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { fmtNum, fmtPct, relTime } from "@/data/portal-crm/mockData";
+import { BUILDER_OBJECTIVES, DRAFT_STATUS_TONE, DRAFT_STATUSES, computeReadiness } from "@/lib/crm-builder";
+import { SEQUENCES, generateMessage, type MessageKind } from "@/lib/crm-sales-ops";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
@@ -486,6 +499,465 @@ export function CrmSlaMonitor() {
                     Escalar
                   </Button>
                 </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Panel>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmCampaignBuilder
+// ===================================================================
+type DraftCampaign = {
+  id: string; name: string; objective: string; status: string;
+  audience_segment: string; sequence_id: string; total_steps: number;
+  enrolled_contacts: number; created_at: string;
+};
+
+const DRAFT_MOCK: DraftCampaign[] = [
+  { id: "d1", name: "Nurturing Altea · Leads tibios", objective: "nurturing", status: "active", audience_segment: "Warm · Altea", sequence_id: "seq_nurturing", total_steps: 5, enrolled_contacts: 38, created_at: new Date(Date.now() - 10 * 86400_000).toISOString() },
+  { id: "d2", name: "Re-engagement Q2 2025", objective: "reengagement", status: "paused", audience_segment: "Cold · 90d+", sequence_id: "seq_reengagement", total_steps: 4, enrolled_contacts: 64, created_at: new Date(Date.now() - 25 * 86400_000).toISOString() },
+  { id: "d3", name: "Cierre · Hot leads", objective: "closing", status: "draft", audience_segment: "Hot · pipeline", sequence_id: "seq_closing", total_steps: 6, enrolled_contacts: 0, created_at: new Date(Date.now() - 2 * 86400_000).toISOString() },
+];
+
+const OBJ_LABEL: Record<string, string> = {
+  nurturing: "Nurturing", reengagement: "Re-engagement", closing: "Cierre",
+  onboarding: "Onboarding", upsell: "Upsell",
+};
+
+export function CrmCampaignBuilder() {
+  const orgId = useCrmOrgId();
+  const qc = useQueryClient();
+  const [tab, setTab] = useState("campaigns");
+  const [openCreate, setOpenCreate] = useState(false);
+  const [selSeq, setSelSeq] = useState(SEQUENCES[0].id);
+  const [form, setForm] = useState({ name: "", objective: "nurturing", audience_segment: "", sequence_id: SEQUENCES[0].id });
+
+  const { data: dbDrafts = [], isLoading } = useQuery({
+    queryKey: ["crm-campaign-drafts", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await (supabase as any).from("crm_campaign_drafts").select("*").eq("organization_id", orgId).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!orgId,
+  });
+
+  const campaigns: DraftCampaign[] = dbDrafts.length > 0 ? dbDrafts : DRAFT_MOCK;
+
+  const saveCampaign = useMutation({
+    mutationFn: async () => {
+      if (!orgId) return;
+      const seq = SEQUENCES.find(s => s.id === form.sequence_id);
+      await (supabase as any).from("crm_campaign_drafts").insert({
+        organization_id: orgId, name: form.name, objective: form.objective,
+        audience_segment: form.audience_segment, sequence_id: form.sequence_id,
+        total_steps: seq?.steps.length ?? 0, enrolled_contacts: 0, status: "draft",
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-campaign-drafts", orgId] }); setOpenCreate(false); toast.success("Campaña creada"); },
+  });
+
+  const activeSeq = SEQUENCES.find(s => s.id === selSeq) ?? SEQUENCES[0];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Constructor de campañas" subtitle="Secuencias de nurturing y plantillas de campaña">
+        <MockBadge />
+        <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="w-4 h-4 mr-1" />Nueva campaña</Button>
+      </PageHeader>
+
+      {dbDrafts.length === 0 && (
+        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />Mostrando campañas de ejemplo. Crea campañas reales desde el botón de arriba.
+        </div>
+      )}
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="campaigns">Campañas activas</TabsTrigger>
+          <TabsTrigger value="sequences">Secuencias disponibles</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="campaigns" className="pt-3">
+          {isLoading ? <Skeleton className="h-32 w-full" /> : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {campaigns.map(c => {
+                const statusTone = c.status === "active" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  : c.status === "paused" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                  : "bg-muted text-muted-foreground";
+                return (
+                  <Card key={c.id} className="p-4 space-y-2">
+                    <div className="flex items-start justify-between">
+                      <p className="text-sm font-semibold leading-tight">{c.name}</p>
+                      <Badge className={`text-[10px] shrink-0 ml-2 ${statusTone}`}>{c.status}</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">{OBJ_LABEL[c.objective] ?? c.objective}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{c.audience_segment}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{c.total_steps} pasos</span>
+                      <span>{c.enrolled_contacts} contactos</span>
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.info(`Editar ${c.name} (mock)`)}>
+                        <Edit2 className="w-3 h-3 mr-1" />Editar
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.info(`Activar/pausar ${c.name} (mock)`)}>
+                        <PlayCircle className="w-3 h-3 mr-1" />
+                        {c.status === "active" ? "Pausar" : "Activar"}
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="sequences" className="pt-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1 border-r pr-3">
+              {SEQUENCES.map(s => (
+                <button key={s.id} onClick={() => setSelSeq(s.id)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${selSeq === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <div className="md:col-span-2 space-y-3">
+              <p className="text-sm font-semibold">{activeSeq.name}</p>
+              <p className="text-xs text-muted-foreground">{activeSeq.description}</p>
+              <div className="space-y-2">
+                {activeSeq.steps.map((step, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+                    <span className="text-xs font-bold text-muted-foreground mt-0.5 w-4 shrink-0">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="text-[10px]">{step.kind}</Badge>
+                        {step.delay_days > 0 && <span className="text-[10px] text-muted-foreground">+{step.delay_days}d</span>}
+                      </div>
+                      <p className="text-xs mt-1">{step.template_hint}</p>
+                    </div>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => { navigator.clipboard.writeText(step.template_hint); toast.success("Copiado"); }}>
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nueva campaña</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label>Nombre</Label><Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="Nurturing Meta Leads" /></div>
+            <div><Label>Objetivo</Label>
+              <Select value={form.objective} onValueChange={v => setForm(f => ({...f, objective: v}))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{BUILDER_OBJECTIVES.map(o => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label>Secuencia</Label>
+              <Select value={form.sequence_id} onValueChange={v => setForm(f => ({...f, sequence_id: v}))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{SEQUENCES.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label>Segmento de audiencia</Label><Input value={form.audience_segment} onChange={e => setForm(f => ({...f, audience_segment: e.target.value}))} placeholder="Warm · desarrollo X" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpenCreate(false)}>Cancelar</Button>
+            <Button onClick={() => saveCampaign.mutate()} disabled={saveCampaign.isPending || !form.name}>Crear</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmAiCopilot
+// ===================================================================
+type ChatMsg = { role: "user" | "assistant"; text: string };
+
+const QUICK_ACTIONS: { label: string; kind: MessageKind; icon: typeof Sparkles }[] = [
+  { label: "Re-engagement", kind: "reengagement", icon: RefreshCw },
+  { label: "Follow-up", kind: "followup", icon: Send },
+  { label: "Intro apertura", kind: "intro", icon: Sparkles },
+  { label: "Confirmación cita", kind: "appointment_confirm", icon: CheckCircle2 },
+];
+
+const MOCK_CONTACT = {
+  full_name: "Andrea Robles", email: "andrea@example.com", phone: "5512345678",
+  source_platform: "meta_ads", buying_intent: "high", budget_range: "medium",
+  development_id: "altea-norte", last_contacted_at: new Date(Date.now() - 5 * 86400_000).toISOString(),
+};
+
+export function CrmAiCopilot() {
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { role: "assistant", text: "Hola! Soy tu copiloto de ventas. Selecciona una acción rápida o escribe una instrucción para generar un mensaje." },
+  ]);
+  const [input, setInput] = useState("");
+  const [contact, setContact] = useState(MOCK_CONTACT.full_name);
+  const [generating, setGenerating] = useState(false);
+
+  const generate = (kind: MessageKind) => {
+    setGenerating(true);
+    const msg = generateMessage(kind, { contact: MOCK_CONTACT });
+    setTimeout(() => {
+      setMessages(prev => [
+        ...prev,
+        { role: "user", text: `Generar mensaje: ${kind}` },
+        { role: "assistant", text: msg },
+      ]);
+      setGenerating(false);
+    }, 600);
+  };
+
+  const sendCustom = () => {
+    if (!input.trim()) return;
+    const userMsg = input.trim();
+    setInput("");
+    setMessages(prev => [...prev, { role: "user", text: userMsg }]);
+    setGenerating(true);
+    setTimeout(() => {
+      const reply = generateMessage("followup", { contact: MOCK_CONTACT });
+      setMessages(prev => [...prev, { role: "assistant", text: `[Basado en tu instrucción: "${userMsg}"]\n\n${reply}` }]);
+      setGenerating(false);
+    }, 800);
+  };
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Copiloto IA" subtitle="Asistente para redacción de mensajes y sugerencias de acción">
+        <MockBadge />
+      </PageHeader>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="rounded-lg border bg-muted/20 p-4 space-y-3 min-h-[360px] max-h-[480px] overflow-y-auto">
+            {messages.map((m, i) => (
+              <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                {m.role === "assistant" && <Bot className="w-5 h-5 mt-1 text-primary shrink-0" />}
+                <div className={`rounded-lg px-3 py-2 max-w-[80%] text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-background border"}`}>
+                  {m.text}
+                  {m.role === "assistant" && (
+                    <button className="block mt-1 text-[10px] text-muted-foreground hover:text-foreground" onClick={() => { navigator.clipboard.writeText(m.text); toast.success("Copiado"); }}>
+                      <Copy className="w-3 h-3 inline mr-0.5" />Copiar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {generating && (
+              <div className="flex gap-2">
+                <Bot className="w-5 h-5 mt-1 text-primary shrink-0" />
+                <div className="bg-background border rounded-lg px-3 py-2 text-sm text-muted-foreground">Generando...</div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Input value={input} onChange={e => setInput(e.target.value)} placeholder="Escribe una instrucción para el copiloto..."
+              onKeyDown={e => e.key === "Enter" && sendCustom()} />
+            <Button onClick={sendCustom} disabled={!input.trim() || generating}><Send className="w-4 h-4" /></Button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium mb-2">Acciones rápidas</p>
+            <div className="grid grid-cols-2 gap-2">
+              {QUICK_ACTIONS.map(a => {
+                const Icon = a.icon;
+                return (
+                  <Button key={a.kind} size="sm" variant="outline" className="h-auto py-2 flex-col gap-1"
+                    onClick={() => generate(a.kind)} disabled={generating}>
+                    <Icon className="w-4 h-4" />
+                    <span className="text-xs">{a.label}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium mb-2">Sugerencias para próxima acción</p>
+            <div className="space-y-1.5">
+              {[
+                { action: "Llamar a Andrea Robles", reason: "5 días sin contacto · alta intención", icon: Phone },
+                { action: "Enviar brochure Altea", reason: "Solicitó info · no respondió", icon: Send },
+                { action: "Agendar visita a obra", reason: "Cita pendiente hace 3 días", icon: ListChecks },
+              ].map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <div key={i} className="flex items-start gap-2 p-2 rounded-md border bg-muted/30">
+                    <Icon className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                    <div>
+                      <p className="text-xs font-medium">{s.action}</p>
+                      <p className="text-[10px] text-muted-foreground">{s.reason}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium mb-2">Contacto activo (mock)</p>
+            <div className="text-xs space-y-1 text-muted-foreground">
+              <p><span className="font-medium text-foreground">{MOCK_CONTACT.full_name}</span></p>
+              <p>Intención: <span className="font-medium text-amber-600 dark:text-amber-400">{MOCK_CONTACT.buying_intent}</span></p>
+              <p>Fuente: {MOCK_CONTACT.source_platform}</p>
+              <p>Último contacto: 5 días</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// CrmOperationsDevelopments
+// ===================================================================
+type DevOps = {
+  id: string; name: string; location: string; status: "available" | "limited" | "sold_out";
+  units_available: number; units_total: number; price_from: number; price_to: number;
+  active_deals: number; last_deal_at: string | null;
+};
+
+const DEV_OPS_MOCK: DevOps[] = [
+  { id: "dev1", name: "Altea Norte", location: "Monterrey, NL", status: "available", units_available: 24, units_total: 60, price_from: 1_800_000, price_to: 3_200_000, active_deals: 7, last_deal_at: new Date(Date.now() - 2 * 86400_000).toISOString() },
+  { id: "dev2", name: "Vivenza", location: "San Pedro Garza García, NL", status: "limited", units_available: 4, units_total: 48, price_from: 2_400_000, price_to: 4_100_000, active_deals: 12, last_deal_at: new Date(Date.now() - 1 * 86400_000).toISOString() },
+  { id: "dev3", name: "Meridian Tower", location: "CDMX, CDMX", status: "sold_out", units_available: 0, units_total: 36, price_from: 3_100_000, price_to: 5_800_000, active_deals: 0, last_deal_at: new Date(Date.now() - 14 * 86400_000).toISOString() },
+  { id: "dev4", name: "Paseo Colinas", location: "Guadalajara, JAL", status: "available", units_available: 18, units_total: 40, price_from: 1_600_000, price_to: 2_800_000, active_deals: 4, last_deal_at: new Date(Date.now() - 3 * 86400_000).toISOString() },
+];
+
+const DEV_STATUS_TONE: Record<DevOps["status"], string> = {
+  available: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  limited: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  sold_out: "bg-muted text-muted-foreground",
+};
+const DEV_STATUS_LABEL: Record<DevOps["status"], string> = {
+  available: "Disponible", limited: "Limitado", sold_out: "Agotado",
+};
+
+const fmtMXN = (n: number) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
+
+export function CrmOperationsDevelopments() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+
+  const filtered = useMemo(() => DEV_OPS_MOCK.filter(d => {
+    if (statusFilter !== "todos" && d.status !== statusFilter) return false;
+    if (search && !d.name.toLowerCase().includes(search.toLowerCase()) && !d.location.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }), [search, statusFilter]);
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Desarrollos" subtitle="Vista de desarrollos disponibles para asignar a deals">
+        <MockBadge />
+      </PageHeader>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar desarrollo..." className="h-9 pl-7" />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="available">Disponible</SelectItem>
+            <SelectItem value="limited">Limitado</SelectItem>
+            <SelectItem value="sold_out">Agotado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+        {filtered.map(d => {
+          const pct = d.units_total > 0 ? (d.units_total - d.units_available) / d.units_total : 1;
+          return (
+            <Card key={d.id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold leading-tight">{d.name}</p>
+                  <p className="text-xs text-muted-foreground">{d.location}</p>
+                </div>
+                <Badge className={`text-[10px] shrink-0 ${DEV_STATUS_TONE[d.status]}`}>{DEV_STATUS_LABEL[d.status]}</Badge>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Disponibles</span>
+                  <span className="font-medium">{d.units_available} / {d.units_total}</span>
+                </div>
+                <Progress value={pct * 100} className="h-1.5" />
+              </div>
+
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Precio desde</span><span className="font-medium text-foreground">{fmtMXN(d.price_from)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Precio hasta</span><span className="font-medium text-foreground">{fmtMXN(d.price_to)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Deals activos</span><span className="font-medium text-foreground">{d.active_deals}</span>
+                </div>
+                {d.last_deal_at && (
+                  <div className="flex justify-between">
+                    <span>Último deal</span><span>{relTime(d.last_deal_at)}</span>
+                  </div>
+                )}
+              </div>
+
+              <Button size="sm" variant="outline" className="w-full h-8 text-xs"
+                disabled={d.status === "sold_out"}
+                onClick={() => toast.info(`Asignar deal · ${d.name} (mock)`)}>
+                <Layers className="w-3 h-3 mr-1.5" />
+                {d.status === "sold_out" ? "Sin disponibilidad" : "Asignar a deal"}
+              </Button>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Panel title="Resumen por desarrollo">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Desarrollo</TableHead>
+            <TableHead>Ubicación</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead className="text-right">Disponibles</TableHead>
+            <TableHead className="text-right">Deals activos</TableHead>
+            <TableHead className="text-right">Último deal</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {DEV_OPS_MOCK.map(d => (
+              <TableRow key={d.id}>
+                <TableCell className="font-medium">{d.name}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{d.location}</TableCell>
+                <TableCell><Badge className={`text-[10px] ${DEV_STATUS_TONE[d.status]}`}>{DEV_STATUS_LABEL[d.status]}</Badge></TableCell>
+                <TableCell className="text-right">{d.units_available}/{d.units_total}</TableCell>
+                <TableCell className="text-right">{d.active_deals}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{d.last_deal_at ? relTime(d.last_deal_at) : "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

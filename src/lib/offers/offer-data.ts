@@ -578,7 +578,7 @@ const initialOffers: OfertaComercial[] = [
     development: {
       website: "https://monocolocountry.mx",
       tagline: "Vive Country como nunca antes",
-      logoUrl: "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/render/image/public/documentos/projects/images/1773856633615.png?width=240&quality=85&format=webp",
+      logoUrl: "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/object/public/documentos/projects/images/1773856633615.png",
       logoUrlInverse: undefined,
       legalName: "Monócolo Country Residences",
       socials: {
