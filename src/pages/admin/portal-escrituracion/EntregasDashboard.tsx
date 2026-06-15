@@ -6,13 +6,13 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Home, Calendar, CheckCircle2, AlertTriangle, Clock, RotateCcw,
   ChevronRight, Building2, Search, X, Star, MoreHorizontal,
-  Truck, Eye, ChevronDown, RefreshCw, Download, AlertCircle, Loader2,
+  Truck, Eye, ChevronDown, RefreshCw, Download, AlertCircle, Loader2, Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type EstatusEntrega = 'LISTO' | 'PROGRAMADA' | 'EN_PROCESO' | 'ENTREGADA' | 'CON_OBSERVACIONES' | 'REPROGRAMADA';
+type EstatusEntrega = 'PENDIENTE_PRE_ENTREGA' | 'PRE_ENTREGA_EN_PROCESO' | 'LISTO' | 'PROGRAMADA' | 'EN_PROCESO' | 'ENTREGADA' | 'CON_OBSERVACIONES' | 'REPROGRAMADA';
 
 interface EntregaRow {
   id: string;
@@ -43,12 +43,14 @@ const ESTATUS_ENTREGA_IDS = [5, 7, 8, 9] as const;
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ESTATUS_META: Record<EstatusEntrega, { label: string; cls: string; dot: string; color: string }> = {
-  LISTO:             { label: 'Listo p/entrega', cls: 'bg-blue-50 text-blue-700 border border-blue-200',           dot: 'bg-blue-500',    color: '#3B82F6' },
-  PROGRAMADA:        { label: 'Programada',       cls: 'bg-violet-50 text-violet-700 border border-violet-200',     dot: 'bg-violet-500',  color: '#7C3AED' },
-  EN_PROCESO:        { label: 'En proceso',        cls: 'bg-amber-50 text-amber-700 border border-amber-200',       dot: 'bg-amber-500',   color: '#F59E0B' },
-  ENTREGADA:         { label: 'Entregada',         cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-500', color: '#10B981' },
-  CON_OBSERVACIONES: { label: 'Con observaciones', cls: 'bg-orange-50 text-orange-700 border border-orange-200',   dot: 'bg-orange-500',  color: '#F97316' },
-  REPROGRAMADA:      { label: 'Reprogramada',      cls: 'bg-red-50 text-red-700 border border-red-200',             dot: 'bg-red-500',     color: '#EF4444' },
+  PENDIENTE_PRE_ENTREGA:  { label: 'Pendiente de pre-entrega', cls: 'bg-slate-50 text-slate-600 border border-slate-200',       dot: 'bg-slate-400',   color: '#94A3B8' },
+  PRE_ENTREGA_EN_PROCESO: { label: 'Pre-entrega en proceso',   cls: 'bg-sky-50 text-sky-700 border border-sky-200',             dot: 'bg-sky-500',     color: '#0EA5E9' },
+  LISTO:                  { label: 'Lista p/entrega',           cls: 'bg-blue-50 text-blue-700 border border-blue-200',         dot: 'bg-blue-500',    color: '#3B82F6' },
+  PROGRAMADA:             { label: 'Programada',                cls: 'bg-violet-50 text-violet-700 border border-violet-200',   dot: 'bg-violet-500',  color: '#7C3AED' },
+  EN_PROCESO:             { label: 'En proceso',                cls: 'bg-amber-50 text-amber-700 border border-amber-200',      dot: 'bg-amber-500',   color: '#F59E0B' },
+  ENTREGADA:              { label: 'Entregada',                 cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-500', color: '#10B981' },
+  CON_OBSERVACIONES:      { label: 'Con observaciones',         cls: 'bg-orange-50 text-orange-700 border border-orange-200',  dot: 'bg-orange-500',  color: '#F97316' },
+  REPROGRAMADA:           { label: 'Reprogramada',              cls: 'bg-red-50 text-red-700 border border-red-200',            dot: 'bg-red-500',     color: '#EF4444' },
 };
 
 const DAIKU_META = {
@@ -319,7 +321,7 @@ export function EntregasDashboard() {
       if (entregasExist) {
         const { data: entregasData } = await (supabase as any)
           .from('entregas')
-          .select('id, id_propiedad, estatus, fecha_programada, fecha_entrega, checklist_pct, daiku_estatus, acta_estatus, entregado_por')
+          .select('id, id_propiedad, estatus, fecha_programada, fecha_entrega, muebles_daiku_estatus, entregado_por')
           .in('id_propiedad', propIds)
           .eq('activo', true);
         (entregasData ?? []).forEach((e: any) => { entregaByPropId[e.id_propiedad] = e; });
@@ -356,16 +358,16 @@ export function EntregasDashboard() {
           const edificio = edificioMap[edificioId];
           const pId = edificio?.proyectoId ?? 0;
 
-          // Prioridad: tabla entregas → id_estatus_disponibilidad=8 → acta → LISTO
+          // Prioridad: tabla entregas → id_estatus_disponibilidad=8 → acta → PENDIENTE_PRE_ENTREGA
+          // Sin registro en entregas = pre-entrega no iniciada, nunca LISTO automáticamente.
           const estatus: EstatusEntrega = entrega
             ? (entrega.estatus as EstatusEntrega)
             : (p.id_estatus_disponibilidad === 8 || acta)
               ? 'ENTREGADA'
-              : 'LISTO';
+              : 'PENDIENTE_PRE_ENTREGA';
 
-          const actaEstatus: EntregaRow['actaEstatus'] = entrega
-            ? (entrega.acta_estatus as EntregaRow['actaEstatus'])
-            : acta ? 'FIRMADA' : 'PENDIENTE';
+          // acta_estatus no existe en BD aún — se deriva del documento tipo 24
+          const actaEstatus: EntregaRow['actaEstatus'] = acta ? 'FIRMADA' : 'PENDIENTE';
 
           return {
             id: entrega ? String(entrega.id) : `prop-${p.id}`,
@@ -380,8 +382,8 @@ export function EntregasDashboard() {
             estatus,
             fechaProgramada: entrega?.fecha_programada ?? null,
             fechaEntrega: entrega?.fecha_entrega ?? acta?.fechaCreacion ?? null,
-            checklistPct: entrega ? Number(entrega.checklist_pct ?? 0) : 0,
-            daikuEstatus: (entrega?.daiku_estatus ?? 'NO_APLICA') as EntregaRow['daikuEstatus'],
+            checklistPct: 0, // checklist_pct no existe en BD aún — se calcula en Fase 2
+            daikuEstatus: (entrega?.muebles_daiku_estatus ?? 'NO_APLICA') as EntregaRow['daikuEstatus'],
             actaEstatus,
             actaUrl: acta?.url ?? null,
             observaciones: 0,
@@ -414,20 +416,24 @@ export function EntregasDashboard() {
     }), [rows, filtroEstatus, filtroTorre, filtroFecha, search]);
 
   const stats = useMemo(() => ({
-    listo:            rows.filter(r => r.estatus === 'LISTO').length,
-    programadas:      rows.filter(r => r.estatus === 'PROGRAMADA').length,
-    enProceso:        rows.filter(r => r.estatus === 'EN_PROCESO').length,
-    entregadas:       rows.filter(r => r.estatus === 'ENTREGADA').length,
-    conObservaciones: rows.filter(r => r.estatus === 'CON_OBSERVACIONES').length,
-    reprogramaciones: rows.filter(r => r.estatus === 'REPROGRAMADA').length,
+    pendientePreEntrega: rows.filter(r => r.estatus === 'PENDIENTE_PRE_ENTREGA').length,
+    preEntregaEnProceso: rows.filter(r => r.estatus === 'PRE_ENTREGA_EN_PROCESO').length,
+    listo:               rows.filter(r => r.estatus === 'LISTO').length,
+    programadas:         rows.filter(r => r.estatus === 'PROGRAMADA').length,
+    enProceso:           rows.filter(r => r.estatus === 'EN_PROCESO').length,
+    entregadas:          rows.filter(r => r.estatus === 'ENTREGADA').length,
+    conObservaciones:    rows.filter(r => r.estatus === 'CON_OBSERVACIONES').length,
+    reprogramaciones:    rows.filter(r => r.estatus === 'REPROGRAMADA').length,
   }), [rows]);
 
   const donutData = [
-    { name: 'Listos para entrega', value: stats.listo,            color: '#3B82F6' },
-    { name: 'Programadas',         value: stats.programadas,      color: '#7C3AED' },
-    { name: 'En proceso',          value: stats.enProceso,        color: '#F59E0B' },
-    { name: 'Entregadas',          value: stats.entregadas,       color: '#10B981' },
-    { name: 'Con observaciones',   value: stats.conObservaciones, color: '#F97316' },
+    { name: 'Pendiente de pre-entrega', value: stats.pendientePreEntrega, color: '#94A3B8' },
+    { name: 'Pre-entrega en proceso',   value: stats.preEntregaEnProceso, color: '#0EA5E9' },
+    { name: 'Lista p/entrega',          value: stats.listo,               color: '#3B82F6' },
+    { name: 'Programadas',              value: stats.programadas,         color: '#7C3AED' },
+    { name: 'En proceso',               value: stats.enProceso,           color: '#F59E0B' },
+    { name: 'Entregadas',               value: stats.entregadas,          color: '#10B981' },
+    { name: 'Con observaciones',        value: stats.conObservaciones,    color: '#F97316' },
   ].filter(d => d.value > 0);
   const total = rows.length;
 
@@ -511,12 +517,14 @@ export function EntregasDashboard() {
         {/* ── KPI Cards ── */}
         <div className="flex gap-3 overflow-x-auto pb-1">
           {[
-            { value: stats.listo,            label: 'Listos para entrega', icon: Home,          color: '#3B82F6', bg: 'bg-blue-50',    estatus: 'LISTO' as EstatusEntrega },
-            { value: stats.programadas,      label: 'Programadas',          icon: Calendar,      color: '#7C3AED', bg: 'bg-violet-50',  estatus: 'PROGRAMADA' as EstatusEntrega },
-            { value: stats.enProceso,        label: 'En proceso hoy',       icon: Truck,         color: '#F59E0B', bg: 'bg-amber-50',   estatus: 'EN_PROCESO' as EstatusEntrega },
-            { value: stats.entregadas,       label: 'Entregadas',           icon: CheckCircle2,  color: '#10B981', bg: 'bg-emerald-50', estatus: 'ENTREGADA' as EstatusEntrega },
-            { value: stats.conObservaciones, label: 'Con observaciones',    icon: AlertTriangle, color: '#F97316', bg: 'bg-orange-50',  estatus: 'CON_OBSERVACIONES' as EstatusEntrega },
-            { value: stats.reprogramaciones, label: 'Reprogramaciones',     icon: RotateCcw,     color: '#EF4444', bg: 'bg-red-50',     estatus: 'REPROGRAMADA' as EstatusEntrega },
+            { value: stats.pendientePreEntrega, label: 'Pendiente de pre-entrega', icon: Clock,         color: '#94A3B8', bg: 'bg-slate-100',  estatus: 'PENDIENTE_PRE_ENTREGA' as EstatusEntrega },
+            { value: stats.preEntregaEnProceso, label: 'Pre-entrega en proceso',   icon: Wrench,        color: '#0EA5E9', bg: 'bg-sky-50',     estatus: 'PRE_ENTREGA_EN_PROCESO' as EstatusEntrega },
+            { value: stats.listo,               label: 'Lista p/entrega',           icon: Home,          color: '#3B82F6', bg: 'bg-blue-50',    estatus: 'LISTO' as EstatusEntrega },
+            { value: stats.programadas,         label: 'Programadas',               icon: Calendar,      color: '#7C3AED', bg: 'bg-violet-50',  estatus: 'PROGRAMADA' as EstatusEntrega },
+            { value: stats.enProceso,           label: 'En proceso hoy',            icon: Truck,         color: '#F59E0B', bg: 'bg-amber-50',   estatus: 'EN_PROCESO' as EstatusEntrega },
+            { value: stats.entregadas,          label: 'Entregadas',                icon: CheckCircle2,  color: '#10B981', bg: 'bg-emerald-50', estatus: 'ENTREGADA' as EstatusEntrega },
+            { value: stats.conObservaciones,    label: 'Con observaciones',         icon: AlertTriangle, color: '#F97316', bg: 'bg-orange-50',  estatus: 'CON_OBSERVACIONES' as EstatusEntrega },
+            { value: stats.reprogramaciones,    label: 'Reprogramaciones',          icon: RotateCcw,     color: '#EF4444', bg: 'bg-red-50',     estatus: 'REPROGRAMADA' as EstatusEntrega },
           ].map(k => (
             <KpiCard key={k.estatus} value={k.value} label={k.label} icon={k.icon}
               color={k.color} bg={k.bg} loading={isLoading}
