@@ -65,14 +65,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION } from "@/lib/config";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { CrmImpersonationSelector } from "./CrmImpersonationSelector";
 import { CrmOrgSwitcher } from "./CrmOrgSwitcher";
 
-const sozuLogo = "/sozu-logo.png";
+const sozuLogo = SOZU_LOGO_URL;
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -270,8 +270,8 @@ export const PortalCRMLayout = () => {
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-          CRM Sozu
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+          Portal CRM
         </p>
       </div>
 
@@ -389,7 +389,7 @@ export const PortalCRMLayout = () => {
 
   return (
     <PortalTrackingProvider portal="crm">
-      <div className="min-h-screen flex">
+      <div className="min-h-screen flex antialiased">
         {/* Desktop sidebar */}
         <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
           {sidebar}
@@ -405,10 +405,10 @@ export const PortalCRMLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header — mismo diseño que TopBar del portal cliente */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
+            <CrmOrgSwitcher />
+
             {/* Impersonation selector — self-guards for superadmin */}
             {isSuperAdmin && <CrmImpersonationSelector />}
-
-            <CrmOrgSwitcher />
 
             {/* Avatar + perfil — pushed to right */}
             <div className="flex items-center gap-2 ml-auto">
@@ -436,9 +436,8 @@ export const PortalCRMLayout = () => {
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <img src={sozuLogo} alt="SOZU" className="h-5 w-auto object-contain dark:invert shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] text-muted-foreground truncate">{currentSection}</p>
+                <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{currentSection}</p>
               </div>
               <Popover open={mobileProfileOpen} onOpenChange={setMobileProfileOpen}>
                 <PopoverTrigger asChild>
@@ -453,14 +452,14 @@ export const PortalCRMLayout = () => {
               </Popover>
             </div>
 
+            <div className="px-4 pb-3">
+              <CrmOrgSwitcher className="w-full max-w-none" />
+            </div>
             {isSuperAdmin && (
               <div className="px-4 pb-3">
                 <CrmImpersonationSelector />
               </div>
             )}
-            <div className="px-4 pb-3">
-              <CrmOrgSwitcher />
-            </div>
           </header>
 
           <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-64px)]">

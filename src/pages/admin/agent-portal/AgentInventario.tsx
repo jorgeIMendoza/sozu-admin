@@ -13,7 +13,6 @@ import { Loader2, Search, Building2, MapPin, ChevronRight, Eye, Share2, Mail, Co
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProyectoCard {
@@ -38,13 +37,11 @@ const AgentInventario = () => {
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
-  // Log page view
   useEffect(() => {
     registrarVista('/admin/agent/inventario');
     track({ page: 'agent_inventario', elementId: 'page_view', elementType: 'page' });
   }, []);
 
-  // Fetch estatus_proyecto for avance calculation
   const { data: estatusData } = useQuery({
     queryKey: ["estatus-proyecto-all"],
     queryFn: async () => {
@@ -134,7 +131,7 @@ const AgentInventario = () => {
           precio_desde: stats.minPrice === Infinity ? null : stats.minPrice,
           unidades_disponibles: stats.available,
           total_unidades: stats.total,
-          avance: 0, // will be calculated with estatus_proyecto
+          avance: 0,
           id_estatus_proyecto: p.id_estatus_proyecto || null,
         };
       }).filter((p: ProyectoCard) => p.total_unidades > 0);
@@ -143,7 +140,6 @@ const AgentInventario = () => {
     staleTime: 60_000,
   });
 
-  // Calculate avance for each project using estatus_proyecto
   const proyectosConAvance = useMemo(() => {
     const totalEstatus = estatusData?.length || 13;
     return proyectos.map(p => ({
@@ -157,9 +153,7 @@ const AgentInventario = () => {
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return proyectosConAvance;
-    return proyectosConAvance.filter(p =>
-      p.nombre.toLowerCase().includes(s)
-    );
+    return proyectosConAvance.filter(p => p.nombre.toLowerCase().includes(s));
   }, [proyectosConAvance, search]);
 
   const isLoading = loadingAccess || loadingData;
@@ -168,10 +162,11 @@ const AgentInventario = () => {
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v);
 
   return (
-    <div className="pb-24">
-      <AgentPortalHeader showAgentName>
+    <div className="pb-6">
+      {/* Search bar */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-1 pt-1 pb-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--agent-muted))]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Buscar desarrollo..."
             value={search}
@@ -181,23 +176,24 @@ const AgentInventario = () => {
                 track({ page: 'agent_inventario', elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
               }
             }}
-            className="pl-9 h-10 rounded-xl border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-[hsl(222.2_84%_4.9%)] placeholder:text-[hsl(215.4_16.3%_46.9%)] placeholder:opacity-100 caret-[hsl(222.2_84%_4.9%)] shadow-sm"
-            style={{ WebkitTextFillColor: "hsl(222.2 84% 4.9%)", colorScheme: "light" }}
+            className="pl-9 h-10 rounded-xl bg-card border-border shadow-sm"
           />
         </div>
-      </AgentPortalHeader>
+      </div>
 
-      <div className="px-4 space-y-3 lg:flex lg:flex-col lg:items-center">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[hsl(var(--agent-text-secondary))]">
-            No se encontraron desarrollos
-          </div>
-        ) : (
-          filtered.map(proyecto => (
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <Building2 className="h-10 w-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No se encontraron desarrollos</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(proyecto => (
             <ProjectCard
               key={proyecto.id}
               proyecto={proyecto}
@@ -214,9 +210,9 @@ const AgentInventario = () => {
               }}
               track={track}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -264,105 +260,110 @@ function ProjectCard({
 
   return (
     <>
-      <div className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden lg:w-[60%] lg:mx-auto">
-        {/* Image with overlay */}
-        <div className="relative h-44 lg:h-96 w-full overflow-hidden cursor-pointer" onClick={onViewProject}>
+      <div
+        className="group rounded-2xl bg-card border border-border/60 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 cursor-pointer"
+        onClick={onViewProject}
+      >
+        {/* Image */}
+        <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
           {proyecto.imagen_url ? (
             <img
               src={proyecto.imagen_url}
               alt={proyecto.nombre}
-              className="h-full w-full object-cover object-bottom"
+              className="h-full w-full object-cover object-bottom group-hover:scale-[1.02] transition-transform duration-300"
               loading="lazy"
             />
           ) : (
-            <div className="h-full w-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-              <Building2 className="h-10 w-10 text-gray-400" />
+            <div className="h-full w-full bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center">
+              <Building2 className="h-10 w-10 text-muted-foreground/40" />
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
 
-          {/* Info on image */}
-          <div className="absolute bottom-0 left-0 right-0 p-3.5 flex items-end justify-between">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-sm text-white truncate">{proyecto.nombre}</h3>
-              {proyecto.ubicacion && (
-                <p className="text-[11px] text-white/80 flex items-center gap-1 mt-0.5">
-                  <MapPin className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{proyecto.ubicacion}</span>
-                </p>
-              )}
-            </div>
+          {/* Availability badge */}
+          <div className="absolute top-3 right-3">
+            {isAgotado ? (
+              <span className="inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white/80">
+                Agotado
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-emerald-500/90 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white">
+                {proyecto.unidades_disponibles} disp.
+              </span>
+            )}
+          </div>
+
+          {/* Name / location / price */}
+          <div className="absolute bottom-0 left-0 right-0 p-3.5">
+            <h3 className="font-semibold text-[15px] text-white leading-snug truncate">{proyecto.nombre}</h3>
+            {proyecto.ubicacion && (
+              <p className="text-[12px] text-white/75 flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{proyecto.ubicacion}</span>
+              </p>
+            )}
             {!isAgotado && proyecto.precio_desde && (
-              <div className="ml-2 flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1">
-                <p className="text-[10px] text-gray-500 leading-none">Desde</p>
-                <p className="text-xs font-bold text-gray-900 leading-tight">{formatCurrency(proyecto.precio_desde)}</p>
-              </div>
+              <p className="text-[12px] text-white/80 mt-1">
+                Desde <span className="font-semibold text-white">{formatCurrency(proyecto.precio_desde)}</span>
+              </p>
             )}
           </div>
         </div>
 
-        {/* Content side */}
-        <div>
+        {/* Stats + actions */}
+        <div onClick={e => e.stopPropagation()}>
+          <div className="px-4 py-3 flex items-center justify-between border-b border-border/50">
+            <div className="flex items-center gap-5">
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Unidades</p>
+                <p className="text-[13px] font-semibold text-foreground tabular-nums">
+                  {proyecto.total_unidades}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Avance</p>
+                <p className="text-[13px] font-semibold text-foreground tabular-nums">{proyecto.avance}%</p>
+              </div>
+            </div>
 
-        {/* Stats row */}
-        <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-gray-50">
-          <div className="flex items-center gap-6">
-            <div>
-              <p className="text-[11px] text-muted-foreground">Disponibles</p>
-              <p className={cn(
-                "text-sm font-bold",
-                isAgotado ? "text-muted-foreground" : "text-foreground"
-              )}>
-                {isAgotado ? "Agotado" : proyecto.unidades_disponibles}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">Avance</p>
-              <p className="text-sm font-bold text-foreground">{proyecto.avance}%</p>
-            </div>
+            {!isAgotado && canRead && (
+              <button
+                onClick={onViewUnits}
+                className="flex items-center gap-1 text-[12px] font-semibold text-primary hover:underline"
+              >
+                Inventario
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {!isAgotado && canRead && (
-            <button
-              onClick={onViewUnits}
-              className="flex items-center gap-1 text-xs font-semibold text-[hsl(var(--agent-primary))] hover:underline"
-            >
-              Ver inventario
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Action buttons */}
-        <div className="px-3.5 py-2.5 flex items-center gap-2">
-          {canRead && (
-            <button
-              onClick={onViewProject}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] py-2 text-xs font-medium text-[hsl(222.2_84%_4.9%)] hover:bg-[hsl(210_40%_96.1%)] transition-colors shadow-sm"
-              style={{ colorScheme: "light" }}
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Ver Desarrollo
-            </button>
-          )}
-          {canRead && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
-                setShareOpen(true);
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-[hsl(var(--agent-primary))] py-2 text-xs font-medium text-white hover:opacity-90 transition-opacity"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-              Compartir
-            </button>
-          )}
-        </div>
+          <div className="px-4 py-3 flex items-center gap-2">
+            {canRead && (
+              <button
+                onClick={onViewProject}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-[12px] font-medium text-foreground hover:bg-muted/60 transition-colors"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Ver desarrollo
+              </button>
+            )}
+            {canRead && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
+                  setShareOpen(true);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Compartir
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Share Dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

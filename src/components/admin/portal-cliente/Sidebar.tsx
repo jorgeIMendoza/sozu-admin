@@ -1,4 +1,5 @@
-const sozuLogo = "/sozu-logo.png";
+import { SOZU_LOGO_URL } from "@/lib/config";
+const sozuLogo = SOZU_LOGO_URL;
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
 import { ArrowLeft, ChevronRight, LogOut } from "lucide-react";
@@ -12,9 +13,10 @@ interface SidebarProps {
   displayName?: string;
   userRole?: string;
   isClient?: boolean;
+  onAfterNavigate?: () => void;
 }
 
-const Sidebar = ({
+export const SidebarContent = ({
   appVersion,
   showBackToAdmin,
   onBackToAdmin,
@@ -22,6 +24,7 @@ const Sidebar = ({
   displayName = "Usuario",
   userRole = "Cliente",
   isClient = true,
+  onAfterNavigate,
 }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,18 +39,17 @@ const Sidebar = ({
     .toUpperCase();
 
   return (
-    <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 z-30 flex-col bg-sidebar border-r border-border">
-
-      {/* ── Brand ── */}
+    <>
+      {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal del cliente
         </p>
       </div>
 
-      {/* ── Nav items ── */}
-      <nav className="flex-1 px-3 py-2 space-y-1.5">
+      {/* Nav items */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {items.map((item) => {
           const isActive = isNavItemActive(item.route, location.pathname);
           const Icon = item.icon;
@@ -55,16 +57,16 @@ const Sidebar = ({
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.route)}
-              className={`group relative w-full flex items-center justify-between gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-200 ease-in-out ${
+              onClick={() => { navigate(item.route); onAfterNavigate?.(); }}
+              className={`group relative w-full flex items-center justify-between gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${
                 isActive
                   ? "bg-primary/[0.06] text-primary"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
-              <span className={`absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-200 ease-in-out ${isActive ? "opacity-100" : "opacity-0"}`} />
+              <span className={`absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150 ${isActive ? "opacity-100" : "opacity-0"}`} />
               <span className="flex items-center gap-3">
-                <Icon className={`size-4 shrink-0 ${isActive ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-200 ease-in-out"}`} />
+                <Icon className={`size-4 shrink-0 ${isActive ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"}`} />
                 {item.label}
               </span>
               {isNotif && totalUnread > 0 && (
@@ -77,12 +79,10 @@ const Sidebar = ({
         })}
       </nav>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
-
-        {/* Profile row */}
         <button
-          onClick={() => navigate("/admin/portal-cliente/perfil")}
+          onClick={() => { navigate("/admin/portal-cliente/perfil"); onAfterNavigate?.(); }}
           className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group/profile"
         >
           <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
@@ -95,7 +95,6 @@ const Sidebar = ({
           <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover/profile:opacity-100 transition-opacity" />
         </button>
 
-        {/* Actions */}
         {isClient ? (
           <button
             onClick={onSignOut}
@@ -126,11 +125,17 @@ const Sidebar = ({
         )}
 
         {appVersion && (
-          <p className="text-[10px] text-muted-foreground/40 font-mono text-center">{appVersion}</p>
+          <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{appVersion}</p>
         )}
       </div>
-    </aside>
+    </>
   );
 };
+
+const Sidebar = (props: SidebarProps) => (
+  <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-64 z-30 flex-col bg-sidebar border-r border-border">
+    <SidebarContent {...props} />
+  </aside>
+);
 
 export default Sidebar;
