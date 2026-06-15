@@ -63,7 +63,7 @@ export function AgentPortalImpersonationSelector() {
             <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[260px] p-0" align="start">
+        <PopoverContent className="w-[min(260px,calc(100vw-2rem))] p-0" align="start">
           <Command>
             <CommandInput placeholder="Buscar agente..." />
             <CommandList>

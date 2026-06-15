@@ -65,14 +65,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION } from "@/lib/config";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { CrmImpersonationSelector } from "./CrmImpersonationSelector";
 import { CrmOrgSwitcher } from "./CrmOrgSwitcher";
 
-const sozuLogo = "/sozu-logo.png";
+const sozuLogo = SOZU_LOGO_URL;
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
