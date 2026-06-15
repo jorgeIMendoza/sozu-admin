@@ -84,10 +84,10 @@ export function CrmImpersonationSelector() {
   });
 
   return (
-    <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-primary/20 bg-primary/5">
-      <UserSearch className="h-4 w-4 text-primary shrink-0" />
-      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-        Ver como:
+    <div className="flex items-center gap-2">
+      <UserSearch className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-sm text-muted-foreground whitespace-nowrap">
+        Vista como:
       </span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -99,12 +99,12 @@ export function CrmImpersonationSelector() {
             {isImpersonating ? (
               <span className="truncate">{impersonatedCrmUserName}</span>
             ) : (
-              <span className="text-muted-foreground">Super Admin (vista completa)</span>
+              <span className="text-muted-foreground">Seleccionar usuario...</span>
             )}
             <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[320px] p-0" align="start">
+        <PopoverContent className="w-[min(320px,calc(100vw-2rem))] p-0" align="start">
           <Command>
             <CommandInput placeholder="Buscar usuario CRM..." />
             <CommandList>
@@ -125,7 +125,7 @@ export function CrmImpersonationSelector() {
                       !isImpersonating ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  <span className="font-medium">Super Admin (vista completa)</span>
+                  <span className="font-medium">Super Admin</span>
                 </CommandItem>
                 {users.map((u: any) => (
                   <CommandItem

@@ -441,7 +441,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     setSendingApartado(true);
     try {
       const { data: apartado, error: insertError } = await (supabase as any)
-        .from("apartados_provisionales")
+        .from("reservaciones")
         .insert({ email: trimmedEmail, id_oferta: oferta.id })
         .select("id")
         .single();
@@ -450,24 +450,24 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
 
-      // Enviar PDF al email capturado (fire-and-forget — el servicio muestra su propio toast)
-      import('@/services/offerEmailService').then(({ sendOfferEmailDirect }) => {
-        sendOfferEmailDirect({
-          offerId: oferta.id,
+      // Enviar PDF + link de apartado (fire-and-forget — el servicio muestra su propio toast)
+      import('@/services/offerEmailService').then(({ sendMultipleOffersEmailDirect }) => {
+        sendMultipleOffersEmailDirect({
+          offerIds: [oferta.id],
           propertyNumber: oferta.propiedad_nombre || '',
-          tipo: oferta.is_producto ? 'producto' : 'propiedad',
           recipientEmail: trimmedEmail,
+          reservationLink,
         });
       });
 
       toast({
-        title: "Apartado creado",
+        title: "Reservación creada",
         description: `Link enviado a ${trimmedEmail} — ${reservationLink}`,
         duration: 8000,
       });
       setApartadoDialogOpen(false);
     } catch {
-      toast({ title: "Error", description: "No se pudo crear el apartado. Intenta de nuevo.", duration: 4000 });
+      toast({ title: "Error", description: "No se pudo crear la reservación. Intenta de nuevo.", duration: 4000 });
     } finally {
       setSendingApartado(false);
     }
@@ -491,7 +491,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
             </button>
           </div>
           <p className="text-[10px] text-gray-400 -mt-1 leading-snug">
-            Se enviará PDF + link de apartado a este correo.
+            Se enviará PDF + link de reservación a este correo.
           </p>
           <input
             autoFocus
@@ -591,7 +591,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
             </button>
             <button
               onClick={handleOpenApartado}
-              title={hasUrl ? 'Apartar unidad — envía PDF + link de reserva' : 'Descarga la oferta primero'}
+              title={hasUrl ? 'Reservar unidad — envía PDF + link de reservación' : 'Descarga la oferta primero'}
               className={cn(
                 "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
                 hasUrl
@@ -600,7 +600,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
               )}
             >
               <Link2 className="h-3 w-3" />
-              Apartar
+              Reservar
             </button>
           </div>
           <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5 ml-auto">

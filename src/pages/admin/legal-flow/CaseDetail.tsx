@@ -5,12 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import {
-  ArrowLeft, ExternalLink, FileText, Users, Clock, AlertCircle, CheckCircle2,
+  ArrowLeft, FileText, Users, Clock, AlertCircle, CheckCircle2,
   Circle, Download, Eye, ChevronRight, Shield, Fingerprint, PenTool, Zap,
   Info, FileCheck, Send, Archive, XCircle, ClipboardCheck, Building2, User, Calendar, Hash, Landmark, Receipt,
   Plus, MessageSquare, AlertTriangle, Handshake, Bell, StickyNote, Pencil, Trash2, Filter,
   UserCheck, ChevronDown, ShieldCheck, CircleAlert, Phone, Mail, Copy, MapPin, X,
-  Search, RotateCcw, Scale, FileSearch, RefreshCw, Stamp, Upload, FileUp,
+  Search, RotateCcw, Scale, FileSearch, Stamp, Upload, FileUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +25,7 @@ import {
   TIMELINE_EVENT_CONFIG, SIGNER_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG,
 } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowAprobadoFirmaCliente } from '@/hooks/useLegalFlowAprobadoFirmaCliente';
 import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
 import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import { useLegalFlowExpedientesArchivados } from '@/hooks/useLegalFlowExpedientesArchivados';
@@ -1682,25 +1683,20 @@ function RevisionActions({
   );
 }
 
-// ── Contract preview clauses for Aprobada stage ──
-const CONTRACT_PREVIEW_CLAUSES = [
-  { num: 'I', title: 'Antecedentes', text: 'Las partes declaran que han convenido celebrar el presente contrato de promesa de compraventa respecto del inmueble descrito en la cláusula siguiente, sujeto a los términos y condiciones que se establecen a continuación.' },
-  { num: 'II', title: 'Objeto del contrato', text: 'El Promitente Vendedor se obliga a vender, y el Promitente Comprador se obliga a comprar, la unidad inmobiliaria identificada como [UNIDAD], ubicada en el desarrollo [PROYECTO], con una superficie aproximada de [METRAJE] m², por el precio total pactado en la cláusula de precio.' },
-  { num: 'III', title: 'Precio y forma de pago', text: 'El precio total de la operación será de [PRECIO] MXN (Moneda Nacional), pagadero conforme al esquema de pagos que se detalla en el Anexo A del presente contrato.' },
-  { num: 'IV', title: 'Plazo y condiciones de escrituración', text: 'Las partes acuerdan que la escritura definitiva de compraventa se otorgará dentro de un plazo máximo de [PLAZO] días naturales contados a partir de la firma del presente instrumento.' },
-  { num: 'V', title: 'Penalidades por incumplimiento', text: 'En caso de incumplimiento por parte del Promitente Comprador, el Promitente Vendedor podrá rescindir el presente contrato y retener como pena convencional el equivalente al [PENALIDAD]% del precio total pactado.' },
-  { num: 'VI', title: 'Declaraciones de las partes', text: 'Ambas partes declaran bajo protesta de decir verdad que cuentan con la capacidad legal necesaria para celebrar el presente contrato y que no existe impedimento legal alguno para ello.' },
-  { num: 'VII', title: 'Jurisdicción y legislación aplicable', text: 'Para la interpretación y cumplimiento del presente contrato, las partes se someten a la jurisdicción de los tribunales competentes de la ciudad de Guadalajara, Jalisco.' },
-];
-
 // ── AprobadaActions ──
 function AprobadaActions({
   request, onGenerate, onReturn, previewChecklist, onTogglePreviewCheck,
 }: {
-  request: { title: string; project: string; property?: string; templateName?: string; counterparty: string; counterparties?: string[] };
+  request: { title: string; project: string; property?: string; modelo?: string; templateName?: string; counterparty: string; counterparties?: string[]; titular?: string; estimatedValue?: number };
   onGenerate: () => void; onReturn: () => void;
   previewChecklist: Record<string, boolean>; onTogglePreviewCheck: (key: string) => void;
 }) {
+  const compradores = (request.counterparties && request.counterparties.length > 0)
+    ? request.counterparties
+    : [request.counterparty].filter(Boolean);
+  const valorEstimado = request.estimatedValue && request.estimatedValue > 0
+    ? `$${request.estimatedValue.toLocaleString('es-MX')} MXN`
+    : '—';
   const checklistItems = [
     { key: 'template', label: 'Plantilla correcta' },
     { key: 'parties', label: 'Datos de las partes' },
@@ -1721,8 +1717,8 @@ function AprobadaActions({
             <FileSearch className="h-4 w-4 text-muted-foreground/60" />
             <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">Vista previa del contrato</h3>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[hsl(var(--status-info)/0.1)] text-[hsl(var(--status-info))]">
-            <Circle className="h-2 w-2 fill-current" /> Borrador sincronizado
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
+            <Circle className="h-2 w-2 fill-current" /> Sin borrador generado
           </span>
         </div>
 
@@ -1732,52 +1728,36 @@ function AprobadaActions({
             <p className="text-[13px] text-muted-foreground mt-1">{request.project} {request.property && `· ${request.property}`}</p>
           </div>
 
-          <div className="rounded-xl border bg-white p-6 space-y-5 max-h-[420px] overflow-y-auto">
-            <div className="text-center border-b pb-4">
-              <p className="text-[11px] text-muted-foreground/50 uppercase tracking-wider font-semibold">Borrador de contrato</p>
-              <p className="text-[15px] font-bold mt-1">CONTRATO DE PROMESA DE COMPRAVENTA</p>
-              <p className="text-[12px] text-muted-foreground mt-1">
-                Que celebran por una parte <strong>Tallwood</strong> como Promitente Vendedor y por otra parte{' '}
-                <strong>{request.counterparties?.[0] || request.counterparty}</strong> como Promitente Comprador.
-              </p>
+          {/* Datos reales del expediente — sustituyen al borrador de relleno.
+              El contrato aún no se genera en esta etapa; se mostrará el PDF
+              real cuando exista la integración de generación. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border bg-muted/10 p-3.5">
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Comprador{compradores.length > 1 ? 'es' : ''}</p>
+              <p className="text-[13px] font-medium mt-1 leading-snug">{compradores.length > 0 ? compradores.join(', ') : '—'}</p>
             </div>
-
-            {CONTRACT_PREVIEW_CLAUSES.map((clause) => (
-              <div key={clause.num} className="group">
-                <p className="text-[13px] font-semibold text-foreground">
-                  Cláusula {clause.num}. {clause.title}
-                </p>
-                <p className="text-[12px] text-muted-foreground leading-relaxed mt-1.5">{clause.text}</p>
+            <div className="rounded-xl border bg-muted/10 p-3.5">
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Titular (vendedor)</p>
+              <p className="text-[13px] font-medium mt-1 leading-snug">{request.titular || '—'}</p>
+            </div>
+            {request.modelo && (
+              <div className="rounded-xl border bg-muted/10 p-3.5">
+                <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Modelo</p>
+                <p className="text-[13px] font-medium mt-1 leading-snug">{request.modelo}</p>
               </div>
-            ))}
-
-            <div className="border-t pt-4 mt-6">
-              <p className="text-[11px] text-muted-foreground/50 uppercase tracking-wider font-semibold mb-3">Firmas</p>
-              <div className="grid grid-cols-2 gap-8">
-                <div className="text-center">
-                  <div className="border-b border-dashed border-muted-foreground/30 pb-8 mb-2" />
-                  <p className="text-[12px] font-medium">Promitente Vendedor</p>
-                  <p className="text-[11px] text-muted-foreground">Tallwood</p>
-                </div>
-                <div className="text-center">
-                  <div className="border-b border-dashed border-muted-foreground/30 pb-8 mb-2" />
-                  <p className="text-[12px] font-medium">Promitente Comprador</p>
-                  <p className="text-[11px] text-muted-foreground">{request.counterparties?.[0] || request.counterparty}</p>
-                </div>
-              </div>
+            )}
+            <div className="rounded-xl border bg-muted/10 p-3.5">
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-semibold">Valor estimado</p>
+              <p className="text-[13px] font-medium mt-1 leading-snug tabular-nums">{valorEstimado}</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1.5 rounded-lg">
-              <ExternalLink className="h-3 w-3" /> Google Docs
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1.5 rounded-lg">
-              <RefreshCw className="h-3 w-3" /> Actualizar
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-[12px] gap-1.5 rounded-lg">
-              <Download className="h-3 w-3" /> Descargar
-            </Button>
+          <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 p-6 text-center">
+            <FileText className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-[13px] font-medium text-foreground/70">Borrador aún no generado</p>
+            <p className="text-[12px] text-muted-foreground/60 mt-1 max-w-md mx-auto leading-relaxed">
+              Confirma el control previo y genera el contrato para enviarlo a firma del cliente.
+            </p>
           </div>
         </div>
       </div>
@@ -1830,7 +1810,9 @@ function AprobadaActions({
   );
 }
 
-// ── Mock observations for Firma de cliente ──
+// ── Modelo de observaciones de contraparte (Firma de cliente) ──
+// Las observaciones reales aún no tienen tabla propia en BD; hasta que
+// exista, la sección se renderiza vacía (sin datos de relleno).
 type ObsStatus = 'pending' | 'in_analysis' | 'approved' | 'rejected' | 'clarification_sent' | 'counterproposal_sent' | 'resolved';
 type ObsType = 'redaccion' | 'economico' | 'datos' | 'clausula' | 'adicion';
 type ObsImpact = 'bajo' | 'medio' | 'alto';
@@ -1840,12 +1822,6 @@ interface CounterpartyObservation {
   clauseAffected?: string; obsType?: ObsType; impact?: ObsImpact; status: ObsStatus;
   resolution?: { by: string; date: string; reason: string; action?: string };
 }
-
-const MOCK_OBSERVATIONS: CounterpartyObservation[] = [
-  { id: 'obs-1', title: 'Ajuste en cláusula de penalización', from: 'Mariana Gómez Herrera', date: '2026-03-22T10:30:00', description: 'La contraparte solicita reducir el porcentaje de penalización por incumplimiento del 15% al 10%.', clauseAffected: 'Cláusula 12 — Penalización por incumplimiento', obsType: 'economico', impact: 'alto', status: 'pending' },
-  { id: 'obs-2', title: 'Corrección del nombre del comprador', from: 'José Luis Cárdenas Romero', date: '2026-03-22T11:15:00', description: 'El segundo nombre aparece incorrecto en el borrador.', clauseAffected: 'Declaraciones — Datos del comprador', obsType: 'datos', impact: 'bajo', status: 'approved', resolution: { by: 'Vladimir Huerta', date: '2026-03-22T14:00:00', reason: 'El ajuste es consistente con la documentación oficial.' } },
-  { id: 'obs-3', title: 'Solicitud para agregar obligado solidario', from: 'Daniel Arriaga Méndez', date: '2026-03-23T09:00:00', description: 'Solicitan incorporar a una segunda persona como obligada solidaria en el contrato.', clauseAffected: 'Cláusula 5 — Partes y representación', obsType: 'adicion', impact: 'alto', status: 'pending' },
-];
 
 const obsStatusConfig: Record<string, { label: string; style: string }> = {
   pending: { label: 'Pendiente', style: 'bg-[hsl(var(--status-warning)/0.1)] text-[hsl(var(--status-warning))]' },
@@ -2680,6 +2656,12 @@ export default function CaseDetail() {
     isLoading: loadingSolicitudes,
   } = useLegalFlowSolicitudesRecibidas();
   const {
+    data: aprobadoFirmaCliente,
+    isLoading: loadingAprobadoFirma,
+  } = useLegalFlowAprobadoFirmaCliente();
+  const aprobado = aprobadoFirmaCliente?.aprobado ?? [];
+  const firmaCliente = aprobadoFirmaCliente?.firmaCliente ?? [];
+  const {
     data: firmaTitular = [],
     isLoading: loadingFirmaTitular,
   } = useLegalFlowFirmaTitular();
@@ -2692,18 +2674,24 @@ export default function CaseDetail() {
     isLoading: loadingArchivados,
   } = useLegalFlowExpedientesArchivados();
   // Prioridad al resolver el detalle: Firmado (etapa 6) > Firma titular
-  // (etapa 5) > Solicitudes recibidas (etapa 1) > Archivados. Una vez el
-  // contrato se valida, el expediente vive en Firmado y no debe
-  // presentarse de nuevo como Solicitud recibida aunque la propiedad
+  // (etapa 5) > Firma de cliente (etapa 4) > Aprobado (etapa 3) >
+  // Solicitudes recibidas (etapa 1) > Archivados. El expediente vive
+  // siempre en la etapa más avanzada que alcanzó, aunque su propiedad
   // siga en estatus Apartado.
   const realRequest =
     firmado.find((r) => r.id === id) ??
     firmaTitular.find((r) => r.id === id) ??
+    firmaCliente.find((r) => r.id === id) ??
+    aprobado.find((r) => r.id === id) ??
     [...solicitudesRecibidas, ...archivados].find((r) => r.id === id);
   const mockRequest = mockRequests.find((r) => r.id === id);
   const request = realRequest ?? mockRequest;
   const isLoadingReal =
-    loadingSolicitudes || loadingFirmaTitular || loadingFirmado || loadingArchivados;
+    loadingSolicitudes ||
+    loadingAprobadoFirma ||
+    loadingFirmaTitular ||
+    loadingFirmado ||
+    loadingArchivados;
   const timeline = mockTimeline.filter((e) => e.caseId === id).sort((a, b) =>
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -2963,7 +2951,19 @@ export default function CaseDetail() {
           reviewChecklist={reviewChecklist}
           onToggleCheck={(key) => setReviewChecklist(prev => ({ ...prev, [key]: !prev[key] }))}
           onOpenSignerDetail={(name) => { setSelectedSignerName(name); setShowSignerReview(true); }}
-          onApprove={() => {/* advance status */}}
+          onApprove={() => {
+            // Etapa 2 → 3: aprobar la generación del contrato. Para
+            // expedientes reales se persiste el marcador en bitácora que el
+            // pipeline lee como "Aprobado".
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'validacion',
+                titulo: 'Contrato aprobado para generación',
+                mensaje: 'Revisión legal aprobada. El contrato queda listo para generación.',
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           onReturn={() => setShowReturnDialog(true)}
         />
       )}
@@ -2971,7 +2971,19 @@ export default function CaseDetail() {
       {isAprobada && (
         <AprobadaActions
           request={request}
-          onGenerate={() => {/* advance */}}
+          onGenerate={() => {
+            // Etapa 3 → 4: contrato generado y enviado a firma del cliente.
+            // Persiste el marcador en bitácora que el pipeline lee como
+            // "Firma de cliente".
+            if (realRequest && idCuentaCobranzaForBitacora) {
+              appendBitacoraCaseDetail.mutate({
+                tipo: 'sistema',
+                titulo: 'Contrato enviado a firma de cliente',
+                mensaje: 'Contrato generado y enviado al cliente para firma.',
+                referencia: { scope: 'expediente' },
+              });
+            }
+          }}
           onReturn={() => setShowReturnToRevisionDialog(true)}
           previewChecklist={previewChecklist}
           onTogglePreviewCheck={(key) => setPreviewChecklist(prev => ({ ...prev, [key]: !prev[key] }))}
@@ -2981,7 +2993,7 @@ export default function CaseDetail() {
       {isClientSignature && (
         <FirmaClienteActions
           signers={signers}
-          observations={MOCK_OBSERVATIONS}
+          observations={[]}
           onAdvance={() => {/* advance */}}
           onReturn={() => setShowReturnToRevisionDialog(true)}
         />

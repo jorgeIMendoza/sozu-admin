@@ -94,7 +94,7 @@ export interface OfferWithAgent {
 }
 
 async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | null> {
-  const numId = parseInt(ofertaId, 10);
+  const numId = parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10);
   if (isNaN(numId)) return null;
 
   // 1. Oferta base
@@ -388,14 +388,19 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           }
         : undefined,
       showroom: (showroom as any)?.descripcion_direccion
-        ? {
-            address:          (showroom as any).descripcion_direccion,
-            googleMapsUrl:    undefined,
-            googleMapsEmbedUrl: undefined,
-            schedule:         (showroom as any).horarios
-              ? [{ daysLabel: "Horarios", hours: (showroom as any).horarios }]
-              : [],
-          }
+        ? (() => {
+            const lat = (showroom as any).latitud;
+            const lon = (showroom as any).longitud;
+            const hasCoords = lat != null && lon != null;
+            return {
+              address:            (showroom as any).descripcion_direccion,
+              googleMapsUrl:      hasCoords ? `https://www.google.com/maps?q=${lat},${lon}` : undefined,
+              googleMapsEmbedUrl: hasCoords ? `https://www.google.com/maps?q=${lat},${lon}&output=embed` : undefined,
+              schedule:           (showroom as any).horarios
+                ? [{ daysLabel: "Horarios", hours: (showroom as any).horarios }]
+                : [],
+            };
+          })()
         : undefined,
     },
     // tour360: del modelo — fallback undefined muestra card "próximamente"
@@ -492,7 +497,7 @@ export function useOfferFromDB(ofertaId: string) {
   return useQuery({
     queryKey: ["oferta-db", ofertaId],
     queryFn:  () => fetchOfertaFromDB(ofertaId),
-    enabled:  !!ofertaId && !isNaN(parseInt(ofertaId, 10)),
+    enabled:  !!ofertaId && !isNaN(parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10)),
     staleTime: 5 * 60 * 1000,
   });
 }

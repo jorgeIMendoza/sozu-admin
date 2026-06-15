@@ -5,7 +5,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 
 const NAV = [
   { label: "Inicio", path: "/admin/portal-notaria/inicio", icon: Home },
@@ -21,89 +21,132 @@ export const PortalNotariaLayout = () => {
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
   const go = (p: string) => { navigate(p); setMobileOpen(false); };
-  const displayName = profile?.nombre || "Notaría";
-  const initials = (displayName).split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
-  const SidebarBody = () => (
-    <div className="flex h-full flex-col bg-card text-card-foreground">
-      <div className="px-6 py-5 border-b">
-        <div className="text-xs text-muted-foreground">Portal</div>
-        <div className="text-lg font-semibold tracking-tight">Portal Notaría</div>
+  const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
+  const userName = rawName.trim().split(/\s+/).slice(0, 2).join(" ");
+  const userRole = profile?.rol_nombre ?? "Notaría";
+  const initials = userName.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join("") || "U";
+
+  const currentSection = NAV.find((i) => isActive(i.path))?.label || "Notaría";
+
+  const sidebar = (
+    <>
+      {/* Brand */}
+      <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
+        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+          Portal Notaría
+        </p>
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {NAV.map((item) => {
-          const Icon = item.icon;
           const active = isActive(item.path);
           return (
             <button
               key={item.path}
               onClick={() => go(item.path)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "bg-primary/[0.06] text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <span className={cn(
+                "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
+                active ? "opacity-100" : "opacity-0"
+              )} />
+              <item.icon className={cn(
+                "size-4 shrink-0",
+                active ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+              )} />
               {item.label}
             </button>
           );
         })}
       </nav>
-      <div className="border-t p-4 space-y-2">
-        {isSuperAdmin && (
+
+      {/* Footer */}
+      <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
+        <div className="w-full flex items-center gap-3 px-2 py-2 rounded-md">
+          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-[13px] font-medium text-foreground truncate">{userName}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          {isSuperAdmin && (
+            <button
+              onClick={() => go("/admin")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <ArrowLeft className="size-4 shrink-0" />
+              Regresar
+            </button>
+          )}
           <button
-            onClick={() => navigate("/admin")}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => signOut()}
+            className={cn(
+              "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors",
+              isSuperAdmin ? "flex-1" : "w-full"
+            )}
           >
-            <ArrowLeft className="h-4 w-4" /> Volver al admin
+            <LogOut className="size-4 shrink-0" />
+            Cerrar sesión
           </button>
-        )}
-        <button
-          onClick={() => signOut()}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" /> Cerrar sesión
-        </button>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
       </div>
-    </div>
+    </>
   );
 
   return (
     <PortalTrackingProvider portal="notaria">
-    <div className="min-h-screen bg-background">
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 border-r">
-        <SidebarBody />
-      </aside>
+      <div className="min-h-screen flex antialiased">
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
+          {sidebar}
+        </aside>
 
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0 w-64">
-          <SidebarBody />
-        </SheetContent>
-      </Sheet>
+        {/* Mobile drawer */}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="p-0 w-64 flex flex-col bg-sidebar">
+            {sidebar}
+          </SheetContent>
+        </Sheet>
 
-      <div className="lg:ml-64 flex flex-col min-h-screen">
-        <header className="sticky top-0 z-30 h-14 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 lg:px-6">
-          <button className="lg:hidden p-2 -ml-2" onClick={() => setMobileOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </button>
-          <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-medium">{displayName}</div>
-              <div className="text-xs text-muted-foreground">{profile?.rol_nombre}</div>
+        <div className="flex-1 lg:pl-64 min-w-0">
+          {/* Mobile header */}
+          <header className="flex lg:hidden flex-col sticky top-0 z-20 bg-card border-b border-border">
+            <div className="flex items-center px-4 pt-3 pb-2 gap-3">
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="p-1.5 -ml-1 rounded-md text-foreground hover:bg-muted transition-colors"
+                aria-label="Abrir menú"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{currentSection}</p>
+              </div>
+              <div className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold shrink-0">
+                {initials}
+              </div>
             </div>
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-          </div>
-        </header>
-        <main className="flex-1 p-4 lg:p-8">
-          <Outlet />
-        </main>
+          </header>
+
+          <main className="p-4 lg:p-8 bg-background min-h-screen">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
     </PortalTrackingProvider>
   );
 };

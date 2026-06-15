@@ -216,6 +216,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [sendEmailOnGenerate, setSendEmailOnGenerate] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [pendingButton, setPendingButton] = useState<'pdf' | 'digital' | null>(null);
   const [productSchemeSelections, setProductSchemeSelections] = useState<Record<number, number | null>>({});
   const [propertySchemeSelection, setPropertySchemeSelection] = useState<number | null>(null);
   const [localSchemeId, setLocalSchemeId] = useState<number | null>(null);
@@ -609,13 +610,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       // Create, get, or update person
       if (!personId) {
         console.log("No person ID, checking for existing person...");
-        // Check if person already exists by RFC
-        const { data: existingPerson } = await supabase
-          .from("personas")
-          .select("id")
-          .eq("rfc", data.rfc)
-          .eq("activo", true)
-          .maybeSingle();
+        // Check if person already exists by RFC, then by email
+        let existingPerson: { id: number } | null = null;
+        if (data.rfc) {
+          const { data: byRfc } = await supabase
+            .from("personas")
+            .select("id")
+            .eq("rfc", data.rfc)
+            .eq("activo", true)
+            .maybeSingle();
+          existingPerson = byRfc;
+        }
+        if (!existingPerson && data.email) {
+          const { data: byEmail } = await supabase
+            .from("personas")
+            .select("id")
+            .eq("email", data.email)
+            .eq("activo", true)
+            .maybeSingle();
+          existingPerson = byEmail;
+        }
 
         if (existingPerson) {
           console.log("Found existing person:", existingPerson);
@@ -628,7 +642,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             nombre_legal: data.nombre_completo,
             email: data.email,
             clave_pais_telefono: data.clave_pais_telefono || 'MX',
-            telefono: data.telefono,
+            telefono: data.telefono || null,
             rfc: data.rfc || null,
             curp: data.curp || null,
             activo: true
@@ -664,7 +678,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             tipo_persona: data.tipo_persona,
             nombre_legal: data.nombre_completo,
             email: data.email,
-            telefono: data.telefono,
+            telefono: data.telefono || null,
             rfc: data.rfc || null,
             curp: data.curp || null
           };
@@ -1018,6 +1032,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       
       // Generate PDFs client-side and download
       let allOfferIdsForEmail: number[] = [];
+      let digitalAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
       const emailServicePromise = import('@/services/offerEmailService');
       try {
         const allOfferIds = [result.offerId];
@@ -1092,6 +1107,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             console.error('Error downloading PDF:', dlErr);
           }
         }
+        digitalAttachments = preGeneratedAttachments;
         toast({
           title: "Oferta generada",
           description: `Se descargaron ${generatedPdfFiles.length} PDF(s).`,
@@ -1111,62 +1127,61 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         return;
       }
 
-      try {
-        // Solo enviar por correo si el usuario marcó explícitamente el checkbox.
-        // Nunca enviar de forma automática.
-        if (sendEmailOnGenerate) {
-          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
-          await sendMultipleOffersEmailDirect({
-            offerIds: allOfferIdsForEmail,
-            propertyNumber,
-            recipientEmail: result.leadEmail,
-            recipientName: result.leadName,
-          });
-        }
-      } catch (emailErr) {
-        console.error('Error sending offer email after PDF generation:', emailErr);
-        toast({
-          title: "PDFs generados",
-          description: "Los PDFs se generaron correctamente, pero no se pudo completar el envío por correo.",
-          variant: "destructive",
-        });
-      }
-
       if (variables.data.digital) {
         try {
-          const { data: apartado, error: aptError } = await (supabase as any)
-            .from('apartados_provisionales')
+          const { data: reservacion, error: aptError } = await (supabase as any)
+            .from('reservaciones')
             .insert({ email: result.leadEmail, id_oferta: result.offerId })
             .select('id')
             .single();
           if (aptError) throw aptError;
-          const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
+          const ofertaLink = `${window.location.origin}/oferta/O-${String(result.offerId).padStart(6, "0")}/RES-${String(reservacion.id).padStart(6, "0")}`;
+          if (import.meta.env.DEV) {
+            console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
+          }
           const { sendMultipleOffersEmailDirect } = await emailServicePromise;
           await sendMultipleOffersEmailDirect({
             offerIds: allOfferIdsForEmail,
             propertyNumber,
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
-            reservationLink,
-          });
-          toast({
-            title: "Oferta digital enviada",
-            description: `Link de apartado enviado a ${result.leadEmail}`,
+            reservationLink: ofertaLink,
+            preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
+              ? digitalAttachments.filter(a => a.tipo === 'propiedad')
+              : digitalAttachments.length > 0 ? digitalAttachments : undefined,
           });
         } catch (digitalErr: any) {
           console.error('Error en flujo oferta digital:', digitalErr);
           toast({
             title: "Oferta generada",
             description: digitalErr?.code === '42P01'
-              ? "DDL apartados_provisionales pendiente de ejecutar en BD."
+              ? "DDL reservaciones pendiente de ejecutar en BD."
               : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
+            variant: "destructive",
+          });
+        }
+      } else if (sendEmailOnGenerate) {
+        try {
+          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
+          await sendMultipleOffersEmailDirect({
+            offerIds: allOfferIdsForEmail,
+            propertyNumber,
+            recipientEmail: result.leadEmail,
+            recipientName: result.leadName,
+          });
+        } catch (emailErr) {
+          console.error('Error sending offer email after PDF generation:', emailErr);
+          toast({
+            title: "PDFs generados",
+            description: "Los PDFs se generaron correctamente, pero no se pudo completar el envío por correo.",
             variant: "destructive",
           });
         }
       }
 
       setSendEmailOnGenerate(false);
-      
+      setPendingButton(null);
+
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       setOpen(false);
       form.reset();
@@ -1211,6 +1226,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         description: "No se pudo generar la oferta. Inténtalo de nuevo.",
         variant: "destructive",
       });
+      setPendingButton(null);
     },
   });
 
@@ -2492,19 +2508,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                onClick={() => form.setValue('digital', false)}
+                onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
                 className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
+                {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
               </button>
               {enableDigitalOffer && (
                 <button
                   type="button"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                  onClick={() => { form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
+                  onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
                   className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {createOfferMutation.isPending ? "Generando..." : "Generar Oferta Digital"}
+                  {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
                 </button>
               )}
             </div>

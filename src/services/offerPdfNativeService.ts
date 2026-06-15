@@ -290,39 +290,27 @@ export class OfertaPdfNativeService {
       };
     };
 
-    // Load icons as base64
-    await this.preloadIcons();
+    // Load icons, logo and model image in parallel
+    const modelImageUrl = data.propertyDetails.modelImages?.length
+      ? (data.propertyDetails.modelImages.find((img) => img.ver_como_ubicacion_en_oferta)?.url ||
+          data.propertyDetails.modelImages[0]?.url)
+      : null;
 
-    // Load project logo if available
-    let logoBase64: string | null = null;
-    if (data.propertyDetails.projectData?.url_logo) {
-      try {
-        logoBase64 = await this.loadImageAsBase64(
-          data.propertyDetails.projectData.url_logo
-        );
-      } catch (e) {
-        console.warn("Could not load project logo:", e);
-      }
-    }
-
-    // Load model image if available
-    let modelImageBase64: string | null = null;
-    if (
-      data.propertyDetails.modelImages &&
-      data.propertyDetails.modelImages.length > 0
-    ) {
-      const modelImageUrl =
-        data.propertyDetails.modelImages.find(
-          (img) => img.ver_como_ubicacion_en_oferta
-        )?.url || data.propertyDetails.modelImages[0]?.url;
-      if (modelImageUrl) {
-        try {
-          modelImageBase64 = await this.loadImageAsBase64(modelImageUrl);
-        } catch (e) {
-          console.warn("Could not load model image:", e);
-        }
-      }
-    }
+    const [, logoBase64, modelImageBase64] = await Promise.all([
+      this.preloadIcons(),
+      data.propertyDetails.projectData?.url_logo
+        ? this.loadImageAsBase64(data.propertyDetails.projectData.url_logo).catch((e) => {
+            console.warn("Could not load project logo:", e);
+            return null;
+          })
+        : Promise.resolve(null),
+      modelImageUrl
+        ? this.loadImageAsBase64(modelImageUrl).catch((e) => {
+            console.warn("Could not load model image:", e);
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
 
     // === HEADER ===
     const headerStartY = y;

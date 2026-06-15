@@ -35,11 +35,11 @@ function InputField({
 }
 
 type Apartado = {
-  id: string;
+  id: number;
   email: string;
   nombre: string | null;
   telefono: string | null;
-  hold_status: string;
+  estatus: string;
   activo: boolean;
   id_oferta: number | null;
 };
@@ -59,17 +59,19 @@ export default function CapturaDatosReservaPage() {
 
   useEffect(() => {
     if (!apartadoId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
+    const numericId = parseInt(apartadoId.replace(/^[A-Z]+-/, ""), 10);
+    if (!numericId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
 
     (async () => {
       const { data, error } = await (supabase as any)
-        .from("apartados_provisionales")
-        .select("id, email, nombre, telefono, hold_status, activo, id_oferta")
-        .eq("id", apartadoId)
+        .from("reservaciones")
+        .select("id, email, nombre, telefono, estatus, activo, id_oferta")
+        .eq("id", numericId)
         .maybeSingle();
 
       if (error || !data) { setLoadError("Este link no existe o ya no es válido."); setLoadingPage(false); return; }
       if (!data.activo) { setLoadError("Este link ha sido desactivado."); setLoadingPage(false); return; }
-      if (data.hold_status === "autorizado") {
+      if (data.estatus === "autorizado") {
         navigate(`/reservar/${apartadoId}/confirmacion`, { replace: true });
         return;
       }
@@ -133,17 +135,17 @@ export default function CapturaDatosReservaPage() {
       } else {
         const { data: newPersona, error: insertError } = await (supabase as any)
           .from("personas")
-          .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, es_draft: true, activo: true })
+          .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, tipo_persona: "fisica", es_draft: true, activo: true })
           .select("id")
           .single();
         if (insertError || !newPersona) throw new Error("Error guardando datos");
         personaId = newPersona.id;
       }
 
-      // UPDATE apartados_provisionales
+      // UPDATE reservaciones
       await (supabase as any)
-        .from("apartados_provisionales")
-        .update({ id_persona: personaId, nombre: nombreTrim, telefono: telefonoTrim, updated_at: new Date().toISOString() })
+        .from("reservaciones")
+        .update({ id_persona: personaId, nombre: nombreTrim, telefono: telefonoTrim, fecha_actualizacion: new Date().toISOString() })
         .eq("id", apartado.id);
 
       // UPSERT entidades_relacionadas como Prospecto (id_tipo_entidad=7) si hay proyecto
@@ -211,7 +213,17 @@ export default function CapturaDatosReservaPage() {
         <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center mb-6">
           <span className="text-primary-foreground text-[11px] font-bold">SZ</span>
         </div>
-        <h1 className="text-xl font-bold text-foreground leading-tight">Tus datos de contacto</h1>
+        {apartado.id_oferta && (
+          <div className="flex gap-3 mb-4">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted text-[11px] font-mono text-muted-foreground border border-border">
+              Oferta {`O-${String(apartado.id_oferta).padStart(6, "0")}`}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted text-[11px] font-mono text-muted-foreground border border-border">
+              {`RES-${String(apartado.id).padStart(6, "0")}`}
+            </span>
+          </div>
+        )}
+        <h1 className="text-xl font-bold text-foreground leading-tight">Confirma tus datos</h1>
         <p className="text-[13px] text-muted-foreground mt-1">
           Para reservar la unidad a tu nombre y enviarte el acceso necesitamos confirmarte.
         </p>

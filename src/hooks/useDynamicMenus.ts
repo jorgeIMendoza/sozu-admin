@@ -110,6 +110,7 @@ import {
      '/admin/notificaciones-log': ScrollText,
   '/admin/crm/workflow-ofertas': ClipboardList,
   '/admin/crm/dashboard-ejecutivo': BarChart3,
+  '/admin/legal-flow/escrituracion/expedientes': FileText,
    // Agent Portal
     '/admin/agent/inicio': LayoutDashboard,
     '/admin/agent/inventario': Building,

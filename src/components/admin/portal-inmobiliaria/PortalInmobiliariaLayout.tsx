@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, BarChart3, UserSearch,
   Calendar, DollarSign, FileText, Settings, ArrowLeft, LucideIcon, LogOut, Percent,
-  Building2, BarChart2, CalendarDays, UserCheck,
+  Building2, BarChart2, CalendarDays, UserCheck, Menu, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -11,10 +12,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
-import { APP_VERSION } from "@/lib/config";
-import sozuLogoBlack from "@/assets/sozu-logo-black.png";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 const PORTAL_INMOB_MENU_ID = 17;
 
@@ -40,21 +40,6 @@ const FALLBACK_TABS = [
   { path: "/admin/portal-inmobiliaria/configuracion", label: "Configuración", icon: Settings },
 ];
 
-const SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-inmobiliaria/dashboard": "Dashboard",
-  "/admin/portal-inmobiliaria/agentes": "Agentes",
-  "/admin/portal-inmobiliaria/pipeline": "Pipeline",
-  "/admin/portal-inmobiliaria/prospectos": "Prospectos",
-  "/admin/portal-inmobiliaria/citas": "Citas",
-  "/admin/portal-inmobiliaria/comisiones": "Comisiones",
-  "/admin/portal-inmobiliaria/reportes": "Reportes",
-  "/admin/portal-inmobiliaria/configuracion": "Configuración",
-};
-
-function getInitials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-}
-
 export const PortalInmobiliariaLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -62,8 +47,8 @@ export const PortalInmobiliariaLayout = () => {
   const isInmobiliariaRole = profile?.rol_nombre === "Inmobiliaria";
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const { personaId } = useInmobiliariaPersonaId();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Fetch agency name + comision
   const { data: agencyInfo } = useQuery({
     queryKey: ["inmob-agency-info", personaId],
     queryFn: async () => {
@@ -105,7 +90,6 @@ export const PortalInmobiliariaLayout = () => {
   const agencyName = agencyInfo?.name || "Mi Inmobiliaria";
   const comisionPct = agencyInfo?.comisionPct;
 
-  // Fetch tabs from DB
   const { data: tabs = FALLBACK_TABS } = useQuery({
     queryKey: ["portal-inmob-tabs"],
     queryFn: async () => {
@@ -128,189 +112,176 @@ export const PortalInmobiliariaLayout = () => {
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const showBackButton = !isInmobiliariaRole;
 
-  // Current section label for topbar breadcrumb
-  const currentSection = Object.entries(SECTION_LABELS).find(([path]) => isActive(path))?.[1] || "";
+  const currentSection = tabs.find(t => isActive(t.path))?.label || "";
 
-  const userInitials = profile?.email ? profile.email.substring(0, 2).toUpperCase() : "U";
+  const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
+  const userName = rawName.trim().split(/\s+/).slice(0, 2).join(" ");
+  const userRole = profile?.rol_nombre ?? "Inmobiliaria";
+  const initials = userName.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join("") || "U";
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
+
+  const sidebar = (
+    <>
+      {/* Brand */}
+      <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
+        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+          Portal Inmobiliaria
+        </p>
+      </div>
+
+      {/* Agency info */}
+      <div className="px-5 py-3 border-b border-border-soft">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60 mb-1">Inmobiliaria</p>
+        <p className="text-[13px] font-semibold text-foreground truncate">{agencyName}</p>
+        {comisionPct !== null && comisionPct !== undefined && (
+          <div className="flex items-center gap-1 mt-1.5">
+            <Percent className="h-3 w-3 text-primary" />
+            <span className="text-[12px] font-medium text-primary">Comisión: {comisionPct.toFixed(2)}%</span>
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+        {tabs.map((tab) => {
+          const active = isActive(tab.path);
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.path}
+              onClick={() => handleNavigate(tab.path)}
+              className={cn(
+                "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
+                active
+                  ? "bg-primary/[0.06] text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              <span className={cn(
+                "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
+                active ? "opacity-100" : "opacity-0"
+              )} />
+              <Icon className={cn(
+                "size-4 shrink-0",
+                active ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+              )} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
+        <button
+          onClick={() => handleNavigate("/admin/portal-inmobiliaria/configuracion")}
+          className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group/profile"
+        >
+          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-[13px] font-medium text-foreground truncate">{userName}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+          </div>
+          <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover/profile:opacity-100 transition-opacity" />
+        </button>
+
+        <div className="flex gap-2">
+          {showBackButton && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <ArrowLeft className="size-4 shrink-0" />
+              Regresar
+            </button>
+          )}
+          <button
+            onClick={signOut}
+            className={cn(
+              "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors",
+              showBackButton ? "flex-1" : "w-full"
+            )}
+          >
+            <LogOut className="size-4 shrink-0" />
+            Cerrar sesión
+          </button>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
+      </div>
+    </>
+  );
 
   return (
     <PortalTrackingProvider portal="inmobiliarias">
-    <div className="inmob-portal min-h-screen flex">
-      {/* ── Sidebar (desktop) ── */}
-      <aside
-        className="hidden lg:flex lg:flex-col border-r border-border bg-[hsl(var(--card))] fixed inset-y-0 left-0 z-30"
-        style={{ width: "var(--inmob-sidebar-width)" }}
-      >
-        {/* Logo area */}
-        <div className="px-4 pt-4 pb-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--inmob-green))] text-white text-sm font-bold shrink-0">
-              S
-            </div>
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">Panel Inmobiliaria</p>
-            </div>
-          </div>
-        </div>
+      <div className="inmob-portal min-h-screen flex antialiased">
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
+          {sidebar}
+        </aside>
 
-        {/* Agency info */}
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Inmobiliaria</p>
-          <p className="text-sm font-semibold text-foreground truncate mt-0.5">{agencyName}</p>
-          {comisionPct !== null && comisionPct !== undefined && (
-            <Badge variant="outline" className="mt-1.5 text-[10px] font-semibold border-primary/30 text-primary">
-              <Percent className="h-3 w-3 mr-0.5" />
-              Comisión: {comisionPct.toFixed(2)}%
-            </Badge>
-          )}
-        </div>
+        {/* Mobile drawer */}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="p-0 w-64 flex flex-col bg-sidebar">
+            {sidebar}
+          </SheetContent>
+        </Sheet>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {tabs.map((tab) => {
-            const active = isActive(tab.path);
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.path}
-                onClick={() => navigate(tab.path)}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-[hsl(var(--inmob-green-light))] text-[hsl(var(--inmob-green))] font-semibold"
-                    : "text-muted-foreground hover:bg-[hsl(var(--inmob-border-light))] hover:text-foreground"
-                )}
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Footer */}
-        <div className="px-3 py-3 border-t border-border space-y-2">
-          <div className="min-w-0 px-1">
-            <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
-            <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {showBackButton && (
-              <button
-                onClick={() => navigate("/admin")}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Menú principal
-              </button>
-            )}
-            <button
-              onClick={signOut}
-              className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Salir
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Mobile bottom nav ── */}
-      <nav className="lg:hidden fixed bottom-4 left-4 right-4 z-50">
-        <div className="relative max-w-lg mx-auto">
-          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 z-10 rounded-r-2xl bg-gradient-to-l from-background to-transparent" />
-          <div
-            className="flex items-center h-16 bg-[hsl(var(--card))] rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-border/50 overflow-x-auto inmob-mobile-nav"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}
-          >
-            <style>{`.inmob-mobile-nav::-webkit-scrollbar { display: none; }`}</style>
-            {tabs.map((tab) => {
-              const active = isActive(tab.path);
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => navigate(tab.path)}
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-0.5 min-w-[64px] px-2 h-full transition-colors shrink-0",
-                    active ? "text-[hsl(var(--inmob-green))]" : "text-muted-foreground"
-                  )}
-                >
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
-                  <span className={cn("text-[10px] truncate", active ? "font-semibold" : "font-medium")}>
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-            <button
-              onClick={signOut}
-              className="flex flex-col items-center justify-center gap-0.5 min-w-[64px] px-2 h-full transition-colors shrink-0 text-destructive"
-            >
-              <LogOut className="h-5 w-5" strokeWidth={2} />
-              <span className="text-[10px] font-medium">Salir</span>
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Main content ── */}
-      <div className="flex-1 lg:ml-[232px]">
-        {/* Topbar (desktop) */}
-        <header
-          className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-[hsl(var(--card))] border-b border-border px-6"
-          style={{ height: "var(--inmob-topbar-height)" }}
-        >
-          <div className="flex items-center gap-2 text-sm text-foreground">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium truncate max-w-[200px]">{agencyName}</span>
-            {currentSection && (
-              <>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-muted-foreground">{currentSection}</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
+        <div className="flex-1 lg:pl-64 min-w-0">
+          {/* Desktop header */}
+          <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
             {isSuperAdmin && <InmobiliariaImpersonationSelector />}
-            <Avatar className="h-9 w-9">
-              <AvatarFallback className="bg-[hsl(var(--inmob-green))] text-white text-[13px] font-bold">
-                {userInitials}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-        </header>
-
-        {/* Mobile header */}
-        <header className="lg:hidden sticky top-0 z-20 bg-[hsl(var(--card))] border-b border-border px-4 py-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[hsl(var(--inmob-green))] text-white text-xs font-bold">S</div>
-              <span className="text-sm font-bold text-foreground">SOZU</span>
-              <span className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</span>
-            </div>
-            {showBackButton && (
+            <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={() => navigate("/admin")}
-                className="flex items-center gap-1 text-sm text-muted-foreground"
+                onClick={() => navigate("/admin/portal-inmobiliaria/configuracion")}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                aria-label="Configuración"
               >
-                <ArrowLeft className="h-4 w-4" />
+                {initials}
               </button>
-            )}
-          </div>
-          {isSuperAdmin && (
-            <div className="pt-1">
-              <InmobiliariaImpersonationSelector />
             </div>
-          )}
-        </header>
+          </header>
 
-        <main className="p-8 lg:px-10 lg:py-8 pb-28 lg:pb-8 bg-[hsl(var(--background))] min-h-[calc(100vh-var(--inmob-topbar-height))]">
-          <Outlet />
-        </main>
+          {/* Mobile header */}
+          <header className="flex lg:hidden flex-col sticky top-0 z-20 bg-card border-b border-border">
+            <div className="flex items-center px-4 pt-3 pb-2 gap-3">
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="p-1.5 -ml-1 rounded-md text-foreground hover:bg-muted transition-colors"
+                aria-label="Abrir menú"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{currentSection}</p>
+              </div>
+              <button
+                onClick={() => navigate("/admin/portal-inmobiliaria/configuracion")}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                aria-label="Configuración"
+              >
+                {initials}
+              </button>
+            </div>
+            {isSuperAdmin && (
+              <div className="px-4 pb-3">
+                <InmobiliariaImpersonationSelector />
+              </div>
+            )}
+          </header>
+
+          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-64px)]">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
     </PortalTrackingProvider>
   );
 };
