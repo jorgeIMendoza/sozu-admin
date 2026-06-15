@@ -97,8 +97,10 @@ type ValidacionComisionInterna = {
   dias_esperando: number;
   // Decisión de Alta Dirección persistida en
   // `cuentas_cobranza.estatus_autorizacion_comision_interna` (En espera /
-  // Rechazado). El valor "Autorizado" no llega nunca aquí porque se filtra
-  // del listado al cargarlo.
+  // Autorizado / Rechazado). La fila permanece visible con su badge aún
+  // después de autorizarse — sólo desaparece cuando Administración ejecuta
+  // el pago de dispersión (`comisionistas.pagada=true`), momento en que la
+  // cuenta sale del universo `fetchComisionistasPendientes` (pagada=false).
   estatus_autorizacion_comision_interna: "En espera" | "Rechazado" | "Autorizado";
   // Útiles para drawer (primer comisionista representativo)
   comisionista_nombre: string;
@@ -952,8 +954,9 @@ const TIPO_EXTERNO_LABEL: Record<ValidacionPagoExterno["agente_tipo"], string> =
 };
 
 /** Badge del estatus de autorización de la dispersión interna.
- *  Renderizado en la tabla de Comisiones internas — "Autorizado" no aparece
- *  porque esas filas ya se filtran del listado. */
+ *  Renderizado en la tabla de Comisiones internas. "Autorizado" sí aparece:
+ *  la fila permanece tras autorizarse y sólo se elimina cuando Administración
+ *  ejecuta el pago de dispersión. */
 function EstatusAprobacionInternaBadge({
   value,
 }: {
@@ -1283,9 +1286,17 @@ export default function AltaDireccionBandejaValidacionesPage() {
     // Importante: NO se exige factura externa ni pago a externo. No todas
     // las cuentas tienen comisionistas externos — gating la interna sobre
     // ese flujo ocultaría cuentas válidas.
+    //
+    // Las cuentas ya AUTORIZADAS por Alta Dirección NO se filtran aquí: la
+    // fila permanece visible (con badge "Autorizada"), sólo cambia el
+    // estatus. La eliminación de la tabla ocurre únicamente cuando
+    // Administración ejecuta el pago de dispersión en la Bandeja de Ejecución
+    // ("Dispersiones internas pendientes"), que marca
+    // `comisionistas.pagada=true` — y `fetchComisionistasPendientes` sólo
+    // trae comisionistas con `pagada=false`, así que la cuenta sale del
+    // listado en ese momento.
     const internosRaw = (comisionistasPendientes ?? []).filter((c) => {
       if (c.es_externo) return false;
-      if (c.estatus_autorizacion_comision_interna === "Autorizado") return false;
       const propVendida =
         c.id_estatus_disponibilidad == null || c.id_estatus_disponibilidad === 5;
       const facturaTimbrada =

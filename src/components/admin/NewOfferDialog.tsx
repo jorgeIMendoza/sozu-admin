@@ -216,6 +216,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [sendEmailOnGenerate, setSendEmailOnGenerate] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [pendingButton, setPendingButton] = useState<'pdf' | 'digital' | null>(null);
   const [productSchemeSelections, setProductSchemeSelections] = useState<Record<number, number | null>>({});
   const [propertySchemeSelection, setPropertySchemeSelection] = useState<number | null>(null);
   const [localSchemeId, setLocalSchemeId] = useState<number | null>(null);
@@ -1179,7 +1180,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       }
 
       setSendEmailOnGenerate(false);
-      
+      setPendingButton(null);
+
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       setOpen(false);
       form.reset();
@@ -1224,6 +1226,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         description: "No se pudo generar la oferta. Inténtalo de nuevo.",
         variant: "destructive",
       });
+      setPendingButton(null);
     },
   });
 
@@ -2502,24 +2505,22 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               >
                 Cancelar
               </Button>
-              {!(hideManualMode && enableDigitalOffer) && (
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                onClick={() => form.setValue('digital', false)}
+                onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
                 className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
+                {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
               </button>
-              )}
               {enableDigitalOffer && (
                 <button
                   type="button"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                  onClick={() => { form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
+                  onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
                   className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {createOfferMutation.isPending ? "Generando..." : "Generar Oferta Digital"}
+                  {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
                 </button>
               )}
             </div>
