@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { NavLink } from '@/components/admin/legal-flow/NavLink';
 import { useNavigate } from 'react-router-dom';
-import sozuLogo from '@/assets/sozu-logo-black.png';
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +24,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import { APP_VERSION, SOZU_LOGO_URL } from '@/lib/config';
 
 const BASE = '/admin/legal-flow';
 
@@ -64,10 +64,11 @@ export function LegalFlowSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-5">
-        <div className="flex items-center justify-center">
-          <img src={sozuLogo} alt="SOZU" className={collapsed ? 'h-7 w-7 object-contain' : 'h-7 w-auto object-contain'} />
-        </div>
+      <SidebarHeader className="border-b border-border-soft px-5 py-4 flex flex-col gap-1">
+        <img src={SOZU_LOGO_URL} alt="SOZU" className={collapsed ? 'h-6 w-6 object-contain' : 'h-6 w-auto object-contain object-left dark:invert'} />
+        {!collapsed && (
+          <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">Legal Flow</p>
+        )}
       </SidebarHeader>
 
       <SidebarContent className="scrollbar-thin px-2 py-3">
@@ -80,8 +81,8 @@ export function LegalFlowSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => navigate('/admin')} className="rounded-lg px-2.5 py-[9px] text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground">
-                    <ArrowLeft className="mr-2.5 h-[18px] w-[18px]" strokeWidth={1.75} />
+                  <SidebarMenuButton onClick={() => navigate('/admin')} className="rounded-md pl-4 pr-3 py-2 text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground">
+                    <ArrowLeft className="mr-3 size-4 shrink-0" />
                     {!collapsed && <span>Volver al admin</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -91,33 +92,34 @@ export function LegalFlowSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
+      <SidebarFooter className="border-t border-border-soft px-3 pt-1 pb-4 space-y-1">
         {!collapsed ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+          <>
+            <div className="flex items-center gap-3 px-2 py-2">
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
                 {initials}
               </div>
-              <div className="flex flex-col">
-                <span className="text-[13px] font-medium text-foreground leading-tight">{displayName}</span>
-                <span className="text-[11px] text-muted-foreground leading-tight">{profile?.rol_nombre || 'Legal'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-foreground truncate">{displayName}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{profile?.rol_nombre || 'Legal'}</p>
               </div>
             </div>
             <SidebarMenuButton
               onClick={handleSignOut}
-              className="rounded-lg px-2.5 py-[9px] text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="w-full rounded-md px-2 py-1.5 text-[12px] text-destructive hover:bg-destructive/10 justify-center gap-1.5"
             >
-              <LogOut className="mr-2.5 h-[18px] w-[18px]" strokeWidth={1.75} />
+              <LogOut className="size-4 shrink-0" />
               <span>Cerrar sesión</span>
             </SidebarMenuButton>
-          </div>
+            <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
+          </>
         ) : (
           <SidebarMenuButton
             onClick={handleSignOut}
             tooltip="Cerrar sesión"
-            className="justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="justify-center rounded-md text-destructive hover:bg-destructive/10"
           >
-            <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            <LogOut className="size-4" />
           </SidebarMenuButton>
         )}
       </SidebarFooter>
@@ -128,9 +130,11 @@ export function LegalFlowSidebar() {
 function NavGroup({ label, items, collapsed }: { label: string; items: typeof mainNav; collapsed: boolean }) {
   return (
     <SidebarGroup className="mt-1">
-      <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/60 font-semibold mb-1 px-2">
-        {label}
-      </SidebarGroupLabel>
+      {!collapsed && (
+        <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 font-semibold mb-1 px-1">
+          {label}
+        </SidebarGroupLabel>
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
@@ -139,10 +143,10 @@ function NavGroup({ label, items, collapsed }: { label: string; items: typeof ma
                 <NavLink
                   to={item.url}
                   end={(item as any).end}
-                  className="rounded-lg px-2.5 py-[9px] text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                  className="relative rounded-md pl-4 pr-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors duration-150"
+                  activeClassName="bg-primary/[0.06] text-primary"
                 >
-                  <item.icon className="mr-2.5 h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+                  <item.icon className="mr-3 size-4 shrink-0 opacity-60" />
                   {!collapsed && <span>{item.title}</span>}
                 </NavLink>
               </SidebarMenuButton>
