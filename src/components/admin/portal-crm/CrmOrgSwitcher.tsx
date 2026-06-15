@@ -4,6 +4,7 @@ import { Building, ChevronsUpDown, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,7 @@ const LS_KEY = "sozu.crm.orgId";
 
 type Org = { id: string; name: string; slug: string };
 
-export function CrmOrgSwitcher() {
+export function CrmOrgSwitcher({ className }: { className?: string }) {
   const { user } = useAuth();
 
   const { data: orgs = [] } = useQuery<Org[]>({
@@ -55,13 +56,13 @@ export function CrmOrgSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-2 font-medium max-w-[220px]">
+        <Button variant="ghost" size="sm" className={cn("gap-2 font-medium max-w-[220px] justify-start", className)}>
           <Building className="h-4 w-4 shrink-0" />
           <span className="truncate">{currentOrg?.name ?? "Organización"}</span>
           <ChevronsUpDown className="h-3.5 w-3.5 opacity-60 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="w-56 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>Organizaciones</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {orgs.length === 0 && (

@@ -12,9 +12,10 @@ interface SidebarProps {
   displayName?: string;
   userRole?: string;
   isClient?: boolean;
+  onAfterNavigate?: () => void;
 }
 
-const Sidebar = ({
+export const SidebarContent = ({
   appVersion,
   showBackToAdmin,
   onBackToAdmin,
@@ -22,6 +23,7 @@ const Sidebar = ({
   displayName = "Usuario",
   userRole = "Cliente",
   isClient = true,
+  onAfterNavigate,
 }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,18 +38,17 @@ const Sidebar = ({
     .toUpperCase();
 
   return (
-    <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 z-30 flex-col bg-sidebar border-r border-border">
-
-      {/* ── Brand ── */}
+    <>
+      {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal del cliente
         </p>
       </div>
 
-      {/* ── Nav items ── */}
-      <nav className="flex-1 px-3 py-2 space-y-1.5">
+      {/* Nav items */}
+      <nav className="flex-1 px-3 py-2 space-y-1.5 overflow-y-auto">
         {items.map((item) => {
           const isActive = isNavItemActive(item.route, location.pathname);
           const Icon = item.icon;
@@ -55,7 +56,7 @@ const Sidebar = ({
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.route)}
+              onClick={() => { navigate(item.route); onAfterNavigate?.(); }}
               className={`group relative w-full flex items-center justify-between gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-200 ease-in-out ${
                 isActive
                   ? "bg-primary/[0.06] text-primary"
@@ -77,12 +78,10 @@ const Sidebar = ({
         })}
       </nav>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
-
-        {/* Profile row */}
         <button
-          onClick={() => navigate("/admin/portal-cliente/perfil")}
+          onClick={() => { navigate("/admin/portal-cliente/perfil"); onAfterNavigate?.(); }}
           className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group/profile"
         >
           <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
@@ -95,7 +94,6 @@ const Sidebar = ({
           <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover/profile:opacity-100 transition-opacity" />
         </button>
 
-        {/* Actions */}
         {isClient ? (
           <button
             onClick={onSignOut}
@@ -129,8 +127,14 @@ const Sidebar = ({
           <p className="text-[10px] text-muted-foreground/40 font-mono text-center">{appVersion}</p>
         )}
       </div>
-    </aside>
+    </>
   );
 };
+
+const Sidebar = (props: SidebarProps) => (
+  <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-64 z-30 flex-col bg-sidebar border-r border-border">
+    <SidebarContent {...props} />
+  </aside>
+);
 
 export default Sidebar;
