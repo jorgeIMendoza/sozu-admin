@@ -893,11 +893,9 @@ class HTMLToPDFService {
         console.log(`Filtered ${imagesData.length - validImages.length} video files from model images`);
         
         if (validImages.length > 0) {
-          // Limit to first 5 images for PDF
-          const limitedImages = validImages.slice(0, 5);
-          if (validImages.length > 5) {
-            console.log(`Limiting model images from ${validImages.length} to 5 for PDF size optimization`);
-          }
+          // Only the first image (or location image) is used by the PDF template
+          const locationImg = validImages.find(img => img.ver_como_ubicacion_en_oferta);
+          const limitedImages = locationImg ? [locationImg] : validImages.slice(0, 1);
           
           modelImages = await Promise.all(
             limitedImages.map(async (img) => {
