@@ -17,8 +17,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["-apple-system", "BlinkMacSystemFont", "SF UI Text", "Helvetica Neue", "Arial", "sans-serif"],
-        display: ["-apple-system", "BlinkMacSystemFont", "SF UI Text", "sans-serif"],
+        sans: ["system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "SF UI Text", "Helvetica Neue", "Arial", "sans-serif"],
+        display: ["system-ui", "-apple-system", "BlinkMacSystemFont", "SF UI Text", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
