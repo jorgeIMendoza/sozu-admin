@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Clock, AlertTriangle, ArrowRight, User, Building2, LayoutGrid, Maximize2 } from 'lucide-react';
-import { mockRequests, STATUS_CONFIG } from '@/data/legalFlow/mockData';
 import { useLegalFlowSolicitudesRecibidas } from '@/hooks/useLegalFlowSolicitudesRecibidas';
+import { useLegalFlowAprobadoFirmaCliente } from '@/hooks/useLegalFlowAprobadoFirmaCliente';
 import { useLegalFlowFirmaTitular } from '@/hooks/useLegalFlowFirmaTitular';
 import { useLegalFlowFirmado } from '@/hooks/useLegalFlowFirmado';
 import type { CaseStatus, LegalRequest } from '@/types/legal-flow';
@@ -39,7 +39,7 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 interface Props {
-  onColumnClick?: (status: CaseStatus) => void;
+  onColumnClick?: (status: CaseStatus, cases: LegalRequest[]) => void;
   search?: string;
 }
 
@@ -63,62 +63,58 @@ const isOverdue = (d: string) => new Date(d) < new Date();
 export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('expanded');
   const { data: solicitudesRecibidas } = useLegalFlowSolicitudesRecibidas();
+  const { data: aprobadoFirmaCliente } = useLegalFlowAprobadoFirmaCliente();
   const { data: firmaTitular } = useLegalFlowFirmaTitular();
   const { data: firmado } = useLegalFlowFirmado();
 
-  // Etapas alimentadas con datos reales:
+  // Todas las etapas se alimentan ahora con datos reales de la BD:
   //   • Solicitud recibida + En revisión legal: cuentas Apartado con/sin
   //     promoción según bitácora.
+  //   • Aprobado: cuentas con bitácora "Contrato aprobado para generación".
+  //   • Firma de cliente: cuentas con bitácora "Contrato enviado a firma de
+  //     cliente".
   //   • Firma titular: cuentas con Contrato firmado completamente (tipo 18)
   //     en estatus de verificación Pendiente.
   //   • Firmado: cuentas con el mismo documento en estatus Validado. Una
   //     vez el contrato se valida, el expediente vive aquí y no regresa
-  //     a Solicitud recibida ni a Firma titular.
-  // El resto del pipeline sigue usando mock hasta que cada etapa tenga
-  // su origen propio.
+  //     a etapas anteriores.
   const activeRequests = useMemo<LegalRequest[]>(() => {
-    const firmadoSet = new Set(
-      (firmado ?? [])
-        .map((r) => r.idCuentaCobranza)
-        .filter((v): v is number => !!v),
-    );
-    const firmaTitularSet = new Set(
-      (firmaTitular ?? [])
-        .map((r) => r.idCuentaCobranza)
-        .filter((v): v is number => !!v),
-    );
-    // Una cuenta en "Firmado" sale de Firma titular y de Solicitud
-    // recibida; una cuenta en "Firma titular" sale de Solicitud recibida.
+    const aprobado = aprobadoFirmaCliente?.aprobado ?? [];
+    const firmaCliente = aprobadoFirmaCliente?.firmaCliente ?? [];
+
+    const toIdSet = (rows: LegalRequest[]) =>
+      new Set(
+        rows.map((r) => r.idCuentaCobranza).filter((v): v is number => !!v),
+      );
+    const firmadoSet = toIdSet(firmado ?? []);
+    const firmaTitularSet = toIdSet(firmaTitular ?? []);
+    const aprobadoSet = toIdSet(aprobado);
+    const firmaClienteSet = toIdSet(firmaCliente);
+
+    // Cada expediente aparece en una sola columna: la etapa más avanzada
+    // que haya alcanzado. Depuramos hacia atrás:
+    //   - "Firma titular" excluye lo ya "Firmado".
+    //   - "Solicitud recibida"/"En revisión legal" excluye lo que ya avanzó
+    //     a Aprobado, Firma de cliente, Firma titular o Firmado.
     const firmaTitularFiltered = (firmaTitular ?? []).filter(
       (r) => !r.idCuentaCobranza || !firmadoSet.has(r.idCuentaCobranza),
     );
     const recibidasFiltered = (solicitudesRecibidas ?? []).filter(
       (r) =>
         !r.idCuentaCobranza ||
-        (!firmaTitularSet.has(r.idCuentaCobranza) && !firmadoSet.has(r.idCuentaCobranza)),
-    );
-    const downstreamMock = mockRequests.filter(
-      (r) =>
-        ![
-          'Solicitud recibida',
-          'Información faltante',
-          'En revisión legal',
-          'Firma titular',
-          'En firma',
-          'Parcialmente firmado',
-          'Firmado',
-          'Cancelado',
-          'Rechazado',
-          'Archivado',
-        ].includes(r.status),
+        (!aprobadoSet.has(r.idCuentaCobranza) &&
+          !firmaClienteSet.has(r.idCuentaCobranza) &&
+          !firmaTitularSet.has(r.idCuentaCobranza) &&
+          !firmadoSet.has(r.idCuentaCobranza)),
     );
     return [
       ...recibidasFiltered,
+      ...aprobado,
+      ...firmaCliente,
       ...firmaTitularFiltered,
       ...(firmado ?? []),
-      ...downstreamMock,
     ];
-  }, [solicitudesRecibidas, firmaTitular, firmado]);
+  }, [solicitudesRecibidas, aprobadoFirmaCliente, firmaTitular, firmado]);
 
   // Búsqueda por ID de cuenta (folio CC-XXXXXX), contraparte
   // (titular/compradores) o unidad ("Unidad 1005" o solo "1005").
@@ -176,17 +172,25 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
       </div>
 
       {/* Board */}
-      <div className="relative overflow-x-auto scrollbar-thin">
-        {/* Fade hints */}
+      <div className="relative">
+        {/* Pista de scroll: degradado fijado al borde visible derecho.
+            Va en este wrapper NO scrolleable (no dentro del overflow) para
+            que se ancle al borde y no cruce las columnas al hacer scroll. */}
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent z-10" />
-        <div
-          className="flex gap-5 p-6"
-          style={{ minWidth: viewMode === 'expanded' ? '2100px' : '1400px' }}
-        >
+        <div className="overflow-x-auto scrollbar-thin">
+          <div
+            className="flex gap-5 p-6"
+            style={{ minWidth: viewMode === 'expanded' ? '2100px' : '1400px' }}
+          >
           {PIPELINE_STAGES.map((stage) => {
             const items = grouped[stage.status] || [];
-            const overdueCount = items.filter(r => isOverdue(r.dueDate)).length;
-            const urgentCount = items.filter(r => r.priority === 'Alto').length;
+            // "Vencido" sólo aplica a etapas activas: un expediente cuyo SLA
+            // (fecha_compra + 15 días) ya pasó y aún no se completa. Las
+            // etapas terminales (Firmado) no acumulan vencidos.
+            const isStageDone = ['Firmado', 'Archivado', 'Cancelado', 'Rechazado'].includes(stage.status);
+            const overdueCount = isStageDone
+              ? 0
+              : items.filter((r) => isOverdue(r.dueDate)).length;
             const stageColor = STAGE_COLORS[stage.status] || 'hsl(var(--muted-foreground))';
 
             return (
@@ -197,7 +201,7 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
               >
                 {/* Column header */}
                 <button
-                  onClick={() => onColumnClick?.(stage.status)}
+                  onClick={() => onColumnClick?.(stage.status, items)}
                   className="flex flex-col gap-2 mb-4 text-left group cursor-pointer rounded-xl border border-border/60 bg-muted/30 px-4 py-3.5 hover:border-primary/30 hover:bg-muted/50 transition-all"
                 >
                   <div className="flex items-center justify-between w-full">
@@ -211,25 +215,14 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
                       {items.length}
                     </span>
                   </div>
-                  {/* Alerts row */}
-                  {(overdueCount > 0 || urgentCount > 0) && (
-                    <div className="flex items-center gap-3">
-                      {overdueCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3 text-destructive" />
-                          <span className="text-[11px] text-destructive font-medium">
-                            {overdueCount} vencido{overdueCount > 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      )}
-                      {urgentCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                          <span className="text-[11px] text-destructive/80 font-medium">
-                            {urgentCount} urgente{urgentCount > 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      )}
+                  {/* Resumen real de la etapa: expedientes vencidos (sólo
+                      etapas activas). */}
+                  {overdueCount > 0 && (
+                    <div className="flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3 text-destructive" />
+                      <span className="text-[11px] text-destructive font-medium">
+                        {overdueCount} vencido{overdueCount > 1 ? 's' : ''}
+                      </span>
                     </div>
                   )}
                 </button>
@@ -253,6 +246,7 @@ export default function PipelineBoard({ onColumnClick, search = '' }: Props) {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
     </motion.div>

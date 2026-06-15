@@ -711,10 +711,3 @@ export const DOCUMENT_STATUS_CONFIG: Record<string, { label: string; style: stri
   signed:    { label: 'Firmado',     style: 'status-success' },
   rejected:  { label: 'Rechazado',   style: 'status-danger' },
 };
-
-export const LAWYER_WORKLOAD = [
-  { name: 'Carlos Mendoza', active: 6, completed: 14, specialization: 'Inmobiliario — Bottura / Monócolo' },
-  { name: 'Ana Lucía Restrepo', active: 4, completed: 11, specialization: 'Comercial — Alianzas y Daiku' },
-  { name: 'Diego Vargas', active: 2, completed: 8, specialization: 'Comercial — Convenios y Renovaciones' },
-  { name: 'Sofía Ramírez', active: 2, completed: 6, specialization: 'Corporativo y Cumplimiento' },
-];

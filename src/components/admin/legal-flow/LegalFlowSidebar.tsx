@@ -56,7 +56,9 @@ export function LegalFlowSidebar() {
     await signOut();
     navigate('/');
   };
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  // "Volver al admin" sólo para Super Administrador (rol_id = 1). El rol 2
+  // (Admin Cobranza) y cualquier otro rol no deben verlo.
+  const isSuperAdmin = profile?.rol_id === 1;
   const displayName = profile?.nombre || 'Usuario Legal';
   const initials = displayName.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
 
