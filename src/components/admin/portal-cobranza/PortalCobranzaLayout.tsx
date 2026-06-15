@@ -145,7 +145,7 @@ export const PortalCobranzaLayout = () => {
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
-          Cobranza 360
+          Portal Cobranza
         </p>
       </div>
 
@@ -297,7 +297,7 @@ export const PortalCobranzaLayout = () => {
           {/* Desktop header */}
           <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border-soft px-6 h-14">
             <div className="flex items-center gap-2 text-sm text-foreground">
-              <span className="font-medium">Cobranza 360</span>
+              <span className="font-medium">Portal Cobranza</span>
               {currentSection && (
                 <>
                   <span className="text-muted-foreground">·</span>
