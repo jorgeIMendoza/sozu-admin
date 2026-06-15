@@ -2502,7 +2502,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               >
                 Cancelar
               </Button>
-              {!(hideManualMode && enableDigitalOffer) && (
               <button
                 type="submit"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
@@ -2511,7 +2510,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               >
                 {createOfferMutation.isPending ? "Generando..." : "Generar Oferta"}
               </button>
-              )}
               {enableDigitalOffer && (
                 <button
                   type="button"
