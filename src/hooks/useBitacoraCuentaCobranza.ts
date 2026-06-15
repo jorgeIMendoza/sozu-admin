@@ -204,9 +204,14 @@ export function useAppendBitacoraEntry(idCuentaCobranza: number | null | undefin
       });
       // Las entradas de bitácora pueden cambiar la etapa del expediente
       // (p.ej. asignar abogado + validación inicial completa promueven a
-      // "En revisión legal"). Invalidamos también el listado del pipeline.
+      // "En revisión legal"; aprobar generación o enviar a firma de cliente
+      // mueven a las etapas 3 y 4). Invalidamos los listados del pipeline
+      // que dependen de la bitácora.
       queryClient.invalidateQueries({
         queryKey: ["legal_flow_solicitudes_recibidas"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["legal_flow_aprobado_firma_cliente"],
       });
     },
   });
