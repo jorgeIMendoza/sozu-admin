@@ -6,10 +6,10 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { APP_VERSION } from "@/lib/config";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
+import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 
@@ -28,103 +28,148 @@ export const PortalBancosLayout = () => {
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";
-  const userName = profile?.nombre || profile?.email || "Usuario";
-  const initials = userName.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "U";
 
-  const handleNavigate = (path: string) => { navigate(path); setMobileOpen(false); };
+  const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
+  const userName = rawName.trim().split(/\s+/).slice(0, 2).join(" ");
+  const userRole = profile?.rol_nombre ?? "Bancos";
+  const initials = userName.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join("") || "U";
+
+  const go = (path: string) => { navigate(path); setMobileOpen(false); };
 
   const sidebar = (
     <>
-      <div className="px-4 pt-4 pb-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold shrink-0">S</div>
-          <div className="min-w-0">
-            <p className="text-[15px] font-bold text-foreground leading-tight">SOZU</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">Portal Bancos</p>
-          </div>
-        </div>
+      {/* Brand */}
+      <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
+        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+          Portal Bancos
+        </p>
       </div>
-      <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {NAV.map((item) => {
           const active = isActive(item.path);
           return (
             <button
               key={item.path}
-              onClick={() => handleNavigate(item.path)}
+              onClick={() => go(item.path)}
               className={cn(
-                "w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-lg text-sm font-medium transition-all duration-150 text-left",
-                active ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
+                active
+                  ? "bg-primary/[0.06] text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               )}
             >
-              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
+              <span className={cn(
+                "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
+                active ? "opacity-100" : "opacity-0"
+              )} />
+              <item.icon className={cn(
+                "size-4 shrink-0",
+                active ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+              )} />
               {item.label}
             </button>
           );
         })}
       </nav>
-      <div className="px-3 py-3 border-t border-border space-y-2">
-        <div className="min-w-0 px-1">
-          <p className="text-xs text-muted-foreground truncate">{profile?.email || "—"}</p>
-          <p className="text-[10px] text-muted-foreground/50 font-mono">{APP_VERSION}</p>
+
+      {/* Footer */}
+      <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
+        <div className="w-full flex items-center gap-3 px-2 py-2 rounded-md">
+          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-[13px] font-medium text-foreground truncate">{userName}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => handleNavigate("/admin")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" /> Menú principal
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => go("/admin")}
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <ArrowLeft className="size-4 shrink-0" />
+            Regresar
           </button>
-          <button onClick={signOut} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors">
-            <LogOut className="h-3.5 w-3.5" /> Salir
+          <button
+            onClick={() => signOut()}
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="size-4 shrink-0" />
+            Cerrar sesión
           </button>
         </div>
+
+        <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
       </div>
     </>
   );
 
   return (
     <BankImpersonationProvider>
-      <div className="min-h-screen flex">
-        <aside className="hidden lg:flex lg:flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-30" style={{ width: 244 }}>
-          {sidebar}
-        </aside>
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="p-0 w-[270px] flex flex-col bg-card">{sidebar}</SheetContent>
-        </Sheet>
-        <div className="flex-1 lg:ml-[244px]">
-          <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-6 h-14">
-            <div className="flex items-center gap-2 text-sm text-foreground">
-              <span className="font-medium">Portal Bancos</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground">{current}</span>
-            </div>
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="min-w-0 text-right">
-                <p className="text-sm font-medium text-foreground truncate">{userName}</p>
-                <p className="text-xs text-muted-foreground truncate">Banco</p>
+      <PortalTrackingProvider portal="bancos">
+        <div className="min-h-screen flex antialiased">
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
+            {sidebar}
+          </aside>
+
+          {/* Mobile drawer */}
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetContent side="left" className="p-0 w-64 flex flex-col bg-sidebar">
+              {sidebar}
+            </SheetContent>
+          </Sheet>
+
+          <div className="flex-1 lg:pl-64 min-w-0">
+            {/* Desktop header */}
+            <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border-soft px-6 h-14">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <span className="font-medium">Portal Bancos</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">{current}</span>
               </div>
-              <Avatar className="h-9 w-9 shrink-0">
-                <AvatarFallback className="bg-primary text-primary-foreground text-[13px] font-bold">{initials}</AvatarFallback>
-              </Avatar>
-            </div>
-          </header>
-          <header className="flex lg:hidden items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-3 h-14">
-            <div className="flex items-center gap-2 min-w-0">
-              <button onClick={() => setMobileOpen(true)} className="p-2 -ml-1 rounded-md text-foreground hover:bg-muted transition-colors" aria-label="Abrir menú">
-                <Menu className="h-5 w-5" />
-              </button>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-foreground leading-tight truncate">Portal Bancos</p>
-                <p className="text-[11px] text-muted-foreground leading-tight truncate">{current}</p>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="min-w-0 text-right">
+                  <p className="text-sm font-medium text-foreground truncate">{userName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{userRole}</p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-semibold shrink-0">
+                  {initials}
+                </div>
               </div>
-            </div>
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="bg-primary text-primary-foreground text-[12px] font-bold">{initials}</AvatarFallback>
-            </Avatar>
-          </header>
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
-            <BankImpersonationSelector />
-            <Outlet />
-          </main>
+            </header>
+
+            {/* Mobile header */}
+            <header className="flex lg:hidden items-center justify-between sticky top-0 z-20 bg-card border-b border-border px-3 h-14">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  onClick={() => setMobileOpen(true)}
+                  className="p-2 -ml-1 rounded-md text-foreground hover:bg-muted transition-colors"
+                  aria-label="Abrir menú"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{current}</p>
+                </div>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
+                {initials}
+              </div>
+            </header>
+
+            <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
+              <BankImpersonationSelector />
+              <Outlet />
+            </main>
+          </div>
         </div>
-      </div>
+      </PortalTrackingProvider>
     </BankImpersonationProvider>
   );
 };
