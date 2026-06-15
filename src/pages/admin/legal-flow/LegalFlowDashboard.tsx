@@ -29,6 +29,13 @@ export default function Dashboard() {
     setDrawerOpen(true);
   }, []);
 
+  // Click en una columna del Pipeline: abre el drawer con los expedientes
+  // REALES de esa etapa (los mismos que muestra la columna), no con mock.
+  const handleColumnClick = useCallback((status: CaseStatus, cases: LegalRequest[]) => {
+    openDrawer(`Estatus: ${status}`, cases);
+  }, [openDrawer]);
+
+  // Click en el donut de la Vista Ejecutiva (distribución por estatus).
   const handleStatusFilter = useCallback((status: CaseStatus) => {
     const filtered = mockRequests.filter(r => r.status === status);
     const label = filtered.length > 0 ? `Estatus: ${status}` : 'Expedientes';
@@ -42,12 +49,8 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row sm:items-end justify-between gap-3"
+        className="flex flex-col sm:flex-row sm:items-end justify-end gap-3"
       >
-        <div className="space-y-1">
-          <h1 className="text-[24px] font-bold leading-tight text-foreground">Panel de Operaciones Legales</h1>
-          <p className="text-[13px] text-muted-foreground">Centro de control de contratos y expedientes · SOZU Legal OS</p>
-        </div>
         <div className="flex items-center bg-muted rounded-lg p-0.5">
           {tabs.map((t) => (
             <button
@@ -71,7 +74,7 @@ export default function Dashboard() {
 
       {/* Views */}
       {view === 'operative' ? (
-        <OperativeView search={search} openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
+        <OperativeView search={search} onColumnClick={handleColumnClick} />
       ) : (
         <ExecutiveView openDrawer={openDrawer} onStatusFilter={handleStatusFilter} />
       )}
@@ -91,10 +94,16 @@ interface ViewProps {
   onStatusFilter: (status: CaseStatus) => void;
 }
 
-function OperativeView({ search, onStatusFilter }: ViewProps & { search: string }) {
+function OperativeView({
+  search,
+  onColumnClick,
+}: {
+  search: string;
+  onColumnClick: (status: CaseStatus, cases: LegalRequest[]) => void;
+}) {
   return (
     <div className="space-y-6">
-      <PipelineBoard search={search} onColumnClick={onStatusFilter} />
+      <PipelineBoard search={search} onColumnClick={onColumnClick} />
     </div>
   );
 }
