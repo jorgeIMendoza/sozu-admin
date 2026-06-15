@@ -163,9 +163,11 @@ export function ComisionInternaContent({
       }
 
       // 3) Persistir la decisión a nivel cuenta para que la Bandeja de
-      //    Validaciones sepa si la fila debe seguir visible:
+      //    Validaciones refleje el estatus en el badge de la fila:
       //    - "Autorizado": todos los comisionistas internos aprobados →
-      //      la fila debe DESAPARECER del listado de Alta Dirección.
+      //      la fila PERMANECE visible (sólo cambia el estatus a "Autorizada").
+      //      Se elimina del listado únicamente cuando Administración ejecuta
+      //      el pago de dispersión (comisionistas.pagada=true).
       //    - "Rechazado": al menos un comisionista rechazado (parcial o
       //      total) → la fila PERMANECE visible con el badge actualizado.
       //    El DDL puede no estar aplicado todavía (ver
