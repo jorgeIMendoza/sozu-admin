@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle } from 'lucide-react';
+import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users } from 'lucide-react';
 import { z } from 'zod';
 import { checkForUpdates, clearCacheAndReload } from '@/utils/versionUtils';
 import { APP_VERSION } from '@/lib/config';
@@ -86,12 +86,13 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
 
   const handleSelectPortal = async (portal: PortalOption) => {
     try {
-      // Update rol_id in usuarios table
-      await supabase
-        .from('usuarios')
-        .update({ rol_id: portal.rolId })
-        .ilike('email', email.trim().toLowerCase());
-
+      // No actualizar rol_id para el portal embajador — el usuario conserva su rol principal
+      if (portal.rolId !== 25) {
+        await supabase
+          .from('usuarios')
+          .update({ rol_id: portal.rolId })
+          .ilike('email', email.trim().toLowerCase());
+      }
       navigate(portal.route, { replace: true });
     } catch (err) {
       console.error('Error selecting portal:', err);
@@ -160,6 +161,26 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
 
       // Check for multiple portals via entidades_relacionadas
       if (userData?.id_persona) {
+        // Obtener el id del tipo "Embajador" dinámicamente
+        const { data: tipoEmbData } = await supabase
+          .from('tipos_entidad')
+          .select('id')
+          .eq('nombre', 'Embajador')
+          .maybeSingle();
+
+        const portalMap: Record<number, PortalOption> = {
+          ...ENTITY_TYPE_TO_PORTAL,
+          ...(tipoEmbData?.id ? {
+            [tipoEmbData.id]: {
+              label: 'Portal Embajador',
+              description: 'Gestiona tus referidos y comisiones',
+              icon: Users,
+              rolId: 25,
+              route: '/admin/portal-embajador/inicio',
+            },
+          } : {}),
+        };
+
         const { data: entidades } = await supabase
           .from('entidades_relacionadas')
           .select('id_tipo_entidad')
@@ -168,8 +189,8 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
 
         const entityTypes = [...new Set(entidades?.map(e => e.id_tipo_entidad) || [])];
         const portals = entityTypes
-          .filter(t => ENTITY_TYPE_TO_PORTAL[t])
-          .map(t => ENTITY_TYPE_TO_PORTAL[t]);
+          .filter(t => portalMap[t])
+          .map(t => portalMap[t]);
 
         if (portals.length > 1) {
           setAvailablePortals(portals);
