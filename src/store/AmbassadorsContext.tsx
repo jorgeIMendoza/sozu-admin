@@ -5,7 +5,7 @@ import {
   Advisor, AmbassadorsSettings, AssignmentStatus, CommissionStatus,
   DEFAULT_PAYMENT_DOCS, DEFAULT_SETTINGS, DocumentStatus, Referral,
   ReferralStatus, ProtectionStatus, InterestType,
-  AmbassadorType, AmbassadorStatus, CommissionTrigger, nextStepFor,
+  AmbassadorStatus, CommissionTrigger, nextStepFor,
 } from '@/types/ambassadors';
 import { toast } from 'sonner';
 
@@ -27,7 +27,7 @@ function mapAmbassador(row: any): Ambassador {
     clavePaisTelefono: row.personas?.clave_pais_telefono ?? 'MX',
     email: row.personas?.email ?? '',
     company: cfg?.empresa ?? undefined,
-    type: (cfg?.tipo ?? 'otro') as AmbassadorType,
+    type: Number(cfg?.tipo) || 0,
     status: (cfg?.estatus ?? 'pendiente') as AmbassadorStatus,
     createdAt: row.fecha_creacion ?? new Date().toISOString(),
     code: cfg?.codigo ?? `EMB-${String(row.id).padStart(4, '0')}`,
