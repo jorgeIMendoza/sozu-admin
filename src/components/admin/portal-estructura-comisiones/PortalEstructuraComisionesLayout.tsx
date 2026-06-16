@@ -14,6 +14,7 @@ import { ProjectAdminImpersonationSelector } from "./ProjectAdminImpersonationSe
 import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { InventoryProvider } from "@/lib/portal-estructura-comisiones/stores/InventoryContext";
 import { CompetitorsProvider } from "@/lib/portal-estructura-comisiones/stores/CompetitorsContext";
+import { AmbassadorsProvider as PECAmbassadorsProvider } from "@/lib/portal-estructura-comisiones/stores/AmbassadorsContext";
 import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 
 interface NavLeaf { label: string; path: string; icon: LucideIcon }
@@ -251,6 +252,7 @@ export const PortalEstructuraComisionesLayout = () => {
     <SimulatorProvider>
       <InventoryProvider>
         <CompetitorsProvider>
+          <PECAmbassadorsProvider>
           <div className="min-h-screen flex antialiased">
             <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
               {sidebarContent}
@@ -300,6 +302,7 @@ export const PortalEstructuraComisionesLayout = () => {
               </main>
             </div>
           </div>
+          </PECAmbassadorsProvider>
         </CompetitorsProvider>
       </InventoryProvider>
     </SimulatorProvider>
