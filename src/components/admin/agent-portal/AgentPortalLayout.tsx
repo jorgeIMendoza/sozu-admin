@@ -259,7 +259,7 @@ export const AgentPortalLayout = () => {
             )}
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-64px)]">
+          <main className="px-4 pb-4 lg:px-8 lg:pb-6 bg-background min-h-[calc(100vh-64px)]">
             <Outlet context={{ permissions, isAgentRole }} />
           </main>
         </div>
