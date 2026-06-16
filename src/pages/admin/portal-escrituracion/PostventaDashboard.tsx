@@ -72,17 +72,6 @@ const PRIORIDAD_META: Record<PrioridadTicket, { label: string; cls: string; colo
   BAJA:    { label: 'Baja',    cls: 'bg-slate-100 text-slate-600 border-slate-200', color: '#94A3B8' },
 };
 
-const SUBCATEGORIAS: Record<string, string[]> = {
-  'Eléctrica':           ['Contacto no funciona', 'Apagador no funciona', 'Luminaria no funciona', 'Corto eléctrico', 'Tablero eléctrico'],
-  'Sanitaria':           ['WC no descarga', 'Coladera tapada', 'Mal olor', 'Fuga sanitaria', 'Drenaje lento'],
-  'Hidráulica':          ['Fuga en lavabo', 'Fuga en tarja', 'Baja presión', 'Llave no funciona', 'Mezcladora defectuosa', 'Humedad'],
-  'HVAC':                ['No enfría', 'No enciende', 'Ruido', 'Fuga de condensado', 'Control no funciona'],
-  'Calentador/Boiler':   ['No enciende', 'No calienta', 'Fuga', 'Baja presión', 'Error eléctrico', 'Olor a gas', 'Falla intermitente'],
-  'Acabados':            ['Pintura', 'Grieta', 'Yeso', 'Plafón', 'Piso', 'Sellador'],
-  'Carpintería':         ['Puerta no cierra', 'Closet no cierra', 'Bisagra dañada', 'Cajón no corre', 'Cubierta dañada', 'Mueble desalineado'],
-  'DAIKU':               ['Instalación incompleta', 'Defecto de fábrica', 'Daño en transporte'],
-  'Electrodomésticos':   ['No enciende', 'No funciona correctamente', 'Daño visible'],
-};
 
 const DEMO_RESPONSABLES = ['Isabel Hernández', 'Miguel Torres', 'Luis García', 'Ana Pérez'];
 const DEMO_PROVEEDORES  = ['Juan López (Plomería Express)', 'Miguel Torres (HVAC Solutions)', 'Carlos Méndez (Eléctrica Pro)', 'Acabados del Valle', 'Carpintería Integral', 'Sin proveedor'];
@@ -384,6 +373,21 @@ export function PostventaDashboard() {
     enabled: pvTablesExist === true,
   });
 
+  // ── Query de subcategorías de la categoría seleccionada (para wizard) ─────
+  const { data: subcats = [], isLoading: subcatsLoading } = useQuery({
+    queryKey: ['pv-subcats', form.categoriaId],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('postventa_subcategorias')
+        .select('id, nombre')
+        .eq('id_categoria', form.categoriaId!)
+        .eq('activo', true)
+        .order('nombre');
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+    enabled: !!form.categoriaId && wizardOpen,
+  });
+
   // ── tipos_entidad (para detectar id de "Personal de mantenimiento") ─────────
   const { data: tiposEntidadWiz = [] } = useQuery<{ id: number; nombre: string }[]>({
     queryKey: ['tipos-entidad-wiz'],
@@ -561,7 +565,6 @@ export function PostventaDashboard() {
 
   // ── Wizard helpers ────────────────────────────────────────────────────────
   const selectedUnidad = unidadesEntregadas.find((u) => u.id === form.unidadId);
-  const subcats        = form.categoria ? (SUBCATEGORIAS[form.categoria] ?? []) : [];
 
   // Filtrado de unidades por búsqueda de texto
   // (La query ya está scoped al wizardProyectoId — no necesitamos re-filtrar por proyecto)
@@ -1551,8 +1554,8 @@ export function PostventaDashboard() {
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     >
                       <option value="">Seleccionar categoría…</option>
-                      {(categoriasDB.length > 0 ? categoriasDB.map(c => c.nombre) : Object.keys(SUBCATEGORIAS)).map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                      {categoriasDB.map((c) => (
+                        <option key={c.id} value={c.nombre}>{c.nombre}</option>
                       ))}
                     </select>
                   </div>
@@ -1562,14 +1565,17 @@ export function PostventaDashboard() {
                     <select
                       value={form.subcategoria}
                       onChange={(e) => setForm((f) => ({ ...f, subcategoria: e.target.value }))}
-                      disabled={!form.categoria}
+                      disabled={!form.categoria || subcatsLoading}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-slate-50 disabled:text-slate-400"
                     >
-                      <option value="">Seleccionar subcategoría…</option>
+                      <option value="">{subcatsLoading ? 'Cargando…' : 'Seleccionar subcategoría…'}</option>
                       {subcats.map((s) => (
-                        <option key={s} value={s}>{s}</option>
+                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
                       ))}
                     </select>
+                    {form.categoria && !subcatsLoading && subcats.length === 0 && (
+                      <p className="text-[11px] text-amber-600 mt-1">No hay subcategorías configuradas para esta categoría.</p>
+                    )}
                   </div>
 
                   <div>
