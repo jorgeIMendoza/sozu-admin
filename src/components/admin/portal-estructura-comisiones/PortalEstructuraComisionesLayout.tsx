@@ -9,7 +9,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useProjectAdminImpersonation } from "@/contexts/ProjectAdminImpersonationContext";
+import { useProjectAdminImpersonation, ProjectAdminImpersonationProvider } from "@/contexts/ProjectAdminImpersonationContext";
 import { ProjectAdminImpersonationSelector } from "./ProjectAdminImpersonationSelector";
 import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { InventoryProvider } from "@/lib/portal-estructura-comisiones/stores/InventoryContext";
@@ -115,7 +115,7 @@ export const PortalEstructuraComisionesLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const { impersonatedName, impersonatedEmail, isImpersonating } = useProjectAdminImpersonation();
+  const { impersonatedUser, isImpersonating } = useProjectAdminImpersonation();
   const isSuperAdmin = profile?.rol_id === 1;
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -126,7 +126,7 @@ export const PortalEstructuraComisionesLayout = () => {
   const handleNavigate = (path: string) => { navigate(path); setMobileOpen(false); };
 
   const activeUserName = isImpersonating
-    ? impersonatedName || impersonatedEmail || profile?.nombre || profile?.email || "Usuario"
+    ? impersonatedUser?.nombre || impersonatedUser?.email || profile?.nombre || profile?.email || "Usuario"
     : profile?.nombre || profile?.email || "Usuario";
 
   const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
@@ -247,6 +247,7 @@ export const PortalEstructuraComisionesLayout = () => {
   );
 
   return (
+    <ProjectAdminImpersonationProvider>
     <SimulatorProvider>
       <InventoryProvider>
         <CompetitorsProvider>
@@ -302,6 +303,7 @@ export const PortalEstructuraComisionesLayout = () => {
         </CompetitorsProvider>
       </InventoryProvider>
     </SimulatorProvider>
+    </ProjectAdminImpersonationProvider>
   );
 };
 
