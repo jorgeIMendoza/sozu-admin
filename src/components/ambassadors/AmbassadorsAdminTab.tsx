@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAmbassadors } from '@/store/AmbassadorsContext';
 import {
-  Ambassador, Advisor, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
+  Ambassador, Advisor, AmbassadorStatus,
   CommissionTrigger, CommissionStatus, COMMISSION_STATUS_LABEL,
   Referral, ReferralStatus, REFERRAL_STATUS_LABEL, InterestType,
   ProtectionStatus, PROTECTION_STATUS_LABEL, DOCUMENT_STATUS_LABEL, DocumentStatus,
   DEFAULT_PAYMENT_DOCS, AssignmentStatus, ASSIGNMENT_STATUS_LABEL,
   nextStepFor, protectionStatusFor, detectDuplicate,
 } from '@/types/ambassadors';
+import { useEmbajadorTipos, EmbajadorTipo } from '@/hooks/useEmbajadorTipos';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -75,8 +76,8 @@ const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
 // =============== Ambassador edit sheet (solo edición) ===============
 function AmbassadorEditSheet({
-  open, onOpenChange, ambassador,
-}: { open: boolean; onOpenChange: (b: boolean) => void; ambassador: Ambassador }) {
+  open, onOpenChange, ambassador, tipos,
+}: { open: boolean; onOpenChange: (b: boolean) => void; ambassador: Ambassador; tipos: EmbajadorTipo[] }) {
   const { updateAmbassador, refresh } = useAmbassadors();
   const [form, setForm] = useState<Partial<Ambassador>>(ambassador);
   const [saving, setSaving] = useState(false);
@@ -202,10 +203,10 @@ function AmbassadorEditSheet({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Tipo</Label>
-              <Select value={form.type} onValueChange={v => set('type', v)}>
+              <Select value={String(form.type ?? '')} onValueChange={v => set('type', Number(v))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(AMBASSADOR_TYPE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  {tipos.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.etiqueta}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -891,6 +892,7 @@ export default function AmbassadorsAdminTab() {
     ambassadors, referrals, advisors, advisorNotifications, settings,
     assignAdvisor, markAdvisorNotifRead, loading, refresh,
   } = useAmbassadors();
+  const tipos = useEmbajadorTipos();
 
   const [showNuevoEmb, setShowNuevoEmb] = useState(false);
   const [showEditEmb, setShowEditEmb] = useState(false);
@@ -1076,7 +1078,7 @@ export default function AmbassadorsAdminTab() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{AMBASSADOR_TYPE_LABEL[a.type]}</TableCell>
+                      <TableCell>{tipos.find(t => t.id === a.type)?.etiqueta ?? '—'}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={
                           a.status === 'activo' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' :
@@ -1354,6 +1356,7 @@ export default function AmbassadorsAdminTab() {
             open={showEditEmb}
             onOpenChange={setShowEditEmb}
             ambassador={editingAmb}
+            tipos={tipos}
           />
         )}
 

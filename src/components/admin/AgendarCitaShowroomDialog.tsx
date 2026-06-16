@@ -566,13 +566,24 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                 ) : (() => {
                   const dates = availableDatesByProject.get(selectedProyectoId) || [];
                   if (dates.length === 0) {
+                    // Distinguir "config sin horarios" del genérico: si el proyecto tiene
+                    // config(s) pero ninguna con horarios cargados, orientar al usuario.
+                    const cfgsProj = (availabilityData?.configs || []).filter((c: any) => c.proyecto_id === selectedProyectoId);
+                    const sinHorarios = cfgsProj.length > 0 &&
+                      !(availabilityData?.horarios || []).some((h: any) => cfgsProj.some((c: any) => c.id === h.id_configuracion_cita));
                     return (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
                         <p className="text-sm text-amber-800 flex items-center gap-1.5">
                           <AlertCircle className="h-4 w-4 shrink-0" />
-                          No hay fechas disponibles para este desarrollo.
+                          {sinHorarios
+                            ? "Este desarrollo aún no tiene horarios configurados."
+                            : "No hay fechas disponibles para este desarrollo."}
                         </p>
-                        <p className="text-xs text-amber-700 mt-1">Contacta a tu Asesor Sozu para más información.</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          {sinHorarios
+                            ? "Configura los horarios en Configuración de Citas."
+                            : "Contacta a tu Asesor Sozu para más información."}
+                        </p>
                       </div>
                     );
                   }

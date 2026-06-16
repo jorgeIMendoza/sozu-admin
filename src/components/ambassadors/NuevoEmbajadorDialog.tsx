@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { AMBASSADOR_TYPE_LABEL, DEFAULT_PAYMENT_DOCS } from '@/types/ambassadors';
+import { DEFAULT_PAYMENT_DOCS } from '@/types/ambassadors';
+import { useEmbajadorTipos } from '@/hooks/useEmbajadorTipos';
 
 interface Props {
   open: boolean;
@@ -32,7 +33,7 @@ interface FormState {
 
 const DEFAULT_FORM: FormState = {
   fullName: '', phone: '', clavePaisTelefono: 'MX', email: '', company: '',
-  type: 'otro', status: 'pendiente',
+  type: '', status: 'pendiente',
   commissionPct: '0.5', fixedAmount: '',
   commissionTrigger: 'enganche', protectionDays: '90', notes: '',
 };
@@ -43,6 +44,7 @@ const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: Props) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
+  const tipos = useEmbajadorTipos();
 
   const set = (k: keyof FormState, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -52,6 +54,10 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
   const handleSubmit = async () => {
     if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error('Nombre, teléfono y email son obligatorios');
+      return;
+    }
+    if (!form.type) {
+      toast.error('Selecciona el tipo de embajador');
       return;
     }
     if (!EMAIL_REGEX.test(form.email.trim())) {
@@ -106,7 +112,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .insert({
           id_entidad_relacionada: erData.id,
           empresa: form.company.trim() || null,
-          tipo: form.type,
+          tipo: Number(form.type),
           pct_comision: Number(form.commissionPct) || 0,
           monto_fijo: form.fixedAmount ? Number(form.fixedAmount) : null,
           trigger_comision: form.commissionTrigger,
@@ -203,10 +209,10 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
             <div>
               <Label>Tipo de embajador</Label>
               <Select value={form.type} onValueChange={v => set('type', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona tipo" /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(AMBASSADOR_TYPE_LABEL).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  {tipos.map(t => (
+                    <SelectItem key={t.id} value={String(t.id)}>{t.etiqueta}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
