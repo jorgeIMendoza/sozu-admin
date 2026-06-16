@@ -817,32 +817,32 @@ const App = () => (
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
                   {/* Portal Estructura de Comisiones */}
                   <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/dashboard" replace />} />
-                  <Route path="portal-estructura-comisiones/dashboard" element={<PECComingSoon title="Resumen Ejecutivo" />} />
-                  <Route path="portal-estructura-comisiones/executive" element={<PECComingSoon title="Dashboard Ejecutivo" />} />
-                  <Route path="portal-estructura-comisiones/projects" element={<PECComingSoon title="Proyectos" />} />
-                  <Route path="portal-estructura-comisiones/channels" element={<PECComingSoon title="Canales de Venta" />} />
-                  <Route path="portal-estructura-comisiones/org-chart" element={<PECComingSoon title="Organigrama" />} />
-                  <Route path="portal-estructura-comisiones/structure" element={<PECComingSoon title="Roles y Sueldos" />} />
-                  <Route path="portal-estructura-comisiones/commissions" element={<PECComingSoon title="Distribución de Comisiones" />} />
-                  <Route path="portal-estructura-comisiones/payment-policies" element={<PECComingSoon title="Políticas de Pago" />} />
-                  <Route path="portal-estructura-comisiones/unit-commission" element={<PECComingSoon title="Comisión por Unidad" />} />
-                  <Route path="portal-estructura-comisiones/broker-incentives" element={<PECComingSoon title="Incentivos Dinámicos" />} />
-                  <Route path="portal-estructura-comisiones/scenarios" element={<PECComingSoon title="Escenarios" />} />
-                  <Route path="portal-estructura-comisiones/comm-simulator" element={<PECComingSoon title="Comparador de Escenarios" />} />
-                  <Route path="portal-estructura-comisiones/dist-simulator" element={<PECComingSoon title="Simulador de Distribución" />} />
-                  <Route path="portal-estructura-comisiones/broker-calc" element={<PECComingSoon title="Simulador de Ingresos Mensuales" />} />
-                  <Route path="portal-estructura-comisiones/broker-calculator" element={<PECComingSoon title="Calculadora Broker" />} />
-                  <Route path="portal-estructura-comisiones/financial-simulator" element={<PECComingSoon title="Simulador Financiero" />} />
-                  <Route path="portal-estructura-comisiones/monthly-flow" element={<PECComingSoon title="Flujo Comercial" />} />
-                  <Route path="portal-estructura-comisiones/results" element={<PECComingSoon title="Resultados Financieros" />} />
-                  <Route path="portal-estructura-comisiones/compensation" element={<PECComingSoon title="Costo Comercial" />} />
-                  <Route path="portal-estructura-comisiones/competitividad" element={<PECComingSoon title="Competitividad Comercial" />} />
-                  <Route path="portal-estructura-comisiones/benchmark" element={<PECComingSoon title="Benchmark de Mercado" />} />
-                  <Route path="portal-estructura-comisiones/competitors-benchmark" element={<PECComingSoon title="Benchmark de Competidores" />} />
-                  <Route path="portal-estructura-comisiones/inventory-advanced" element={<PECComingSoon title="Inventario Avanzado" />} />
-                  <Route path="portal-estructura-comisiones/agent-portal" element={<PECComingSoon title="Portal de Agentes" />} />
-                  <Route path="portal-estructura-comisiones/ambassadors-admin" element={<PECComingSoon title="Gestión de Embajadores" />} />
-                  <Route path="portal-estructura-comisiones/ambassadors-portal" element={<PECComingSoon title="Portal del Embajador" />} />
+                  <Route path="portal-estructura-comisiones/dashboard" element={<PECDashboard />} />
+                  <Route path="portal-estructura-comisiones/executive" element={<PECExecutiveDashboard />} />
+                  <Route path="portal-estructura-comisiones/projects" element={<PECProjects />} />
+                  <Route path="portal-estructura-comisiones/channels" element={<PECChannels />} />
+                  <Route path="portal-estructura-comisiones/org-chart" element={<PECOrgChart />} />
+                  <Route path="portal-estructura-comisiones/structure" element={<PECStructure />} />
+                  <Route path="portal-estructura-comisiones/commissions" element={<PECCommissions />} />
+                  <Route path="portal-estructura-comisiones/payment-policies" element={<PECPaymentPolicies />} />
+                  <Route path="portal-estructura-comisiones/unit-commission" element={<PECUnitCommission />} />
+                  <Route path="portal-estructura-comisiones/broker-incentives" element={<PECBrokerIncentives />} />
+                  <Route path="portal-estructura-comisiones/scenarios" element={<PECScenarios />} />
+                  <Route path="portal-estructura-comisiones/comm-simulator" element={<PECCommSimulator />} />
+                  <Route path="portal-estructura-comisiones/dist-simulator" element={<PECDistSimulator />} />
+                  <Route path="portal-estructura-comisiones/broker-calc" element={<PECBrokerCalc />} />
+                  <Route path="portal-estructura-comisiones/broker-calculator" element={<PECBrokerCalculator />} />
+                  <Route path="portal-estructura-comisiones/financial-simulator" element={<PECFinancialSimulator />} />
+                  <Route path="portal-estructura-comisiones/monthly-flow" element={<PECMonthlyFlow />} />
+                  <Route path="portal-estructura-comisiones/results" element={<PECResults />} />
+                  <Route path="portal-estructura-comisiones/compensation" element={<PECCompensation />} />
+                  <Route path="portal-estructura-comisiones/competitividad" element={<PECCompetitividad />} />
+                  <Route path="portal-estructura-comisiones/benchmark" element={<PECBenchmark />} />
+                  <Route path="portal-estructura-comisiones/competitors-benchmark" element={<PECCompetitorsBenchmark />} />
+                  <Route path="portal-estructura-comisiones/inventory-advanced" element={<PECInventoryAdvanced />} />
+                  <Route path="portal-estructura-comisiones/agent-portal" element={<PECAgentPortal />} />
+                  <Route path="portal-estructura-comisiones/ambassadors-admin" element={<PECAmbassadorsAdmin />} />
+                  <Route path="portal-estructura-comisiones/ambassadors-portal" element={<PECAmbassadorsPortal />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
