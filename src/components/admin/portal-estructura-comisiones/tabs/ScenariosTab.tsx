@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
-import ScenarioChartsSection from '@/components/tabs/ScenarioChartsSection';
+import ScenarioChartsSection from './ScenarioChartsSection';
 import { Plus, Copy, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

@@ -16,7 +16,7 @@ import {
   ProtectionStatus,
   detectDuplicate,
   nextStepFor,
-} from '@/types/ambassadors';
+} from '@/lib/portal-estructura-comisiones/types/ambassadors';
 
 const LS_KEY = 'sozu.ambassadors.v3';
 
