@@ -1,395 +1,362 @@
-import { useMemo, useState } from "react";
-import { X, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
-import {
-  SaludFinancieraWidgets,
-  type SaludFinancieraData,
-} from "@/components/admin/portal-alta-direccion/SaludFinancieraWidgets";
-import {
-  useFacturasPorCobrar,
-  type FacturaPorCobrar,
-} from "@/hooks/useFacturasPorCobrar";
-import {
-  useFacturasPorPagar,
-  type FacturaPorPagar,
-  type TipoBeneficiario,
-} from "@/hooks/useFacturasPorPagar";
-import {
-  useComisionesInternas,
-  type ComisionInterna,
-} from "@/hooks/useComisionesInternas";
+  CalendarCheck,
+  UserSearch,
+  FileText,
+  KeyRound,
+  ShoppingCart,
+  Wallet,
+  ArrowUpFromLine,
+  Building2,
+  Users,
+  Timer,
+  type LucideIcon,
+} from "lucide-react";
+import { PageHeader, Panel, Kpi } from "@/components/admin/portal-alta-direccion/ui";
+import { fmtMxn } from "@/data/altaDireccion/mockData";
+import { useResumenComercial } from "@/hooks/usePortalAltaDireccion/useResumenComercial";
+import { useResumenOfertasAprobadas } from "@/hooks/usePortalAltaDireccion/useOfertasPipeline";
+import { useResumenFinanzas } from "@/hooks/usePortalAltaDireccion/useResumenFinanzas";
+import { useResumenMediciones } from "@/hooks/usePortalAltaDireccion/useResumenMediciones";
 
-/* ══════════════════════════════════════════════════════════
-   Tipos de filtro
-   ══════════════════════════════════════════════════════════ */
+/* ──────────────────────────────────────────────────────────
+   Helpers de presentación
+   ────────────────────────────────────────────────────────── */
 
-type DesarrolloFilter = string; // "all" | nombre real del proyecto
-type Canal = TipoBeneficiario | "interno";
-type CanalFilter = "all" | Canal;
-type PeriodoFilter = "all" | "7" | "30" | "90";
-
-const CANAL_LABEL: Record<CanalFilter, string> = {
-  all: "Todos los canales",
-  inmobiliaria: "Inmobiliaria",
-  broker: "Broker",
-  aliado_comercial: "Aliado comercial",
-  agente_externo: "Agente externo",
-  interno: "Interno (equipo SOZU)",
-};
-
-const PERIODO_LABEL: Record<PeriodoFilter, string> = {
-  all: "Todo el período",
-  "7": "Últimos 7 días",
-  "30": "Últimos 30 días",
-  "90": "Últimos 90 días",
-};
-
-/* ══════════════════════════════════════════════════════════
-   Cómputo de SaludFinancieraData a partir de los hooks reales
-   ══════════════════════════════════════════════════════════ */
-
-function inPeriod(fechaStr: string | null | undefined, periodo: PeriodoFilter): boolean {
-  if (periodo === "all") return true;
-  if (!fechaStr) return false;
-  const fecha = new Date(fechaStr);
-  if (isNaN(fecha.getTime())) return false;
-  const days = periodo === "7" ? 7 : periodo === "30" ? 30 : 90;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  return fecha >= cutoff;
+function SeccionLoader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> {label}
+    </div>
+  );
 }
 
-function computeSaludData({
-  facturasCobrar,
-  facturasPagar,
-  comisionesInternas,
-  desarrollo,
-  canal,
-  periodo,
+/** Lista "por proyecto": nombre a la izquierda, valor a la derecha. */
+function PorProyecto({
+  rows,
+  formato = "numero",
 }: {
-  facturasCobrar: FacturaPorCobrar[];
-  facturasPagar: FacturaPorPagar[];
-  comisionesInternas: ComisionInterna[];
-  desarrollo: DesarrolloFilter;
-  canal: CanalFilter;
-  periodo: PeriodoFilter;
-}): SaludFinancieraData {
-  /* ── Widget A: Facturas Por Cobrar — canal NO aplica ── */
-  const cobrarFiltradas = facturasCobrar.filter(
-    (f) =>
-      (desarrollo === "all" || f.proyecto_nombre === desarrollo) &&
-      inPeriod(f.fecha_emision, periodo),
+  rows: Array<{ proyecto: string; valor: number; monto?: number }>;
+  formato?: "numero" | "moneda";
+}) {
+  if (rows.length === 0) {
+    return <p className="text-[13px] text-muted-foreground py-2">Sin datos este mes.</p>;
+  }
+  return (
+    <ul className="divide-y divide-border/50">
+      {rows.map((r) => (
+        <li key={r.proyecto} className="flex items-center justify-between py-2 text-[13px]">
+          <span className="flex items-center gap-2 text-foreground/80 min-w-0">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+            <span className="truncate">{r.proyecto}</span>
+          </span>
+          <span className="tabular-nums font-medium text-foreground whitespace-nowrap">
+            {formato === "moneda" ? fmtMxn(r.valor) : r.valor}
+            {r.monto != null && (
+              <span className="text-muted-foreground font-normal"> · {fmtMxn(r.monto)}</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
-  const cobrarPending = cobrarFiltradas.filter(
-    (f) => f.estado !== "cobrada" && f.estado !== "cancelada",
-  );
-  const cobrarMonto = cobrarPending.reduce(
-    (s, f) => s + (f.monto_total - f.monto_cobrado),
-    0,
-  );
-  const cobrarVencidas = cobrarPending.filter((f) => f.estado === "vencida");
-  const cobrarVencidasMonto = cobrarVencidas.reduce(
-    (s, f) => s + (f.monto_total - f.monto_cobrado),
-    0,
-  );
-  const cobrarAvgAge =
-    cobrarPending.length > 0
-      ? Math.round(
-          cobrarPending.reduce((s, f) => s + f.dias_desde_emision, 0) /
-            cobrarPending.length,
-        )
-      : 0;
-
-  /* ── Widget B: Facturas Por Pagar — desarrollo + canal + período ── */
-  const canalAplicaExternos =
-    canal === "all" ||
-    canal === "inmobiliaria" ||
-    canal === "broker" ||
-    canal === "aliado_comercial" ||
-    canal === "agente_externo";
-
-  const pagarFiltradas = canalAplicaExternos
-    ? facturasPagar.filter(
-        (f) =>
-          (desarrollo === "all" || f.proyecto_nombre === desarrollo) &&
-          (canal === "all" || canal === f.beneficiario_tipo) &&
-          inPeriod(f.fecha_emision, periodo),
-      )
-    : [];
-  const pendienteEstados = ["en_revision", "aprobada_para_pago", "bloqueada"] as const;
-  const pagarPendientes = pagarFiltradas.filter((f) =>
-    pendienteEstados.includes(f.estado as (typeof pendienteEstados)[number]),
-  );
-  const listasParaPagar = pagarPendientes.filter(
-    (f) => f.ya_se_cobro_al_desarrollador,
-  );
-  const bloqueadas = pagarPendientes.filter(
-    (f) => !f.ya_se_cobro_al_desarrollador,
-  );
-  const pagarTotal = pagarPendientes.reduce((s, f) => s + f.monto_total, 0);
-  const listasMonto = listasParaPagar.reduce((s, f) => s + f.monto_total, 0);
-  const bloqueadasMonto = bloqueadas.reduce((s, f) => s + f.monto_total, 0);
-
-  /* ── Widget C: Comisiones Internas — desarrollo + período ── */
-  const canalAplicaInternas = canal === "all" || canal === "interno";
-  const internasFiltradas = canalAplicaInternas
-    ? comisionesInternas.filter(
-        (c) =>
-          (desarrollo === "all" || c.proyecto_nombre === desarrollo) &&
-          inPeriod(c.fecha_devengo, periodo) &&
-          c.estado === "aprobada",
-      )
-    : [];
-
-  const internasMonto = internasFiltradas.reduce((s, c) => s + c.monto_comision, 0);
-  const internasAvgAge =
-    internasFiltradas.length > 0
-      ? Math.round(
-          internasFiltradas.reduce(
-            (s, c) => s + (c.dias_esperando_director ?? 0),
-            0,
-          ) / internasFiltradas.length,
-        )
-      : 0;
-  const internasMax =
-    internasFiltradas.length > 0
-      ? internasFiltradas.reduce((max, c) =>
-          (c.dias_esperando_director ?? 0) > (max.dias_esperando_director ?? 0)
-            ? c
-            : max,
-        )
-      : null;
-
-  /* ── Widget D: Financiamiento involuntario ── */
-  const finCasos = pagarFiltradas.filter(
-    (f) => f.estado === "pagada" && !f.ya_se_cobro_al_desarrollador,
-  );
-  const finMonto = finCasos.reduce((s, f) => s + f.monto_total, 0);
-
-  return {
-    dinero_por_cobrar: {
-      empty: cobrarPending.length === 0,
-      monto: cobrarMonto,
-      facturas_count: cobrarPending.length,
-      antiguedad_promedio_dias: cobrarAvgAge,
-      facturas_vencidas: { count: cobrarVencidas.length, monto: cobrarVencidasMonto },
-    },
-    deuda_colaboradores: ({
-      empty: pagarPendientes.length === 0,
-      empty_reason: !canalAplicaExternos
-        ? "El canal seleccionado no aplica a deuda con colaboradores externos"
-        : undefined,
-      monto_total: pagarTotal,
-      listas_para_pagar: { count: listasParaPagar.length, monto: listasMonto },
-      bloqueadas: { count: bloqueadas.length, monto: bloqueadasMonto },
-    } as any),
-    comisiones_internas_pendientes: {
-      empty: internasFiltradas.length === 0,
-      empty_reason: !canalAplicaInternas
-        ? "Sin comisiones internas para este canal"
-        : undefined,
-      monto: internasMonto,
-      comisionistas_count: internasFiltradas.length,
-      antiguedad_promedio_dias: internasAvgAge,
-      mas_antigua_dias: internasMax?.dias_esperando_director ?? 0,
-      mas_antigua_persona: internasMax
-        ? internasMax.comisionista_nombre.split(" ").slice(0, 2).join(" ")
-        : "",
-      mas_antigua_venta: internasMax ? internasMax.folio_comision : "",
-    },
-    financiamiento_involuntario: {
-      empty: pagarFiltradas.length === 0,
-      casos: finCasos.length,
-      monto: finMonto,
-    },
-  };
 }
 
-/* ══════════════════════════════════════════════════════════
-   Página Dashboard
-   ══════════════════════════════════════════════════════════ */
+const minutosLabel = (min: number) => {
+  if (min <= 0) return "—";
+  if (min < 60) return `${min.toFixed(min < 10 ? 1 : 0)} min`;
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return m > 0 ? `${h} h ${m} min` : `${h} h`;
+};
+
+/* ──────────────────────────────────────────────────────────
+   Página — Dashboard General
+   ────────────────────────────────────────────────────────── */
 
 export default function AltaDireccionDashboardPage() {
-  const [desarrollo, setDesarrollo] = useState<DesarrolloFilter>("all");
-  const [canal, setCanal] = useState<CanalFilter>("all");
-  const [periodo, setPeriodo] = useState<PeriodoFilter>("all");
+  const navigate = useNavigate();
+  const comercialQ = useResumenComercial();
+  const ofertasQ = useResumenOfertasAprobadas();
+  const finanzasQ = useResumenFinanzas();
+  const medicionesQ = useResumenMediciones();
 
-  const {
-    data: facturasCobrar = [],
-    isLoading: loadingCobrar,
-    error: errorCobrar,
-  } = useFacturasPorCobrar();
-  const {
-    data: facturasPagar = [],
-    isLoading: loadingPagar,
-    error: errorPagar,
-  } = useFacturasPorPagar();
-  const {
-    data: comisionesInternas = [],
-    isLoading: loadingInternas,
-    error: errorInternas,
-  } = useComisionesInternas();
+  const c = comercialQ.data;
+  const ofertas = ofertasQ.data;
+  const f = finanzasQ.data;
+  const m = medicionesQ.data;
 
-  const isLoading = loadingCobrar || loadingPagar || loadingInternas;
-  const error = errorCobrar || errorPagar || errorInternas;
+  const mesLabel = c?.mesLabel ?? new Date().toLocaleDateString("es-MX", { month: "long", year: "numeric" });
 
-  /* ─── Lista dinámica de desarrollos a partir de los datos reales ─── */
-  const desarrolloOptions = useMemo(() => {
-    const set = new Set<string>();
-    facturasCobrar.forEach((f) => f.proyecto_nombre && set.add(f.proyecto_nombre));
-    facturasPagar.forEach((f) => f.proyecto_nombre && set.add(f.proyecto_nombre));
-    comisionesInternas.forEach((c) => c.proyecto_nombre && set.add(c.proyecto_nombre));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [facturasCobrar, facturasPagar, comisionesInternas]);
+  // Rango del mes en curso (YYYY-MM-DD) para los CTA que llevan a las
+  // pantallas de detalle con el filtro de fechas preaplicado.
+  const { desdeMes, hastaMes } = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const mo = d.getMonth();
+    const fmt = (dt: Date) => {
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      return `${dt.getFullYear()}-${mm}-${dd}`;
+    };
+    return {
+      desdeMes: fmt(new Date(y, mo, 1)),
+      hastaMes: fmt(new Date(y, mo + 1, 0)),
+    };
+  }, []);
 
-  const saludData = useMemo(
-    () =>
-      computeSaludData({
-        facturasCobrar,
-        facturasPagar,
-        comisionesInternas,
-        desarrollo,
-        canal,
-        periodo,
-      }),
-    [facturasCobrar, facturasPagar, comisionesInternas, desarrollo, canal, periodo],
-  );
+  const irAProspectos = () =>
+    navigate(`/admin/portal-alta-direccion/prospectos?desde=${desdeMes}&hasta=${hastaMes}`);
 
-  const hayFiltros = desarrollo !== "all" || canal !== "all" || periodo !== "all";
-  const limpiar = () => {
-    setDesarrollo("all");
-    setCanal("all");
-    setPeriodo("all");
-  };
+  // CTA "Citas comerciales" → menú Citas Comerciales con las citas generadas
+  // (fecha de creación) en el mes en curso.
+  const irACitas = () =>
+    navigate(`/admin/portal-alta-direccion/citas?desde=${desdeMes}&hasta=${hastaMes}`);
+
+  // CTA "Nuevas ofertas" → Pipeline con tipo Propiedad + mes en curso
+  // (todos los agentes / todos los proyectos por defecto).
+  const irAPipeline = () =>
+    navigate(`/admin/portal-alta-direccion/pipeline?tipo=propiedad&mes=${ofertas.mesKey}`);
+
+  // CTA "Apartados (al momento)" → Histórico Comercial, que ya muestra el
+  // KPI "Apartados al momento" (propiedades en estatus Apartado).
+  const irAHistorico = () =>
+    navigate(`/admin/portal-alta-direccion/historico-comercial`);
+
+  // CTA "Ventas" → Histórico Comercial abriendo el detalle (drill-down) de
+  // las ventas del mes en curso, con el caso de cada cuenta.
+  const irAVentas = () =>
+    navigate(`/admin/portal-alta-direccion/historico-comercial?drill=ventas&mes=${desdeMes}`);
+
+  // CTA "Ingresos del mes" → Ingresos y Egresos en base CAJA (flujo de caja
+  // real), mes en curso, todos los proyectos/tipos, vista de ingresos.
+  const irAIngresos = () =>
+    navigate(
+      `/admin/portal-alta-direccion/ingresos-egresos?base=caja&periodo=este_mes&proyecto=todos&tipo=todos&mov=ingresos`,
+    );
+
+  // CTA "Egresos externos / internos" → Ingresos y Egresos en base CAJA, mes
+  // en curso, vista de egresos, enfocando la Composición de egresos.
+  const irAEgresos = () =>
+    navigate(
+      `/admin/portal-alta-direccion/ingresos-egresos?base=caja&periodo=este_mes&proyecto=todos&tipo=todos&mov=egresos&focus=egresos`,
+    );
 
   return (
-    <>
+    <div>
       <PageHeader
-        title="Dashboard Ejecutivo"
-        description="Resumen financiero y comercial de SOZU"
+        title="Dashboard General"
+        description={`Resumen ejecutivo del portal · ${mesLabel}`}
       />
 
-      {/* ─── Filtros ─── */}
-      <Card className="mb-4 bg-card">
-        <CardContent className="p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={desarrollo}
-              onValueChange={(v) => setDesarrollo(v as DesarrolloFilter)}
-            >
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los desarrollos</SelectItem>
-                {desarrolloOptions.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={canal} onValueChange={(v) => setCanal(v as CanalFilter)}>
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(CANAL_LABEL) as CanalFilter[]).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {CANAL_LABEL[k]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={periodo}
-              onValueChange={(v) => setPeriodo(v as PeriodoFilter)}
-            >
-              <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(PERIODO_LABEL) as PeriodoFilter[]).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {PERIODO_LABEL[k]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {hayFiltros && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs ml-auto"
-                onClick={limpiar}
-              >
-                <X className="h-3 w-3 mr-1" /> Limpiar filtros
-              </Button>
-            )}
-          </div>
-
-          {hayFiltros && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {desarrollo !== "all" && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted"
-                  onClick={() => setDesarrollo("all")}
-                >
-                  Desarrollo: {desarrollo}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {canal !== "all" && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted"
-                  onClick={() => setCanal("all")}
-                >
-                  Canal: {CANAL_LABEL[canal]}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {periodo !== "all" && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted"
-                  onClick={() => setPeriodo("all")}
-                >
-                  Período: {PERIODO_LABEL[periodo]}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
+      {/* ─── Resumen Comercial ─── */}
+      <Panel
+        title="Resumen Comercial"
+        description="Actividad comercial del mes en curso (Apartados al momento)"
+        className="mb-6"
+      >
+        {comercialQ.isLoading ? (
+          <SeccionLoader label="Cargando resumen comercial…" />
+        ) : comercialQ.error || !c ? (
+          <p className="text-sm text-red-600 py-4">No se pudo cargar el resumen comercial.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
+              <Kpi
+                label="Citas comerciales"
+                value={c.citas.total}
+                hint="Ver listado del mes →"
+                icon={CalendarCheck}
+                tone="info"
+                onClick={irACitas}
+              />
+              <Kpi
+                label="Prospectos"
+                value={c.prospectos.total}
+                hint="Ver listado del mes →"
+                icon={UserSearch}
+                tone="primary"
+                onClick={irAProspectos}
+              />
+              <Kpi
+                label="Nuevas ofertas"
+                value={ofertasQ.isLoading ? "…" : ofertas.total}
+                hint="Aprobadas · ver Pipeline →"
+                icon={FileText}
+                tone="default"
+                onClick={irAPipeline}
+              />
+              <Kpi
+                label="Apartados (al momento)"
+                value={c.apartados.total}
+                hint="Ver Histórico Comercial →"
+                icon={KeyRound}
+                tone="warning"
+                onClick={irAHistorico}
+              />
+              <Kpi
+                label="Ventas"
+                value={c.ventas.total}
+                hint={`${fmtMxn(c.ventas.monto)} · ver detalle →`}
+                icon={ShoppingCart}
+                tone="success"
+                onClick={irAVentas}
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-4">
+              <DesglosePanel titulo="Citas por proyecto"><PorProyecto rows={c.citas.porProyecto} /></DesglosePanel>
+              <DesglosePanel titulo="Prospectos por proyecto"><PorProyecto rows={c.prospectos.porProyecto} /></DesglosePanel>
+              <DesglosePanel titulo="Ofertas aprobadas por proyecto"><PorProyecto rows={ofertas.porProyecto} /></DesglosePanel>
+              <DesglosePanel titulo="Apartados por proyecto"><PorProyecto rows={c.apartados.porProyecto} /></DesglosePanel>
+              <DesglosePanel titulo="Ventas por proyecto (núm · monto)"><PorProyecto rows={c.ventas.porProyecto} /></DesglosePanel>
+            </div>
+          </>
+        )}
+      </Panel>
 
-      {/* ─── Salud Financiera ─── */}
-      {isLoading ? (
-        <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando datos…
-        </div>
-      ) : error ? (
-        <div className="py-12 text-center text-sm text-red-600 dark:text-red-400">
-          Error al cargar el dashboard: {(error as Error).message}
-        </div>
-      ) : (
-        <SaludFinancieraWidgets data={saludData} />
-      )}
+      {/* ─── Resumen de Ingresos ─── */}
+      <Panel
+        title="Resumen de Ingresos"
+        description="Comisión SOZU en flujo de caja · mes en curso"
+        className="mb-6"
+      >
+        {finanzasQ.isLoading ? (
+          <SeccionLoader label="Cargando ingresos…" />
+        ) : finanzasQ.error || !f ? (
+          <p className="text-sm text-red-600 py-4">No se pudieron cargar los ingresos.</p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-4 items-start">
+            <div className="lg:col-span-1">
+              <Kpi
+                label="Ingresos del mes"
+                value={fmtMxn(f.ingresos.total)}
+                hint="Flujo de caja · ver detalle →"
+                icon={Wallet}
+                tone="success"
+                onClick={irAIngresos}
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <DesglosePanel titulo="Ingresos por proyecto">
+                <PorProyecto rows={f.ingresos.porProyecto} formato="moneda" />
+              </DesglosePanel>
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      {/* ─── Resumen de Egresos ─── */}
+      <Panel
+        title="Resumen de Egresos"
+        description="Composición de egresos por comisiones · mes en curso"
+        className="mb-6"
+      >
+        {finanzasQ.isLoading ? (
+          <SeccionLoader label="Cargando egresos…" />
+        ) : finanzasQ.error || !f ? (
+          <p className="text-sm text-red-600 py-4">No se pudieron cargar los egresos.</p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+            <div>
+              <Kpi
+                label="Egresos externos"
+                value={fmtMxn(f.egresosExternos.total)}
+                hint="Composición · ver detalle →"
+                icon={ArrowUpFromLine}
+                tone="destructive"
+                onClick={irAEgresos}
+              />
+              <div className="mt-4">
+                <DesglosePanel titulo="Externos por proyecto">
+                  <PorProyecto rows={f.egresosExternos.porProyecto} formato="moneda" />
+                </DesglosePanel>
+              </div>
+            </div>
+            <div>
+              <Kpi
+                label="Egresos internos"
+                value={fmtMxn(f.egresosInternos.total)}
+                hint="Composición · ver detalle →"
+                icon={ArrowUpFromLine}
+                tone="warning"
+                onClick={irAEgresos}
+              />
+              <div className="mt-4">
+                <DesglosePanel titulo="Internos por proyecto">
+                  <PorProyecto rows={f.egresosInternos.porProyecto} formato="moneda" />
+                </DesglosePanel>
+              </div>
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      {/* ─── Resumen de Mediciones ─── */}
+      <Panel
+        title="Resumen de Mediciones"
+        description="Uso de portales en el mes en curso"
+        className="mb-2"
+      >
+        {medicionesQ.isLoading ? (
+          <SeccionLoader label="Cargando mediciones…" />
+        ) : !m ? (
+          <p className="text-sm text-red-600 py-4">No se pudieron cargar las mediciones.</p>
+        ) : !m.disponible ? (
+          <p className="text-[13px] text-muted-foreground py-4">
+            Las mediciones de uso aún no están disponibles (falta la función de
+            base de datos `visitas_historicas_por_portal`).
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <SegmentoMediciones titulo="Clientes" icon={Users} seg={m.clientes} />
+            <SegmentoMediciones titulo="Agentes" icon={Users} seg={m.agentes} />
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+/* Sub-bloque visual para un desglose por proyecto. */
+function DesglosePanel({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted-foreground mb-1">
+        {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/* Dos KPIs por segmento de medición (usuarios + duración promedio). */
+function SegmentoMediciones({
+  titulo,
+  icon,
+  seg,
+}: {
+  titulo: string;
+  icon: LucideIcon;
+  seg: { usuarios: number; sesiones: number; duracionPromedioMin: number };
+}) {
+  return (
+    <>
+      <Kpi
+        label={`${titulo} conectados`}
+        value={seg.usuarios}
+        hint={`${seg.sesiones} ${seg.sesiones === 1 ? "sesión" : "sesiones"} este mes`}
+        icon={icon}
+        tone="info"
+      />
+      <Kpi
+        label={`${titulo} · duración prom.`}
+        value={minutosLabel(seg.duracionPromedioMin)}
+        hint="por sesión"
+        icon={Timer}
+        tone="default"
+      />
     </>
   );
 }
