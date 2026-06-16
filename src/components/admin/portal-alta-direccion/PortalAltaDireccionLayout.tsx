@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  LayoutDashboard,
   CalendarCheck,
   UserSearch,
   Briefcase,
@@ -59,6 +60,12 @@ interface NavGroup {
 const isParent = (i: NavItem): i is NavParent => "children" in i;
 
 const navGroups: NavGroup[] = [
+  {
+    label: "Resumen",
+    items: [
+      { label: "Dashboard General", path: "/admin/portal-alta-direccion/dashboard", icon: LayoutDashboard },
+    ],
+  },
   {
     label: "Comercial",
     items: [
