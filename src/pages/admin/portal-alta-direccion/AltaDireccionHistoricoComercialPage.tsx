@@ -60,7 +60,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Eye, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMetricasConversionComercial } from "@/hooks/usePortalAltaDireccion/useMetricasConversionComercial";
 import { usePropiedadesEstatusKpis } from "@/hooks/usePortalAltaDireccion/usePropiedadesEstatusKpis";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
@@ -125,10 +125,21 @@ export default function AltaDireccionHistoricoComercialPage() {
   // gráfica "Evolución mensual", abrimos un drawer con las cuentas que
   // forman ese indicador (mes + categoría).
   const navigate = useNavigate();
+  // Drill-down inicializable desde la URL (?drill=ventas|apartados&mes=YYYY-MM-01)
+  // para soportar el CTA "Ventas" del Dashboard General, que abre el detalle
+  // de las ventas del mes en curso.
+  const [searchParams] = useSearchParams();
   const [drillDown, setDrillDown] = useState<{
     mes: string;
     categoria: CategoriaHistorico;
-  } | null>(null);
+  } | null>(() => {
+    const drill = searchParams.get("drill");
+    const mes = searchParams.get("mes");
+    if ((drill === "ventas" || drill === "apartados") && mes) {
+      return { mes, categoria: drill as CategoriaHistorico };
+    }
+    return null;
+  });
 
   const drillDownRows = useMemo<HistoricoComercialDetalleRow[]>(() => {
     if (!drillDown) return [];
