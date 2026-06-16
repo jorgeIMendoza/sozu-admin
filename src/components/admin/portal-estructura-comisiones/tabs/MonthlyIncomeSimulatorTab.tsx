@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { formatCurrency, formatPct } from '@/lib/calculations';
-import MetricCard from '@/components/MetricCard';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { formatCurrency, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import MetricCard from '../shared/MetricCard';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

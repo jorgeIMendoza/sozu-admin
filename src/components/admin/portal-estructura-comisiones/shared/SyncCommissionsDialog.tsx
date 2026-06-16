@@ -5,7 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
-import type { Channel, Scenario } from '@/types/simulator';
+import type { Channel, Scenario } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 export interface SyncDiffRow {
   channelId: string;

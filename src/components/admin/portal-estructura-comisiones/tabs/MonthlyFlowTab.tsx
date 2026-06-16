@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateScenario, formatCurrency, formatNumber } from '@/lib/calculations';
-import MetricCard from '@/components/MetricCard';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateScenario, formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import MetricCard from '../shared/MetricCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 

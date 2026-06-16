@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { formatCurrency, formatNumber } from '@/lib/calculations';
-import type { Project } from '@/types/simulator';
+import { formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import type { Project } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import ProjectInventory from '@/components/ProjectInventory';
-import PricingStrategy from '@/components/PricingStrategy';
+import ProjectInventory from '../shared/ProjectInventory';
+import PricingStrategy from '../shared/PricingStrategy';
 
 export default function ProjectsTab() {
   const { projects, addProject, updateProject, deleteProject } = useSimulator();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import ScenarioChartsSection from '@/components/tabs/ScenarioChartsSection';
 import { Plus, Copy, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { validateChannelMix, formatPct } from '@/lib/calculations';
+import { validateChannelMix, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { AlertTriangle, CheckCircle } from 'lucide-react';
-import type { Scenario } from '@/types/simulator';
+import type { Scenario } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 export default function ScenariosTab() {
   const { scenarios, projects, channels, roles, roleAssignments, addScenario, updateScenario, deleteScenario, duplicateScenario } = useSimulator();

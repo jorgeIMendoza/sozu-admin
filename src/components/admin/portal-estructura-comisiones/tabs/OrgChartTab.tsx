@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateScenario, formatCurrency } from '@/lib/calculations';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateScenario, formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Badge } from '@/components/ui/badge';
 import { Users, Building2, ChevronDown } from 'lucide-react';
-import RoleAnalysisPanel, { type RoleCardInfo } from '@/components/RoleAnalysisPanel';
-import type { Role, RoleAssignment } from '@/types/simulator';
+import RoleAnalysisPanel, { type RoleCardInfo } from '../shared/RoleAnalysisPanel';
+import type { Role, RoleAssignment } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 
 export default function OrgChartTab() {

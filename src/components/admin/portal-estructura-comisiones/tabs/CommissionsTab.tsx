@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { validateCommissionRules, formatPct } from '@/lib/calculations';
+import { validateCommissionRules, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-import SyncCommissionsDialog from '@/components/SyncCommissionsDialog';
+import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
 
 interface SyncHistoryEntry {
   id: string;

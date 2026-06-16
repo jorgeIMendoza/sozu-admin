@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { useInventory } from '@/store/InventoryContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import MetricCard from '@/components/MetricCard';
-import { formatCurrency, formatPct } from '@/lib/calculations';
+import MetricCard from '../shared/MetricCard';
+import { formatCurrency, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Calculator, Wallet, KeyRound, Calendar, AlertTriangle, Link2 } from 'lucide-react';
 
 export default function FinancialSimulatorTab() {

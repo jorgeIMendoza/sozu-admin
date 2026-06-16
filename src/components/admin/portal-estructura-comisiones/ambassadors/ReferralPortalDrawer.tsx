@@ -1,4 +1,4 @@
-import { useAmbassadors } from '@/store/AmbassadorsContext';
+import { useAmbassadors } from '@/lib/portal-estructura-comisiones/stores/AmbassadorsContext';
 import {
   Ambassador,
   COMMISSION_STATUS_HELP,
@@ -10,7 +10,7 @@ import {
   nextStepFor,
   protectionStatusFor,
   stageIndex,
-} from '@/types/ambassadors';
+} from '@/lib/portal-estructura-comisiones/types/ambassadors';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -6,8 +6,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Download, FileText, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCompetitors } from '@/store/CompetitorsContext';
-import type { Competitor } from '@/types/competitors';
+import { useCompetitors } from '@/lib/portal-estructura-comisiones/stores/CompetitorsContext';
+import type { Competitor } from '@/lib/portal-estructura-comisiones/types/competitors';
 
 type RowStatus = 'ready' | 'incomplete' | 'format_error' | 'duplicate';
 type DupAction = 'update' | 'skip' | 'create_new';

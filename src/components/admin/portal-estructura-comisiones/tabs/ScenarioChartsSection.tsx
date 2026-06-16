@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateScenario, formatCurrency, formatPct } from '@/lib/calculations';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateScenario, formatCurrency, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   Legend, Tooltip as RTooltip

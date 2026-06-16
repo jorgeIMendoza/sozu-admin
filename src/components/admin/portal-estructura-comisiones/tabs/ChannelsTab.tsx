@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,8 +24,8 @@ import {
   ArrowUpDown, Power, PowerOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ChannelDetailDrawer from '@/components/ChannelDetailDrawer';
-import type { Channel } from '@/types/simulator';
+import ChannelDetailDrawer from '../shared/ChannelDetailDrawer';
+import type { Channel } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 const CATEGORIES = [
   'Externo', 'Interno', 'Referido', 'Institucional', 'Patrimonial', 'Internacional',

@@ -3,8 +3,8 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { Info, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import MetricCard from '@/components/MetricCard';
-import { formatCurrency, formatPct } from '@/lib/calculations';
+import MetricCard from '../shared/MetricCard';
+import { formatCurrency, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 
 interface ScenarioPreset {
   id: string;

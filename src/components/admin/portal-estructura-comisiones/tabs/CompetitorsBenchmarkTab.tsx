@@ -7,12 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from '@/components/ui/sheet';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { useCompetitors } from '@/store/CompetitorsContext';
-import { useInventory } from '@/store/InventoryContext';
-import type { Competitor, CompetitorType, Diagnosis } from '@/types/competitors';
+import { useCompetitors } from '@/lib/portal-estructura-comisiones/stores/CompetitorsContext';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
+import type { Competitor, CompetitorType, Diagnosis } from '@/lib/portal-estructura-comisiones/types/competitors';
 import { Plus, Trash2, Pencil, Upload, History } from 'lucide-react';
 import { toast } from 'sonner';
-import CompetitorsImportDialog from '@/components/CompetitorsImportDialog';
+import CompetitorsImportDialog from '../shared/CompetitorsImportDialog';
 
 const TYPE_LABEL: Record<CompetitorType, string> = {
   directa: 'Directa', indirecta: 'Indirecta', aspiracional: 'Aspiracional', financiera: 'Financiera',

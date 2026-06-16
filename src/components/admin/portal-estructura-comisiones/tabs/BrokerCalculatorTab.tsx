@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { formatCurrency } from '@/lib/calculations';
-import { useSimulator } from '@/store/SimulatorContext';
-import MetricCard from '@/components/MetricCard';
+import { formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import MetricCard from '../shared/MetricCard';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Calculator, TrendingUp } from 'lucide-react';

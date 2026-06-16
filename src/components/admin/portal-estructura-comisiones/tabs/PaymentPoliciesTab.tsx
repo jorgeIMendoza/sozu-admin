@@ -1,5 +1,5 @@
 import { Wallet, Calendar, KeyRound, Layers, ShieldCheck, Info } from 'lucide-react';
-import CommercialPoliciesPanel from '@/components/CommercialPoliciesPanel';
+import CommercialPoliciesPanel from '../shared/CommercialPoliciesPanel';
 
 const policyCards = [
   {

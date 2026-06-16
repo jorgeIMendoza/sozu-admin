@@ -7,9 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { useInventory } from '@/store/InventoryContext';
-import { useSimulator } from '@/store/SimulatorContext';
-import type { InventoryUnit, UnitStatus, AuthorizedChannel } from '@/types/inventory';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import type { InventoryUnit, UnitStatus, AuthorizedChannel } from '@/lib/portal-estructura-comisiones/types/inventory';
 import { Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 

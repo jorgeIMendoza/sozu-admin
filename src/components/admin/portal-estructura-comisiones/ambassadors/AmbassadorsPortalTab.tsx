@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useAmbassadors } from '@/store/AmbassadorsContext';
+import { useAmbassadors } from '@/lib/portal-estructura-comisiones/stores/AmbassadorsContext';
 import {
   COMMISSION_STATUS_HELP,
   COMMISSION_STATUS_LABEL,
@@ -13,7 +13,7 @@ import {
   mapStatusForAmbassador,
   nextStepFor,
   protectionStatusFor,
-} from '@/types/ambassadors';
+} from '@/lib/portal-estructura-comisiones/types/ambassadors';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

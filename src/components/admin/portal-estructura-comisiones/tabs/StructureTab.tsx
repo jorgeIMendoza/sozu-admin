@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Plus, Trash2, Users } from 'lucide-react';
-import { formatCurrency } from '@/lib/calculations';
-import type { Role, RoleAssignment } from '@/types/simulator';
+import { formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import type { Role, RoleAssignment } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

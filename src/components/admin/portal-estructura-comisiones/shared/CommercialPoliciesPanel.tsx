@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertTriangle, CheckCircle2, Info, HelpCircle } from 'lucide-react';
-import MetricCard from '@/components/MetricCard';
-import type { CommercialPolicy, WeightedCollectionKPIs } from '@/types/simulator';
-import { formatPct } from '@/lib/calculations';
+import MetricCard from './MetricCard';
+import type { CommercialPolicy, WeightedCollectionKPIs } from '@/lib/portal-estructura-comisiones/types/simulator';
+import { formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 
 export function calculateWeightedKPIs(policies: CommercialPolicy[]): WeightedCollectionKPIs {
   let weightedDownPayment = 0;

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
-import { useInventory } from '@/store/InventoryContext';
-import { formatCurrency, formatNumber } from '@/lib/calculations';
-import type { InventoryUnit, UnitStatus } from '@/types/inventory';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
+import { formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import type { InventoryUnit, UnitStatus } from '@/lib/portal-estructura-comisiones/types/inventory';
 import { Upload, Search, Filter, Package, DollarSign, Home, AlertCircle, Trash2, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

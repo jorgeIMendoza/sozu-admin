@@ -2,9 +2,9 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useInventory } from '@/store/InventoryContext';
-import { useSimulator } from '@/store/SimulatorContext';
-import { useCompetitors } from '@/store/CompetitorsContext';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { useCompetitors } from '@/lib/portal-estructura-comisiones/stores/CompetitorsContext';
 import {
   Building2, Package, CheckCircle2, Ban, DollarSign, TrendingUp,
   Target, Wallet, Users, ArrowRight, Layers, Compass,

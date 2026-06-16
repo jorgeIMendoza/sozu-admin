@@ -13,10 +13,10 @@ import {
   ChevronRight, Eye, Zap, Trophy, ArrowUpRight, Wallet,
   BarChart3, Calculator, Info, Clock
 } from 'lucide-react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateBrokerCommission } from '@/lib/broker-calculations';
-import { formatCurrency } from '@/lib/calculations';
-import { DEFAULT_BROKER_CONFIG } from '@/types/broker-incentives';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateBrokerCommission } from '@/lib/portal-estructura-comisiones/utils/broker-calculations';
+import { formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import { DEFAULT_BROKER_CONFIG } from '@/lib/portal-estructura-comisiones/types/broker-incentives';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   Tooltip as RechartsTooltip, AreaChart, Area, Cell

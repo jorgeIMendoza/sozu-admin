@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateScenario, formatCurrency, formatPct } from '@/lib/calculations';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateScenario, formatCurrency, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Users, TrendingUp, Target, BarChart3, Gauge, Info, DollarSign, Percent, Building2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, ReferenceLine, Tooltip as RTooltip } from 'recharts';
-import type { Role, RoleAssignment } from '@/types/simulator';
+import type { Role, RoleAssignment } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 export interface RoleCardInfo {
   role: Role;

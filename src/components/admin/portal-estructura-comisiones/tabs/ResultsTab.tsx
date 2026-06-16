@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
-import { calculateScenario, formatCurrency, formatPct, formatNumber } from '@/lib/calculations';
-import MetricCard from '@/components/MetricCard';
-import CommercialPoliciesPanel, { calculateWeightedKPIs } from '@/components/CommercialPoliciesPanel';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import { calculateScenario, formatCurrency, formatPct, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import MetricCard from '../shared/MetricCard';
+import CommercialPoliciesPanel, { calculateWeightedKPIs } from '../shared/CommercialPoliciesPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
-import type { ScenarioResults, MonthlyPL } from '@/types/simulator';
+import type { ScenarioResults, MonthlyPL } from '@/lib/portal-estructura-comisiones/types/simulator';
 
 type AnalysisWindowOption = '12' | '18' | '24' | '36' | 'full' | 'custom';
 
@@ -264,8 +264,8 @@ const CASHFLOW_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(
 
 function SingleResultView({ scenario, result, windowMonths, onExport, policiesEnabled, policies, projects }: {
   scenario: any; result: ScenarioResults; windowMonths: number; onExport: () => void;
-  policiesEnabled: boolean; policies: import('@/types/simulator').CommercialPolicy[];
-  projects: import('@/types/simulator').Project[];
+  policiesEnabled: boolean; policies: import('@/lib/portal-estructura-comisiones/types/simulator').CommercialPolicy[];
+  projects: import('@/lib/portal-estructura-comisiones/types/simulator').Project[];
 }) {
   const [view, setView] = useState<'executive' | 'channels' | 'roles' | 'pl' | 'cashflow'>('executive');
 

@@ -8,8 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Pencil, Save, X, Plus, Trash2, ArrowUp, ArrowDown, Info, CheckCircle2, ShieldAlert, Sparkles, Palette } from 'lucide-react';
-import { useSimulator } from '@/store/SimulatorContext';
-import type { Channel, ChannelProfile } from '@/types/simulator';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import type { Channel, ChannelProfile } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { toast } from 'sonner';
 
 interface Props {

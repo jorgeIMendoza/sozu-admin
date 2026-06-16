@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useSimulator } from '@/store/SimulatorContext';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +15,12 @@ import {
 import type {
   BrokerIncentiveConfig, VolumeRule, SaleAmountRule, DownPaymentRule,
   MeasurementPeriod, AuditRecord, OperationInput, OperationBreakdown,
-} from '@/types/broker-incentives';
-import { DEFAULT_BROKER_CONFIG } from '@/types/broker-incentives';
+} from '@/lib/portal-estructura-comisiones/types/broker-incentives';
+import { DEFAULT_BROKER_CONFIG } from '@/lib/portal-estructura-comisiones/types/broker-incentives';
 import {
   calculateBrokerBaseCommission, calculateOperationBreakdown,
   formatMoney, periodLabel,
-} from '@/lib/broker-calculations';
+} from '@/lib/portal-estructura-comisiones/utils/broker-calculations';
 
 const STORAGE_KEY = 'sozu-broker-incentives';
 function loadConfig(): BrokerIncentiveConfig {

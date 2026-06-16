@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useAmbassadors } from '@/store/AmbassadorsContext';
+import { useAmbassadors } from '@/lib/portal-estructura-comisiones/stores/AmbassadorsContext';
 import {
   Ambassador, AMBASSADOR_TYPE_LABEL, AmbassadorType, AmbassadorStatus,
   CommissionTrigger, CommissionStatus, COMMISSION_STATUS_LABEL,
@@ -7,7 +7,7 @@ import {
   ProtectionStatus, PROTECTION_STATUS_LABEL, DOCUMENT_STATUS_LABEL, DocumentStatus,
   DEFAULT_PAYMENT_DOCS, AssignmentStatus, ASSIGNMENT_STATUS_LABEL,
   nextStepFor, protectionStatusFor,
-} from '@/types/ambassadors';
+} from '@/lib/portal-estructura-comisiones/types/ambassadors';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

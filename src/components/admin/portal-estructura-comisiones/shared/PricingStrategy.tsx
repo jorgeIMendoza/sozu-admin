@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useInventory } from '@/store/InventoryContext';
-import { formatCurrency } from '@/lib/calculations';
-import type { PricingRule, IncrementType, IncrementFrequency } from '@/types/inventory';
+import { useInventory } from '@/lib/portal-estructura-comisiones/stores/InventoryContext';
+import { formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import type { PricingRule, IncrementType, IncrementFrequency } from '@/lib/portal-estructura-comisiones/types/inventory';
 import { TrendingUp, Plus, Trash2, Pencil, Play, Eye, Info, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
