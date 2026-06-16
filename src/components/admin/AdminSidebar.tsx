@@ -147,7 +147,6 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
    };
  
    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [portalesExpanded, setPortalesExpanded] = useState(false);
  
    // Update expanded groups when menuItems change
    useEffect(() => {
@@ -205,177 +204,115 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
              </div>
            ) : (
-             <nav className="px-3 py-2 space-y-0.5">
-               {(() => {
-                 const coreItems = menuItems.filter(item => !item.isPortal);
-                 const portalItems = menuItems
-                   .filter(item => item.isPortal)
-                   .sort((a, b) => a.title.localeCompare(b.title, 'es'));
-
-                 const renderPortalLink = (item: DynamicMenuItem, index: number) => {
-                   const portalActive = item.href ? currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/')) : false;
-                   return (
-                     <div key={`portal-${index}`}>
-                       <Link
-                         to={item.href!}
+             <nav className="py-4 space-y-2 px-4">
+               {menuItems.map((item, index) => (
+                 <div key={index}>
+                   {item.href && item.isPortal ? (
+                     <Link
+                       to={item.href}
+                       className={cn(
+                         "flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-medium border",
+                         item.isRestrictedPortal
+                           ? currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
+                             ? "bg-blue-600 text-white border-blue-600"
+                             : "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                           : currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
+                             ? "bg-primary text-primary-foreground border-primary"
+                             : "bg-accent/60 border-border hover:bg-accent hover:border-primary/40 text-foreground"
+                       )}
+                       onClick={onClose}
+                     >
+                       <div className="flex items-center space-x-3">
+                         <item.icon className="h-5 w-5" />
+                         <span>{item.title}</span>
+                       </div>
+                       <ExternalLink className="h-3.5 w-3.5 opacity-50" />
+                     </Link>
+                   ) : item.href ? (
+                     <Link
+                       to={item.href}
+                       className={cn(
+                         "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                         currentPath === item.href
+                           ? "bg-primary text-primary-foreground"
+                           : "hover:bg-accent"
+                       )}
+                       onClick={onClose}
+                     >
+                       <item.icon className="h-5 w-5" />
+                       <span>{item.title}</span>
+                     </Link>
+                   ) : (
+                     <div className="space-y-1">
+                       <button
+                         onClick={() => toggleGroup(item.title)}
                          className={cn(
-                           "group relative flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150",
-                           portalActive
-                             ? "bg-primary/[0.06] text-primary"
-                             : item.isRestrictedPortal
-                               ? "text-blue-600/80 dark:text-blue-400/80 hover:bg-blue-500/[0.06] hover:text-blue-600 dark:hover:text-blue-400"
-                               : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                           "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border",
+                           item.isSoloA
+                             ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-400 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                             : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                          )}
-                         onClick={onClose}
                        >
-                         <span className={cn(
-                           "absolute left-0 top-0 bottom-0 w-[2px] rounded-r transition-opacity duration-150",
-                           item.isRestrictedPortal ? "bg-blue-500" : "bg-primary",
-                           portalActive ? "opacity-100" : "opacity-0"
-                         )} />
-                         <item.icon className={cn(
-                           "size-4 shrink-0",
-                           portalActive ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
-                         )} />
-                         <span className="flex-1 leading-snug">{item.title}</span>
-                         <ExternalLink className="size-3 shrink-0 opacity-40 self-start mt-[3px]" />
-                       </Link>
-                     </div>
-                   );
-                 };
-
-                 return (
-                   <>
-                     {/* Portal section — collapsible, shown first */}
-                     {portalItems.length > 0 && (
-                       <div className="pb-1">
-                         <button
-                           onClick={() => setPortalesExpanded(prev => !prev)}
-                           className="group w-full flex items-center gap-2 pl-4 pr-3 py-1.5 rounded-md hover:bg-muted/40 transition-colors duration-150"
-                         >
-                           <span className="flex-1 text-left text-[12px] font-bold uppercase tracking-[0.14em] text-foreground/80">
-                             Portales
-                           </span>
-                           <ChevronDown className={cn(
-                             "size-4 shrink-0 text-foreground/70 transition-transform duration-200",
-                             portalesExpanded ? "rotate-180" : ""
-                           )} />
-                         </button>
-                         {portalesExpanded && (
-                           <div className="mt-0.5 space-y-0.5">
-                             {portalItems.map((item, index) => renderPortalLink(item, index))}
-                           </div>
-                         )}
-                       </div>
-                     )}
-
-                     {/* Divider */}
-                     {portalItems.length > 0 && coreItems.length > 0 && (
-                       <div className="my-1 mx-1 h-px bg-border-soft" />
-                     )}
-
-                     {coreItems.map((item, index) => (
-                       <div key={index}>
-                         {item.href ? (
-                           <Link
-                             to={item.href}
-                             className={cn(
-                               "group relative flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150",
-                               currentPath === item.href
-                                 ? "bg-primary/[0.06] text-primary"
-                                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                             )}
-                             onClick={onClose}
-                           >
-                             <span className={cn(
-                               "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
-                               currentPath === item.href ? "opacity-100" : "opacity-0"
-                             )} />
-                             <item.icon className={cn(
-                               "size-4 shrink-0",
-                               currentPath === item.href ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
-                             )} />
-                             <span className="flex-1 min-w-0 truncate">{item.title}</span>
-                           </Link>
+                         <div className="flex items-center space-x-3">
+                           <item.icon className="h-5 w-5" />
+                           <span>{item.title}</span>
+                         </div>
+                         {expandedGroups.has(item.title) ? (
+                           <ChevronDown className="h-4 w-4 transition-transform" />
                          ) : (
-                           <div className="space-y-0.5">
-                             <button
-                               onClick={() => toggleGroup(item.title)}
-                               className={cn(
-                                 "group w-full flex items-center gap-3 pl-4 pr-3 py-2 text-[13px] font-medium rounded-md transition-colors duration-150",
-                                 item.isSoloA
-                                   ? "bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-400 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                               )}
-                             >
-                               <item.icon className="size-4 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity duration-150" />
-                               <span className="flex-1 min-w-0 text-left truncate">{item.title}</span>
-                               {expandedGroups.has(item.title) ? (
-                                 <ChevronDown className="size-3.5 shrink-0 opacity-80" />
-                               ) : (
-                                 <ChevronRight className="size-3.5 shrink-0 opacity-80" />
-                               )}
-                             </button>
-                             {expandedGroups.has(item.title) && (
-                               <div className="ml-4 space-y-0.5 animate-in slide-in-from-top-2 duration-200">
-                                 {item.children?.map((child, childIndex) => {
-                                   const isBlocked = isRouteBlocked(child.href);
-                                   if (isBlocked) {
-                                     return (
-                                       <TooltipProvider key={childIndex} delayDuration={100}>
-                                         <Tooltip>
-                                           <TooltipTrigger asChild>
-                                             <div className="flex items-center justify-between pl-4 pr-3 py-2 rounded-md text-[13px] font-medium text-muted-foreground/50 cursor-not-allowed">
-                                               <div className="flex items-center gap-3">
-                                                 <child.icon className="size-4 shrink-0" />
-                                                 <span className="min-w-0 truncate">{child.title}</span>
-                                               </div>
-                                               <Lock className="h-3 w-3" />
-                                             </div>
-                                           </TooltipTrigger>
-                                           <TooltipContent side="right" className="max-w-xs">
-                                             <p className="font-medium">Sección bloqueada</p>
-                                             <p className="text-xs text-muted-foreground mt-1">
-                                               Completa la información en "Mi Información" para habilitar esta sección.
-                                             </p>
-                                           </TooltipContent>
-                                         </Tooltip>
-                                       </TooltipProvider>
-                                     );
-                                   }
-                                   return (
-                                     <Link
-                                       key={childIndex}
-                                       to={child.href}
-                                       className={cn(
-                                         "group relative flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150",
-                                         currentPath === child.href
-                                           ? "bg-primary/[0.06] text-primary"
-                                           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                       )}
-                                       onClick={onClose}
-                                     >
-                                       <span className={cn(
-                                         "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
-                                         currentPath === child.href ? "opacity-100" : "opacity-0"
-                                       )} />
-                                       <child.icon className={cn(
-                                         "size-4 shrink-0",
-                                         currentPath === child.href ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
-                                       )} />
-                                       <span className="flex-1 min-w-0 truncate">{child.title}</span>
-                                     </Link>
-                                   );
-                                 })}
-                               </div>
-                             )}
-                           </div>
+                           <ChevronRight className="h-4 w-4 transition-transform" />
                          )}
-                       </div>
-                     ))}
-                   </>
-                 );
-               })()}
+                       </button>
+                       {expandedGroups.has(item.title) && (
+                         <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
+                           {item.children?.map((child, childIndex) => {
+                             const isBlocked = isRouteBlocked(child.href);
+                             if (isBlocked) {
+                               return (
+                                 <TooltipProvider key={childIndex} delayDuration={100}>
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                       <div className="flex items-center justify-between pl-8 pr-3 py-2 rounded-lg text-sm text-muted-foreground/50 cursor-not-allowed">
+                                         <div className="flex items-center space-x-3">
+                                           <child.icon className="h-4 w-4" />
+                                           <span>{child.title}</span>
+                                         </div>
+                                         <Lock className="h-3 w-3" />
+                                       </div>
+                                     </TooltipTrigger>
+                                     <TooltipContent side="right" className="max-w-xs">
+                                       <p className="font-medium">Sección bloqueada</p>
+                                       <p className="text-xs text-muted-foreground mt-1">
+                                         Completa la información en "Mi Información" para habilitar esta sección.
+                                       </p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               );
+                             }
+                             return (
+                               <Link
+                                 key={childIndex}
+                                 to={child.href}
+                                 className={cn(
+                                   "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
+                                   currentPath === child.href
+                                     ? "bg-primary text-primary-foreground"
+                                     : "hover:bg-accent"
+                                 )}
+                                 onClick={onClose}
+                               >
+                                 <child.icon className="h-4 w-4" />
+                                 <span>{child.title}</span>
+                               </Link>
+                             );
+                           })}
+                         </div>
+                       )}
+                     </div>
+                   )}
+                 </div>
+               ))}
              </nav>
            )}
            </ScrollArea>
