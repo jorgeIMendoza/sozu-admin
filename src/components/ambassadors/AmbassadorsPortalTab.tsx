@@ -786,6 +786,7 @@ export default function AmbassadorsPortalTab() {
         onOpenChange={setShowForm}
         defaultAmbassadorId={activeId}
         hideAdvisor
+        canal="portal_embajador"
       />
       <ReferralPortalDrawer referralId={openRefId} onOpenChange={setOpenRefId} />
       <EmbajadorComoFuncionaDialog open={showHowItWorks} onOpenChange={setShowHowItWorks} />
