@@ -35,32 +35,36 @@ export function useInmobAgents() {
 
       const pIds = rels.map((r: any) => r.id_persona).filter(Boolean) as number[];
 
-      // Get user emails
+      // Get user rows (may not exist yet for every agent)
       const { data: usuarios } = await supabase
         .from("usuarios")
         .select("email, id_persona, activo")
         .in("id_persona", pIds) as any;
 
-      if (!usuarios || usuarios.length === 0) return [];
-
       // Get persona details
       const { data: personas } = await supabase
         .from("personas")
-        .select("id, nombre_legal, nombre_comercial, telefono, clave_pais_telefono")
+        .select("id, nombre_legal, nombre_comercial, telefono, clave_pais_telefono, email")
         .in("id", pIds) as any;
 
+      const usuarioMap = new Map<number, any>();
+      (usuarios || []).forEach((u: any) => usuarioMap.set(u.id_persona, u));
       const personaMap = new Map<number, any>();
       (personas || []).forEach((p: any) => personaMap.set(p.id, p));
 
-      return usuarios.map((u: any) => {
-        const p = personaMap.get(u.id_persona);
+      // Mapear sobre los agentes (entidades_relacionadas), NO sobre usuarios: un agente
+      // con persona + entidad pero sin fila en usuarios igual debe listarse (en vez de
+      // desaparecer, o de ocultar a todos los demás si ninguno tuviera usuario).
+      return pIds.map((pid: number) => {
+        const u = usuarioMap.get(pid);
+        const p = personaMap.get(pid);
         return {
-          email: u.email,
-          personaId: u.id_persona,
-          nombre: p?.nombre_legal || p?.nombre_comercial || u.email,
+          email: u?.email || p?.email || "",
+          personaId: pid,
+          nombre: p?.nombre_legal || p?.nombre_comercial || u?.email || "Agente",
           telefono: p?.telefono || "",
           clavePaisTelefono: p?.clave_pais_telefono || "",
-          activo: u.activo ?? true,
+          activo: u?.activo ?? true,
         };
       });
     },
