@@ -4,13 +4,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   X, Plus, Pencil, Loader2, ShieldCheck, Users, Building2,
-  Settings2, AlertTriangle, Check, GitBranch, Trash2,
+  Settings2, AlertTriangle, Check, GitBranch, Trash2, List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'categorias' | 'personal' | 'proveedores' | 'reglas';
+type Tab = 'categorias' | 'personal' | 'proveedores' | 'reglas' | 'subcategorias';
+
+interface Subcategoria {
+  id: number;
+  id_categoria: number;
+  nombre: string;
+  activo: boolean;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
 
 interface Categoria {
   id: number;
@@ -824,13 +833,266 @@ function TabReglas() {
   );
 }
 
+// ─── Tab: Subcategorías ───────────────────────────────────────────────────────
+
+function TabSubcategorias() {
+  const qc = useQueryClient();
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingNombre, setEditingNombre] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [newNombre, setNewNombre] = useState('');
+
+  const { data: categorias = [] } = useQuery<{ id: number; nombre: string }[]>({
+    queryKey: ['pv-config-categorias-mini'],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('postventa_categorias_garantia')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre');
+      return data ?? [];
+    },
+  });
+
+  const { data: subcategorias = [], isLoading } = useQuery<Subcategoria[]>({
+    queryKey: ['pv-subcats-admin', categoriaId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('postventa_subcategorias')
+        .select('id, id_categoria, nombre, activo, fecha_creacion, fecha_actualizacion')
+        .eq('id_categoria', categoriaId!)
+        .order('nombre');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!categoriaId,
+  });
+
+  const insertMutation = useMutation({
+    mutationFn: async (nombre: string) => {
+      const { error } = await (supabase as any)
+        .from('postventa_subcategorias')
+        .insert({ id_categoria: categoriaId, nombre: nombre.trim(), activo: true });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Subcategoría creada');
+      qc.invalidateQueries({ queryKey: ['pv-subcats-admin', categoriaId] });
+      qc.invalidateQueries({ queryKey: ['pv-subcats', categoriaId] });
+      setNewNombre('');
+      setShowNew(false);
+    },
+    onError: (e: any) => {
+      if (e.message?.includes('uq_subcat_categoria_nombre')) {
+        toast.error('Ya existe una subcategoría con ese nombre en esta categoría');
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+
+  const updateNombreMutation = useMutation({
+    mutationFn: async ({ id, nombre }: { id: number; nombre: string }) => {
+      const { error } = await (supabase as any)
+        .from('postventa_subcategorias')
+        .update({ nombre: nombre.trim() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Nombre actualizado');
+      qc.invalidateQueries({ queryKey: ['pv-subcats-admin', categoriaId] });
+      qc.invalidateQueries({ queryKey: ['pv-subcats', categoriaId] });
+      setEditingId(null);
+    },
+    onError: (e: any) => {
+      if (e.message?.includes('uq_subcat_categoria_nombre')) {
+        toast.error('Ya existe una subcategoría con ese nombre en esta categoría');
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, activo }: { id: number; activo: boolean }) => {
+      const { error } = await (supabase as any)
+        .from('postventa_subcategorias')
+        .update({ activo })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, variables) => {
+      toast.success(variables.activo ? 'Subcategoría activada' : 'Subcategoría inactivada');
+      qc.invalidateQueries({ queryKey: ['pv-subcats-admin', categoriaId] });
+      qc.invalidateQueries({ queryKey: ['pv-subcats', categoriaId] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  function handleCategoriaChange(id: number | null) {
+    setCategoriaId(id);
+    setShowNew(false);
+    setEditingId(null);
+    setNewNombre('');
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Selector de categoría */}
+      <div className="flex items-center gap-3">
+        <label className="text-xs font-semibold text-slate-600 whitespace-nowrap">Categoría:</label>
+        <select
+          value={categoriaId ?? ''}
+          onChange={e => handleCategoriaChange(Number(e.target.value) || null)}
+          className={INPUT_CLS}
+        >
+          <option value="">Selecciona una categoría…</option>
+          {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </div>
+
+      {!categoriaId ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-2">
+          <List className="w-8 h-8 text-slate-200" />
+          <p className="text-sm text-slate-400">Selecciona una categoría para ver sus subcategorías</p>
+        </div>
+      ) : isLoading ? (
+        <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              {subcategorias.filter(s => s.activo).length} activa(s) · {subcategorias.filter(s => !s.activo).length} inactiva(s)
+            </p>
+            {!showNew && (
+              <button
+                onClick={() => { setShowNew(true); setNewNombre(''); setEditingId(null); }}
+                className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800"
+              >
+                <Plus className="w-3.5 h-3.5" /> Agregar subcategoría
+              </button>
+            )}
+          </div>
+
+          {/* Formulario de nueva subcategoría */}
+          {showNew && (
+            <div className="flex items-center gap-2 border border-emerald-200 rounded-xl px-3 py-2 bg-emerald-50">
+              <input
+                autoFocus
+                value={newNombre}
+                onChange={e => setNewNombre(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newNombre.trim()) insertMutation.mutate(newNombre);
+                  if (e.key === 'Escape') { setShowNew(false); setNewNombre(''); }
+                }}
+                placeholder="Nombre de la subcategoría…"
+                className="flex-1 bg-transparent text-sm outline-none text-slate-800 placeholder-slate-400"
+              />
+              <button
+                disabled={!newNombre.trim() || insertMutation.isPending}
+                onClick={() => insertMutation.mutate(newNombre)}
+                className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50"
+              >
+                {insertMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Guardar
+              </button>
+              <button onClick={() => { setShowNew(false); setNewNombre(''); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {subcategorias.length === 0 && !showNew ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2 border border-dashed border-slate-200 rounded-xl">
+              <p className="text-sm text-slate-400">Sin subcategorías configuradas</p>
+              <p className="text-xs text-slate-300 text-center">Esta categoría no tiene subcategorías en el catálogo.</p>
+            </div>
+          ) : subcategorias.length > 0 && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    {['Nombre', 'Estado', 'Actualizado', ''].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-slate-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {subcategorias.map(s => (
+                    <tr key={s.id} className={cn('hover:bg-slate-50', !s.activo && 'opacity-60')}>
+                      <td className="px-3 py-2.5">
+                        {editingId === s.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              autoFocus
+                              value={editingNombre}
+                              onChange={e => setEditingNombre(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && editingNombre.trim()) updateNombreMutation.mutate({ id: s.id, nombre: editingNombre });
+                                if (e.key === 'Escape') setEditingId(null);
+                              }}
+                              className="border border-emerald-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-emerald-400 w-56"
+                            />
+                            <button
+                              disabled={!editingNombre.trim() || updateNombreMutation.isPending}
+                              onClick={() => updateNombreMutation.mutate({ id: s.id, nombre: editingNombre })}
+                              className="p-1 rounded hover:bg-emerald-50 text-emerald-600 disabled:opacity-50"
+                            >
+                              {updateNombreMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            </button>
+                            <button onClick={() => setEditingId(null)} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className={cn('font-medium', s.activo ? 'text-slate-800' : 'text-slate-400')}>{s.nombre}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5"><ActiveBadge activo={s.activo} /></td>
+                      <td className="px-3 py-2.5 text-slate-400">
+                        {new Date(s.fecha_actualizacion).toLocaleDateString('es-MX')}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button
+                            disabled={editingId === s.id}
+                            onClick={() => { setEditingId(s.id); setEditingNombre(s.nombre); setShowNew(false); }}
+                            className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
+                            title="Editar nombre"
+                          >
+                            <Pencil className="w-3 h-3 text-slate-400" />
+                          </button>
+                          <button
+                            onClick={() => toggleMutation.mutate({ id: s.id, activo: !s.activo })}
+                            className="p-1 rounded hover:bg-slate-100"
+                            title={s.activo ? 'Inactivar (baja lógica)' : 'Activar'}
+                          >
+                            {s.activo ? <Trash2 className="w-3 h-3 text-red-400" /> : <Check className="w-3 h-3 text-emerald-500" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[] = [
-  { id: 'categorias', label: 'Categorías',   icon: ShieldCheck },
-  { id: 'personal',   label: 'Personal',     icon: Users },
-  { id: 'proveedores', label: 'Proveedores', icon: Building2 },
-  { id: 'reglas',     label: 'Reglas',       icon: GitBranch },
+  { id: 'categorias',    label: 'Categorías',    icon: ShieldCheck },
+  { id: 'subcategorias', label: 'Subcategorías', icon: List },
+  { id: 'personal',      label: 'Personal',      icon: Users },
+  { id: 'proveedores',   label: 'Proveedores',   icon: Building2 },
+  { id: 'reglas',        label: 'Reglas',        icon: GitBranch },
 ];
 
 export function PostventaConfiguracion({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -853,7 +1115,7 @@ export function PostventaConfiguracion({ open, onClose }: { open: boolean; onClo
             </div>
             <div>
               <p className="text-base font-bold text-slate-900">Configuración de Postventa</p>
-              <p className="text-xs text-slate-500">Categorías · Personal · Proveedores · Reglas de asignación</p>
+              <p className="text-xs text-slate-500">Categorías · Subcategorías · Personal · Proveedores · Reglas</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
@@ -880,10 +1142,11 @@ export function PostventaConfiguracion({ open, onClose }: { open: boolean; onClo
 
         {/* Content */}
         <div className="flex-1 overflow-hidden">
-          {tab === 'categorias'  && <div className="h-full flex flex-col"><TabCategorias /></div>}
-          {tab === 'personal'    && <div className="h-full overflow-y-auto"><TabPersonal /></div>}
-          {tab === 'proveedores' && <div className="h-full overflow-y-auto"><TabProveedores /></div>}
-          {tab === 'reglas'      && <div className="h-full overflow-y-auto"><TabReglas /></div>}
+          {tab === 'categorias'    && <div className="h-full flex flex-col"><TabCategorias /></div>}
+          {tab === 'subcategorias' && <div className="h-full overflow-y-auto"><TabSubcategorias /></div>}
+          {tab === 'personal'      && <div className="h-full overflow-y-auto"><TabPersonal /></div>}
+          {tab === 'proveedores'   && <div className="h-full overflow-y-auto"><TabProveedores /></div>}
+          {tab === 'reglas'        && <div className="h-full overflow-y-auto"><TabReglas /></div>}
         </div>
       </div>
     </div>
