@@ -327,19 +327,46 @@ export function EntregasDashboard() {
         (entregasData ?? []).forEach((e: any) => { entregaByPropId[e.id_propiedad] = e; });
       }
 
-      // ── 7. Documentos — Acta de entrega (id_tipo_documento = 24) ─────────
-      // Keyed por id_propiedad (fiable aunque la propiedad tenga varias cuentas)
+      // ── 7a. Checklist progress — suma items_completos/total_items por entrega ─
+      // items_completos y total_items son conteos reales en BD (no porcentajes).
+      // El porcentaje se calcula aquí en JS como dato derivado.
+      const entregaIds = Object.values(entregaByPropId).map((e: any) => e.id as number);
+      const checklistPctByEntregaId: Record<number, number> = {};
+      if (entregaIds.length) {
+        const { data: catAgg } = await supabase
+          .from('entregas_checklist_categorias')
+          .select('id_entrega, items_completos, total_items')
+          .in('id_entrega', entregaIds)
+          .eq('activo', true);
+        const sumByEntrega: Record<number, { completos: number; total: number }> = {};
+        (catAgg ?? []).forEach((c: any) => {
+          if (!sumByEntrega[c.id_entrega]) sumByEntrega[c.id_entrega] = { completos: 0, total: 0 };
+          sumByEntrega[c.id_entrega].completos += Number(c.items_completos ?? 0);
+          sumByEntrega[c.id_entrega].total     += Number(c.total_items   ?? 0);
+        });
+        Object.entries(sumByEntrega).forEach(([id, s]) => {
+          checklistPctByEntregaId[Number(id)] = s.total > 0 ? Math.round((s.completos / s.total) * 100) : 0;
+        });
+      }
+
+      // ── 7b. Documentos — Acta de entrega (id_tipo_documento = 24) ─────────
+      // Derivamos acta_estatus desde documentos: sin columna en BD.
+      //   es_draft=false → FIRMADA
+      //   es_draft=true  → GENERADA
+      //   sin documento  → PENDIENTE
+      // Keyed por id_propiedad. Si hay draft y firmada, prevalece FIRMADA.
       const { data: actaDocs } = await supabase
         .from('documentos')
-        .select('id_propiedad, url, fecha_creacion')
+        .select('id_propiedad, url, fecha_creacion, es_draft')
         .in('id_propiedad', propIds)
         .eq('id_tipo_documento', ID_TIPO_ACTA_ENTREGA)
-        .eq('activo', true)
-        .eq('es_draft', false);
-      const actaByPropId: Record<number, { fechaCreacion: string; url: string }> = {};
+        .eq('activo', true);
+      const actaByPropId: Record<number, { fechaCreacion: string; url: string; isDraft: boolean }> = {};
       (actaDocs ?? []).forEach((d: any) => {
-        if (!actaByPropId[d.id_propiedad])
-          actaByPropId[d.id_propiedad] = { fechaCreacion: d.fecha_creacion, url: d.url ?? '' };
+        const existing = actaByPropId[d.id_propiedad];
+        // Prioridad: un acta firmada (es_draft=false) gana sobre draft
+        if (!existing || (!d.es_draft && existing.isDraft))
+          actaByPropId[d.id_propiedad] = { fechaCreacion: d.fecha_creacion, url: d.url ?? '', isDraft: !!d.es_draft };
       });
 
       // ── 8. Lookup de nombres de proyecto ─────────────────────────────────
@@ -366,8 +393,10 @@ export function EntregasDashboard() {
               ? 'ENTREGADA'
               : 'PENDIENTE_PRE_ENTREGA';
 
-          // acta_estatus no existe en BD aún — se deriva del documento tipo 24
-          const actaEstatus: EntregaRow['actaEstatus'] = acta ? 'FIRMADA' : 'PENDIENTE';
+          // acta_estatus se deriva desde documentos tipo 24: FIRMADA | GENERADA | PENDIENTE
+          const actaEstatus: EntregaRow['actaEstatus'] = acta
+            ? (acta.isDraft ? 'GENERADA' : 'FIRMADA')
+            : 'PENDIENTE';
 
           return {
             id: entrega ? String(entrega.id) : `prop-${p.id}`,
@@ -382,7 +411,7 @@ export function EntregasDashboard() {
             estatus,
             fechaProgramada: entrega?.fecha_programada ?? null,
             fechaEntrega: entrega?.fecha_entrega ?? acta?.fechaCreacion ?? null,
-            checklistPct: 0, // checklist_pct no existe en BD aún — se calcula en Fase 2
+            checklistPct: entrega ? (checklistPctByEntregaId[entrega.id] ?? 0) : 0,
             daikuEstatus: (entrega?.muebles_daiku_estatus ?? 'NO_APLICA') as EntregaRow['daikuEstatus'],
             actaEstatus,
             actaUrl: acta?.url ?? null,
