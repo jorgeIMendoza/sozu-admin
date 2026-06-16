@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { APP_VERSION } from "@/lib/config";
+import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
@@ -180,72 +180,68 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
          "fixed top-0 left-0 z-50 h-full w-64 bg-sidebar text-sidebar-foreground border-r border-border transform transition-transform duration-300 ease-in-out lg:translate-x-0 flex flex-col",
          isOpen ? "translate-x-0" : "-translate-x-full"
        )}>
-         {/* Header */}
-         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-           <div className="flex items-center space-x-3">
-             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-               <span className="text-primary-foreground font-bold text-sm">S</span>
-             </div>
-             <div>
-               <h1 className="font-bold text-lg">{isInmobiliariaRole ? 'By Sozu' : 'SOZU'}</h1>
-               <p className="text-xs text-muted-foreground">Admin Panel</p>
-             </div>
+         {/* Brand */}
+         <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1 flex-shrink-0">
+           <div className="flex items-center justify-between">
+             <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+             <button
+               onClick={onClose}
+               className="lg:hidden p-1 rounded-md hover:bg-accent transition-colors"
+             >
+               <X className="h-5 w-5" />
+             </button>
            </div>
-           
-           <button
-             onClick={onClose}
-             className="lg:hidden p-1 rounded-md hover:bg-accent transition-colors"
-           >
-             <X className="h-5 w-5" />
-           </button>
+           <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+             {isInmobiliariaRole ? "By Sozu" : "Admin Panel"}
+           </p>
          </div>
  
          {/* Navigation - con scroll */}
          <div className="flex-1 overflow-hidden">
-           <ScrollArea className="h-full px-4">
+           <ScrollArea className="h-full">
            {isLoadingMenus ? (
              <div className="flex items-center justify-center py-8">
                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
              </div>
            ) : (
-             <nav className="py-4 space-y-2">
+             <nav className="py-4 space-y-2 px-4">
                {menuItems.map((item, index) => (
                  <div key={index}>
-                    {item.href && item.isPortal ? (
-                      <Link
-                        to={item.href}
-                        className={cn(
-                          "flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-medium border",
-                          item.isRestrictedPortal
-                            ? currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                            : currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-accent/60 border-border hover:bg-accent hover:border-primary/40 text-foreground"
-                        )}
-                        onClick={onClose}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <item.icon className="h-5 w-5" />
-                          <span>{item.title}</span>
-                        </div>
-                        <ExternalLink className="h-3.5 w-3.5 opacity-50" />
-                      </Link>
-                    ) : item.href ? (
-                      <Link
-                        to={item.href}
-                        className={cn(
-                          "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                          currentPath === item.href
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-accent"
-                        )}
-                        onClick={onClose}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        <span>{item.title}</span>
-                      </Link>
+                   {item.href && item.isPortal ? (
+                     <Link
+                       to={item.href}
+                       className={cn(
+                         "flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-medium border",
+                         item.isRestrictedPortal
+                           ? currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
+                             ? "bg-blue-600 text-white border-blue-600"
+                             : "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-400 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                           : currentPath.startsWith("/" + item.href.split('/').slice(1, 3).join('/'))
+                             ? "bg-primary text-primary-foreground border-primary"
+                             : "bg-accent/60 border-border hover:bg-accent hover:border-primary/40 text-foreground"
+                       )}
+                       onClick={onClose}
+                     >
+                       <div className="flex items-center space-x-3">
+                         <item.icon className="h-5 w-5" />
+                         <span>{item.title}</span>
+                       </div>
+                       <ExternalLink className="h-3.5 w-3.5 opacity-50" />
+                     </Link>
+                   ) : item.href ? (
+                     <Link
+                       to={item.href}
+                       className={cn(
+                         "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                         currentPath === item.href
+                           ? "bg-primary text-primary-foreground"
+                           : "hover:bg-accent"
+                       )}
+                       onClick={onClose}
+                     >
+                       <item.icon className="h-5 w-5" />
+                       <span>{item.title}</span>
+                     </Link>
                    ) : (
                      <div className="space-y-1">
                        <button
@@ -267,56 +263,52 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
                            <ChevronRight className="h-4 w-4 transition-transform" />
                          )}
                        </button>
-                        {expandedGroups.has(item.title) && (
-                          <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
-                            {item.children?.map((child, childIndex) => {
-                              const isBlocked = isRouteBlocked(child.href);
-                              
-                              if (isBlocked) {
-                                return (
-                                  <TooltipProvider key={childIndex} delayDuration={100}>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div
-                                          className="flex items-center justify-between pl-8 pr-3 py-2 rounded-lg text-sm text-muted-foreground/50 cursor-not-allowed"
-                                        >
-                                          <div className="flex items-center space-x-3">
-                                            <child.icon className="h-4 w-4" />
-                                            <span>{child.title}</span>
-                                          </div>
-                                          <Lock className="h-3 w-3" />
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right" className="max-w-xs">
-                                        <p className="font-medium">Sección bloqueada</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                          Completa la información en "Mi Información" para habilitar esta sección.
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                );
-                              }
-                              
-                              return (
-                                <Link
-                                  key={childIndex}
-                                  to={child.href}
-                                  className={cn(
-                                    "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
-                                    currentPath === child.href
-                                      ? "bg-primary text-primary-foreground"
-                                      : "hover:bg-accent"
-                                  )}
-                                  onClick={onClose}
-                                >
-                                  <child.icon className="h-4 w-4" />
-                                  <span>{child.title}</span>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        )}
+                       {expandedGroups.has(item.title) && (
+                         <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
+                           {item.children?.map((child, childIndex) => {
+                             const isBlocked = isRouteBlocked(child.href);
+                             if (isBlocked) {
+                               return (
+                                 <TooltipProvider key={childIndex} delayDuration={100}>
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                       <div className="flex items-center justify-between pl-8 pr-3 py-2 rounded-lg text-sm text-muted-foreground/50 cursor-not-allowed">
+                                         <div className="flex items-center space-x-3">
+                                           <child.icon className="h-4 w-4" />
+                                           <span>{child.title}</span>
+                                         </div>
+                                         <Lock className="h-3 w-3" />
+                                       </div>
+                                     </TooltipTrigger>
+                                     <TooltipContent side="right" className="max-w-xs">
+                                       <p className="font-medium">Sección bloqueada</p>
+                                       <p className="text-xs text-muted-foreground mt-1">
+                                         Completa la información en "Mi Información" para habilitar esta sección.
+                                       </p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               );
+                             }
+                             return (
+                               <Link
+                                 key={childIndex}
+                                 to={child.href}
+                                 className={cn(
+                                   "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
+                                   currentPath === child.href
+                                     ? "bg-primary text-primary-foreground"
+                                     : "hover:bg-accent"
+                                 )}
+                                 onClick={onClose}
+                               >
+                                 <child.icon className="h-4 w-4" />
+                                 <span>{child.title}</span>
+                               </Link>
+                             );
+                           })}
+                         </div>
+                       )}
                      </div>
                    )}
                  </div>
@@ -326,27 +318,25 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
            </ScrollArea>
          </div>
  
-         {/* User Profile */}
-         <div className="p-4 border-t border-border">
-           <div className="flex items-center space-x-3 p-3 bg-accent rounded-lg">
-             <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-               <span className="text-primary-foreground font-medium text-sm">
-                 {getInitials(profile?.nombre)}
-               </span>
+         {/* Footer */}
+         <div className="px-3 pt-1 pb-4 border-t border-border-soft space-y-1">
+           <div className="w-full flex items-center gap-3 px-2 py-2 rounded-md">
+             <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
+               {getInitials(profile?.nombre)}
              </div>
-             <div className="flex-1 min-w-0">
-               <p className="font-medium text-sm truncate">{profile?.nombre || "Usuario"}</p>
-               <p className="text-xs text-muted-foreground truncate">{profile?.rol_nombre || "Sin rol"}</p>
-               <p className="text-[10px] text-muted-foreground/60">{APP_VERSION}</p>
+             <div className="flex-1 text-left min-w-0">
+               <p className="text-[13px] font-medium text-foreground truncate">{profile?.nombre || "Usuario"}</p>
+               <p className="text-[11px] text-muted-foreground truncate">{profile?.rol_nombre || "Sin rol"}</p>
              </div>
-             <button
-               onClick={handleSignOut}
-               className="p-2 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
-               title="Cerrar sesión"
-             >
-               <LogOut className="h-4 w-4" />
-             </button>
            </div>
+           <button
+             onClick={handleSignOut}
+             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors"
+           >
+             <LogOut className="size-4 shrink-0" />
+             Cerrar sesión
+           </button>
+           <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
          </div>
        </div>
      </>

@@ -3,7 +3,8 @@
 #
 # Destinatarios:
 #   - DEV:  autor del PR que entró a `dev` (commit que disparó el deploy) + admin.
-#   - PROD: autor del último PR mergeado a `dev` (origen del cambio promovido) + admin.
+#   - PROD: TODOS los autores de PRs mergeados a `dev` desde el último deploy
+#           a prod (HEAD^1 del merge actual) + admin.
 #
 # El teléfono (10 dígitos) del autor se lee de Firestore:
 #   contributors/{githubLogin}.telefonoWhatsapp  ->  se envía como +521<telefono>
@@ -31,7 +32,6 @@ set -euo pipefail
 ADMIN_PHONE="${ADMIN_PHONE:-+5217221514185}"
 REPO_NAME="${GITHUB_REPOSITORY##*/}"
 
-# Resultado del job (lo inyecta el workflow via STATUS: ${{ job.status }})
 STATUS="${STATUS:-success}"
 RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID:-}"
 if [ "$STATUS" = "success" ]; then
@@ -41,7 +41,7 @@ else
 fi
 
 API="https://api.github.com"
-gh() { curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+gh_api() { curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
 
 send_wa() { # $1 = teléfono E.164 ; $2 = etiqueta para log
   curl -s -X POST "$N8N_WEBHOOK" \
@@ -53,13 +53,30 @@ send_wa() { # $1 = teléfono E.164 ; $2 = etiqueta para log
 
 logins=()
 if [ "$ENVIRONMENT" = "PROD" ]; then
-  # Autor del último PR mergeado a dev (el cambio que se promovió a prod).
-  a="$(gh "$API/repos/$GITHUB_REPOSITORY/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=10" \
-      | jq -r '[.[] | select(.merged_at != null)] | .[0].user.login // empty')"
-  [ -n "$a" ] && logins+=("$a")
+  # PROD: notificar a TODOS los autores de PRs mergeados a dev desde el último
+  # deploy a prod. HEAD^1 = tip de main antes de este merge = fecha del deploy
+  # anterior a prod. Todos los PRs a dev mergeados DESPUÉS de esa fecha son
+  # "nuevos" en este release.
+  PREV_MAIN_DATE="$(git log HEAD^1 --format="%cI" -1 2>/dev/null || true)"
+  if [ -n "$PREV_MAIN_DATE" ]; then
+    echo "Buscando PRs a dev mergeados después de: ${PREV_MAIN_DATE}"
+    mapfile -t logins < <(
+      gh_api "$API/repos/$GITHUB_REPOSITORY/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=50" \
+        | jq -r --arg since "$PREV_MAIN_DATE" \
+            '[.[] | select(.merged_at != null and .merged_at > $since)] | .[].user.login' \
+        | sort -u
+    )
+    echo "Autores a notificar (${#logins[@]}): ${logins[*]:-ninguno}"
+  else
+    # Fallback: solo el último PR mergeado a dev
+    echo "No se pudo obtener fecha del deploy anterior; usando último PR a dev."
+    a="$(gh_api "$API/repos/$GITHUB_REPOSITORY/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=10" \
+        | jq -r '[.[] | select(.merged_at != null)] | .[0].user.login // empty')"
+    [ -n "$a" ] && logins+=("$a")
+  fi
 else
-  # Autor del PR que entró a dev (commit que disparó el deploy).
-  a="$(gh "$API/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+  # DEV: solo el autor del PR que entró en este push.
+  a="$(gh_api "$API/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
       | jq -r '[.[] | select(.merged_at != null)] | .[0].user.login // empty')"
   [ -n "$a" ] && logins+=("$a")
 fi

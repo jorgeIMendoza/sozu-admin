@@ -263,35 +263,36 @@ const AgentPipeline = () => {
 
   return (
     <div className="pb-24">
-      <AgentPortalHeader showAgentName>
-        {pipelinePerms.canCreate && (
-          <div className="flex items-center justify-end -mt-2">
-            {isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
+      <AgentPortalHeader>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Pipeline</h1>
+          {pipelinePerms.canCreate && (
+            isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
               <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Lock className="h-3.5 w-3.5" />
                 Completa tu capacitación
               </span>
             ) : (
-            <button
-              onClick={() => {
-                track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
-                navigate('/admin/agent/inventario/unidades?openFilters=true');
-              }}
-              className="flex items-center gap-1 text-xs font-medium text-[hsl(var(--agent-primary))] active:opacity-70"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva oferta
-            </button>
-            )}
-          </div>
-        )}
+              <button
+                onClick={() => {
+                  track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
+                  navigate('/admin/agent/inventario/unidades?openFilters=true');
+                }}
+                className="flex items-center gap-1 text-xs font-medium text-[hsl(var(--agent-primary))] active:opacity-70"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva oferta
+              </button>
+            )
+          )}
+        </div>
         {!isLoading && (
-          <>
+          <div>
             <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
               {nonExpiredOfertas.length} ofertas · {formatCurrency(totalMonto)} en proceso
             </p>
             <p className="text-[10px] text-[hsl(var(--agent-muted))]">Últimos 30 días</p>
-          </>
+          </div>
         )}
       </AgentPortalHeader>
 

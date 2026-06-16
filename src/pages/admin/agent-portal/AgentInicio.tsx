@@ -295,16 +295,12 @@ const AgentInicio = () => {
     <div className="pb-24">
       <AgentPortalHeader>
         <div>
-          <p className="text-sm text-[hsl(var(--agent-primary))]">
-            {greeting}
-          </p>
-          <h1 className="text-2xl font-bold text-[hsl(var(--agent-text))]">
-            {nombre}
-          </h1>
+          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Inicio</h1>
+          <p className="text-sm text-[hsl(var(--agent-text-secondary))]">{greeting}</p>
           {attentionItems.length > 0 && (
-            <p className="text-xs text-[hsl(var(--agent-amber))] flex items-center gap-1 mt-1">
+            <p className="text-xs text-[hsl(var(--agent-amber))] flex items-center gap-1 mt-0.5">
               <AlertCircle className="h-3.5 w-3.5" />
-              Hoy tienes {attentionItems.length} acciones pendientes
+              {attentionItems.length} {attentionItems.length === 1 ? 'acción pendiente' : 'acciones pendientes'}
             </p>
           )}
         </div>
