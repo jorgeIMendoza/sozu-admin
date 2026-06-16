@@ -23,12 +23,15 @@ interface ChecklistItem {
   nombre: string;
   estatus: EstatusItem;
   observacion: string | null;
+  responsable: string | null;
+  fecha_revision: string | null;
+  fecha_compromiso: string | null;
 }
 
 interface ChecklistCategoria {
   id: number;
   nombre: string;
-  orden: number;
+  tipo_checklist?: string;
   responsable: string | null;
   cargo: string | null;
   fecha_vobo: string | null;
@@ -296,19 +299,20 @@ export function EntregaDetalle() {
     queryFn: async () => {
       const { data: cats } = await supabase
         .from('entregas_checklist_categorias')
-        .select('id, nombre, orden, responsable, cargo, fecha_vobo, estatus, total_items, items_completos')
+        .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos')
         .eq('id_entrega', entregaId!)
         .eq('activo', true)
-        .order('orden');
+        .order('nombre');
 
       const catIds = (cats ?? []).map((c: any) => c.id);
       if (!catIds.length) return [];
 
       const { data: items } = await supabase
         .from('entregas_checklist_items')
-        .select('id, id_categoria, nombre, estatus, observacion')
+        .select('id, id_categoria, nombre, estatus, observacion, responsable, fecha_revision, fecha_compromiso')
         .in('id_categoria', catIds)
-        .eq('activo', true);
+        .eq('activo', true)
+        .order('nombre');
 
       const itemsByCat: Record<number, ChecklistItem[]> = {};
       (items ?? []).forEach((item: any) => {
@@ -365,13 +369,13 @@ export function EntregaDetalle() {
       const { data: cats, error: catErr } = await supabase
         .from('entregas_checklist_categorias')
         .insert(CHECKLIST_PLANTILLA.map(cat => ({
-          id_entrega:    nuevaEntrega.id,
-          nombre:        cat.nombre,
-          orden:         cat.orden,
-          estatus:       'PENDIENTE',
-          total_items:   cat.items.length,
+          id_entrega:      nuevaEntrega.id,
+          nombre:          cat.nombre,
+          tipo_checklist:  'PRE_ENTREGA',
+          estatus:         'PENDIENTE',
+          total_items:     cat.items.length,
           items_completos: 0,
-          activo:        true,
+          activo:          true,
         })))
         .select('id, nombre');
 
@@ -402,9 +406,11 @@ export function EntregaDetalle() {
   };
 
   // ── Derived values ────────────────────────────────────────────────────────────
-  const totalItems    = checklist.reduce((s, c) => s + c.total_items, 0);
-  const completosItems = checklist.reduce((s, c) => s + c.items_completos, 0);
-  const checklistGlobal = totalItems > 0 ? Math.round((completosItems / totalItems) * 100) : 0;
+  // Conteo desde ítems reales: aplicables = todos excepto NO_APLICA; cumplidos = CUMPLE
+  const allChecklistItems = checklist.flatMap(c => c.items);
+  const aplicables        = allChecklistItems.filter(i => i.estatus !== 'NO_APLICA');
+  const cumplidos         = aplicables.filter(i => i.estatus === 'CUMPLE');
+  const checklistGlobal   = aplicables.length > 0 ? Math.round((cumplidos.length / aplicables.length) * 100) : 0;
   const entregaEstatus = pageData?.entrega?.estatus ?? 'PENDIENTE_PRE_ENTREGA';
   const estatusMeta = ESTATUS_META[entregaEstatus] ?? { label: entregaEstatus, cls: 'bg-slate-50 text-slate-600 border border-slate-200' };
 
@@ -627,7 +633,7 @@ export function EntregaDetalle() {
           <div className="space-y-5 max-w-4xl">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Checklist técnico', value: `${checklistGlobal}%`, sub: `${completosItems}/${totalItems} ítems`, ok: checklistGlobal === 100, icon: ListChecks },
+                { label: 'Checklist técnico', value: `${checklistGlobal}%`, sub: `${cumplidos.length}/${aplicables.length} ítems`, ok: checklistGlobal === 100, icon: ListChecks },
                 { label: 'Paquete Muebles', value: daikuEstatus === 'COMPLETADO' ? 'Completado' : daikuEstatus === 'NO_APLICA' ? 'No aplica' : 'Pendiente', sub: '', ok: daikuEstatus !== 'PENDIENTE', icon: Package, tab: 'muebles' as const },
                 { label: 'Observaciones', value: `${observaciones.filter(o => o.estatus !== 'RESUELTA').length} abiertas`, sub: observaciones.some(o => o.prioridad === 'CRITICA' && o.estatus !== 'RESUELTA') ? 'Hay obs. críticas' : 'Sin obs. críticas', ok: !observaciones.some(o => o.prioridad === 'CRITICA' && o.estatus !== 'RESUELTA'), icon: AlertTriangle },
                 { label: 'Firmas', value: entrega.estatus === 'ENTREGADA' ? 'Firmado' : 'Pendiente', sub: '', ok: entrega.estatus === 'ENTREGADA', icon: ClipboardCheck },
@@ -740,13 +746,19 @@ export function EntregaDetalle() {
                                   : <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
                                 <div>
                                   <p className="font-semibold text-slate-900 text-xs">{cat.nombre}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-emerald-500 rounded-full"
-                                        style={{ width: `${cat.total_items > 0 ? Math.round((cat.items_completos / cat.total_items) * 100) : 0}%` }} />
-                                    </div>
-                                    <span className="text-[10px] text-slate-500">{cat.items_completos}/{cat.total_items}</span>
-                                  </div>
+                                  {(() => {
+                                    const catApl = cat.items.filter(i => i.estatus !== 'NO_APLICA');
+                                    const catCum = catApl.filter(i => i.estatus === 'CUMPLE');
+                                    const catPct = catApl.length > 0 ? Math.round((catCum.length / catApl.length) * 100) : 0;
+                                    return (
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${catPct}%` }} />
+                                        </div>
+                                        <span className="text-[10px] text-slate-500">{catCum.length}/{catApl.length}</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             </td>
@@ -811,16 +823,25 @@ export function EntregaDetalle() {
                 <div className="p-4 space-y-4">
                   <div>
                     <p className="text-sm font-bold text-slate-900">{selectedCat.nombre}</p>
-                    <div className="flex items-center justify-between mt-2 mb-1">
-                      <span className="text-xs text-slate-500">Conceptos</span>
-                      <span className="text-xs font-semibold text-emerald-600">
-                        {selectedCat.items_completos}/{selectedCat.total_items} completos
-                      </span>
-                    </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full transition-all"
-                        style={{ width: `${selectedCat.total_items > 0 ? Math.round((selectedCat.items_completos / selectedCat.total_items) * 100) : 0}%` }} />
-                    </div>
+                    {(() => {
+                      const panelApl = selectedCat.items.filter(i => i.estatus !== 'NO_APLICA');
+                      const panelCum = panelApl.filter(i => i.estatus === 'CUMPLE');
+                      const panelPct = panelApl.length > 0 ? Math.round((panelCum.length / panelApl.length) * 100) : 0;
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mt-2 mb-1">
+                            <span className="text-xs text-slate-500">Conceptos</span>
+                            <span className="text-xs font-semibold text-emerald-600">
+                              {panelCum.length}/{panelApl.length} completos
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full transition-all"
+                              style={{ width: `${panelPct}%` }} />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                   {selectedCat.responsable && (
                     <div className="bg-slate-50 rounded-xl p-3 space-y-2">
