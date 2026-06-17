@@ -140,6 +140,7 @@ const Estacionamientos = () => {
       const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
       const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
       const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
       if (propIds.length > 0 && prodIds.length > 0) {
         const { data: ofertasData } = await supabase
           .from('ofertas')
@@ -150,17 +151,24 @@ const Estacionamientos = () => {
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
         let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
-            .select('id, id_oferta')
+            .select('id, id_oferta, precio_final')
             .in('id_oferta', ofertaIds)
             .eq('activo', true)
             .range(0, 5000);
-          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
         }
         for (const o of ofertasData || []) {
-          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
         }
       }
 
@@ -168,7 +176,8 @@ const Estacionamientos = () => {
         // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
         // no desde la propiedad: un estacionamiento puede no tener propiedad asignada y aun así pertenecer a un proyecto.
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id,
           nombre: item.nombre,
@@ -258,6 +267,7 @@ const Estacionamientos = () => {
       const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
       const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
       const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
       if (propIds.length > 0 && prodIds.length > 0) {
         const { data: ofertasData } = await supabase
           .from('ofertas')
@@ -268,24 +278,32 @@ const Estacionamientos = () => {
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
         let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
-            .select('id, id_oferta')
+            .select('id, id_oferta, precio_final')
             .in('id_oferta', ofertaIds)
             .eq('activo', true)
             .range(0, 5000);
-          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
         }
         for (const o of ofertasData || []) {
-          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
         }
       }
 
       const enrichedData = allData.map((item: any) => {
         // Proyecto desde el producto, no desde la propiedad (ver query de activos).
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id, nombre: item.nombre, m2: item.m2, ubicacion: item.ubicacion,
           es_incluido: item.es_incluido, activo: item.activo,

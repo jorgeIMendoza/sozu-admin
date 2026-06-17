@@ -136,6 +136,7 @@ const Bodegas = () => {
       const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
       const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
       const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
       if (propIds.length > 0 && prodIds.length > 0) {
         const { data: ofertasData } = await supabase
           .from('ofertas')
@@ -146,17 +147,24 @@ const Bodegas = () => {
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
         let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
-            .select('id, id_oferta')
+            .select('id, id_oferta, precio_final')
             .in('id_oferta', ofertaIds)
             .eq('activo', true)
             .range(0, 5000);
-          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
         }
         for (const o of ofertasData || []) {
-          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
         }
       }
 
@@ -167,7 +175,8 @@ const Bodegas = () => {
         const proyecto = item.productos_servicios?.proyectos;
         const id_proyecto = item.productos_servicios?.id_proyecto;
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id,
           nombre: item.nombre,
@@ -259,6 +268,7 @@ const Bodegas = () => {
       const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
       const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
       const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
       if (propIds.length > 0 && prodIds.length > 0) {
         const { data: ofertasData } = await supabase
           .from('ofertas')
@@ -269,17 +279,24 @@ const Bodegas = () => {
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
         let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
-            .select('id, id_oferta')
+            .select('id, id_oferta, precio_final')
             .in('id_oferta', ofertaIds)
             .eq('activo', true)
             .range(0, 5000);
-          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
         }
         for (const o of ofertasData || []) {
-          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
         }
       }
 
@@ -290,7 +307,8 @@ const Bodegas = () => {
         const proyecto = item.productos_servicios?.proyectos;
         const id_proyecto = item.productos_servicios?.id_proyecto;
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id,
           nombre: item.nombre,
