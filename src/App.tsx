@@ -97,6 +97,7 @@ const ConfiguracionReportes = lazyRetry(() => import("./pages/admin/Configuracio
 const VersionProduccion = lazyRetry(() => import("./pages/admin/VersionProduccion"));
 const ReportesInventarios = lazyRetry(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas"));
+const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -709,6 +710,7 @@ const App = () => (
                  <Route path="version-produccion" element={<VersionProduccion />} />
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
+                  <Route path="finanzas/validacion-contratos" element={<ValidacionContratosPDF />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
@@ -815,6 +817,7 @@ const App = () => (
                   <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
                   <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
                   <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  <Route path="portal-escrituracion/validacion-contratos" element={<ValidacionContratosPDF />} />
                   {/* Portal Notaría — independiente del Portal Escrituración */}
                   <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
                   {/* Portal Jurídico — independiente del Portal Escrituración */}
@@ -1001,6 +1004,7 @@ const App = () => (
                  <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
                  <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                  <Route path="legal-flow/escrituracion/expedientes" element={<LegalFlowEscExpedientes />} />
+                 <Route path="legal-flow/validacion-contratos" element={<ValidacionContratosPDF />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -16,6 +16,7 @@ import {
   Scale,
   HeartHandshake,
   GitBranch,
+  FileSearch,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { label: "Entregas",              path: "/admin/portal-escrituracion/entregas",       icon: PackageCheck },
   { label: "Postventa",             path: "/admin/portal-escrituracion/postventa",      icon: HeartHandshake },
   { label: "Workflow",              path: "/admin/portal-escrituracion/workflow",        icon: GitBranch },
+  { label: "Validación Contratos", path: "/admin/portal-escrituracion/validacion-contratos", icon: FileSearch },
 ];
 
 export const PortalEscrituracionLayout = () => {
