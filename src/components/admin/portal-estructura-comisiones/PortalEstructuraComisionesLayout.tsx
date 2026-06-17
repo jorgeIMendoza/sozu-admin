@@ -112,7 +112,7 @@ const SECTION_LABELS: Record<string, string> = (() => {
   return map;
 })();
 
-export const PortalEstructuraComisionesLayout = () => {
+const PortalEstructuraComisionesLayoutInner = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
@@ -248,7 +248,6 @@ export const PortalEstructuraComisionesLayout = () => {
   );
 
   return (
-    <ProjectAdminImpersonationProvider>
     <SimulatorProvider>
       <InventoryProvider>
         <CompetitorsProvider>
@@ -306,8 +305,13 @@ export const PortalEstructuraComisionesLayout = () => {
         </CompetitorsProvider>
       </InventoryProvider>
     </SimulatorProvider>
-    </ProjectAdminImpersonationProvider>
   );
 };
+
+export const PortalEstructuraComisionesLayout = () => (
+  <ProjectAdminImpersonationProvider>
+    <PortalEstructuraComisionesLayoutInner />
+  </ProjectAdminImpersonationProvider>
+);
 
 export default PortalEstructuraComisionesLayout;
