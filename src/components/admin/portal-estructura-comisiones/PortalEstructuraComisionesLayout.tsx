@@ -90,7 +90,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
-  const currentSection = Object.entries(SECTION_LABELS).find(([p]) => isActive(p))?.[1] || "Estructura de Comisiones";
+  const currentSection = Object.entries(SECTION_LABELS).find(([p]) => isActive(p))?.[1] || "Estructura de comisiones";
 
   const handleNavigate = (path: string) => { navigate(path); setMobileOpen(false); };
 
