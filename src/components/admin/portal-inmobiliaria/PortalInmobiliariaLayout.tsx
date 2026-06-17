@@ -15,6 +15,7 @@ import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSe
 import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { usePortalNav } from "@/hooks/usePortalNav";
 
 const PORTAL_INMOB_MENU_ID = 17;
 
@@ -28,17 +29,6 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-inmobiliaria/reportes": BarChart3,
   "/admin/portal-inmobiliaria/configuracion": Settings,
 };
-
-const FALLBACK_TABS = [
-  { path: "/admin/portal-inmobiliaria/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/admin/portal-inmobiliaria/agentes", label: "Agentes", icon: Users },
-  { path: "/admin/portal-inmobiliaria/pipeline", label: "Pipeline", icon: BarChart2 },
-  { path: "/admin/portal-inmobiliaria/prospectos", label: "Prospectos", icon: UserCheck },
-  { path: "/admin/portal-inmobiliaria/citas", label: "Citas", icon: CalendarDays },
-  { path: "/admin/portal-inmobiliaria/comisiones", label: "Comisiones", icon: DollarSign },
-  { path: "/admin/portal-inmobiliaria/reportes", label: "Reportes", icon: BarChart3 },
-  { path: "/admin/portal-inmobiliaria/configuracion", label: "Configuración", icon: Settings },
-];
 
 export const PortalInmobiliariaLayout = () => {
   const location = useLocation();
@@ -90,24 +80,7 @@ export const PortalInmobiliariaLayout = () => {
   const agencyName = agencyInfo?.name || "Mi Inmobiliaria";
   const comisionPct = agencyInfo?.comisionPct;
 
-  const { data: tabs = FALLBACK_TABS } = useQuery({
-    queryKey: ["portal-inmob-tabs"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("submenus")
-        .select("nombre, vista_front_end, orden")
-        .eq("menu_id", PORTAL_INMOB_MENU_ID)
-        .eq("activo", true)
-        .order("orden");
-      if (error || !data || data.length === 0) return FALLBACK_TABS;
-      return data.map((s: any) => ({
-        path: s.vista_front_end,
-        label: s.nombre,
-        icon: iconMap[s.vista_front_end] || LayoutDashboard,
-      }));
-    },
-    staleTime: 5 * 60_000,
-  });
+  const tabs = usePortalNav(PORTAL_INMOB_MENU_ID, iconMap, LayoutDashboard);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const showBackButton = !isInmobiliariaRole;
