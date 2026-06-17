@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -513,7 +513,7 @@ function CuentaDetalleModal({
                     ))}
                     {productos.length > 1 && (
                       <div className="flex items-center justify-between px-3 py-2.5 border-t border-border bg-muted/40">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           Total escrituración
                         </span>
                         <span className="text-[15px] font-bold tabular-nums">{fmtCurrency(totalEscrituracion)}</span>
@@ -782,74 +782,68 @@ export default function ValidacionContratosPDF() {
     }, []);
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-6 space-y-6">
 
       {/* Header */}
       <div>
-        <h1 className="text-[18px] font-semibold text-foreground tracking-tight flex items-center gap-2">
-          <FileSearch className="size-5 text-muted-foreground" />
-          Validación Contratos PDF
-        </h1>
-        <p className="text-[13px] text-muted-foreground mt-0.5">
+        <h1 className="text-2xl font-bold tracking-tight">Validación Contratos PDF</h1>
+        <p className="text-muted-foreground mt-1">
           Contratos de propiedades SOZU - verificacion precio PDF vs precio DB (departamento)
         </p>
       </div>
 
       {/* Stats */}
-      <div className="flex flex-wrap gap-3">
-        <Card className="border">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-6">
-              <p className="text-[12px] text-muted-foreground font-medium">Total</p>
-              <FileSearch className="size-4 text-foreground" />
-            </div>
-            <p className="text-2xl font-bold mt-1 tabular-nums">{isLoading ? "-" : stats.total}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <FileSearch className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">{isLoading ? "-" : stats.total}</div>
           </CardContent>
         </Card>
-        {!isLoading && stats.coincide > 0 && (
-          <Card className="border border-emerald-200 bg-emerald-50/40">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-6">
-                <p className="text-[12px] text-emerald-700 font-medium">Coinciden</p>
-                <CheckCircle2 className="size-4 text-emerald-600" />
-              </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700">{stats.coincide}</p>
-            </CardContent>
-          </Card>
-        )}
-        {!isLoading && stats.no_coincide > 0 && (
-          <Card className="border border-red-200 bg-red-50/40">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-6">
-                <p className="text-[12px] text-red-700 font-medium">No coinciden</p>
-                <XCircle className="size-4 text-red-600" />
-              </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums text-red-700">{stats.no_coincide}</p>
-            </CardContent>
-          </Card>
-        )}
-        {!isLoading && stats.error > 0 && (
-          <Card className="border border-amber-200 bg-amber-50/40">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-6">
-                <p className="text-[12px] text-amber-700 font-medium">Error lectura</p>
-                <AlertCircle className="size-4 text-amber-600" />
-              </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums text-amber-700">{stats.error}</p>
-            </CardContent>
-          </Card>
-        )}
-        {!isLoading && stats.sin_registro > 0 && (
-          <Card className="border">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-6">
-                <p className="text-[12px] text-muted-foreground font-medium">Sin validar</p>
-                <Clock className="size-4 text-muted-foreground" />
-              </div>
-              <p className="text-2xl font-bold mt-1 tabular-nums text-muted-foreground">{stats.sin_registro}</p>
-            </CardContent>
-          </Card>
-        )}
+        <Card className={cn(!isLoading && stats.coincide > 0 ? "border-emerald-200 bg-emerald-50/40" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.coincide > 0 ? "text-emerald-700" : "text-muted-foreground")}>Coinciden</CardTitle>
+            <CheckCircle2 className={cn("h-4 w-4", !isLoading && stats.coincide > 0 ? "text-emerald-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.coincide > 0 ? "text-emerald-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.coincide}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn(!isLoading && stats.no_coincide > 0 ? "border-red-200 bg-red-50/40" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.no_coincide > 0 ? "text-red-700" : "text-muted-foreground")}>No coinciden</CardTitle>
+            <XCircle className={cn("h-4 w-4", !isLoading && stats.no_coincide > 0 ? "text-red-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.no_coincide > 0 ? "text-red-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.no_coincide}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn(!isLoading && stats.error > 0 ? "border-amber-200 bg-amber-50/40" : !isLoading && stats.sin_registro > 0 ? "" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.error > 0 ? "text-amber-700" : "text-muted-foreground")}>
+              {!isLoading && stats.error === 0 ? "Sin validar" : "Error lectura"}
+            </CardTitle>
+            {!isLoading && stats.error > 0
+              ? <AlertCircle className="h-4 w-4 text-amber-600" />
+              : <Clock className="h-4 w-4 text-muted-foreground" />
+            }
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.error > 0 ? "text-amber-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.error > 0 ? stats.error : stats.sin_registro}
+            </div>
+            {!isLoading && stats.error > 0 && stats.sin_registro > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">{stats.sin_registro} sin validar</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -858,16 +852,16 @@ export default function ValidacionContratosPDF() {
           placeholder="Unidad (No. propiedad)"
           value={searchUnidad}
           onChange={(e) => { setSearchUnidad(e.target.value); resetPage(); }}
-          className="h-9 text-[13px] w-[160px] sm:w-[180px]"
+          className="h-9 text-sm w-[160px] sm:w-[180px]"
         />
         <Input
           placeholder="Cliente / Dueño"
           value={searchCliente}
           onChange={(e) => { setSearchCliente(e.target.value); resetPage(); }}
-          className="h-9 text-[13px] w-[160px] sm:w-[200px]"
+          className="h-9 text-sm w-[160px] sm:w-[200px]"
         />
         <Select value={filtroProyecto} onValueChange={(v) => { setFiltroProyecto(v); resetPage(); }}>
-          <SelectTrigger className="h-9 w-[160px] sm:w-[180px] text-[13px]">
+          <SelectTrigger className="h-9 w-[160px] sm:w-[180px] text-sm">
             <SelectValue placeholder="Proyecto" />
           </SelectTrigger>
           <SelectContent>
@@ -876,7 +870,7 @@ export default function ValidacionContratosPDF() {
           </SelectContent>
         </Select>
         <Select value={filtroEstado} onValueChange={(v) => { setFiltroEstado(v); resetPage(); }}>
-          <SelectTrigger className="h-9 w-[150px] text-[13px]">
+          <SelectTrigger className="h-9 w-[150px] text-sm">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
@@ -887,7 +881,7 @@ export default function ValidacionContratosPDF() {
             <SelectItem value="sin_registro">Sin registro</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-[12px] text-muted-foreground tabular-nums ml-auto hidden sm:block">
+        <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
           {isLoading ? "Cargando..." : `${filtered.length} de ${stats.total} · Pág. ${currentPage}/${totalPages}`}
         </p>
       </div>
@@ -898,17 +892,17 @@ export default function ValidacionContratosPDF() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Cuenta</TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Proyecto</TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Unidad</TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Cliente / Dueño</TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right hidden xl:table-cell">
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Cuenta</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Proyecto</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Unidad</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Cliente / Dueño</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right hidden xl:table-cell">
                   Precio Final
                 </TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">
                   Estado PDF
                 </TableHead>
-                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center w-[80px]">
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[80px]">
                   Acciones
                 </TableHead>
               </TableRow>
@@ -919,25 +913,25 @@ export default function ValidacionContratosPDF() {
                   <TableCell colSpan={7} className="h-32 text-center">
                     <div className="flex items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="size-4 animate-spin" />
-                      <span className="text-[13px]">Cargando contratos...</span>
+                      <span className="text-sm">Cargando contratos...</span>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-[13px] text-destructive">
+                  <TableCell colSpan={7} className="h-32 text-center text-sm text-destructive">
                     Error al cargar datos.
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-[13px] text-muted-foreground">
+                  <TableCell colSpan={7} className="h-32 text-center text-sm text-muted-foreground">
                     Sin resultados para los filtros actuales
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((c) => (
-                    <TableRow key={c.cuenta_id} className="hover:bg-muted/30 text-[13px]">
+                    <TableRow key={c.cuenta_id} className="hover:bg-muted/30 text-sm">
                       <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                         {formatCuentaCobranzaId(c.cuenta_id)}
                       </TableCell>
@@ -1029,7 +1023,7 @@ export default function ValidacionContratosPDF() {
       {/* Pagination */}
       {!isLoading && filtered.length > ITEMS_PER_PAGE && (
         <div className="flex items-center justify-between gap-4">
-          <p className="text-[12px] text-muted-foreground tabular-nums shrink-0">
+          <p className="text-sm text-muted-foreground tabular-nums shrink-0">
             {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
           </p>
           <div className="flex items-center gap-1">
@@ -1038,9 +1032,9 @@ export default function ValidacionContratosPDF() {
             </Button>
             {pageNumbers.map((p, idx) =>
               p === "…" ? (
-                <span key={`e${idx}`} className="px-1 text-[13px] text-muted-foreground">…</span>
+                <span key={`e${idx}`} className="px-1 text-sm text-muted-foreground">…</span>
               ) : (
-                <Button key={p} variant={p === currentPage ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(p as number)} className="h-8 w-8 p-0 text-[13px]">
+                <Button key={p} variant={p === currentPage ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(p as number)} className="h-8 w-8 p-0 text-sm">
                   {p}
                 </Button>
               )
