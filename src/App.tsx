@@ -816,7 +816,8 @@ const App = () => (
                   <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
                   {/* Portal Estructura de Comisiones */}
-                  <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/dashboard" replace />} />
+                  <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
+                  <Route path="portal-estructura-comisiones/dashboard" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
                   <Route path="portal-estructura-comisiones/dashboard" element={<PECDashboard />} />
                   <Route path="portal-estructura-comisiones/executive" element={<PECExecutiveDashboard onTabChange={() => {}} />} />
                   <Route path="portal-estructura-comisiones/projects" element={<PECProjects />} />
