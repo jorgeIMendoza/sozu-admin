@@ -29,6 +29,7 @@ interface ContratoRow {
   precio_final: number;
   fecha_compra: string | null;
   contrato_url: string | null;
+  estado_validacion: "correcto" | "discrepancia" | "pendiente" | null;
 }
 
 interface CuentaDetalle {
@@ -684,7 +685,8 @@ export default function ValidacionContratosPDF() {
             m.nombre              AS modelo,
             proy.nombre           AS proyecto,
             pers.nombre_legal     AS dueno,
-            doc_ctto.url          AS contrato_url
+            doc_ctto.url          AS contrato_url,
+            NULL::text            AS estado_validacion
           FROM cuentas_cobranza cc
           JOIN ofertas o                ON o.id  = cc.id_oferta          AND o.activo = true
                                         AND o.id_producto IS NULL
@@ -726,8 +728,9 @@ export default function ValidacionContratosPDF() {
         numero_propiedad: row.numero_propiedad ?? null,
         dueno:            row.dueno            ?? "Sin propietario",
         precio_final:     Number(row.precio_final),
-        fecha_compra:     row.fecha_compra     ?? null,
-        contrato_url:     row.contrato_url     ?? null,
+        fecha_compra:       row.fecha_compra     ?? null,
+        contrato_url:       row.contrato_url     ?? null,
+        estado_validacion:  row.estado_validacion ?? null,
       }));
     },
   });
@@ -826,6 +829,9 @@ export default function ValidacionContratosPDF() {
                 <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right hidden xl:table-cell">
                   Precio Final
                 </TableHead>
+                <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">
+                  Estado PDF
+                </TableHead>
                 <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center w-[80px]">
                   Acciones
                 </TableHead>
@@ -834,7 +840,7 @@ export default function ValidacionContratosPDF() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center">
+                  <TableCell colSpan={7} className="h-32 text-center">
                     <div className="flex items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="size-4 animate-spin" />
                       <span className="text-[13px]">Cargando contratos...</span>
@@ -843,13 +849,13 @@ export default function ValidacionContratosPDF() {
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-[13px] text-destructive">
+                  <TableCell colSpan={7} className="h-32 text-center text-[13px] text-destructive">
                     Error al cargar datos.
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-[13px] text-muted-foreground">
+                  <TableCell colSpan={7} className="h-32 text-center text-[13px] text-muted-foreground">
                     Sin resultados para los filtros actuales
                   </TableCell>
                 </TableRow>
@@ -875,6 +881,25 @@ export default function ValidacionContratosPDF() {
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-right tabular-nums font-medium whitespace-nowrap">
                         {fmtCurrency(c.precio_final)}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-center whitespace-nowrap">
+                        {c.estado_validacion === "correcto" ? (
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] gap-1 px-2 py-0.5">
+                            <CheckCircle2 className="size-3" />Correcto
+                          </Badge>
+                        ) : c.estado_validacion === "discrepancia" ? (
+                          <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[11px] gap-1 px-2 py-0.5">
+                            Discrepancia
+                          </Badge>
+                        ) : c.estado_validacion === "pendiente" ? (
+                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[11px] gap-1 px-2 py-0.5">
+                            <Clock className="size-3" />Pendiente
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-border text-muted-foreground text-[11px] px-2 py-0.5">
+                            Sin registro
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
