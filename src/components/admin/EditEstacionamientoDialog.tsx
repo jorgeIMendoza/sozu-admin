@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Combobox } from "@/components/ui/combobox";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,10 +18,47 @@ interface Estacionamiento {
   activo: boolean;
   tipo_nombre: string;
   proyecto_nombre: string;
+  proyecto_id?: number | null;
+  id_propiedad?: number | null;
   numero_propiedad: string;
   id_tipo: number | null;
   es_incluido?: boolean;
   precio_final?: number | null;
+}
+
+// Propiedades (departamentos) del proyecto al que pertenece el producto.
+function usePropiedadesProyecto(proyectoId: number | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['estacionamiento-propiedades-proyecto', proyectoId],
+    queryFn: async () => {
+      // Waterfall: proyecto → edificios → edificios_modelos → propiedades
+      const { data: edificios } = await supabase
+        .from('edificios')
+        .select('id')
+        .eq('id_proyecto', proyectoId!)
+        .eq('activo', true);
+      const edificioIds = (edificios || []).map((e: any) => e.id);
+      if (edificioIds.length === 0) return [];
+
+      const { data: modelos } = await supabase
+        .from('edificios_modelos')
+        .select('id')
+        .in('id_edificio', edificioIds);
+      const modeloIds = (modelos || []).map((m: any) => m.id);
+      if (modeloIds.length === 0) return [];
+
+      const { data: propiedades } = await supabase
+        .from('propiedades')
+        .select('id, numero_propiedad')
+        .in('id_edificio_modelo', modeloIds)
+        .eq('activo', true)
+        .order('numero_propiedad')
+        .range(0, 5000);
+      return (propiedades || []) as { id: number; numero_propiedad: string }[];
+    },
+    enabled: enabled && !!proyectoId,
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 interface EditEstacionamientoDialogProps {
@@ -42,7 +80,10 @@ export const EditEstacionamientoDialog = ({
     ubicacion: estacionamiento?.ubicacion || "",
     id_tipo: estacionamiento?.id_tipo || null,
     es_incluido: estacionamiento?.es_incluido ?? true,
+    id_propiedad: estacionamiento?.id_propiedad ?? null as number | null,
   }));
+
+  const { data: propiedades = [] } = usePropiedadesProyecto(estacionamiento?.proyecto_id, open);
 
   // Query para obtener tipos de estacionamiento
   const { data: tiposEstacionamiento = [] } = useQuery({
@@ -68,6 +109,7 @@ export const EditEstacionamientoDialog = ({
         ubicacion: estacionamiento.ubicacion,
         id_tipo: estacionamiento.id_tipo,
         es_incluido: estacionamiento.es_incluido ?? true,
+        id_propiedad: estacionamiento.id_propiedad ?? null,
       });
     }
   }, [estacionamiento]);
@@ -86,6 +128,7 @@ export const EditEstacionamientoDialog = ({
       ubicacion: "",
       id_tipo: null,
       es_incluido: true,
+      id_propiedad: null,
     });
   };
 
@@ -148,6 +191,32 @@ export const EditEstacionamientoDialog = ({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Propiedad asignada (departamento)</Label>
+            <Combobox
+              value={formData.id_propiedad ? String(formData.id_propiedad) : ""}
+              // id_propiedad es NOT NULL en estacionamientos: ignorar el vaciado (no se puede dejar sin propiedad).
+              onValueChange={(v) => { if (v) setFormData({ ...formData, id_propiedad: Number(v) }); }}
+              options={propiedades.map((p) => ({
+                value: String(p.id),
+                label: p.numero_propiedad,
+              }))}
+              placeholder="Sin propiedad asignada"
+              searchPlaceholder="Buscar número de departamento..."
+              emptyText="No se encontró el departamento en este proyecto"
+              disabled={!estacionamiento.proyecto_id}
+            />
+            {!estacionamiento.proyecto_id ? (
+              <p className="text-xs text-muted-foreground">
+                El producto no tiene proyecto asignado, no es posible seleccionar departamentos.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Solo se muestran departamentos del proyecto {estacionamiento.proyecto_nombre}.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">
