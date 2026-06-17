@@ -44,6 +44,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Allow portal-estructura-comisiones for Super Admin (1) and Administrador de Proyectos (2),
+  // o cualquier rol con permiso explícito en la BD.
+  if (location.pathname.startsWith('/admin/portal-estructura-comisiones')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    let tieneAccesoEC = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-estructura-comisiones')) {
+        tieneAccesoEC = true;
+        break;
+      }
+    }
+    return tieneAccesoEC
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
