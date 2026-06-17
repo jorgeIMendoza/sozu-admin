@@ -5111,36 +5111,36 @@ export type Database = {
       entregas_checklist_items: {
         Row: {
           activo: boolean
-          estatus: string
           fecha_compromiso: string | null
           fecha_creacion: string
           fecha_revision: string | null
           id: number
           id_categoria: number
+          id_estatus_checklist: number
           nombre: string
           observacion: string | null
           responsable: string | null
         }
         Insert: {
           activo?: boolean
-          estatus?: string
           fecha_compromiso?: string | null
           fecha_creacion?: string
           fecha_revision?: string | null
           id?: never
           id_categoria: number
+          id_estatus_checklist?: number
           nombre: string
           observacion?: string | null
           responsable?: string | null
         }
         Update: {
           activo?: boolean
-          estatus?: string
           fecha_compromiso?: string | null
           fecha_creacion?: string
           fecha_revision?: string | null
           id?: never
           id_categoria?: number
+          id_estatus_checklist?: number
           nombre?: string
           observacion?: string | null
           responsable?: string | null
@@ -5151,6 +5151,13 @@ export type Database = {
             columns: ["id_categoria"]
             isOneToOne: false
             referencedRelation: "entregas_checklist_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_checklist_items_estatus"
+            columns: ["id_estatus_checklist"]
+            isOneToOne: false
+            referencedRelation: "estatus_checklist"
             referencedColumns: ["id"]
           },
         ]
@@ -5659,6 +5666,33 @@ export type Database = {
           fecha_creacion?: string | null
           id?: number
           nombre?: string | null
+        }
+        Relationships: []
+      }
+      estatus_checklist: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
         }
         Relationships: []
       }
