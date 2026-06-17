@@ -111,10 +111,13 @@ const Estacionamientos = () => {
           *,
           tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre),
           propiedades!estacionamientos_id_propiedad_fkey(
-            numero_propiedad,
-            id_entidad_relacionada_dueno
+            numero_propiedad
           ),
-          productos_servicios!estacionamientos_id_producto_fkey(precio_lista)
+          productos_servicios!estacionamientos_id_producto_fkey(
+            precio_lista,
+            id_proyecto,
+            proyectos!productos_servicios_id_proyecto_fkey(id, nombre)
+          )
         `, { count: 'exact' })
         .eq('activo', true)
         .order('id', { ascending: false });
@@ -123,26 +126,9 @@ const Estacionamientos = () => {
       
       if (error) throw error;
 
-      const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-      
-      let entitiesData: any[] = [];
-      if (entityIds.length > 0) {
-        const { data: entities, error: entitiesError } = await supabase
-          .from('entidades_relacionadas')
-          .select(`
-            id,
-            id_proyecto,
-            proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)
-          `)
-          .in('id', entityIds);
-        
-        if (!entitiesError) {
-          entitiesData = entities || [];
-        }
-      }
-
       const enrichedData = allData.map((item: any) => {
-        const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
+        // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
+        // no desde la propiedad: un estacionamiento puede no tener propiedad asignada y aun así pertenecer a un proyecto.
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
         const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
         return {
@@ -153,8 +139,8 @@ const Estacionamientos = () => {
           es_incluido: item.es_incluido,
           activo: item.activo,
           tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
-          proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
-          proyecto_id: entity?.id_proyecto || entity?.proyectos?.id || null,
+          proyecto_nombre: item.productos_servicios?.proyectos?.nombre || 'N/A',
+          proyecto_id: item.productos_servicios?.id_proyecto || item.productos_servicios?.proyectos?.id || null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           id_tipo: item.id_tipo,
           precio_m2: precioM2,
@@ -207,10 +193,13 @@ const Estacionamientos = () => {
           *,
           tipos_estacionamiento!estacionamientos_id_tipo_fkey(nombre),
           propiedades!estacionamientos_id_propiedad_fkey(
-            numero_propiedad,
-            id_entidad_relacionada_dueno
+            numero_propiedad
           ),
-          productos_servicios!estacionamientos_id_producto_fkey(precio_lista)
+          productos_servicios!estacionamientos_id_producto_fkey(
+            precio_lista,
+            id_proyecto,
+            proyectos!productos_servicios_id_proyecto_fkey(id, nombre)
+          )
         `, { count: 'exact' })
         .eq('activo', false)
         .order('id', { ascending: false });
@@ -218,26 +207,16 @@ const Estacionamientos = () => {
       const { data: allData, error } = await query.range(0, 2000);
       if (error) throw error;
 
-      const entityIds = [...new Set(allData.map(item => item.propiedades?.id_entidad_relacionada_dueno).filter(Boolean))];
-      let entitiesData: any[] = [];
-      if (entityIds.length > 0) {
-        const { data: entities, error: entitiesError } = await supabase
-          .from('entidades_relacionadas')
-          .select(`id, id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)`)
-          .in('id', entityIds);
-        if (!entitiesError) entitiesData = entities || [];
-      }
-
       const enrichedData = allData.map((item: any) => {
-        const entity = entitiesData.find(e => e.id === item.propiedades?.id_entidad_relacionada_dueno);
+        // Proyecto desde el producto, no desde la propiedad (ver query de activos).
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
         const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
         return {
           id: item.id, nombre: item.nombre, m2: item.m2, ubicacion: item.ubicacion,
           es_incluido: item.es_incluido, activo: item.activo,
           tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
-          proyecto_nombre: entity?.proyectos?.nombre || 'N/A',
-          proyecto_id: entity?.id_proyecto || entity?.proyectos?.id || null,
+          proyecto_nombre: item.productos_servicios?.proyectos?.nombre || 'N/A',
+          proyecto_id: item.productos_servicios?.id_proyecto || item.productos_servicios?.proyectos?.id || null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           id_tipo: item.id_tipo,
           precio_m2: precioM2,
