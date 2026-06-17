@@ -5,7 +5,7 @@ import {
   Advisor, AmbassadorsSettings, AssignmentStatus, CommissionStatus,
   DEFAULT_PAYMENT_DOCS, DEFAULT_SETTINGS, DocumentStatus, Referral,
   ReferralStatus, ProtectionStatus, InterestType,
-  AmbassadorStatus, CommissionTrigger, nextStepFor,
+  AmbassadorStatus, CommissionTrigger, nextStepFor, ReferralCanal,
 } from '@/types/ambassadors';
 import { toast } from 'sonner';
 
@@ -78,6 +78,7 @@ function mapReferral(row: any): Referral {
     estimatedPaymentDate: row.fecha_pago_estimada ?? undefined,
     paymentDate: row.fecha_pago ?? undefined,
     auditTrail: Array.isArray(row.audit_trail) ? row.audit_trail : [],
+    canal: (row.canal ?? undefined) as ReferralCanal | undefined,
   };
 }
 
@@ -196,7 +197,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         estatus_asignacion, fecha_asignacion, ultima_actualizacion_asesor,
         notas_internas, comentarios_publicos, proximo_paso, estatus_proteccion,
         monto_venta, monto_comision, estatus_comision, fecha_pago_estimada, fecha_pago,
-        audit_trail, fecha_creacion, activo,
+        audit_trail, fecha_creacion, activo, canal,
         entidades_relacionadas!embajadores_referidos_id_entidad_relacionada_fkey(
           id_persona,
           personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono)

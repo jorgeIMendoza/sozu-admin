@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAllowedMenus } from '@/hooks/useAllowedMenus';
 import { useDynamicMenus } from '@/hooks/useDynamicMenus';
 import { useAuth } from '@/contexts/AuthContext';
+import { useHasEmbajadorRole } from '@/hooks/useHasEmbajadorRole';
 import { Loader2 } from 'lucide-react';
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
@@ -15,6 +16,7 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   const { isPathAllowed, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
   const { menuItems, isLoading: isMenuLoading } = useDynamicMenus();
   const { profile } = useAuth();
+  const hasEmbajadorRole = useHasEmbajadorRole();
   const location = useLocation();
 
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
@@ -42,11 +44,19 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
-  // Allow portal-embajador routes para el rol Embajador y para Super Admin / Admin (impersonación)
+  // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
       return <>{children}</>;
     }
+    if (hasEmbajadorRole === null) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    if (hasEmbajadorRole) return <>{children}</>;
     return <Navigate to="/admin/access-denied" replace />;
   }
 

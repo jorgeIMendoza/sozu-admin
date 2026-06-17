@@ -327,8 +327,8 @@ function AdvisorCombobox({
 
 // =============== Referral form dialog (Supabase) ===============
 export function ReferralFormDialog({
-  open, onOpenChange, defaultAmbassadorId, hideAdvisor,
-}: { open: boolean; onOpenChange: (b: boolean) => void; defaultAmbassadorId?: string; hideAdvisor?: boolean }) {
+  open, onOpenChange, defaultAmbassadorId, hideAdvisor, canal,
+}: { open: boolean; onOpenChange: (b: boolean) => void; defaultAmbassadorId?: string; hideAdvisor?: boolean; canal?: 'admin' | 'portal_embajador' | 'link_referido' | 'importacion' }) {
   const { ambassadors, advisors, referrals, refresh } = useAmbassadors();
   const [form, setForm] = useState<any>({
     ambassadorId: defaultAmbassadorId ?? ambassadors[0]?.id ?? '',
@@ -430,7 +430,11 @@ export function ReferralFormDialog({
       if (erError || !erData) throw erError ?? new Error('Error al crear entidad_relacionada');
 
       // Crear referido en bridge table
-      const { error: refError } = await supabase.from('embajadores_referidos').insert({
+      // DDL probe: incluir canal solo si la columna existe
+      const canalProbe = await (supabase as any).from('embajadores_referidos').select('canal').limit(0);
+      const canalExists = !canalProbe.error;
+
+      const refPayload: any = {
         id_entidad_relacionada: erData.id,
         id_entidad_relacionada_emb: Number(form.ambassadorId),
         id_persona_embajador: emb?.idPersona ?? 0,
@@ -449,7 +453,10 @@ export function ReferralFormDialog({
         estatus_asignacion: adv ? 'asignado' : 'sin_asignar',
         fecha_asignacion: adv ? new Date().toISOString() : null,
         audit_trail: [{ timestamp: new Date().toISOString(), actor: 'admin', type: 'creado' }],
-      } as any);
+      };
+      if (canalExists && canal) refPayload.canal = canal;
+
+      const { error: refError } = await supabase.from('embajadores_referidos').insert(refPayload);
       if (refError) throw refError;
 
       toast.success('Referido registrado');
@@ -1367,7 +1374,7 @@ export default function AmbassadorsAdminTab() {
           ambassadorName={verifyAmb?.fullName}
         />
 
-        <ReferralFormDialog open={showRefForm} onOpenChange={setShowRefForm} />
+        <ReferralFormDialog open={showRefForm} onOpenChange={setShowRefForm} canal="admin" />
         <ReferralDetailSheet referralId={openRefId} onOpenChange={setOpenRefId} />
       </div>
     </TooltipProvider>

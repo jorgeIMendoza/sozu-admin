@@ -1,5 +1,7 @@
 export type AmbassadorStatus = 'activo' | 'inactivo' | 'pendiente';
 
+export type ReferralCanal = 'admin' | 'portal_embajador' | 'link_referido' | 'importacion';
+
 export type CommissionTrigger = 'apartado' | 'promesa' | 'enganche' | 'escrituracion';
 
 export type CommissionStatus =
@@ -167,6 +169,7 @@ export interface Referral {
   estimatedPaymentDate?: string;
   paymentDate?: string;
   auditTrail: AmbassadorAuditEvent[];
+  canal?: ReferralCanal;
 }
 
 export const REFERRAL_STATUS_LABEL: Record<ReferralStatus, string> = {
