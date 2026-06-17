@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Car, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
+  AlertCircle, Car, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
   ChevronUp, Clock, Eye, FileSearch, FileText, Home,
-  Info, Loader2, Package,
+  Info, Loader2, Package, XCircle,
 } from "lucide-react";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,9 @@ interface ContratoRow {
   precio_final: number;
   fecha_compra: string | null;
   contrato_url: string | null;
-  estado_validacion: "correcto" | "discrepancia" | "pendiente" | null;
+  estado_validacion: "coincide" | "no_coincide" | "error" | null;
+  monto_real: number | null;
+  motivo: string | null;
 }
 
 interface CuentaDetalle {
@@ -664,6 +666,7 @@ export default function ValidacionContratosPDF() {
   const [searchUnidad,   setSearchUnidad]   = useState("");
   const [searchCliente,  setSearchCliente]  = useState("");
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
+  const [filtroEstado,   setFiltroEstado]   = useState("todos");
   const [currentPage,    setCurrentPage]    = useState(1);
   const [modalCuentaId,  setModalCuentaId]  = useState<number | null>(null);
   const [contratoUrl,    setContratoUrl]    = useState<string | null>(null);
@@ -686,7 +689,9 @@ export default function ValidacionContratosPDF() {
             proy.nombre           AS proyecto,
             pers.nombre_legal     AS dueno,
             doc_ctto.url          AS contrato_url,
-            NULL::text            AS estado_validacion
+            val.estado            AS estado_validacion,
+            val.monto_real        AS monto_real,
+            val.motivo            AS motivo
           FROM cuentas_cobranza cc
           JOIN ofertas o                ON o.id  = cc.id_oferta          AND o.activo = true
                                         AND o.id_producto IS NULL
@@ -706,14 +711,21 @@ export default function ValidacionContratosPDF() {
                                        AND er_dueno.activo = true
           LEFT JOIN personas pers       ON pers.id = er_dueno.id_persona
           LEFT JOIN LATERAL (
-            SELECT d.url
+            SELECT d.id AS doc_id, d.url
             FROM documentos d
             WHERE d.id_cuenta_cobranza = cc.id
-              AND d.id_tipo_documento  = 18
+              AND d.id_tipo_documento IN (18, 42)
               AND d.activo = true
             ORDER BY d.id DESC
             LIMIT 1
           ) doc_ctto ON true
+          LEFT JOIN LATERAL (
+            SELECT cv.estado, cv.monto_real, cv.motivo
+            FROM contrato_validaciones cv
+            WHERE cv.id_documento = doc_ctto.doc_id
+            ORDER BY cv.fecha_creacion DESC
+            LIMIT 1
+          ) val ON true
           WHERE cc.activo = true
           ORDER BY proy.nombre, p.numero_propiedad
           LIMIT 1000
@@ -728,9 +740,11 @@ export default function ValidacionContratosPDF() {
         numero_propiedad: row.numero_propiedad ?? null,
         dueno:            row.dueno            ?? "Sin propietario",
         precio_final:     Number(row.precio_final),
-        fecha_compra:       row.fecha_compra     ?? null,
-        contrato_url:       row.contrato_url     ?? null,
-        estado_validacion:  row.estado_validacion ?? null,
+        fecha_compra:     row.fecha_compra     ?? null,
+        contrato_url:     row.contrato_url     ?? null,
+        estado_validacion: row.estado_validacion ?? null,
+        monto_real:       row.monto_real != null ? Number(row.monto_real) : null,
+        motivo:           row.motivo ?? null,
       }));
     },
   });
@@ -739,16 +753,24 @@ export default function ValidacionContratosPDF() {
 
   const filtered = useMemo(() => rows.filter((c) => {
     if (filtroProyecto !== "todos" && c.proyecto !== filtroProyecto) return false;
+    if (filtroEstado !== "todos") {
+      if (filtroEstado === "sin_registro" && c.estado_validacion !== null) return false;
+      if (filtroEstado !== "sin_registro" && c.estado_validacion !== filtroEstado) return false;
+    }
     if (searchUnidad  && !c.numero_propiedad?.toLowerCase().includes(searchUnidad.toLowerCase()))  return false;
     if (searchCliente && !c.dueno?.toLowerCase().includes(searchCliente.toLowerCase()))            return false;
     return true;
-  }), [rows, filtroProyecto, searchUnidad, searchCliente]);
+  }), [rows, filtroProyecto, filtroEstado, searchUnidad, searchCliente]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const paginated  = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const stats = useMemo(() => ({
-    total: rows.length,
+    total:        rows.length,
+    coincide:     rows.filter(r => r.estado_validacion === "coincide").length,
+    no_coincide:  rows.filter(r => r.estado_validacion === "no_coincide").length,
+    error:        rows.filter(r => r.estado_validacion === "error").length,
+    sin_registro: rows.filter(r => r.estado_validacion === null).length,
   }), [rows]);
 
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -769,23 +791,65 @@ export default function ValidacionContratosPDF() {
           Validación Contratos PDF
         </h1>
         <p className="text-[13px] text-muted-foreground mt-0.5">
-          Contratos de propiedades SOZU — verificación precio PDF vs precio DB (departamento)
+          Contratos de propiedades SOZU - verificacion precio PDF vs precio DB (departamento)
         </p>
       </div>
 
       {/* Stats */}
-      <div className="flex">
+      <div className="flex flex-wrap gap-3">
         <Card className="border">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-6">
-              <p className="text-[12px] text-muted-foreground font-medium">Total departamentos</p>
+              <p className="text-[12px] text-muted-foreground font-medium">Total</p>
               <FileSearch className="size-4 text-foreground" />
             </div>
-            <p className="text-2xl font-bold mt-1 tabular-nums">
-              {isLoading ? "-" : stats.total}
-            </p>
+            <p className="text-2xl font-bold mt-1 tabular-nums">{isLoading ? "-" : stats.total}</p>
           </CardContent>
         </Card>
+        {!isLoading && stats.coincide > 0 && (
+          <Card className="border border-emerald-200 bg-emerald-50/40">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-6">
+                <p className="text-[12px] text-emerald-700 font-medium">Coinciden</p>
+                <CheckCircle2 className="size-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700">{stats.coincide}</p>
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && stats.no_coincide > 0 && (
+          <Card className="border border-red-200 bg-red-50/40">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-6">
+                <p className="text-[12px] text-red-700 font-medium">No coinciden</p>
+                <XCircle className="size-4 text-red-600" />
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums text-red-700">{stats.no_coincide}</p>
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && stats.error > 0 && (
+          <Card className="border border-amber-200 bg-amber-50/40">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-6">
+                <p className="text-[12px] text-amber-700 font-medium">Error lectura</p>
+                <AlertCircle className="size-4 text-amber-600" />
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums text-amber-700">{stats.error}</p>
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && stats.sin_registro > 0 && (
+          <Card className="border">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-6">
+                <p className="text-[12px] text-muted-foreground font-medium">Sin validar</p>
+                <Clock className="size-4 text-muted-foreground" />
+              </div>
+              <p className="text-2xl font-bold mt-1 tabular-nums text-muted-foreground">{stats.sin_registro}</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Filters */}
@@ -809,6 +873,18 @@ export default function ValidacionContratosPDF() {
           <SelectContent>
             <SelectItem value="todos">Todos los proyectos</SelectItem>
             {proyectos.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroEstado} onValueChange={(v) => { setFiltroEstado(v); resetPage(); }}>
+          <SelectTrigger className="h-9 w-[150px] text-[13px]">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los estados</SelectItem>
+            <SelectItem value="coincide">Coincide</SelectItem>
+            <SelectItem value="no_coincide">No coincide</SelectItem>
+            <SelectItem value="error">Error</SelectItem>
+            <SelectItem value="sin_registro">Sin registro</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-[12px] text-muted-foreground tabular-nums ml-auto hidden sm:block">
@@ -882,19 +958,33 @@ export default function ValidacionContratosPDF() {
                       <TableCell className="hidden xl:table-cell text-right tabular-nums font-medium whitespace-nowrap">
                         {fmtCurrency(c.precio_final)}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell text-center whitespace-nowrap">
-                        {c.estado_validacion === "correcto" ? (
+                      <TableCell className="hidden sm:table-cell text-center">
+                        {c.estado_validacion === "coincide" ? (
                           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] gap-1 px-2 py-0.5">
-                            <CheckCircle2 className="size-3" />Correcto
+                            <CheckCircle2 className="size-3" />Coincide
                           </Badge>
-                        ) : c.estado_validacion === "discrepancia" ? (
-                          <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[11px] gap-1 px-2 py-0.5">
-                            Discrepancia
-                          </Badge>
-                        ) : c.estado_validacion === "pendiente" ? (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[11px] gap-1 px-2 py-0.5">
-                            <Clock className="size-3" />Pendiente
-                          </Badge>
+                        ) : c.estado_validacion === "no_coincide" ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[11px] gap-1 px-2 py-0.5">
+                              <XCircle className="size-3" />No coincide
+                            </Badge>
+                            {c.monto_real !== null && (
+                              <span className="text-[10px] tabular-nums text-red-600 font-medium">
+                                {fmtCurrency(c.monto_real - c.precio_final)}
+                              </span>
+                            )}
+                          </div>
+                        ) : c.estado_validacion === "error" ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[11px] gap-1 px-2 py-0.5">
+                              <AlertCircle className="size-3" />Error
+                            </Badge>
+                            {c.motivo && (
+                              <span className="text-[10px] text-amber-600 max-w-[120px] truncate" title={c.motivo}>
+                                {c.motivo}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <Badge variant="outline" className="border-border text-muted-foreground text-[11px] px-2 py-0.5">
                             Sin registro
@@ -940,7 +1030,7 @@ export default function ValidacionContratosPDF() {
       {!isLoading && filtered.length > ITEMS_PER_PAGE && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-[12px] text-muted-foreground tabular-nums shrink-0">
-            {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
+            {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
           </p>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8 w-8 p-0">
