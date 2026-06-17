@@ -109,7 +109,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
-          Estructura de Comisiones
+          Estructura de comisiones
         </p>
       </div>
 
@@ -234,7 +234,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
             <div className="flex-1 lg:pl-64 min-w-0">
               <header className="hidden lg:flex items-center justify-between sticky top-0 z-20 bg-card border-b border-border-soft px-6 h-14">
                 <div className="flex items-center gap-2 text-sm text-foreground">
-                  <span className="font-medium">Estructura de Comisiones</span>
+                  <span className="font-medium">Estructura de comisiones</span>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground">{currentSection}</span>
                 </div>
