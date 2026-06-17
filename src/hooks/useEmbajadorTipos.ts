@@ -6,6 +6,16 @@ export interface EmbajadorTipo {
   etiqueta: string;
 }
 
+// Fallback mientras la tabla embajador_tipos no exista en BD
+const FALLBACK_TIPOS: EmbajadorTipo[] = [
+  { id: 1, etiqueta: 'Cliente' },
+  { id: 2, etiqueta: 'Socio' },
+  { id: 3, etiqueta: 'Aliado' },
+  { id: 4, etiqueta: 'Referidor externo' },
+  { id: 5, etiqueta: 'Colaborador' },
+  { id: 6, etiqueta: 'Otro' },
+];
+
 export function useEmbajadorTipos(): EmbajadorTipo[] {
   const [tipos, setTipos] = useState<EmbajadorTipo[]>([]);
 
@@ -15,8 +25,13 @@ export function useEmbajadorTipos(): EmbajadorTipo[] {
       .select('id, etiqueta')
       .eq('activo', true)
       .order('orden')
-      .then(({ data }: any) => {
-        if (data) setTipos(data);
+      .then(({ data, error }: any) => {
+        if (data && data.length > 0) {
+          setTipos(data);
+        } else {
+          // Tabla aún no existe o vacía — usar fallback hasta ejecutar DDL
+          setTipos(FALLBACK_TIPOS);
+        }
       });
   }, []);
 
