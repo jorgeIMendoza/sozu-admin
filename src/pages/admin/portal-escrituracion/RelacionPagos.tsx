@@ -9,6 +9,8 @@ import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCuentaCobranzaFinancials } from '@/hooks/useCuentaCobranzaFinancials';
+import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -44,6 +46,8 @@ function normConcepto(
     ...(aplicaciones_detalle ?? []).map((a) => a.concepto ?? ''),
     descripcion ?? '',
   ]) {
+    if (c === 'Múltiples aplicaciones') return 'Múltiples aplicaciones';
+    if (c === 'Multa') return 'Multa';
     const lower = c.toLowerCase();
     if (lower.includes('anticipo')) return 'Anticipo';
     if (lower.includes('enganche')) return 'Enganche';
@@ -157,7 +161,7 @@ function CashPaymentCard({ limite, pagado, disponible }: CashPaymentCardProps) {
         <div className="flex justify-between text-xs">
           <span className="text-slate-400">Aún permitido:</span>
           <span className={`font-medium ${disponible < 0 ? 'text-red-500' : 'text-slate-700'}`}>
-            {fmtMxn(Math.max(0, disponible))}
+            {fmtMxn(disponible)}
           </span>
         </div>
       </div>
@@ -176,6 +180,39 @@ function EscrituracionCard({ value }: { value: number }) {
       <p className="text-xs text-slate-400 mt-1">
         Suma de precio final de propiedad, bodegas y estacionamientos
       </p>
+    </div>
+  );
+}
+
+interface AccesorioCardProps {
+  titulo: string;
+  precioFinal: number;
+  totalPagado: number;
+  saldoPendiente: number;
+}
+function AccesorioCard({ titulo, precioFinal, totalPagado, saldoPendiente }: AccesorioCardProps) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{titulo}</p>
+        <DollarSign className="w-4 h-4 text-slate-400" />
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between items-baseline">
+          <span className="text-xs text-slate-400">Precio Final</span>
+          <span className="text-sm font-bold text-slate-900 tabular-nums">{fmtMxn(precioFinal)}</span>
+        </div>
+        <div className="flex justify-between items-baseline">
+          <span className="text-xs text-slate-400">Total Pagado</span>
+          <span className="text-sm font-semibold text-emerald-600 tabular-nums">{fmtMxn(totalPagado)}</span>
+        </div>
+        <div className="border-t border-slate-100 pt-2 flex justify-between items-baseline">
+          <span className="text-xs text-slate-400">Saldo Pendiente</span>
+          <span className={`text-sm font-bold tabular-nums ${saldoPendiente <= 0 ? 'text-emerald-600' : 'text-amber-500'}`}>
+            {fmtMxn(saldoPendiente)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -379,33 +416,460 @@ export function RelacionPagos() {
     )];
   }, [filteredPagos]);
 
-  // Single-account: solo para mostrar el breakdown de acuerdos
+  // ── Cuenta PRINCIPAL de propiedad ────────────────────────────────────────────
+  // La RPC clasifica como tipo_cuenta='propiedad' tanto la cuenta de departamento
+  // como bodegas/estacionamientos (si tienen cc.id_propiedad set). La distinción
+  // es que los accesorios tienen p.producto != null (nombre del producto asociado).
+  // Solo usamos la cuenta con producto=null como fuente de verdad financiera.
+  const primaryCuentaId = useMemo(() => {
+    const mainIds = [...new Set(
+      filteredPagos
+        .filter(p => p.tipo_cuenta === 'propiedad' && p.producto === null)
+        .map(p => p.id_cuenta_cobranza)
+        .filter((id): id is number => id != null),
+    )];
+    return mainIds.length === 1 ? mainIds[0] : null;
+  }, [filteredPagos]);
+
+  // singleCuentaId: cuenta única total (puede incluir bodegas — solo para legacy)
   const singleCuentaId = useMemo(() =>
     visibleCuentaIds.length === 1 ? visibleCuentaIds[0] : null,
   [visibleCuentaIds]);
 
+  // Hook financiero exacto — usa primaryCuentaId (cuenta de propiedad, sin bodegas)
+  const { data: financials, isLoading: financialsLoading } = useCuentaCobranzaFinancials(primaryCuentaId);
+
+  // Financials de accesorios (bodega + cajón) — depende de idPropiedad del hook principal
+  const { data: accesorios, isLoading: accesoriosLoading } = useAccesoriosFinancials(financials?.idPropiedad ?? null);
+
+  // ── Queries directas — fuente idéntica a "Pagos Aplicados" en DetalleCuentaCobranza ──
+  // Reemplazan el RPC como fuente de la tabla cuando hay cuenta principal identificada.
+  const { data: rpPagosCuenta, isLoading: rpPagosLoading } = useQuery({
+    queryKey: ['rp-pagos-cuenta', primaryCuentaId],
+    enabled: !!primaryCuentaId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('pagos')
+        .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, descripcion, url_recibo, url_cep, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
+        .eq('id_cuenta_cobranza', primaryCuentaId!)
+        .eq('activo', true)
+        .order('fecha_pago', { ascending: true });
+      return (data ?? []) as Array<{
+        id: number; fecha_pago: string; monto: number; clave_rastreo: string | null;
+        id_metodos_pago: number; descripcion: string | null;
+        url_recibo: string | null; url_cep: string | null;
+        metodos_pago: { nombre: string } | null;
+      }>;
+    },
+  });
+
+  const { data: rpAplicacionesPorPago, isLoading: rpAplicacionesLoading } = useQuery({
+    queryKey: ['rp-aplicaciones-por-pago', primaryCuentaId],
+    enabled: !!primaryCuentaId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: pagosData } = await supabase
+        .from('pagos')
+        .select('id')
+        .eq('id_cuenta_cobranza', primaryCuentaId!)
+        .eq('activo', true);
+      if (!pagosData?.length) return [];
+      const pagoIds = pagosData.map((p) => p.id);
+      const { data } = await (supabase as any)
+        .from('aplicaciones_pago')
+        .select(`id, monto, id_pago, id_acuerdo_pago, es_multa, acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(fecha_pago, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre))`)
+        .in('id_pago', pagoIds)
+        .eq('activo', true);
+      return (data ?? []) as Array<{
+        id: number; monto: number; id_pago: number; id_acuerdo_pago: number; es_multa: boolean;
+        acuerdos_pago: { fecha_pago: string; orden: number; conceptos_pago: { nombre: string } | null } | null;
+      }>;
+    },
+  });
+
+  // isRpMode: activo cuando hay cuenta principal identificada — usa queries directas en tabla
+  const isRpMode = !!primaryCuentaId;
+
+  // Transforma pagos directos en PagoRecord[] para reutilizar PaymentsTable sin modificarla
+  const rpTableRows = useMemo((): PagoRecord[] => {
+    if (!isRpMode || !rpPagosCuenta?.length) return [];
+    const contextRow = filteredPagos.find((p) => p.id_cuenta_cobranza === primaryCuentaId);
+    const proyectoNombre = proyectos.find((p) => p.id === proyectoId)?.nombre ?? null;
+    return rpPagosCuenta.map((pago) => {
+      const apls = (rpAplicacionesPorPago ?? []).filter((a) => a.id_pago === pago.id);
+      let conceptoDisplay: string | null = null;
+      if (apls.length === 1) {
+        conceptoDisplay = apls[0].es_multa
+          ? 'Multa'
+          : (apls[0].acuerdos_pago?.conceptos_pago?.nombre ?? null);
+      } else if (apls.length > 1) {
+        conceptoDisplay = 'Múltiples aplicaciones';
+      }
+      return {
+        pago_id: pago.id,
+        monto: pago.monto,
+        fecha_pago: pago.fecha_pago,
+        clave_rastreo: pago.clave_rastreo,
+        url_cep: pago.url_cep,
+        url_recibo: pago.url_recibo,
+        descripcion: pago.descripcion,
+        id_cuenta_cobranza: primaryCuentaId,
+        metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
+        clabe_stp: null,
+        cliente: contextRow?.cliente ?? null,
+        num_propiedad: contextRow?.num_propiedad ?? null,
+        producto: null,           // normProducto('propiedad', null) → 'Propiedad'
+        tipo_cuenta: 'propiedad' as const,
+        proyecto: proyectoNombre,
+        proyecto_id: proyectoId,
+        tiene_cep: !!(pago.url_cep || pago.url_recibo),
+        monto_aplicado: apls.reduce((s, a) => s + Number(a.monto ?? 0), 0),
+        num_aplicaciones: apls.length,
+        aplicaciones_detalle: conceptoDisplay
+          ? [{ concepto: conceptoDisplay, orden: null, monto: 0 }]
+          : [],
+      };
+    });
+  }, [isRpMode, rpPagosCuenta, rpAplicacionesPorPago, filteredPagos, primaryCuentaId, proyectos, proyectoId]);
+
+  // ── Queries Pagos de Bodega ───────────────────────────────────────────────────
+  // Waterfall: bodegas → ofertas (scoped a id_propiedad) → cuentas_cobranza → pagos
+  // Fuente idéntica a tab "Pagos Aplicados" de /admin/cuentas-cobranza/905/detalle
+  const idPropiedad = financials?.idPropiedad ?? null;
+
+  const { data: rpBodegaPagos, isLoading: rpBodegaPagosLoading } = useQuery({
+    queryKey: ['rp-bodega-pagos', idPropiedad],
+    enabled: !!idPropiedad,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: bodegas } = await supabase
+        .from('bodegas')
+        .select('id_producto')
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const bodegaProductIds = [...new Set(
+        (bodegas ?? []).map((b) => b.id_producto).filter(Boolean),
+      )] as number[];
+      if (!bodegaProductIds.length) return [];
+
+      const { data: ofertas } = await supabase
+        .from('ofertas')
+        .select('id')
+        .in('id_producto', bodegaProductIds)
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const ofertaIds = (ofertas ?? []).map((o) => o.id);
+      if (!ofertaIds.length) return [];
+
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza')
+        .select('id')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true);
+      const cuentaBodegaIds = (cuentas ?? []).map((c) => c.id);
+      if (!cuentaBodegaIds.length) return [];
+
+      const { data } = await (supabase as any)
+        .from('pagos')
+        .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, descripcion, url_recibo, url_cep, id_cuenta_cobranza, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
+        .in('id_cuenta_cobranza', cuentaBodegaIds)
+        .eq('activo', true)
+        .order('fecha_pago', { ascending: true });
+      return (data ?? []) as Array<{
+        id: number; fecha_pago: string; monto: number; clave_rastreo: string | null;
+        id_metodos_pago: number; descripcion: string | null;
+        url_recibo: string | null; url_cep: string | null;
+        id_cuenta_cobranza: number;
+        metodos_pago: { nombre: string } | null;
+      }>;
+    },
+  });
+
+  // Aplicaciones de bodega — waterfall independiente (patrón de DetalleCuentaCobranza)
+  const { data: rpBodegaAplicaciones, isLoading: rpBodegaAplicacionesLoading } = useQuery({
+    queryKey: ['rp-bodega-aplicaciones', idPropiedad],
+    enabled: !!idPropiedad,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: bodegas } = await supabase
+        .from('bodegas')
+        .select('id_producto')
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const bodegaProductIds = [...new Set(
+        (bodegas ?? []).map((b) => b.id_producto).filter(Boolean),
+      )] as number[];
+      if (!bodegaProductIds.length) return [];
+
+      const { data: ofertas } = await supabase
+        .from('ofertas')
+        .select('id')
+        .in('id_producto', bodegaProductIds)
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const ofertaIds = (ofertas ?? []).map((o) => o.id);
+      if (!ofertaIds.length) return [];
+
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza')
+        .select('id')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true);
+      const cuentaBodegaIds = (cuentas ?? []).map((c) => c.id);
+      if (!cuentaBodegaIds.length) return [];
+
+      const { data: pagosData } = await supabase
+        .from('pagos')
+        .select('id')
+        .in('id_cuenta_cobranza', cuentaBodegaIds)
+        .eq('activo', true);
+      if (!pagosData?.length) return [];
+      const pagoIds = pagosData.map((p) => p.id);
+
+      const { data } = await (supabase as any)
+        .from('aplicaciones_pago')
+        .select(`id, monto, id_pago, id_acuerdo_pago, es_multa, acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(fecha_pago, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre))`)
+        .in('id_pago', pagoIds)
+        .eq('activo', true);
+      return (data ?? []) as Array<{
+        id: number; monto: number; id_pago: number; id_acuerdo_pago: number; es_multa: boolean;
+        acuerdos_pago: { fecha_pago: string; orden: number; conceptos_pago: { nombre: string } | null } | null;
+      }>;
+    },
+  });
+
+  const rpBodegaTotalMonto = useMemo(
+    () => (rpBodegaPagos ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0),
+    [rpBodegaPagos],
+  );
+  const rpBodegaConComprobante = useMemo(
+    () => (rpBodegaPagos ?? []).filter((p) => !!(p.url_cep || p.url_recibo)).length,
+    [rpBodegaPagos],
+  );
+
+  // Transforma pagos de bodega a PagoRecord[] — mismo patrón que rpTableRows
+  const rpBodegaTableRows = useMemo((): PagoRecord[] => {
+    if (!rpBodegaPagos?.length) return [];
+    const contextRow = filteredPagos.find((p) => p.id_cuenta_cobranza === primaryCuentaId);
+    const proyectoNombre = proyectos.find((p) => p.id === proyectoId)?.nombre ?? null;
+    return rpBodegaPagos.map((pago) => {
+      const apls = (rpBodegaAplicaciones ?? []).filter((a) => a.id_pago === pago.id);
+      let conceptoDisplay: string | null = null;
+      if (apls.length === 1) {
+        conceptoDisplay = apls[0].es_multa
+          ? 'Multa'
+          : (apls[0].acuerdos_pago?.conceptos_pago?.nombre ?? null);
+      } else if (apls.length > 1) {
+        conceptoDisplay = 'Múltiples aplicaciones';
+      }
+      return {
+        pago_id: pago.id,
+        monto: pago.monto,
+        fecha_pago: pago.fecha_pago,
+        clave_rastreo: pago.clave_rastreo,
+        url_cep: pago.url_cep,
+        url_recibo: pago.url_recibo,
+        descripcion: pago.descripcion,
+        id_cuenta_cobranza: pago.id_cuenta_cobranza,
+        metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
+        clabe_stp: null,
+        cliente: contextRow?.cliente ?? null,
+        num_propiedad: contextRow?.num_propiedad ?? null,
+        producto: 'Bodegas',          // normProducto('producto','Bodegas') → 'Bodega'
+        tipo_cuenta: 'producto' as const,
+        proyecto: proyectoNombre,
+        proyecto_id: proyectoId,
+        tiene_cep: !!(pago.url_cep || pago.url_recibo),
+        monto_aplicado: apls.reduce((s, a) => s + Number(a.monto ?? 0), 0),
+        num_aplicaciones: apls.length,
+        aplicaciones_detalle: conceptoDisplay
+          ? [{ concepto: conceptoDisplay, orden: null, monto: 0 }]
+          : [],
+      };
+    });
+  }, [rpBodegaPagos, rpBodegaAplicaciones, filteredPagos, primaryCuentaId, proyectos, proyectoId]);
+
+  // ── Queries Pagos de Estacionamiento ─────────────────────────────────────────
+  // Waterfall: estacionamientos → ofertas (scoped a id_propiedad) → cuentas_cobranza → pagos
+  // Fuente idéntica a tab "Pagos Aplicados" de /admin/cuentas-cobranza/1299/detalle
+  const { data: rpEstPagos, isLoading: rpEstPagosLoading } = useQuery({
+    queryKey: ['rp-est-pagos', idPropiedad],
+    enabled: !!idPropiedad,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: estacionamientos } = await supabase
+        .from('estacionamientos')
+        .select('id_producto')
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const estProductIds = [...new Set(
+        (estacionamientos ?? []).map((e) => e.id_producto).filter(Boolean),
+      )] as number[];
+      if (!estProductIds.length) return [];
+
+      const { data: ofertas } = await supabase
+        .from('ofertas')
+        .select('id')
+        .in('id_producto', estProductIds)
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const ofertaIds = (ofertas ?? []).map((o) => o.id);
+      if (!ofertaIds.length) return [];
+
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza')
+        .select('id')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true);
+      const cuentaEstIds = (cuentas ?? []).map((c) => c.id);
+      if (!cuentaEstIds.length) return [];
+
+      const { data } = await (supabase as any)
+        .from('pagos')
+        .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, descripcion, url_recibo, url_cep, id_cuenta_cobranza, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
+        .in('id_cuenta_cobranza', cuentaEstIds)
+        .eq('activo', true)
+        .order('fecha_pago', { ascending: true });
+      return (data ?? []) as Array<{
+        id: number; fecha_pago: string; monto: number; clave_rastreo: string | null;
+        id_metodos_pago: number; descripcion: string | null;
+        url_recibo: string | null; url_cep: string | null;
+        id_cuenta_cobranza: number;
+        metodos_pago: { nombre: string } | null;
+      }>;
+    },
+  });
+
+  // Aplicaciones de estacionamiento — waterfall independiente (patrón de DetalleCuentaCobranza)
+  const { data: rpEstAplicaciones, isLoading: rpEstAplicacionesLoading } = useQuery({
+    queryKey: ['rp-est-aplicaciones', idPropiedad],
+    enabled: !!idPropiedad,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: estacionamientos } = await supabase
+        .from('estacionamientos')
+        .select('id_producto')
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const estProductIds = [...new Set(
+        (estacionamientos ?? []).map((e) => e.id_producto).filter(Boolean),
+      )] as number[];
+      if (!estProductIds.length) return [];
+
+      const { data: ofertas } = await supabase
+        .from('ofertas')
+        .select('id')
+        .in('id_producto', estProductIds)
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+      const ofertaIds = (ofertas ?? []).map((o) => o.id);
+      if (!ofertaIds.length) return [];
+
+      const { data: cuentas } = await supabase
+        .from('cuentas_cobranza')
+        .select('id')
+        .in('id_oferta', ofertaIds)
+        .eq('activo', true);
+      const cuentaEstIds = (cuentas ?? []).map((c) => c.id);
+      if (!cuentaEstIds.length) return [];
+
+      const { data: pagosData } = await supabase
+        .from('pagos')
+        .select('id')
+        .in('id_cuenta_cobranza', cuentaEstIds)
+        .eq('activo', true);
+      if (!pagosData?.length) return [];
+      const pagoIds = pagosData.map((p) => p.id);
+
+      const { data } = await (supabase as any)
+        .from('aplicaciones_pago')
+        .select(`id, monto, id_pago, id_acuerdo_pago, es_multa, acuerdos_pago!aplicaciones_pago_id_acuerdo_pago_fkey(fecha_pago, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre))`)
+        .in('id_pago', pagoIds)
+        .eq('activo', true);
+      return (data ?? []) as Array<{
+        id: number; monto: number; id_pago: number; id_acuerdo_pago: number; es_multa: boolean;
+        acuerdos_pago: { fecha_pago: string; orden: number; conceptos_pago: { nombre: string } | null } | null;
+      }>;
+    },
+  });
+
+  const rpEstTotalMonto = useMemo(
+    () => (rpEstPagos ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0),
+    [rpEstPagos],
+  );
+  const rpEstConComprobante = useMemo(
+    () => (rpEstPagos ?? []).filter((p) => !!(p.url_cep || p.url_recibo)).length,
+    [rpEstPagos],
+  );
+
+  // Transforma pagos de estacionamiento a PagoRecord[] — mismo patrón que rpBodegaTableRows
+  const rpEstTableRows = useMemo((): PagoRecord[] => {
+    if (!rpEstPagos?.length) return [];
+    const contextRow = filteredPagos.find((p) => p.id_cuenta_cobranza === primaryCuentaId);
+    const proyectoNombre = proyectos.find((p) => p.id === proyectoId)?.nombre ?? null;
+    return rpEstPagos.map((pago) => {
+      const apls = (rpEstAplicaciones ?? []).filter((a) => a.id_pago === pago.id);
+      let conceptoDisplay: string | null = null;
+      if (apls.length === 1) {
+        conceptoDisplay = apls[0].es_multa
+          ? 'Multa'
+          : (apls[0].acuerdos_pago?.conceptos_pago?.nombre ?? null);
+      } else if (apls.length > 1) {
+        conceptoDisplay = 'Múltiples aplicaciones';
+      }
+      return {
+        pago_id: pago.id,
+        monto: pago.monto,
+        fecha_pago: pago.fecha_pago,
+        clave_rastreo: pago.clave_rastreo,
+        url_cep: pago.url_cep,
+        url_recibo: pago.url_recibo,
+        descripcion: pago.descripcion,
+        id_cuenta_cobranza: pago.id_cuenta_cobranza,
+        metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
+        clabe_stp: null,
+        cliente: contextRow?.cliente ?? null,
+        num_propiedad: contextRow?.num_propiedad ?? null,
+        producto: 'Estacionamiento',     // normProducto('producto','Estacionamiento') → 'Cajón'
+        tipo_cuenta: 'producto' as const,
+        proyecto: proyectoNombre,
+        proyecto_id: proyectoId,
+        tiene_cep: !!(pago.url_cep || pago.url_recibo),
+        monto_aplicado: apls.reduce((s, a) => s + Number(a.monto ?? 0), 0),
+        num_aplicaciones: apls.length,
+        aplicaciones_detalle: conceptoDisplay
+          ? [{ concepto: conceptoDisplay, orden: null, monto: 0 }]
+          : [],
+      };
+    });
+  }, [rpEstPagos, rpEstAplicaciones, filteredPagos, primaryCuentaId, proyectos, proyectoId]);
+
   // Resumen de cuentas — funciona para cualquier cantidad de cuentas visibles
+  // queryKey incluye primaryCuentaId para forzar re-fetch cuando cambia la cuenta principal
   const { data: cuentaResumen, isLoading: isLoadingResumen } = useQuery({
-    queryKey: ['cuenta-resumen-rp', visibleCuentaIds.join(',')],
+    queryKey: ['cuenta-resumen-rp', visibleCuentaIds.join(','), primaryCuentaId],
     enabled: visibleCuentaIds.length > 0 && filteredPagos.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
-      // 1. Precio final y valor_uma de TODAS las cuentas visibles
+      // 1. Precio final y valor_uma de la cuenta PRINCIPAL (o todas si no hay una principal)
+      const idsToFetch = primaryCuentaId ? [primaryCuentaId] : visibleCuentaIds;
       const { data: cuentas } = await supabase
         .from('cuentas_cobranza')
         .select('id, precio_final, valor_uma, id_propiedad')
-        .in('id', visibleCuentaIds);
+        .in('id', idsToFetch);
       if (!cuentas?.length) return null;
 
       const precioFinalTotal = cuentas.reduce((s, c) => s + Number(c.precio_final ?? 0), 0);
       const valorUma = cuentas[0]?.valor_uma ?? 0;
 
-      // 2. Breakdown de acuerdos — solo para cuenta única (performance)
-      let totalPagadoCuenta = 0; // se setea si es cuenta única; si no, se usa totalMonto
+      // 2. Breakdown de acuerdos — para cuenta principal cuando existe
+      let totalPagadoCuenta = 0;
       let breakdown: { duranteObra: number; aLaEntrega: number; parcialidadesRestantes: number } | null = null;
 
-      if (visibleCuentaIds.length === 1) {
-        const cuentaId = visibleCuentaIds[0];
+      const cuentaIdParaBreakdown = primaryCuentaId ?? singleCuentaId;
+      if (cuentaIdParaBreakdown) {
+        const cuentaId = cuentaIdParaBreakdown;
         const { data: acuerdosRaw } = await supabase
           .from('acuerdos_pago').select('id, monto, pago_completado, id_concepto')
           .eq('id_cuenta_cobranza', cuentaId).eq('activo', true);
@@ -466,33 +930,74 @@ export function RelacionPagos() {
     },
   });
 
-  // Derived account-level values
-  const precioFinal = cuentaResumen?.precioFinal ?? 0;
-  // Cuenta única: usar totalPagadoCuenta de aplicaciones_pago (fuente de verdad)
-  // Multi-cuenta: usar totalMonto de los pagos visibles
-  const totalPagadoCuenta = singleCuentaId && cuentaResumen?.totalPagadoCuenta
-    ? cuentaResumen.totalPagadoCuenta
-    : totalMonto;
-  const diferencia    = precioFinal > 0 ? totalPagadoCuenta - precioFinal : 0;
-  const haySobrepago  = diferencia > 0.01;
-  const esPagadoCompleto = !!cuentaResumen && precioFinal > 0 && !haySobrepago && Math.abs(diferencia) <= 0.01;
-  const totalPendiente = Math.max(0, precioFinal - totalPagadoCuenta);
-  const montoSobrepago = haySobrepago ? diferencia : 0;
-  const limiteEfectivo = ((cuentaResumen?.valorUma ?? 0) || 0) * 8025;
-  const pagadoEfectivo = useMemo(
-    () => filteredPagos.filter((p) => p.metodo_pago?.toLowerCase().includes('efectivo')).reduce((s, p) => s + p.monto, 0),
-    [filteredPagos],
+  // ── Derived account-level values ────────────────────────────────────────────
+  // Para cuenta única: el hook replica EXACTAMENTE la lógica de DetalleCuentaCobranza.
+  // Para multi-cuenta: fallback a los totales genéricos del cuentaResumen.
+  const precioFinal = financials?.precioFinal ?? (cuentaResumen?.precioFinal ?? 0);
+
+  // Total Pagado: SUM(aplicaciones_pago.monto) excluyendo conceptos 7 y 9
+  const totalPagadoCuenta = financials?.totalPagadoAplicaciones
+    ?? (cuentaResumen?.totalPagadoCuenta ?? totalMonto);
+
+  // Saldo Pendiente usa totalPagadoReal = SUM(pagos.monto), igual que DetalleCuentaCobranza
+  const haySobrepago  = financials ? financials.haySobrepago : false;
+  const totalPendiente = financials?.saldoPendiente ?? Math.max(0, precioFinal - totalPagadoCuenta);
+  const montoSobrepago = financials?.montoSobrepago ?? 0;
+  const esPagadoCompleto = !!financials && precioFinal > 0 && !financials.haySobrepago && financials.saldoPendiente === 0;
+
+  // Pago en efectivo: waterfall aplicaciones_pago WHERE pagos.id_metodos_pago=1
+  // (NO suma pagos.monto directamente)
+  const limiteEfectivo = financials?.limiteEfectivo ?? (((cuentaResumen?.valorUma ?? 0) || 0) * 8025);
+  const pagadoEfectivo = financials?.pagadoEfectivo ?? 0;
+  const aunPermitidoEfectivo = financials?.aunPermitidoEfectivo ?? (limiteEfectivo - pagadoEfectivo);
+
+  // Valor de escrituración: propiedad + bodegas + estacionamientos vía waterfall correcto
+  const valorEscrituracion = financials?.valorEscrituracion ?? cuentaResumen?.escrituracion;
+
+  const isLoadingCards = isLoadingResumen || (!!primaryCuentaId && financialsLoading);
+
+  // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
+  const rpTotalMonto = useMemo(
+    () => (rpPagosCuenta ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0),
+    [rpPagosCuenta],
+  );
+  const rpConComprobante = useMemo(
+    () => (rpPagosCuenta ?? []).filter((p) => !!(p.url_cep || p.url_recibo)).length,
+    [rpPagosCuenta],
   );
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // ── Debug temporal — borrar después de validar ────────────────────────────
+  console.log('RELACION_PAGOS_DEBUG', {
+    proyectoId,
+    searchTerm: search,
+    visibleCuentaIds,
+    singleCuentaId,
+    primaryCuentaId,
+    cuentaIdUsadoEnHook: primaryCuentaId,
+    financialsRaw: financials,
+    precioFinal,
+    totalPagadoAplicaciones: financials?.totalPagadoAplicaciones,
+    totalPagadoReal: financials?.totalPagadoReal,
+    saldoPendiente: financials?.saldoPendiente,
+    limiteEfectivo,
+    pagadoEfectivo,
+    aunPermitidoEfectivo,
+    valorEscrituracion,
+    cuentaResumenFallback: cuentaResumen,
+  });
+
+  // Fuente activa de la tabla: queries directas (rpMode) o RPC (fallback para vista global)
+  const displayRows = isRpMode ? rpTableRows : filteredPagos;
+  const displayTotal = isRpMode ? rpTableRows.length : total;
+  const displayLoading = isLoading || (isRpMode && (rpPagosLoading || rpAplicacionesLoading));
+  const totalPages = Math.max(1, Math.ceil(displayTotal / PAGE_SIZE));
   const pagedPagos = useMemo(
-    () => filteredPagos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filteredPagos, page],
+    () => displayRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayRows, page],
   );
 
   const handleExport = async () => {
-    const rows = filteredPagos.map((p) => ({
+    const rows = displayRows.map((p) => ({
       proyecto: p.proyecto ?? '—',
       estatus: 'Activa',
       comprador: p.cliente ?? '—',
@@ -549,7 +1054,7 @@ export function RelacionPagos() {
         </div>
         <button
           onClick={handleExport}
-          disabled={isExporting || total === 0}
+          disabled={isExporting || displayTotal === 0}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -586,24 +1091,24 @@ export function RelacionPagos() {
             </>
           ) : (
             <>
-              <KpiCard label="Total pagos" value={total.toLocaleString('es-MX')} />
+              <KpiCard label="Total pagos" value={(isRpMode ? (rpPagosCuenta?.length ?? 0) : total).toLocaleString('es-MX')} />
               <KpiCard
                 label="Total pagado"
-                value={fmtMxn(totalPagadoCuenta)}
+                value={fmtMxn(isRpMode ? rpTotalMonto : totalMonto)}
                 valueClass="text-emerald-600"
               />
-              <KpiCard label="Con comprobante" value={totalConCep.toLocaleString('es-MX')} colSpan />
+              <KpiCard label="Con comprobante" value={(isRpMode ? rpConComprobante : totalConCep).toLocaleString('es-MX')} colSpan />
             </>
           )}
         </div>
       )}
 
       {/* ── Cards financieros — siempre visibles cuando hay resultados ─────── */}
-      {hasResults && (isLoadingResumen || !!cuentaResumen) && (
+      {hasResults && (isLoadingCards || !!cuentaResumen || !!financials) && (
         <div className="space-y-4 mb-6">
           {/* Fila 1: 4 cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {isLoadingResumen ? (
+            {isLoadingCards ? (
               <>
                 <DetailCardSkeleton />
                 <DetailCardSkeleton />
@@ -677,21 +1182,49 @@ export function RelacionPagos() {
                 <CashPaymentCard
                   limite={limiteEfectivo}
                   pagado={pagadoEfectivo}
-                  disponible={limiteEfectivo - pagadoEfectivo}
+                  disponible={aunPermitidoEfectivo}
                 />
               </>
             )}
           </div>
 
-          {/* Fila 2: Valor de escrituración */}
-          {!isLoadingResumen && cuentaResumen?.escrituracion !== undefined && (
-            <div className="md:w-72">
-              <EscrituracionCard value={cuentaResumen.escrituracion} />
-            </div>
-          )}
-          {isLoadingResumen && (
-            <div className="md:w-72">
-              <DetailCardSkeleton />
+          {/* Fila 2: Valor de escrituración + Bodega + Cajón */}
+          {(isLoadingCards || accesoriosLoading || valorEscrituracion != null || accesorios?.bodega || accesorios?.cajon) && (
+            <div className="flex flex-wrap gap-4">
+              {/* Escrituración */}
+              {isLoadingCards ? (
+                <div className="md:w-72"><DetailCardSkeleton /></div>
+              ) : valorEscrituracion != null && (
+                <div className="md:w-72"><EscrituracionCard value={valorEscrituracion} /></div>
+              )}
+
+              {/* Bodega */}
+              {accesoriosLoading ? (
+                <div className="md:w-72"><DetailCardSkeleton /></div>
+              ) : accesorios?.bodega && (
+                <div className="md:w-72">
+                  <AccesorioCard
+                    titulo="Bodega"
+                    precioFinal={accesorios.bodega.precioFinal}
+                    totalPagado={accesorios.bodega.totalPagadoAplicaciones}
+                    saldoPendiente={accesorios.bodega.saldoPendiente}
+                  />
+                </div>
+              )}
+
+              {/* Cajón / Estacionamiento */}
+              {accesoriosLoading ? (
+                <div className="md:w-72"><DetailCardSkeleton /></div>
+              ) : accesorios?.cajon && (
+                <div className="md:w-72">
+                  <AccesorioCard
+                    titulo="Cajón / Estacionamiento"
+                    precioFinal={accesorios.cajon.precioFinal}
+                    totalPagado={accesorios.cajon.totalPagadoAplicaciones}
+                    saldoPendiente={accesorios.cajon.saldoPendiente}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -701,7 +1234,7 @@ export function RelacionPagos() {
       {hasResults && (
         <>
           {/* Estado vacío (proyecto seleccionado pero sin resultados) */}
-          {!isLoading && total === 0 ? (
+          {!displayLoading && displayTotal === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm py-20 text-center text-slate-400">
               <FileText className="w-10 h-10 mx-auto mb-3 opacity-25" />
               <p className="text-sm font-medium">
@@ -714,16 +1247,16 @@ export function RelacionPagos() {
             <>
               <PaymentsTable
                 pagos={pagedPagos}
-                isLoading={isLoading}
+                isLoading={displayLoading}
                 onViewComprobante={setViewerUrl}
               />
 
               {/* Paginación */}
-              {!isLoading && total > 0 && (
+              {!displayLoading && displayTotal > 0 && (
                 <div className="mt-3 px-1 flex items-center justify-between text-sm text-slate-500">
                   <span>
-                    Mostrando {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} de{' '}
-                    {total.toLocaleString('es-MX')} pagos
+                    Mostrando {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, displayTotal)} de{' '}
+                    {displayTotal.toLocaleString('es-MX')} pagos
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -754,6 +1287,66 @@ export function RelacionPagos() {
             </>
           )}
         </>
+      )}
+
+      {/* ── Pagos de Bodega ───────────────────────────────────────────────── */}
+      {isRpMode && !rpBodegaPagosLoading && !!rpBodegaPagos && rpBodegaPagos.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">Pagos de Bodega</h2>
+            <span className="text-sm text-slate-500">({rpBodegaPagos.length} pagos)</span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+            <KpiCard label="Total pagos" value={rpBodegaPagos.length.toLocaleString('es-MX')} />
+            <KpiCard
+              label="Total pagado"
+              value={fmtMxn(rpBodegaTotalMonto)}
+              valueClass="text-emerald-600"
+            />
+            <KpiCard
+              label="Con comprobante"
+              value={rpBodegaConComprobante.toLocaleString('es-MX')}
+              colSpan
+            />
+          </div>
+
+          <PaymentsTable
+            pagos={rpBodegaTableRows}
+            isLoading={rpBodegaAplicacionesLoading}
+            onViewComprobante={setViewerUrl}
+          />
+        </div>
+      )}
+
+      {/* ── Pagos de Estacionamiento ──────────────────────────────────────── */}
+      {isRpMode && !rpEstPagosLoading && !!rpEstPagos && rpEstPagos.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">Pagos de Estacionamiento</h2>
+            <span className="text-sm text-slate-500">({rpEstPagos.length} pagos)</span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+            <KpiCard label="Total pagos" value={rpEstPagos.length.toLocaleString('es-MX')} />
+            <KpiCard
+              label="Total pagado"
+              value={fmtMxn(rpEstTotalMonto)}
+              valueClass="text-emerald-600"
+            />
+            <KpiCard
+              label="Con comprobante"
+              value={rpEstConComprobante.toLocaleString('es-MX')}
+              colSpan
+            />
+          </div>
+
+          <PaymentsTable
+            pagos={rpEstTableRows}
+            isLoading={rpEstAplicacionesLoading}
+            onViewComprobante={setViewerUrl}
+          />
+        </div>
       )}
 
       {/* ── Visor de comprobante ──────────────────────────────────────────── */}
