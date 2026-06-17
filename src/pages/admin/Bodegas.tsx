@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Edit, Trash2, Upload, Plus, Undo2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -29,10 +30,17 @@ interface Bodega {
   es_incluido: boolean;
   activo: boolean;
   proyecto_nombre: string;
+  proyecto_id: number | null;
+  id_propiedad: number | null;
+  id_producto: number | null;
   numero_propiedad: string;
   precio_m2: number | null;
   precio_final: number | null;
+  cuenta_cobranza_id: number | null;
 }
+
+// Folio de cuenta de cobranza de producto (bodega/estacionamiento) → CCP-000001
+const formatCuentaProducto = (id: number): string => `CCP-${String(id).padStart(6, '0')}`;
 
 // Helper para formatear moneda
 const formatCurrency = (value: number | null): string => {
@@ -80,6 +88,7 @@ const Bodegas = () => {
   const [activeTab, setActiveTab] = useState("activos");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [proyectoFilter, setProyectoFilter] = useState("");
+  const [cuentaFilter, setCuentaFilter] = useState("all"); // all | con | sin
   const [editingBodega, setEditingBodega] = useState<Bodega | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +110,7 @@ const Bodegas = () => {
 
   // Query para obtener bodegas activas
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
-    queryKey: ['bodegas', 'active', currentPageActive, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ['bodegas', 'active', currentPageActive, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       const { data: allData, error } = await supabase
         .from('bodegas')
@@ -122,6 +131,35 @@ const Bodegas = () => {
       
       if (error) throw error;
 
+      // Cuenta de cobranza del producto: oferta activa que coincide en (propiedad + producto)
+      // → cuenta_cobranza activa de esa oferta. id_producto es genérico, por eso se requiere ambos.
+      const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
+      const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
+      const cuentaByPair: Record<string, number> = {};
+      if (propIds.length > 0 && prodIds.length > 0) {
+        const { data: ofertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_propiedad, id_producto')
+          .in('id_propiedad', propIds)
+          .in('id_producto', prodIds)
+          .eq('activo', true)
+          .range(0, 5000);
+        const ofertaIds = (ofertasData || []).map((o: any) => o.id);
+        let cuentaByOferta: Record<number, number> = {};
+        if (ofertaIds.length > 0) {
+          const { data: cuentasData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .range(0, 5000);
+          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+        }
+        for (const o of ofertasData || []) {
+          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+        }
+      }
+
       // Enriquecer datos con proyecto a través de la cadena correcta
       const enrichedData = allData.map((item: any) => {
         // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
@@ -139,9 +177,12 @@ const Bodegas = () => {
           activo: item.activo,
           proyecto_nombre: proyecto?.nombre || 'N/A',
           proyecto_id: id_proyecto || proyecto?.id || null,
+          id_propiedad: item.id_propiedad ?? null,
+          id_producto: item.id_producto ?? null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           precio_m2: precioM2,
-          precio_final: precioFinal
+          precio_final: precioFinal,
+          cuenta_cobranza_id: cuentaByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null
         };
       });
 
@@ -169,6 +210,13 @@ const Bodegas = () => {
         filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
       }
 
+      // Filtro por cuenta de cobranza
+      if (cuentaFilter === "con") {
+        filteredData = filteredData.filter(item => item.cuenta_cobranza_id);
+      } else if (cuentaFilter === "sin") {
+        filteredData = filteredData.filter(item => !item.cuenta_cobranza_id);
+      }
+
       // Paginación local
       const from = (currentPageActive - 1) * itemsPerPage;
       const to = from + itemsPerPage;
@@ -185,7 +233,7 @@ const Bodegas = () => {
 
   // Query para obtener bodegas eliminadas
   const { data: deletedData, isLoading: isLoadingDeleted } = useQuery({
-    queryKey: ['bodegas', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ['bodegas', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       const { data: allData, error } = await supabase
         .from('bodegas')
@@ -206,6 +254,35 @@ const Bodegas = () => {
       
       if (error) throw error;
 
+      // Cuenta de cobranza del producto: oferta activa que coincide en (propiedad + producto)
+      // → cuenta_cobranza activa de esa oferta. id_producto es genérico, por eso se requiere ambos.
+      const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
+      const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
+      const cuentaByPair: Record<string, number> = {};
+      if (propIds.length > 0 && prodIds.length > 0) {
+        const { data: ofertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_propiedad, id_producto')
+          .in('id_propiedad', propIds)
+          .in('id_producto', prodIds)
+          .eq('activo', true)
+          .range(0, 5000);
+        const ofertaIds = (ofertasData || []).map((o: any) => o.id);
+        let cuentaByOferta: Record<number, number> = {};
+        if (ofertaIds.length > 0) {
+          const { data: cuentasData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .range(0, 5000);
+          for (const c of cuentasData || []) cuentaByOferta[c.id_oferta] = c.id;
+        }
+        for (const o of ofertasData || []) {
+          if (cuentaByOferta[o.id]) cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+        }
+      }
+
       // Enriquecer datos con proyecto a través de la cadena correcta
       const enrichedData = allData.map((item: any) => {
         // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
@@ -223,9 +300,12 @@ const Bodegas = () => {
           activo: item.activo,
           proyecto_nombre: proyecto?.nombre || 'N/A',
           proyecto_id: id_proyecto || proyecto?.id || null,
+          id_propiedad: item.id_propiedad ?? null,
+          id_producto: item.id_producto ?? null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           precio_m2: precioM2,
-          precio_final: precioFinal
+          precio_final: precioFinal,
+          cuenta_cobranza_id: cuentaByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null
         };
       });
 
@@ -251,6 +331,13 @@ const Bodegas = () => {
       // Filtro por proyecto
       if (proyectoFilter && proyectoFilter !== "all") {
         filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+      }
+
+      // Filtro por cuenta de cobranza
+      if (cuentaFilter === "con") {
+        filteredData = filteredData.filter(item => item.cuenta_cobranza_id);
+      } else if (cuentaFilter === "sin") {
+        filteredData = filteredData.filter(item => !item.cuenta_cobranza_id);
       }
 
       // Paginación local
@@ -472,6 +559,20 @@ const Bodegas = () => {
                 emptyText="No se encontró el proyecto"
               />
             </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Cuenta de cobranza</label>
+              <Select value={cuentaFilter} onValueChange={setCuentaFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="con">Con cuenta de cobranza</SelectItem>
+                  <SelectItem value="sin">Sin cuenta de cobranza</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -497,6 +598,7 @@ const Bodegas = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Cuenta de Cobranza</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -510,6 +612,18 @@ const Bodegas = () => {
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
                         <TableCell><PrecioFinalBadge value={bodega.precio_final} /></TableCell>
+                        <TableCell>
+                          {bodega.cuenta_cobranza_id ? (
+                            <Link
+                              to={`/admin/cuentas-cobranza/${bodega.cuenta_cobranza_id}/detalle`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {formatCuentaProducto(bodega.cuenta_cobranza_id)}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -598,6 +712,7 @@ const Bodegas = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Cuenta de Cobranza</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -611,6 +726,18 @@ const Bodegas = () => {
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_final)}</TableCell>
+                        <TableCell>
+                          {bodega.cuenta_cobranza_id ? (
+                            <Link
+                              to={`/admin/cuentas-cobranza/${bodega.cuenta_cobranza_id}/detalle`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {formatCuentaProducto(bodega.cuenta_cobranza_id)}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{bodega.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
