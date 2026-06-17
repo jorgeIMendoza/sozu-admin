@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Building2, Network, Users2, Workflow, Coins, FileSliders,
-  Calculator, Trophy, FlaskConical, GitCompare, PieChart, Wallet, CalendarRange,
-  TrendingUp, BarChart3, Target, Boxes, Briefcase, Sparkles, Crown,
+  Building2, Store, Target, GitBranch, Users, DollarSign, UserCheck,
+  SlidersHorizontal, Calculator, TrendingUp, BarChart3, Wallet,
+  ArrowLeftRight, Shield,
   ArrowLeft, LogOut, ChevronDown, ChevronRight, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -27,76 +27,44 @@ const BASE = "/admin/portal-estructura-comisiones";
 
 const navGroups: NavGroup[] = [
   {
-    label: "Resumen",
-    items: [
-      { label: "Resumen Ejecutivo", path: `${BASE}/dashboard`, icon: LayoutDashboard },
-      { label: "Dashboard Ejecutivo", path: `${BASE}/executive`, icon: Crown },
-    ],
-  },
-  {
     label: "Configuración",
     items: [
       { label: "Proyectos", path: `${BASE}/projects`, icon: Building2 },
-      { label: "Canales de Venta", path: `${BASE}/channels`, icon: Network },
-      { label: "Organigrama", path: `${BASE}/org-chart`, icon: Users2 },
-      { label: "Roles y Sueldos", path: `${BASE}/structure`, icon: Workflow },
+      { label: "Canales de Venta", path: `${BASE}/channels`, icon: Store },
+      { label: "Benchmark", path: `${BASE}/benchmark`, icon: Target },
     ],
   },
   {
-    label: "Estructura de Comisiones",
+    label: "Estructura",
     items: [
-      { label: "Distribución de Comisiones", path: `${BASE}/commissions`, icon: Coins },
-      { label: "Políticas de Pago", path: `${BASE}/payment-policies`, icon: FileSliders },
-      { label: "Comisión por Unidad", path: `${BASE}/unit-commission`, icon: Calculator },
-      { label: "Incentivos Dinámicos", path: `${BASE}/broker-incentives`, icon: Trophy },
+      { label: "Organigrama", path: `${BASE}/org-chart`, icon: GitBranch },
+      { label: "Roles y Sueldos", path: `${BASE}/structure`, icon: Users },
+      { label: "Comisiones", path: `${BASE}/commissions`, icon: DollarSign },
+      { label: "Incentivos Dinámicos", path: `${BASE}/broker-incentives`, icon: UserCheck },
     ],
   },
   {
     label: "Simulación",
     items: [
-      {
-        label: "Simuladores",
-        icon: FlaskConical,
-        children: [
-          { label: "Escenarios", path: `${BASE}/scenarios` },
-          { label: "Comparador de Escenarios", path: `${BASE}/comm-simulator` },
-          { label: "Simulador de Distribución", path: `${BASE}/dist-simulator` },
-          { label: "Ingresos Mensuales", path: `${BASE}/broker-calc` },
-          { label: "Calculadora Broker", path: `${BASE}/broker-calculator` },
-          { label: "Simulador Financiero", path: `${BASE}/financial-simulator` },
-          { label: "Flujo Comercial", path: `${BASE}/monthly-flow` },
-        ],
-      },
+      { label: "Escenarios", path: `${BASE}/scenarios`, icon: SlidersHorizontal },
+      { label: "Distribución", path: `${BASE}/dist-simulator`, icon: DollarSign },
+      { label: "Comisión / Unidad", path: `${BASE}/unit-commission`, icon: Calculator },
+      { label: "Flujo Comercial", path: `${BASE}/monthly-flow`, icon: TrendingUp },
     ],
   },
   {
     label: "Resultados",
     items: [
-      { label: "Resultados Financieros", path: `${BASE}/results`, icon: PieChart },
-      { label: "Costo Comercial", path: `${BASE}/compensation`, icon: Wallet },
+      { label: "Financieros", path: `${BASE}/results`, icon: BarChart3 },
+      { label: "Costos Comerciales", path: `${BASE}/compensation`, icon: Wallet },
+      { label: "Simulador de Ingresos", path: `${BASE}/broker-calc`, icon: UserCheck },
     ],
   },
   {
     label: "Análisis",
     items: [
-      { label: "Competitividad Comercial", path: `${BASE}/competitividad`, icon: TrendingUp },
-      { label: "Benchmark de Mercado", path: `${BASE}/benchmark`, icon: BarChart3 },
-      { label: "Benchmark Competidores", path: `${BASE}/competitors-benchmark`, icon: Target },
-      { label: "Inventario Avanzado", path: `${BASE}/inventory-advanced`, icon: Boxes },
-    ],
-  },
-  {
-    label: "Portales",
-    items: [
-      { label: "Portal de Agentes", path: `${BASE}/agent-portal`, icon: Briefcase },
-      {
-        label: "Embajadores",
-        icon: Sparkles,
-        children: [
-          { label: "Gestión de Embajadores", path: `${BASE}/ambassadors-admin` },
-          { label: "Portal del Embajador", path: `${BASE}/ambassadors-portal` },
-        ],
-      },
+      { label: "Comparador", path: `${BASE}/comm-simulator`, icon: ArrowLeftRight },
+      { label: "Competitividad", path: `${BASE}/competitividad`, icon: Shield },
     ],
   },
 ];
