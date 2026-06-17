@@ -108,7 +108,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
     <>
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+        <p className="text-[10px] font-semibold tracking-[0.18em] text-gray-500">
           Estructura de comisiones
         </p>
       </div>
