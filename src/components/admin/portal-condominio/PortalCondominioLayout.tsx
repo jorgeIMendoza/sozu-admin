@@ -21,8 +21,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { CondominioProvider, useCondominio } from "@/contexts/CondominioContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
+import { usePortalNav } from "@/hooks/usePortalNav";
 
-interface NavItem { label: string; path: string; icon: LucideIcon }
+const CONDOMINIO_MENU_ID = 30;
+
+const iconMap: Record<string, LucideIcon> = {
+  "/admin/portal-condominio/dashboard":     LayoutDashboard,
+  "/admin/portal-condominio/departamentos": Building2,
+  "/admin/portal-condominio/cargos":        Receipt,
+  "/admin/portal-condominio/pagos":         Landmark,
+  "/admin/portal-condominio/cobranza":      CircleDollarSign,
+  "/admin/portal-condominio/tesoreria":     Banknote,
+  "/admin/portal-condominio/amenidades":    CalendarDays,
+  "/admin/portal-condominio/auditoria":     ShieldCheck,
+  "/admin/portal-condominio/configuracion": Settings2,
+};
 
 function CondominioSelector({ className }: { className?: string }) {
   const { condominios, proyectoId, setProyectoId, isLoading } = useCondominio();
@@ -42,23 +55,13 @@ function CondominioSelector({ className }: { className?: string }) {
   );
 }
 
-const navItems: NavItem[] = [
-  { label: "Dashboard",            path: "/admin/portal-condominio/dashboard",     icon: LayoutDashboard },
-  { label: "Departamentos",        path: "/admin/portal-condominio/departamentos", icon: Building2 },
-  { label: "Cargos",               path: "/admin/portal-condominio/cargos",        icon: Receipt },
-  { label: "Pagos y Conciliación", path: "/admin/portal-condominio/pagos",         icon: Landmark },
-  { label: "Cobranza",             path: "/admin/portal-condominio/cobranza",      icon: CircleDollarSign },
-  { label: "Tesorería",            path: "/admin/portal-condominio/tesoreria",     icon: Banknote },
-  { label: "Amenidades",           path: "/admin/portal-condominio/amenidades",    icon: CalendarDays },
-  { label: "Auditoría",            path: "/admin/portal-condominio/auditoria",     icon: ShieldCheck },
-  { label: "Configuración",        path: "/admin/portal-condominio/configuracion", icon: Settings2 },
-];
-
 const PortalCondominioLayoutInner = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navItems = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const currentSection = navItems.find((i) => isActive(i.path))?.label || "Condominio";
