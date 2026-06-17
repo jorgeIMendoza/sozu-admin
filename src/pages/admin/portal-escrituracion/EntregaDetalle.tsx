@@ -11,17 +11,35 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// ─── Catálogo de estatus checklist (fuente de verdad: id numérico) ────────────
+
+const ESTATUS_CHECKLIST = {
+  PENDIENTE:               1,
+  CUMPLE:                  2,
+  NO_CUMPLE:               3,
+  NO_APLICA:               4,
+  EN_REPARACION:           5,
+  REPARADO_PENDIENTE_VOBO: 6,
+  VOBO_APROBADO:           7,
+  VOBO_RECHAZADO:          8,
+} as const;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EstatusEntrega = 'PENDIENTE_PRE_ENTREGA' | 'PRE_ENTREGA_EN_PROCESO' | 'LISTO' | 'PROGRAMADA' | 'EN_PROCESO' | 'ENTREGADA' | 'CON_OBSERVACIONES' | 'REPROGRAMADA';
-type EstatusItem = 'PENDIENTE' | 'CUMPLE' | 'NO_CUMPLE' | 'NO_APLICA';
 type PrioridadObs = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
+
+interface EstatusChecklistRow {
+  id: number;
+  nombre: string;
+  activo: boolean;
+}
 
 interface ChecklistItem {
   id: number;
   id_categoria: number;
   nombre: string;
-  estatus: EstatusItem;
+  id_estatus_checklist: number;
   observacion: string | null;
   responsable: string | null;
   fecha_revision: string | null;
@@ -84,18 +102,15 @@ const ESTATUS_META: Record<string, { label: string; cls: string }> = {
   REPROGRAMADA:           { label: 'Reprogramada',              cls: 'bg-red-50 text-red-700 border border-red-200' },
 };
 
-const ITEM_CLS: Record<EstatusItem, string> = {
-  CUMPLE:      'text-emerald-600',
-  PENDIENTE:   'text-amber-600',
-  NO_CUMPLE:   'text-red-500',
-  NO_APLICA:   'text-slate-400',
-};
-
-const ITEM_LABEL: Record<EstatusItem, string> = {
-  CUMPLE:    'Cumple',
-  PENDIENTE: 'Pendiente',
-  NO_CUMPLE: 'No cumple',
-  NO_APLICA: 'N/A',
+const ITEM_CLS: Record<number, string> = {
+  [ESTATUS_CHECKLIST.CUMPLE]:                  'text-emerald-600',
+  [ESTATUS_CHECKLIST.PENDIENTE]:               'text-amber-600',
+  [ESTATUS_CHECKLIST.NO_CUMPLE]:               'text-red-500',
+  [ESTATUS_CHECKLIST.NO_APLICA]:               'text-slate-400',
+  [ESTATUS_CHECKLIST.EN_REPARACION]:           'text-orange-500',
+  [ESTATUS_CHECKLIST.REPARADO_PENDIENTE_VOBO]: 'text-blue-500',
+  [ESTATUS_CHECKLIST.VOBO_APROBADO]:           'text-emerald-700',
+  [ESTATUS_CHECKLIST.VOBO_RECHAZADO]:          'text-red-700',
 };
 
 const PRIORIDAD_META: Record<PrioridadObs, { label: string; cls: string }> = {
@@ -122,7 +137,7 @@ const CHECKLIST_PLANTILLA = [
   { nombre: 'Fachada / exteriores',          orden: 9,  items: ['Balcón', 'Barandales', 'Cancelería exterior', 'Impermeabilización visible', 'Drenes pluviales'] },
   { nombre: 'Limpieza fina',                 orden: 10, items: ['Vidrios', 'Pisos', 'Baños', 'Cocina', 'Retiro de residuos', 'Detalles finales'] },
   { nombre: 'Seguridad y acceso',            orden: 11, items: ['Cerradura principal', 'Tarjetas / llaves', 'Interfon', 'Accesos', 'Cajón de estacionamiento', 'Bodega (si aplica)'] },
-  { nombre: 'Muebles / DAIKU',               orden: 12, items: ['Sala', 'Comedor', 'Recámaras', 'Cocina integral (si aplica)', 'General / otros'] },
+  { nombre: 'Paquete de Muebles',             orden: 12, items: ['Sala', 'Comedor', 'Recámaras', 'Cocina integral (si aplica)', 'General / otros'] },
 ] as const;
 
 // ─── Signature Canvas ─────────────────────────────────────────────────────────
@@ -205,6 +220,9 @@ export function EntregaDetalle() {
   const [firmaData, setFirmaData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [itemsLoading, setItemsLoading] = useState<Set<number>>(new Set());
+  const [noCumpleModal, setNoCumpleModal] = useState<{ itemId: number; nombre: string } | null>(null);
+  const [noCumpleObs, setNoCumpleObs] = useState('');
 
   // ── Query principal: propiedad + edificio + modelo + proyecto + cliente ──────
   const { data: pageData, isLoading: pageLoading, error: pageError } = useQuery<PageData | null>({
@@ -309,7 +327,7 @@ export function EntregaDetalle() {
 
       const { data: items } = await supabase
         .from('entregas_checklist_items')
-        .select('id, id_categoria, nombre, estatus, observacion, responsable, fecha_revision, fecha_compromiso')
+        .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, fecha_revision, fecha_compromiso')
         .in('id_categoria', catIds)
         .eq('activo', true)
         .order('nombre');
@@ -342,6 +360,79 @@ export function EntregaDetalle() {
     },
     enabled: !!entregaId,
   });
+
+  // ── Catálogo de estatus checklist ────────────────────────────────────────────
+  const { data: estatusCatalogo = [] } = useQuery<EstatusChecklistRow[]>({
+    queryKey: ['estatus-checklist-catalogo'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('estatus_checklist')
+        .select('id, nombre, activo')
+        .eq('activo', true)
+        .order('id');
+      return (data ?? []) as EstatusChecklistRow[];
+    },
+  });
+
+  const getEstatusNombre = (id: number) =>
+    estatusCatalogo.find(e => e.id === id)?.nombre ?? 'Sin estatus';
+
+  // ── Acciones de checklist ─────────────────────────────────────────────────────
+
+  const setItemLoading = (itemId: number, loading: boolean) =>
+    setItemsLoading(prev => {
+      const next = new Set(prev);
+      loading ? next.add(itemId) : next.delete(itemId);
+      return next;
+    });
+
+  const handleActualizarEstatus = async (itemId: number, nuevoEstatus: number) => {
+    setItemLoading(itemId, true);
+    const { error } = await supabase
+      .from('entregas_checklist_items')
+      .update({ id_estatus_checklist: nuevoEstatus })
+      .eq('id', itemId);
+    if (error) {
+      toast.error('Error al actualizar el ítem');
+    } else {
+      toast.success(`Ítem actualizado: ${getEstatusNombre(nuevoEstatus)}`);
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+    }
+    setItemLoading(itemId, false);
+  };
+
+  const handleGuardarNoCumple = async () => {
+    if (!noCumpleModal || !noCumpleObs.trim() || !entregaId) return;
+    const { itemId, nombre } = noCumpleModal;
+    setItemLoading(itemId, true);
+
+    const [itemRes, obsRes] = await Promise.all([
+      supabase
+        .from('entregas_checklist_items')
+        .update({ id_estatus_checklist: ESTATUS_CHECKLIST.NO_CUMPLE, observacion: noCumpleObs.trim() })
+        .eq('id', itemId),
+      supabase
+        .from('entregas_observaciones')
+        .insert({
+          id_entrega:  entregaId,
+          descripcion: `[Checklist] ${nombre}: ${noCumpleObs.trim()}`,
+          prioridad:   'MEDIA',
+          estatus:     'ABIERTA',
+          activo:      true,
+        }),
+    ]);
+
+    if (itemRes.error || obsRes.error) {
+      toast.error('Error al registrar No cumple');
+    } else {
+      toast.success('Ítem marcado como No cumple');
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      queryClient.invalidateQueries({ queryKey: ['observaciones-entrega', entregaId] });
+      setNoCumpleModal(null);
+      setNoCumpleObs('');
+    }
+    setItemLoading(itemId, false);
+  };
 
   // ── FASE 2: Iniciar pre-entrega ───────────────────────────────────────────────
   const handleIniciarPreEntrega = async () => {
@@ -381,12 +472,12 @@ export function EntregaDetalle() {
 
       if (catErr || !cats) throw new Error(catErr?.message ?? 'Error al crear categorías del checklist');
 
-      const itemInserts: { id_categoria: number; nombre: string; estatus: string; activo: boolean }[] = [];
+      const itemInserts: { id_categoria: number; nombre: string; id_estatus_checklist: number; activo: boolean }[] = [];
       CHECKLIST_PLANTILLA.forEach(plantilla => {
         const catDb = (cats as any[]).find(c => c.nombre === plantilla.nombre);
         if (!catDb) return;
         plantilla.items.forEach(nombre => {
-          itemInserts.push({ id_categoria: catDb.id, nombre, estatus: 'PENDIENTE', activo: true });
+          itemInserts.push({ id_categoria: catDb.id, nombre, id_estatus_checklist: ESTATUS_CHECKLIST.PENDIENTE, activo: true });
         });
       });
 
@@ -408,8 +499,8 @@ export function EntregaDetalle() {
   // ── Derived values ────────────────────────────────────────────────────────────
   // Conteo desde ítems reales: aplicables = todos excepto NO_APLICA; cumplidos = CUMPLE
   const allChecklistItems = checklist.flatMap(c => c.items);
-  const aplicables        = allChecklistItems.filter(i => i.estatus !== 'NO_APLICA');
-  const cumplidos         = aplicables.filter(i => i.estatus === 'CUMPLE');
+  const aplicables        = allChecklistItems.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
+  const cumplidos         = aplicables.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE);
   const checklistGlobal   = aplicables.length > 0 ? Math.round((cumplidos.length / aplicables.length) * 100) : 0;
   const entregaEstatus = pageData?.entrega?.estatus ?? 'PENDIENTE_PRE_ENTREGA';
   const estatusMeta = ESTATUS_META[entregaEstatus] ?? { label: entregaEstatus, cls: 'bg-slate-50 text-slate-600 border border-slate-200' };
@@ -688,7 +779,12 @@ export function EntregaDetalle() {
               {/* Summary */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm font-bold text-slate-900">Progreso del checklist</p>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Progreso del checklist</p>
+                    {/* La edición de catálogo de checklist debe hacerse desde una futura pantalla de
+                        Configuración de Checklist por proyecto/modelo/categoría.
+                        No se debe editar la plantilla desde una entrega individual. */}
+                  </div>
                   {checklist.length > 0 && (
                     <button onClick={() => setExpandedCats(expandedCats.length > 0 ? [] : checklist.map(c => c.id))}
                       className="text-xs text-blue-600 hover:underline">
@@ -702,10 +798,10 @@ export function EntregaDetalle() {
                   <div className="grid grid-cols-4 gap-4">
                     {(() => {
                       const allItems = checklist.flatMap(c => c.items);
-                      const cumple    = allItems.filter(i => i.estatus === 'CUMPLE').length;
-                      const pendiente = allItems.filter(i => i.estatus === 'PENDIENTE').length;
-                      const noCumple  = allItems.filter(i => i.estatus === 'NO_CUMPLE').length;
-                      const noAplica  = allItems.filter(i => i.estatus === 'NO_APLICA').length;
+                      const cumple    = allItems.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE).length;
+                      const pendiente = allItems.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.PENDIENTE).length;
+                      const noCumple  = allItems.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.NO_CUMPLE).length;
+                      const noAplica  = allItems.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.NO_APLICA).length;
                       return [
                         { label: 'Cumple',     value: cumple,    cls: 'text-emerald-600' },
                         { label: 'Pendientes', value: pendiente, cls: 'text-amber-600' },
@@ -747,8 +843,8 @@ export function EntregaDetalle() {
                                 <div>
                                   <p className="font-semibold text-slate-900 text-xs">{cat.nombre}</p>
                                   {(() => {
-                                    const catApl = cat.items.filter(i => i.estatus !== 'NO_APLICA');
-                                    const catCum = catApl.filter(i => i.estatus === 'CUMPLE');
+                                    const catApl = cat.items.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
+                                    const catCum = catApl.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE);
                                     const catPct = catApl.length > 0 ? Math.round((catCum.length / catApl.length) * 100) : 0;
                                     return (
                                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -786,21 +882,87 @@ export function EntregaDetalle() {
                                 : <span className="text-xs text-slate-400">—</span>}
                             </td>
                           </tr>
-                          {expandedCats.includes(cat.id) && cat.items.map(item => (
-                            <tr key={item.id} className="bg-slate-50/60">
-                              <td className="pl-12 pr-4 py-2.5" colSpan={4}>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${ITEM_CLS[item.estatus] ?? 'text-slate-400'}`} />
-                                    <span className="text-xs text-slate-700">{item.nombre}</span>
+                          {expandedCats.includes(cat.id) && cat.items.map(item => {
+                            const isLoading = itemsLoading.has(item.id);
+                            return (
+                              <tr key={item.id} className="bg-slate-50/60 hover:bg-slate-50">
+                                <td className="pl-12 pr-4 py-2" colSpan={4}>
+                                  <div className="flex items-center justify-between gap-3">
+                                    {/* Nombre + ícono de estatus */}
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${ITEM_CLS[item.id_estatus_checklist] ?? 'text-slate-400'}`} />
+                                      <span className="text-xs text-slate-700 truncate">{item.nombre}</span>
+                                    </div>
+                                    {/* Estatus label + acciones */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className={`text-[11px] font-medium ${ITEM_CLS[item.id_estatus_checklist] ?? 'text-slate-400'}`}>
+                                        {getEstatusNombre(item.id_estatus_checklist)}
+                                      </span>
+                                      {isLoading ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          {/* Pendiente → Cumple / No cumple / N/A */}
+                                          {item.id_estatus_checklist === ESTATUS_CHECKLIST.PENDIENTE && (<>
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.CUMPLE)}
+                                              className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium hover:bg-emerald-100 border border-emerald-200 transition-colors">
+                                              Cumple
+                                            </button>
+                                            <button
+                                              onClick={() => { setNoCumpleModal({ itemId: item.id, nombre: item.nombre }); setNoCumpleObs(''); }}
+                                              className="px-2 py-0.5 rounded-lg bg-red-50 text-red-700 text-[11px] font-medium hover:bg-red-100 border border-red-200 transition-colors">
+                                              No cumple
+                                            </button>
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.NO_APLICA)}
+                                              className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-medium hover:bg-slate-200 transition-colors">
+                                              N/A
+                                            </button>
+                                          </>)}
+                                          {/* No cumple → Enviar a reparación */}
+                                          {item.id_estatus_checklist === ESTATUS_CHECKLIST.NO_CUMPLE && (
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.EN_REPARACION)}
+                                              className="px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 text-[11px] font-medium hover:bg-orange-100 border border-orange-200 transition-colors flex items-center gap-1">
+                                              <Wrench className="w-3 h-3" /> Enviar a reparación
+                                            </button>
+                                          )}
+                                          {/* En reparación → Marcar terminada */}
+                                          {item.id_estatus_checklist === ESTATUS_CHECKLIST.EN_REPARACION && (
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.REPARADO_PENDIENTE_VOBO)}
+                                              className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-medium hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1">
+                                              <CheckCircle2 className="w-3 h-3" /> Reparación terminada
+                                            </button>
+                                          )}
+                                          {/* Reparado pendiente VoBo → Aprobar / Rechazar */}
+                                          {item.id_estatus_checklist === ESTATUS_CHECKLIST.REPARADO_PENDIENTE_VOBO && (<>
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.VOBO_APROBADO)}
+                                              className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center gap-1">
+                                              <CheckCheck className="w-3 h-3" /> Aprobar VoBo
+                                            </button>
+                                            <button
+                                              onClick={() => handleActualizarEstatus(item.id, ESTATUS_CHECKLIST.VOBO_RECHAZADO)}
+                                              className="px-2 py-0.5 rounded-lg bg-red-50 text-red-700 text-[11px] font-medium hover:bg-red-100 border border-red-200 transition-colors flex items-center gap-1">
+                                              <X className="w-3 h-3" /> Rechazar VoBo
+                                            </button>
+                                          </>)}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                  <span className={`text-[11px] font-medium ${ITEM_CLS[item.estatus] ?? 'text-slate-400'}`}>
-                                    {ITEM_LABEL[item.estatus] ?? item.estatus}
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                  {/* Observación registrada */}
+                                  {item.observacion && (
+                                    <p className="ml-5 mt-1 text-[11px] text-slate-400 italic truncate">
+                                      Obs: {item.observacion}
+                                    </p>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </>
                       ))}
                     </tbody>
@@ -824,8 +986,8 @@ export function EntregaDetalle() {
                   <div>
                     <p className="text-sm font-bold text-slate-900">{selectedCat.nombre}</p>
                     {(() => {
-                      const panelApl = selectedCat.items.filter(i => i.estatus !== 'NO_APLICA');
-                      const panelCum = panelApl.filter(i => i.estatus === 'CUMPLE');
+                      const panelApl = selectedCat.items.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
+                      const panelCum = panelApl.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE);
                       const panelPct = panelApl.length > 0 ? Math.round((panelCum.length / panelApl.length) * 100) : 0;
                       return (
                         <>
@@ -870,8 +1032,8 @@ export function EntregaDetalle() {
                       {selectedCat.items.map(item => (
                         <div key={item.id} className="flex items-center justify-between gap-2">
                           <span className="text-xs text-slate-700 leading-tight">{item.nombre}</span>
-                          <span className={`text-[11px] font-medium shrink-0 ${ITEM_CLS[item.estatus] ?? 'text-slate-400'}`}>
-                            {ITEM_LABEL[item.estatus] ?? item.estatus}
+                          <span className={`text-[11px] font-medium shrink-0 ${ITEM_CLS[item.id_estatus_checklist] ?? 'text-slate-400'}`}>
+                            {getEstatusNombre(item.id_estatus_checklist)}
                           </span>
                         </div>
                       ))}
@@ -896,7 +1058,7 @@ export function EntregaDetalle() {
                 daikuEstatus === 'NO_APLICA'  ? 'text-slate-400' : 'text-amber-600'
               }`} />
               <div>
-                <p className="text-sm font-bold text-slate-900">Paquete Muebles (DAIKU)</p>
+                <p className="text-sm font-bold text-slate-900">Paquete de Muebles</p>
                 <p className="text-xs text-slate-600 mt-0.5">
                   {daikuEstatus === 'COMPLETADO'     && 'Entregado e instalado correctamente.'}
                   {daikuEstatus === 'NO_APLICA'      && 'Esta unidad no incluye paquete de muebles.'}
@@ -909,11 +1071,11 @@ export function EntregaDetalle() {
             {daikuEstatus === 'NO_APLICA' ? (
               <div className="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center text-center shadow-sm">
                 <Package className="w-10 h-10 text-slate-300 mb-3" />
-                <p className="text-sm font-medium text-slate-500">Esta unidad no incluye paquete de muebles DAIKU.</p>
+                <p className="text-sm font-medium text-slate-500">Esta unidad no incluye paquete de muebles.</p>
               </div>
             ) : (
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                <p className="text-sm font-bold text-slate-900 mb-3">Estatus de entrega DAIKU</p>
+                <p className="text-sm font-bold text-slate-900 mb-3">Estatus del paquete de muebles</p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   {[
                     ['Estatus actual', daikuEstatus.replace('_', ' ')],
@@ -1223,6 +1385,57 @@ export function EntregaDetalle() {
         )}
 
       </div>
+
+      {/* ── Modal: No cumple ─────────────────────────────────────────────────── */}
+      {noCumpleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Marcar como No cumple</p>
+                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{noCumpleModal.nombre}</p>
+              </div>
+              <button onClick={() => setNoCumpleModal(null)} className="text-slate-400 hover:text-slate-600 mt-0.5 ml-4 shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                Observación <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={noCumpleObs}
+                onChange={e => setNoCumpleObs(e.target.value)}
+                placeholder="Describe el problema encontrado…"
+                rows={4}
+                autoFocus
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                La observación se guardará en el ítem y en el log de observaciones de la entrega.
+              </p>
+              {/* TODO: evidencia fotográfica — implementar cuando exista tabla entregas_checklist_evidencias */}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setNoCumpleModal(null)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarNoCumple}
+                disabled={!noCumpleObs.trim() || itemsLoading.has(noCumpleModal.itemId)}
+                className="flex-1 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {itemsLoading.has(noCumpleModal.itemId)
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando…</>
+                  : 'Guardar y marcar No cumple'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
