@@ -87,6 +87,7 @@ type ExpedienteRow = {
   bodegas: BodegaDetalle[];
   paquetes: PaqueteDetalle[];
   productos: string[];
+  tieneCondensadora: boolean;
   fechaVenta: string | null;
   precioFinal: number;
   m2Interiores: number;
@@ -161,6 +162,20 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [showPagos, setShowPagos] = useState(false);
   const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
+
+  // Adquisiciones adicionales con precio final (las que suman al valor de
+  // escrituración): bodegas con cuenta y estacionamientos NO incluidos.
+  const bodegasAdquiridas = row.bodegas.filter((b) => b.tieneCuenta);
+  const estacionamientosAdicionales = row.estacionamientos.filter(
+    (e) => !e.esIncluido && e.tieneCuenta,
+  );
+  const totalBodegas = bodegasAdquiridas.reduce((s, b) => s + b.precioFinal, 0);
+  const totalEstacionamientos = estacionamientosAdicionales.reduce(
+    (s, e) => s + e.precioFinal,
+    0,
+  );
+  const valorEscrituracion = row.precioFinal + totalBodegas + totalEstacionamientos;
+
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); setShowPagos(false); setCompradorSel(null); } onOpenChange(o); }}>
@@ -258,6 +273,118 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
               />
               <DetailItem label="Precio / m²" value={row.precioM2 ? fmtMxn(row.precioM2) : '—'} />
             </div>
+          </section>
+
+          {/* ─── Bodegas adquiridas ─── */}
+          {bodegasAdquiridas.length > 0 && (
+            <section>
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Warehouse className="h-4 w-4 text-primary" /> Bodegas adquiridas
+              </h3>
+              <div className="overflow-hidden rounded-xl border border-border/60">
+                <table className="w-full">
+                  <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Bodega</th>
+                      <th className="px-4 py-2 font-medium">Ubicación</th>
+                      <th className="px-4 py-2 font-medium text-right">Metraje</th>
+                      <th className="px-4 py-2 font-medium text-right">Precio final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bodegasAdquiridas.map((b) => (
+                      <tr key={b.id} className="border-t border-border/60 text-[13px]">
+                        <td className="px-4 py-2 font-medium">{b.nombre}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{b.ubicacion || '—'}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{b.m2 > 0 ? fmtM2(b.m2) : '—'}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(b.precioFinal)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-border/60 bg-muted/30 text-[13px] font-semibold">
+                      <td className="px-4 py-2" colSpan={3}>Subtotal bodegas</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalBodegas)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ─── Estacionamiento adicional ─── */}
+          {estacionamientosAdicionales.length > 0 && (
+            <section>
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Car className="h-4 w-4 text-primary" /> Estacionamiento adicional
+              </h3>
+              <div className="overflow-hidden rounded-xl border border-border/60">
+                <table className="w-full">
+                  <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Estacionamiento</th>
+                      <th className="px-4 py-2 font-medium">Tipo</th>
+                      <th className="px-4 py-2 font-medium">Ubicación</th>
+                      <th className="px-4 py-2 font-medium text-right">Precio final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estacionamientosAdicionales.map((e) => (
+                      <tr key={e.id} className="border-t border-border/60 text-[13px]">
+                        <td className="px-4 py-2 font-medium">{e.nombre}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{e.tipo || '—'}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{e.ubicacion || '—'}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(e.precioFinal)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-border/60 bg-muted/30 text-[13px] font-semibold">
+                      <td className="px-4 py-2" colSpan={3}>Subtotal estacionamiento</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalEstacionamientos)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ─── Valor de escrituración (Propiedad + Bodegas + Estacionamiento) ─── */}
+          <section>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <Wallet className="h-4 w-4 text-primary" /> Valor de escrituración
+            </h3>
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              <table className="w-full">
+                <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Concepto</th>
+                    <th className="px-4 py-2 font-medium text-right">Precio final</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-border/60 text-[13px]">
+                    <td className="px-4 py-2">Propiedad · Unidad {row.unidad}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(row.precioFinal)}</td>
+                  </tr>
+                  <tr className="border-t border-border/60 text-[13px]">
+                    <td className="px-4 py-2">
+                      Bodegas{bodegasAdquiridas.length > 0 ? ` (${bodegasAdquiridas.length})` : ''}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalBodegas)}</td>
+                  </tr>
+                  <tr className="border-t border-border/60 text-[13px]">
+                    <td className="px-4 py-2">
+                      Estacionamiento adicional{estacionamientosAdicionales.length > 0 ? ` (${estacionamientosAdicionales.length})` : ''}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalEstacionamientos)}</td>
+                  </tr>
+                  <tr className="border-t-2 border-border bg-primary/5 text-[13px] font-bold">
+                    <td className="px-4 py-2.5">Valor de escrituración</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-primary">{fmtMxn2(valorEscrituracion)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Suma del precio final de la propiedad más el de bodegas y estacionamientos adquiridos.
+            </p>
           </section>
 
           <section>
@@ -751,6 +878,7 @@ export default function LegalFlowEscrituracionExpedientes() {
   const [projectFilter, setProjectFilter] = useState(ALL_VALUE);
   const [bodegaFilter, setBodegaFilter] = useState(ALL_VALUE);
   const [paqueteFilter, setPaqueteFilter] = useState(ALL_VALUE);
+  const [condensadoraFilter, setCondensadoraFilter] = useState(ALL_VALUE);
   const [modelFilter, setModelFilter] = useState(ALL_VALUE);
   const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
   const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
@@ -781,6 +909,8 @@ export default function LegalFlowEscrituracionExpedientes() {
       if (bodegaFilter === 'without' && row.bodegas.length > 0) return false;
       if (paqueteFilter === 'with' && row.paquetes.length === 0) return false;
       if (paqueteFilter === 'without' && row.paquetes.length > 0) return false;
+      if (condensadoraFilter === 'with' && !row.tieneCondensadora) return false;
+      if (condensadoraFilter === 'without' && row.tieneCondensadora) return false;
       if (!q) return true;
       return [
         row.cuentaLabel,
@@ -793,7 +923,7 @@ export default function LegalFlowEscrituracionExpedientes() {
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter]);
+  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter]);
 
   return (
     <div className="max-w-[1600px] space-y-6 px-10 py-8">
@@ -835,6 +965,10 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Paquete de muebles" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos</SelectItem><SelectItem value="with">Con paquete de muebles</SelectItem><SelectItem value="without">Sin paquete de muebles</SelectItem></SelectContent>
         </Select>
+        <Select value={condensadoraFilter} onValueChange={setCondensadoraFilter}>
+          <SelectTrigger className="h-[38px] w-[180px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Condensadora" /></SelectTrigger>
+          <SelectContent><SelectItem value={ALL_VALUE}>Todas</SelectItem><SelectItem value="with">Con condensadora</SelectItem><SelectItem value="without">Sin condensadora</SelectItem></SelectContent>
+        </Select>
         <Select value={modelFilter} onValueChange={setModelFilter}>
           <SelectTrigger className="h-[38px] w-[190px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Modelo" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los modelos</SelectItem>{options.models.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
@@ -861,16 +995,17 @@ export default function LegalFlowEscrituracionExpedientes() {
                 <th className="table-head">Estacionamientos</th>
                 <th className="table-head">Bodegas</th>
                 <th className="table-head">Muebles</th>
+                <th className="table-head">Condensadora</th>
                 <th className="table-head text-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={12} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
@@ -885,6 +1020,13 @@ export default function LegalFlowEscrituracionExpedientes() {
                   <td className="table-cell text-[13px] text-muted-foreground">{row.bodegas.length ? row.bodegas.map((b) => b.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px]">
                     {row.paquetes.length ? (
+                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
+                    )}
+                  </td>
+                  <td className="table-cell text-[13px]">
+                    {row.tieneCondensadora ? (
                       <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
                     ) : (
                       <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
@@ -919,6 +1061,7 @@ function uniqueOptions(options: Option[]): Option[] {
 const BODEGA_RE = /bodega/i;
 const ESTAC_RE = /estacionamiento/i;
 const PAQUETE_RE = /amueblad/i;
+const CONDENSADORA_RE = /condensador/i;
 
 async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   // 1) TODAS las cuentas de cobranza activas (paginado — PostgREST corta a 1000).
@@ -1236,6 +1379,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         bodegas: bodegasDetalle,
         paquetes: paquetesDetalle,
         productos: Array.from(productNames),
+        tieneCondensadora: Array.from(productNames).some((n) => CONDENSADORA_RE.test(n)),
         fechaVenta: account.fecha_compra,
         precioFinal: Number(account.precio_final || 0),
         m2Interiores,
