@@ -28,6 +28,7 @@ import { WorkflowDashboard } from "./WorkflowDashboard";
 import { AppNotariaDashboard } from "./AppNotariaDashboard";
 import { AppNotariaUsuarios } from "./AppNotariaUsuarios";
 import { AppJuridicoDashboard } from "./AppJuridicoDashboard";
+import { ChecklistConfiguracion } from "./ChecklistConfiguracion";
 
 // ============================ Dashboard ============================
 export function EscDashboard() {
@@ -275,6 +276,11 @@ export function EscEntregas() {
 
 export function EscEntregaDetalle() {
   return <EntregaDetalle />;
+}
+
+// ============================ Configuración Checklist ============================
+export function EscChecklistConfig() {
+  return <ChecklistConfiguracion />;
 }
 
 // ============================ Postventa ============================

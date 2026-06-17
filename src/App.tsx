@@ -225,6 +225,7 @@ const EscWorkflow     = lazyRetry(() => import("./pages/admin/portal-escrituraci
 const EscAppNotaria         = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotaria })));
 const EscAppNotariaUsuarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotariaUsuarios })));
 const EscAppJuridico        = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppJuridico })));
+const EscChecklistConfig    = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscChecklistConfig })));
 const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotariaLogin"));
 
 // Portal Alta Dirección
@@ -860,6 +861,7 @@ const App = () => (
                   <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
                   <Route path="portal-escrituracion/entregas/:id" element={<EscEntregaDetalle />} />
+                  <Route path="portal-escrituracion/checklist-configuracion" element={<EscChecklistConfig />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />

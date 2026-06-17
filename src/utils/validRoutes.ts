@@ -128,6 +128,7 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-escrituracion/firmas',
   '/admin/portal-escrituracion/citas',
   '/admin/portal-escrituracion/entregas',
+  '/admin/portal-escrituracion/checklist-configuracion',
   '/admin/portal-escrituracion/rpp',
   '/admin/portal-escrituracion/reportes',
   '/admin/portal-escrituracion/auditoria',
