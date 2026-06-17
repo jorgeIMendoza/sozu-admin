@@ -67,6 +67,18 @@ type PaqueteDetalle = {
   cuentaLabel: string;
 };
 
+/** Detalle de una condensadora vinculada a su cuenta de cobranza (producto). */
+type CondensadoraDetalle = {
+  id: number;
+  nombre: string;
+  precioFinal: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  compradores: Person[];
+  cuentaId: number;
+  cuentaLabel: string;
+};
+
 type ExpedienteRow = {
   cuentaId: number;
   cuentaLabel: string;
@@ -86,6 +98,7 @@ type ExpedienteRow = {
   estacionamientos: EstacionamientoDetalle[];
   bodegas: BodegaDetalle[];
   paquetes: PaqueteDetalle[];
+  condensadoras: CondensadoraDetalle[];
   productos: string[];
   tieneCondensadora: boolean;
   fechaVenta: string | null;
@@ -159,6 +172,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [showBodegas, setShowBodegas] = useState(false);
   const [showEstac, setShowEstac] = useState(false);
   const [showPaquete, setShowPaquete] = useState(false);
+  const [showCondensadora, setShowCondensadora] = useState(false);
   const [showPagos, setShowPagos] = useState(false);
   const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
@@ -178,7 +192,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
 
   return (
     <>
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); setShowPagos(false); setCompradorSel(null); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setShowBodegas(false); setShowEstac(false); setShowPaquete(false); setShowCondensadora(false); setShowPagos(false); setCompradorSel(null); } onOpenChange(o); }}>
       <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -267,6 +281,19 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                     className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
                   >
                     {row.paquetes.map((p) => p.nombre).join(', ')}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </button>
+                ) : '—'}
+              />
+              <DetailItem
+                label="Condensadora"
+                value={row.condensadoras.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCondensadora(true)}
+                    className="inline-flex items-center gap-1 font-mono text-primary underline-offset-2 hover:underline"
+                  >
+                    {row.condensadoras.map((c) => c.cuentaLabel).join(', ')}
                     <ExternalLink className="h-3 w-3 shrink-0" />
                   </button>
                 ) : '—'}
@@ -459,6 +486,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
     <BodegasModal row={row} open={showBodegas} onOpenChange={setShowBodegas} />
     <EstacionamientosModal row={row} open={showEstac} onOpenChange={setShowEstac} />
     <PaquetesModal row={row} open={showPaquete} onOpenChange={setShowPaquete} />
+    <CondensadorasModal row={row} open={showCondensadora} onOpenChange={setShowCondensadora} />
     <PagosDetalleModal folio={row.cuentaLabel} unidad={row.unidad} open={showPagos} onOpenChange={setShowPagos} />
     {compradorSel != null && (
       <CompradorDetalleSheet
@@ -759,6 +787,48 @@ function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null;
                 </tr>
               )) : (
                 <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CondensadorasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+  if (!row) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-primary" /> Condensadora · Propiedad {row.unidad}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="overflow-hidden rounded-xl border border-border/60">
+          <table className="w-full">
+            <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">ID Cuenta</th>
+                <th className="px-4 py-2 font-medium text-right">Precio Final</th>
+                <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
+                <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Compradores</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.condensadoras.length ? row.condensadoras.map((cond) => (
+                <tr key={cond.id} className="border-t border-border/60 text-[13px]">
+                  <td className="px-4 py-2 font-mono text-muted-foreground">{cond.cuentaLabel}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(cond.precioFinal)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(cond.totalPagado)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(cond.saldoPendiente)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{cond.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin condensadora ligada</td></tr>
               )}
             </tbody>
           </table>
@@ -1079,10 +1149,20 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   // 2) Ofertas → productos, para clasificar cada cuenta (unidad vs producto/bodega).
   const ofertaIds = [...new Set(cuentas.map((c) => c.id_oferta).filter(Boolean))] as number[];
   const ofertas = await fetchInBatches<any>(ofertaIds, (batch) =>
-    (supabase as any).from('ofertas').select('id, id_producto').in('id', batch as number[]),
+    (supabase as any).from('ofertas').select('id, id_producto, id_propiedad').in('id', batch as number[]),
   );
   const offerById = new Map<number, any>(ofertas.map((o: any) => [o.id, o]));
   const ofertaProductIds = [...new Set(ofertas.map((o: any) => o.id_producto).filter(Boolean))] as number[];
+
+  // Propiedad efectiva por cuenta: muchas cuentas de PRODUCTO (condensadora,
+  // bodega, estacionamiento, paquete) traen `id_propiedad = null` y sólo
+  // referencian la propiedad vía su oferta. Resolvemos el fallback aquí para
+  // que se agrupen con la cuenta de la unidad correspondiente.
+  for (const c of cuentas) {
+    if (!c.id_propiedad && c.id_oferta) {
+      c.id_propiedad = offerById.get(c.id_oferta)?.id_propiedad ?? null;
+    }
+  }
 
   // 3) Propiedades referenciadas por las cuentas. Se muestran TODAS las cuentas
   //    sin importar el estatus de disponibilidad de la propiedad.
@@ -1158,6 +1238,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const esCuentaBodega = (c: any) => { const n = productoDeCuenta(c); return !!n && BODEGA_RE.test(n); };
   const esCuentaEstacionamiento = (c: any) => { const n = productoDeCuenta(c); return !!n && ESTAC_RE.test(n); };
   const esCuentaPaquete = (c: any) => { const n = productoDeCuenta(c); return !!n && PAQUETE_RE.test(n); };
+  const esCuentaCondensadora = (c: any) => { const n = productoDeCuenta(c); return !!n && CONDENSADORA_RE.test(n); };
 
   // 6) Agrupar cuentas por propiedad y clasificar.
   const cuentasByProp = groupByProp(relevantCuentas);
@@ -1167,7 +1248,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const bodegaCuentasByProp = new Map<number, any[]>();
   const estacCuentasByProp = new Map<number, any[]>();
   const paqueteCuentasByProp = new Map<number, any[]>();
-  const productCuentasByProp = new Map<number, any[]>(); // hermanas con producto (incl. bodegas/estac/paquetes)
+  const condensadoraCuentasByProp = new Map<number, any[]>();
+  const productCuentasByProp = new Map<number, any[]>(); // hermanas con producto (incl. bodegas/estac/paquetes/condensadoras)
   for (const [propId, list] of cuentasByProp) {
     for (const c of list) {
       if (esCuentaUnidad(c)) {
@@ -1189,6 +1271,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           estacCuentasByProp.set(propId, [...(estacCuentasByProp.get(propId) || []), c]);
         } else if (esCuentaPaquete(c)) {
           paqueteCuentasByProp.set(propId, [...(paqueteCuentasByProp.get(propId) || []), c]);
+        } else if (esCuentaCondensadora(c)) {
+          condensadoraCuentasByProp.set(propId, [...(condensadoraCuentasByProp.get(propId) || []), c]);
         }
       }
     }
@@ -1209,8 +1293,9 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const repAccountIds = [...new Set([...representativeByProp.values()].map((c: any) => c.id as number))];
   const bodegaCuentaIds = [...new Set([...bodegaCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
   const paqueteCuentaIds = [...new Set([...paqueteCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
-  const compradorCuentaIds = [...new Set([...repAccountIds, ...paqueteCuentaIds])];
-  const pagoCuentaIds = [...new Set([...bodegaCuentaIds, ...paqueteCuentaIds])];
+  const condensadoraCuentaIds = [...new Set([...condensadoraCuentasByProp.values()].flat().map((c: any) => c.id))] as number[];
+  const compradorCuentaIds = [...new Set([...repAccountIds, ...paqueteCuentaIds, ...condensadoraCuentaIds])];
+  const pagoCuentaIds = [...new Set([...bodegaCuentaIds, ...paqueteCuentaIds, ...condensadoraCuentaIds])];
 
   const [compradores, docs, acuerdos] = await Promise.all([
     // compradores no tiene PK simple; lotes chicos para no superar 1000 filas/lote.
@@ -1347,6 +1432,22 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         };
       });
 
+      const condensadoraCuentas = condensadoraCuentasByProp.get(property.id) || [];
+      const condensadorasDetalle: CondensadoraDetalle[] = condensadoraCuentas.map((c: any) => {
+        const precioFinal = Number(c.precio_final || 0);
+        const totalPagado = pagadoPorCuenta.get(c.id) || 0;
+        return {
+          id: c.id,
+          nombre: productoDeCuenta(c) || 'Condensadora',
+          precioFinal,
+          totalPagado,
+          saldoPendiente: precioFinal - totalPagado,
+          compradores: buyersByAccount.get(c.id) || [],
+          cuentaId: c.id,
+          cuentaLabel: ccLabel(c.id),
+        };
+      });
+
       const productNames = new Set<string>();
       for (const item of propertyEstacionamientos) {
         const name = item.id_producto ? productById.get(item.id_producto) : null;
@@ -1378,8 +1479,9 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         estacionamientos: estacionamientosDetalle,
         bodegas: bodegasDetalle,
         paquetes: paquetesDetalle,
+        condensadoras: condensadorasDetalle,
         productos: Array.from(productNames),
-        tieneCondensadora: Array.from(productNames).some((n) => CONDENSADORA_RE.test(n)),
+        tieneCondensadora: condensadorasDetalle.length > 0 || Array.from(productNames).some((n) => CONDENSADORA_RE.test(n)),
         fechaVenta: account.fecha_compra,
         precioFinal: Number(account.precio_final || 0),
         m2Interiores,
