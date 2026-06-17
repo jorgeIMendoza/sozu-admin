@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Edit, Trash2, Upload, Plus, Undo2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -30,11 +31,18 @@ interface Estacionamiento {
   activo: boolean;
   tipo_nombre: string;
   proyecto_nombre: string;
+  proyecto_id: number | null;
+  id_propiedad: number | null;
+  id_producto: number | null;
   numero_propiedad: string;
   id_tipo: number | null;
   precio_m2: number | null;
   precio_final: number | null;
+  cuenta_cobranza_id: number | null;
 }
+
+// Folio de cuenta de cobranza de producto (bodega/estacionamiento) → CCP-000001
+const formatCuentaProducto = (id: number): string => `CCP-${String(id).padStart(6, '0')}`;
 
 // Helper para formatear moneda
 const formatCurrency = (value: number | null): string => {
@@ -82,6 +90,7 @@ const Estacionamientos = () => {
   const [activeTab, setActiveTab] = useState("activos");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [proyectoFilter, setProyectoFilter] = useState("");
+  const [cuentaFilter, setCuentaFilter] = useState("all"); // all | con | sin
   const [editingEstacionamiento, setEditingEstacionamiento] = useState<Estacionamiento | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -103,7 +112,7 @@ const Estacionamientos = () => {
 
   // Query para obtener estacionamientos activos
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
-    queryKey: ['estacionamientos', 'active', currentPageActive, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ['estacionamientos', 'active', currentPageActive, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       let query = supabase
         .from('estacionamientos')
@@ -126,11 +135,49 @@ const Estacionamientos = () => {
       
       if (error) throw error;
 
+      // Cuenta de cobranza del producto: oferta activa que coincide en (propiedad + producto)
+      // → cuenta_cobranza activa de esa oferta. id_producto es genérico, por eso se requiere ambos.
+      const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
+      const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
+      const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
+      if (propIds.length > 0 && prodIds.length > 0) {
+        const { data: ofertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_propiedad, id_producto')
+          .in('id_propiedad', propIds)
+          .in('id_producto', prodIds)
+          .eq('activo', true)
+          .range(0, 5000);
+        const ofertaIds = (ofertasData || []).map((o: any) => o.id);
+        let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
+        if (ofertaIds.length > 0) {
+          const { data: cuentasData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta, precio_final')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .range(0, 5000);
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
+        }
+        for (const o of ofertasData || []) {
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
+        }
+      }
+
       const enrichedData = allData.map((item: any) => {
         // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
         // no desde la propiedad: un estacionamiento puede no tener propiedad asignada y aun así pertenecer a un proyecto.
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id,
           nombre: item.nombre,
@@ -141,10 +188,13 @@ const Estacionamientos = () => {
           tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
           proyecto_nombre: item.productos_servicios?.proyectos?.nombre || 'N/A',
           proyecto_id: item.productos_servicios?.id_proyecto || item.productos_servicios?.proyectos?.id || null,
+          id_propiedad: item.id_propiedad ?? null,
+          id_producto: item.id_producto ?? null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           id_tipo: item.id_tipo,
           precio_m2: precioM2,
-          precio_final: precioFinal
+          precio_final: precioFinal,
+          cuenta_cobranza_id: cuentaByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null
         };
       });
 
@@ -170,6 +220,12 @@ const Estacionamientos = () => {
         filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
       }
 
+      if (cuentaFilter === "con") {
+        filteredData = filteredData.filter(item => item.cuenta_cobranza_id);
+      } else if (cuentaFilter === "sin") {
+        filteredData = filteredData.filter(item => !item.cuenta_cobranza_id);
+      }
+
       const from = (currentPageActive - 1) * itemsPerPage;
       const to = from + itemsPerPage;
       const paginatedData = filteredData.slice(from, to);
@@ -185,7 +241,7 @@ const Estacionamientos = () => {
 
   // Query para obtener estacionamientos eliminados
   const { data: deletedData, isLoading: isLoadingDeleted } = useQuery({
-    queryKey: ['estacionamientos', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ['estacionamientos', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
       let query = supabase
         .from('estacionamientos')
@@ -207,20 +263,60 @@ const Estacionamientos = () => {
       const { data: allData, error } = await query.range(0, 2000);
       if (error) throw error;
 
+      // Cuenta de cobranza del producto (ver query de activos).
+      const propIds = [...new Set(allData.map((i: any) => i.id_propiedad).filter(Boolean))];
+      const prodIds = [...new Set(allData.map((i: any) => i.id_producto).filter(Boolean))];
+      const cuentaByPair: Record<string, number> = {};
+      const precioByPair: Record<string, number> = {};
+      if (propIds.length > 0 && prodIds.length > 0) {
+        const { data: ofertasData } = await supabase
+          .from('ofertas')
+          .select('id, id_propiedad, id_producto')
+          .in('id_propiedad', propIds)
+          .in('id_producto', prodIds)
+          .eq('activo', true)
+          .range(0, 5000);
+        const ofertaIds = (ofertasData || []).map((o: any) => o.id);
+        let cuentaByOferta: Record<number, number> = {};
+        let precioByOferta: Record<number, number> = {};
+        if (ofertaIds.length > 0) {
+          const { data: cuentasData } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta, precio_final')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .range(0, 5000);
+          for (const c of cuentasData || []) {
+            cuentaByOferta[c.id_oferta] = c.id;
+            precioByOferta[c.id_oferta] = Number(c.precio_final);
+          }
+        }
+        for (const o of ofertasData || []) {
+          if (cuentaByOferta[o.id]) {
+            cuentaByPair[`${o.id_propiedad}-${o.id_producto}`] = cuentaByOferta[o.id];
+            precioByPair[`${o.id_propiedad}-${o.id_producto}`] = precioByOferta[o.id];
+          }
+        }
+      }
+
       const enrichedData = allData.map((item: any) => {
         // Proyecto desde el producto, no desde la propiedad (ver query de activos).
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
-        const precioFinal = precioM2 !== null ? Number(item.m2 || 0) * Number(precioM2) : null;
+        // Precio final viene de la cuenta de cobranza del producto: N/A si no hay cuenta, 0 si la cuenta es 0.
+        const precioFinal = precioByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null;
         return {
           id: item.id, nombre: item.nombre, m2: item.m2, ubicacion: item.ubicacion,
           es_incluido: item.es_incluido, activo: item.activo,
           tipo_nombre: item.tipos_estacionamiento?.nombre || 'N/A',
           proyecto_nombre: item.productos_servicios?.proyectos?.nombre || 'N/A',
           proyecto_id: item.productos_servicios?.id_proyecto || item.productos_servicios?.proyectos?.id || null,
+          id_propiedad: item.id_propiedad ?? null,
+          id_producto: item.id_producto ?? null,
           numero_propiedad: item.propiedades?.numero_propiedad || 'N/A',
           id_tipo: item.id_tipo,
           precio_m2: precioM2,
-          precio_final: precioFinal
+          precio_final: precioFinal,
+          cuenta_cobranza_id: cuentaByPair[`${item.id_propiedad}-${item.id_producto}`] ?? null
         };
       });
 
@@ -241,6 +337,12 @@ const Estacionamientos = () => {
 
       if (proyectoFilter && proyectoFilter !== "all") {
         filteredData = filteredData.filter(item => item.proyecto_nombre === proyectoFilter);
+      }
+
+      if (cuentaFilter === "con") {
+        filteredData = filteredData.filter(item => item.cuenta_cobranza_id);
+      } else if (cuentaFilter === "sin") {
+        filteredData = filteredData.filter(item => !item.cuenta_cobranza_id);
       }
 
       const from = (currentPageDeleted - 1) * itemsPerPage;
@@ -455,6 +557,20 @@ const Estacionamientos = () => {
                 emptyText="No se encontró el proyecto"
               />
             </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Cuenta de cobranza</label>
+              <Select value={cuentaFilter} onValueChange={setCuentaFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="con">Con cuenta de cobranza</SelectItem>
+                  <SelectItem value="sin">Sin cuenta de cobranza</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -479,6 +595,7 @@ const Estacionamientos = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Cuenta de Cobranza</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -493,6 +610,18 @@ const Estacionamientos = () => {
                         <TableCell>{estacionamiento.m2} m²</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_m2)}</TableCell>
                         <TableCell><PrecioFinalBadge value={estacionamiento.precio_final} /></TableCell>
+                        <TableCell>
+                          {estacionamiento.cuenta_cobranza_id ? (
+                            <Link
+                              to={`/admin/cuentas-cobranza/${estacionamiento.cuenta_cobranza_id}/detalle`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {formatCuentaProducto(estacionamiento.cuenta_cobranza_id)}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -578,6 +707,7 @@ const Estacionamientos = () => {
                       <TableHead>M2</TableHead>
                       <TableHead>Precio por M2</TableHead>
                       <TableHead>Precio Final</TableHead>
+                      <TableHead>Cuenta de Cobranza</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -592,6 +722,18 @@ const Estacionamientos = () => {
                         <TableCell>{estacionamiento.m2} m²</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_m2)}</TableCell>
                         <TableCell>{formatCurrency(estacionamiento.precio_final)}</TableCell>
+                        <TableCell>
+                          {estacionamiento.cuenta_cobranza_id ? (
+                            <Link
+                              to={`/admin/cuentas-cobranza/${estacionamiento.cuenta_cobranza_id}/detalle`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {formatCuentaProducto(estacionamiento.cuenta_cobranza_id)}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{estacionamiento.ubicacion || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
