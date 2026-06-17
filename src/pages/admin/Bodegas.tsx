@@ -108,17 +108,13 @@ const Bodegas = () => {
         .select(`
           *,
           propiedades!fk_bodegas_propiedad(
-            numero_propiedad,
-            id_edificio_modelo,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey(
-              id_edificio,
-              edificios!edificios_modelos_id_edificio_fkey(
-                id_proyecto,
-                proyectos!edificios_id_proyecto_fkey(id, nombre)
-              )
-            )
+            numero_propiedad
           ),
-          productos_servicios!bodegas_id_producto_fkey(precio_lista)
+          productos_servicios!bodegas_id_producto_fkey(
+            precio_lista,
+            id_proyecto,
+            proyectos!productos_servicios_id_proyecto_fkey(id, nombre)
+          )
         `)
         .eq('activo', true)
         .order('id', { ascending: false })
@@ -128,8 +124,10 @@ const Bodegas = () => {
 
       // Enriquecer datos con proyecto a través de la cadena correcta
       const enrichedData = allData.map((item: any) => {
-        const proyecto = item.propiedades?.edificios_modelos?.edificios?.proyectos;
-        const id_proyecto = item.propiedades?.edificios_modelos?.edificios?.id_proyecto;
+        // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
+        // no desde la propiedad: una bodega puede no tener propiedad asignada y aun así pertenecer a un proyecto.
+        const proyecto = item.productos_servicios?.proyectos;
+        const id_proyecto = item.productos_servicios?.id_proyecto;
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
         const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
         return {
@@ -194,17 +192,13 @@ const Bodegas = () => {
         .select(`
           *,
           propiedades!fk_bodegas_propiedad(
-            numero_propiedad,
-            id_edificio_modelo,
-            edificios_modelos!propiedades_id_edificio_modelo_fkey(
-              id_edificio,
-              edificios!edificios_modelos_id_edificio_fkey(
-                id_proyecto,
-                proyectos!edificios_id_proyecto_fkey(id, nombre)
-              )
-            )
+            numero_propiedad
           ),
-          productos_servicios!bodegas_id_producto_fkey(precio_lista)
+          productos_servicios!bodegas_id_producto_fkey(
+            precio_lista,
+            id_proyecto,
+            proyectos!productos_servicios_id_proyecto_fkey(id, nombre)
+          )
         `)
         .eq('activo', false)
         .order('id', { ascending: false })
@@ -214,8 +208,10 @@ const Bodegas = () => {
 
       // Enriquecer datos con proyecto a través de la cadena correcta
       const enrichedData = allData.map((item: any) => {
-        const proyecto = item.propiedades?.edificios_modelos?.edificios?.proyectos;
-        const id_proyecto = item.propiedades?.edificios_modelos?.edificios?.id_proyecto;
+        // Proyecto se obtiene desde el producto (id_producto → productos_servicios.id_proyecto),
+        // no desde la propiedad: una bodega puede no tener propiedad asignada y aun así pertenecer a un proyecto.
+        const proyecto = item.productos_servicios?.proyectos;
+        const id_proyecto = item.productos_servicios?.id_proyecto;
         const precioM2 = item.productos_servicios?.precio_lista ?? null;
         const precioFinal = precioM2 !== null && item.m2 ? Number(item.m2) * Number(precioM2) : null;
         return {
