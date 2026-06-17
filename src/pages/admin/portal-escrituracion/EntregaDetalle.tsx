@@ -123,23 +123,6 @@ const PRIORIDAD_META: Record<PrioridadObs, { label: string; cls: string }> = {
 const fmt  = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString('es-MX') : '—';
 const fmtDt = (d: string | null | undefined) => d ? new Date(d).toLocaleString('es-MX')   : '—';
 
-// ─── Checklist plantilla (FASE 2) ─────────────────────────────────────────────
-
-const CHECKLIST_PLANTILLA = [
-  { nombre: 'Acabados',                      orden: 1,  items: ['Muros', 'Plafones', 'Pintura', 'Pisos', 'Zoclos', 'Puertas', 'Cerraduras', 'Herrajes', 'Cancelería', 'Vidrios', 'Ventanas'] },
-  { nombre: 'Instalación eléctrica',         orden: 2,  items: ['Contactos', 'Apagadores', 'Centro de carga', 'Luminarias', 'Preparaciones', 'Tierra física'] },
-  { nombre: 'Instalación hidráulica',        orden: 3,  items: ['Presión de agua', 'Llaves', 'Lavabos', 'Regaderas', 'Tarjas', 'Conexiones', 'Fugas'] },
-  { nombre: 'Instalación sanitaria',         orden: 4,  items: ['WC', 'Coladeras', 'Drenajes', 'Prueba de descarga', 'Olores', 'Sellos'] },
-  { nombre: 'Aire acondicionado / HVAC',     orden: 5,  items: ['Preparaciones', 'Minisplits (si aplica)', 'Drenes', 'Alimentación eléctrica', 'Prueba de funcionamiento (si aplica)'] },
-  { nombre: 'Carpintería',                   orden: 6,  items: ['Clósets', 'Puertas interiores', 'Muebles de baño', 'Cocina (si aplica)', 'Ajustes', 'Bisagras', 'Jaladeras'] },
-  { nombre: 'Electrodomésticos / equipamiento', orden: 7, items: ['Parrilla', 'Campana', 'Horno', 'Refrigerador (si aplica)', 'Lavasecadora (si aplica)', 'Manuales y garantías'] },
-  { nombre: 'Calentador / boiler',           orden: 8,  items: ['Instalación', 'Encendido', 'Ventilación', 'Conexiones', 'Prueba de agua caliente'] },
-  { nombre: 'Fachada / exteriores',          orden: 9,  items: ['Balcón', 'Barandales', 'Cancelería exterior', 'Impermeabilización visible', 'Drenes pluviales'] },
-  { nombre: 'Limpieza fina',                 orden: 10, items: ['Vidrios', 'Pisos', 'Baños', 'Cocina', 'Retiro de residuos', 'Detalles finales'] },
-  { nombre: 'Seguridad y acceso',            orden: 11, items: ['Cerradura principal', 'Tarjetas / llaves', 'Interfon', 'Accesos', 'Cajón de estacionamiento', 'Bodega (si aplica)'] },
-  { nombre: 'Paquete de Muebles',             orden: 12, items: ['Sala', 'Comedor', 'Recámaras', 'Cocina integral (si aplica)', 'General / otros'] },
-] as const;
-
 // ─── Signature Canvas ─────────────────────────────────────────────────────────
 
 function SignatureCanvas({ onChange }: { onChange: (data: string | null) => void }) {
@@ -315,12 +298,13 @@ export function EntregaDetalle() {
   const { data: checklist = [] } = useQuery<ChecklistCategoria[]>({
     queryKey: ['checklist-entrega', entregaId],
     queryFn: async () => {
-      const { data: cats } = await supabase
+      const { data: cats } = await (supabase as any)
         .from('entregas_checklist_categorias')
-        .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos')
+        .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos, id_plantilla_categoria')
         .eq('id_entrega', entregaId!)
         .eq('activo', true)
-        .order('nombre');
+        .order('id_plantilla_categoria', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true });
 
       const catIds = (cats ?? []).map((c: any) => c.id);
       if (!catIds.length) return [];
@@ -330,7 +314,7 @@ export function EntregaDetalle() {
         .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, fecha_revision, fecha_compromiso')
         .in('id_categoria', catIds)
         .eq('activo', true)
-        .order('nombre');
+        .order('id', { ascending: true });
 
       const itemsByCat: Record<number, ChecklistItem[]> = {};
       (items ?? []).forEach((item: any) => {
@@ -376,6 +360,52 @@ export function EntregaDetalle() {
 
   const getEstatusNombre = (id: number) =>
     estatusCatalogo.find(e => e.id === id)?.nombre ?? 'Sin estatus';
+
+  // ── Plantilla preview (prop-mode: resumen del checklist a crear) ─────────────
+  const modeloIdForPreview   = isPropMode ? (pageData?.modelo?.id ?? null) : null;
+  const proyectoIdForPreview = isPropMode ? ((pageData?.edificio as any)?.id_proyecto ?? null) : null;
+
+  const { data: plantillaPreview = [] } = useQuery<{ nombre: string; total_items: number }[]>({
+    queryKey: ['checklist-plantilla-preview', modeloIdForPreview, proyectoIdForPreview],
+    queryFn: async () => {
+      const { data: plantillas } = await (supabase as any)
+        .from('checklist_plantillas')
+        .select('id, id_proyecto, id_modelo')
+        .eq('tipo_checklist', 'PRE_ENTREGA')
+        .eq('activo', true);
+      if (!plantillas?.length) return [];
+
+      const byModelo   = (plantillas as any[]).find(p => modeloIdForPreview !== null && p.id_modelo === modeloIdForPreview);
+      const byProyecto = (plantillas as any[]).find(p => p.id_proyecto === proyectoIdForPreview && p.id_modelo === null);
+      const global     = (plantillas as any[]).find(p => p.id_proyecto === null && p.id_modelo === null);
+      const plantilla  = byModelo ?? byProyecto ?? global;
+      if (!plantilla) return [];
+
+      const { data: cats } = await (supabase as any)
+        .from('checklist_plantilla_categorias')
+        .select('id, nombre, orden')
+        .eq('id_plantilla', plantilla.id)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+      if (!cats?.length) return [];
+
+      const catIds = (cats as any[]).map((c: any) => c.id);
+      const { data: items } = await (supabase as any)
+        .from('checklist_plantilla_items')
+        .select('id, id_plantilla_categoria')
+        .in('id_plantilla_categoria', catIds)
+        .eq('activo', true);
+
+      const countByCat: Record<number, number> = {};
+      (items ?? []).forEach((i: any) => {
+        countByCat[i.id_plantilla_categoria] = (countByCat[i.id_plantilla_categoria] ?? 0) + 1;
+      });
+
+      return (cats as any[]).map((c: any) => ({ nombre: c.nombre, total_items: countByCat[c.id] ?? 0 }));
+    },
+    enabled: isPropMode && !!pageData,
+    staleTime: 60_000,
+  });
 
   // ── Acciones de checklist ─────────────────────────────────────────────────────
 
@@ -434,7 +464,7 @@ export function EntregaDetalle() {
     setItemLoading(itemId, false);
   };
 
-  // ── FASE 2: Iniciar pre-entrega ───────────────────────────────────────────────
+  // ── Iniciar pre-entrega (fuente: BD) ─────────────────────────────────────────
   const handleIniciarPreEntrega = async () => {
     if (!pageData?.propiedad || !pageData?.cuenta || !pageData?.edificio) {
       toast.error('No se encontraron los datos necesarios para iniciar la pre-entrega');
@@ -442,42 +472,132 @@ export function EntregaDetalle() {
     }
     setStarting(true);
     try {
+      const propiedadId = pageData.propiedad.id;
+      const proyectoId  = (pageData.edificio as any).id_proyecto as number;
+      const modeloId    = pageData.modelo?.id ?? null;
+
+      // ── Guard: propiedad ya tiene entrega inicializada ──────────────────────
+      const { data: entregasExistentes } = await supabase
+        .from('entregas')
+        .select('id')
+        .eq('id_propiedad', propiedadId)
+        .eq('activo', true)
+        .limit(1);
+
+      if (entregasExistentes?.length) {
+        const idExistente = (entregasExistentes[0] as any).id;
+        const { count } = await (supabase as any)
+          .from('entregas_checklist_categorias')
+          .select('id', { count: 'exact', head: true })
+          .eq('id_entrega', idExistente)
+          .eq('activo', true);
+        if (count && count > 0) {
+          toast.info('La pre-entrega ya fue inicializada.');
+          navigate(`/admin/portal-escrituracion/entregas/${idExistente}`);
+          return;
+        }
+      }
+
+      // ── Fase 1: Resolver plantilla activa ───────────────────────────────────
+      // Prioridad: específica de modelo > específica de proyecto > global
+      const { data: plantillas } = await (supabase as any)
+        .from('checklist_plantillas')
+        .select('id, id_proyecto, id_modelo')
+        .eq('tipo_checklist', 'PRE_ENTREGA')
+        .eq('activo', true);
+
+      if (!plantillas?.length) throw new Error('No hay una plantilla de checklist activa para PRE_ENTREGA');
+
+      const byModelo   = (plantillas as any[]).find(p => modeloId !== null && p.id_modelo === modeloId);
+      const byProyecto = (plantillas as any[]).find(p => p.id_proyecto === proyectoId && p.id_modelo === null);
+      const global     = (plantillas as any[]).find(p => p.id_proyecto === null && p.id_modelo === null);
+      const plantilla  = byModelo ?? byProyecto ?? global;
+
+      if (!plantilla) throw new Error('No se encontró una plantilla de checklist aplicable a esta unidad');
+
+      // ── Fase 1b: Cargar categorías e ítems ordenados ────────────────────────
+      const { data: plantillaCats, error: plantillaCatErr } = await (supabase as any)
+        .from('checklist_plantilla_categorias')
+        .select('id, nombre, orden')
+        .eq('id_plantilla', plantilla.id)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+
+      if (plantillaCatErr || !plantillaCats?.length)
+        throw new Error('La plantilla no tiene categorías activas');
+
+      const plantillaCatIds = (plantillaCats as any[]).map((c: any) => c.id);
+
+      const { data: plantillaItems, error: plantillaItemErr } = await (supabase as any)
+        .from('checklist_plantilla_items')
+        .select('id, id_plantilla_categoria, nombre, orden')
+        .in('id_plantilla_categoria', plantillaCatIds)
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+
+      if (plantillaItemErr || !plantillaItems?.length)
+        throw new Error('La plantilla no tiene ítems activos');
+
+      const itemsByCat: Record<number, any[]> = {};
+      (plantillaItems as any[]).forEach(item => {
+        if (!itemsByCat[item.id_plantilla_categoria]) itemsByCat[item.id_plantilla_categoria] = [];
+        itemsByCat[item.id_plantilla_categoria].push(item);
+      });
+
+      // ── Fase 3: Crear registro de entrega ───────────────────────────────────
       const { data: nuevaEntrega, error: eErr } = await supabase
         .from('entregas')
         .insert({
-          id_propiedad:        pageData.propiedad.id,
-          id_cuenta_cobranza:  pageData.cuenta.id,
-          id_proyecto:         (pageData.edificio as any).id_proyecto,
-          estatus:             'PRE_ENTREGA_EN_PROCESO',
+          id_propiedad:          propiedadId,
+          id_cuenta_cobranza:    pageData.cuenta.id,
+          id_proyecto:           proyectoId,
+          estatus:               'PRE_ENTREGA_EN_PROCESO',
           muebles_daiku_estatus: 'PENDIENTE',
-          activo:              true,
+          activo:                true,
         })
         .select('id')
         .single();
 
       if (eErr || !nuevaEntrega) throw new Error(eErr?.message ?? 'Error al crear la pre-entrega');
 
-      const { data: cats, error: catErr } = await supabase
+      // ── Fase 2: Insertar categorías con trazabilidad ────────────────────────
+      const { data: cats, error: catErr } = await (supabase as any)
         .from('entregas_checklist_categorias')
-        .insert(CHECKLIST_PLANTILLA.map(cat => ({
-          id_entrega:      nuevaEntrega.id,
-          nombre:          cat.nombre,
-          tipo_checklist:  'PRE_ENTREGA',
-          estatus:         'PENDIENTE',
-          total_items:     cat.items.length,
-          items_completos: 0,
-          activo:          true,
-        })))
-        .select('id, nombre');
+        .insert(
+          (plantillaCats as any[]).map(cat => ({
+            id_entrega:             (nuevaEntrega as any).id,
+            id_plantilla_categoria: cat.id,
+            nombre:                 cat.nombre,
+            tipo_checklist:         'PRE_ENTREGA',
+            estatus:                'PENDIENTE',
+            total_items:            (itemsByCat[cat.id] ?? []).length,
+            items_completos:        0,
+            activo:                 true,
+          }))
+        )
+        .select('id, id_plantilla_categoria');
 
-      if (catErr || !cats) throw new Error(catErr?.message ?? 'Error al crear categorías del checklist');
+      if (catErr || !cats?.length) throw new Error(catErr?.message ?? 'Error al crear categorías del checklist');
 
-      const itemInserts: { id_categoria: number; nombre: string; id_estatus_checklist: number; activo: boolean }[] = [];
-      CHECKLIST_PLANTILLA.forEach(plantilla => {
-        const catDb = (cats as any[]).find(c => c.nombre === plantilla.nombre);
-        if (!catDb) return;
-        plantilla.items.forEach(nombre => {
-          itemInserts.push({ id_categoria: catDb.id, nombre, id_estatus_checklist: ESTATUS_CHECKLIST.PENDIENTE, activo: true });
+      // ── Fase 2b: Insertar ítems con trazabilidad ────────────────────────────
+      const itemInserts: {
+        id_categoria: number;
+        id_plantilla_item: number;
+        nombre: string;
+        id_estatus_checklist: number;
+        activo: boolean;
+      }[] = [];
+
+      (cats as any[]).forEach(catDb => {
+        const catItems = itemsByCat[catDb.id_plantilla_categoria] ?? [];
+        catItems.forEach(pItem => {
+          itemInserts.push({
+            id_categoria:         catDb.id,
+            id_plantilla_item:    pItem.id,
+            nombre:               pItem.nombre,
+            id_estatus_checklist: ESTATUS_CHECKLIST.PENDIENTE,
+            activo:               true,
+          });
         });
       });
 
@@ -581,8 +701,8 @@ export function EntregaDetalle() {
               <h2 className="text-xl font-bold text-slate-900 mb-2">Pre-entrega no iniciada</h2>
               <p className="text-sm text-slate-500 leading-relaxed">
                 Esta unidad aún no tiene un proceso de pre-entrega activo.
-                Al iniciar, se creará el registro y se cargarán las {CHECKLIST_PLANTILLA.length} categorías
-                y {CHECKLIST_PLANTILLA.reduce((s, c) => s + c.items.length, 0)} ítems estándar del checklist técnico.
+                Al iniciar, se creará el registro y se cargarán las {plantillaPreview.length} categorías
+                y {plantillaPreview.reduce((s, c) => s + c.total_items, 0)} ítems estándar del checklist técnico.
               </p>
             </div>
 
@@ -607,10 +727,10 @@ export function EntregaDetalle() {
             <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-left">
               <p className="text-xs font-semibold text-sky-800 mb-2">Se crearán automáticamente:</p>
               <ul className="space-y-1">
-                {CHECKLIST_PLANTILLA.map(cat => (
+                {plantillaPreview.map(cat => (
                   <li key={cat.nombre} className="flex items-center justify-between text-xs text-sky-700">
                     <span>{cat.nombre}</span>
-                    <span className="font-medium">{cat.items.length} ítems</span>
+                    <span className="font-medium">{cat.total_items} ítems</span>
                   </li>
                 ))}
               </ul>
