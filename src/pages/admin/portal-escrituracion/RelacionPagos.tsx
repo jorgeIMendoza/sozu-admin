@@ -996,8 +996,15 @@ export function RelacionPagos() {
     [displayRows, page],
   );
 
+  const exportTotal = isRpMode
+    ? rpTableRows.length + rpBodegaTableRows.length + rpEstTableRows.length
+    : displayTotal;
+
   const handleExport = async () => {
-    const rows = displayRows.map((p) => ({
+    const rowsToExport = isRpMode
+      ? [...rpTableRows, ...rpBodegaTableRows, ...rpEstTableRows]
+      : displayRows;
+    const rows = rowsToExport.map((p) => ({
       proyecto: p.proyecto ?? '—',
       estatus: 'Activa',
       comprador: p.cliente ?? '—',
@@ -1054,7 +1061,11 @@ export function RelacionPagos() {
         </div>
         <button
           onClick={handleExport}
-          disabled={isExporting || displayTotal === 0}
+          disabled={
+            isExporting ||
+            exportTotal === 0 ||
+            (isRpMode && (rpBodegaPagosLoading || rpEstPagosLoading))
+          }
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
