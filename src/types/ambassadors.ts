@@ -1,7 +1,6 @@
-export type AmbassadorType =
-  | 'cliente' | 'socio' | 'aliado' | 'referidor_externo' | 'colaborador' | 'otro';
-
 export type AmbassadorStatus = 'activo' | 'inactivo' | 'pendiente';
+
+export type ReferralCanal = 'admin' | 'portal_embajador' | 'link_referido' | 'importacion';
 
 export type CommissionTrigger = 'apartado' | 'promesa' | 'enganche' | 'escrituracion';
 
@@ -119,7 +118,7 @@ export interface Ambassador {
   clavePaisTelefono?: string;
   email: string;
   company?: string;
-  type: AmbassadorType;
+  type: number;
   status: AmbassadorStatus;
   createdAt: string;
   code: string;
@@ -170,16 +169,8 @@ export interface Referral {
   estimatedPaymentDate?: string;
   paymentDate?: string;
   auditTrail: AmbassadorAuditEvent[];
+  canal?: ReferralCanal;
 }
-
-export const AMBASSADOR_TYPE_LABEL: Record<AmbassadorType, string> = {
-  cliente: 'Cliente',
-  socio: 'Socio',
-  aliado: 'Aliado',
-  referidor_externo: 'Referidor externo',
-  colaborador: 'Colaborador',
-  otro: 'Otro',
-};
 
 export const REFERRAL_STATUS_LABEL: Record<ReferralStatus, string> = {
   registrado: 'Registrado',

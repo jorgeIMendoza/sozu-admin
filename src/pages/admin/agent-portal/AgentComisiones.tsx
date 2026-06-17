@@ -238,7 +238,9 @@ const AgentComisiones = () => {
   if (isAgentRole && !onboardingLoading && !canReceivePayments) {
     return (
       <div className="pb-24">
-        <AgentPortalHeader showAgentName />
+        <AgentPortalHeader>
+          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Comisiones</h1>
+        </AgentPortalHeader>
         <div className="p-4 space-y-5">
         <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-center gap-3">
@@ -277,13 +279,12 @@ const AgentComisiones = () => {
 
   return (
     <div className="pb-24">
-      <AgentPortalHeader showAgentName />
-
-      {/* Title */}
-      <div className="px-4 pt-2 pb-3">
-        <h1 className="text-2xl font-bold text-[hsl(var(--agent-text))]">Comisiones</h1>
-        <p className="text-sm text-[hsl(var(--agent-text-secondary))]">Tu wallet de ingresos</p>
-      </div>
+      <AgentPortalHeader>
+        <div>
+          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Comisiones</h1>
+          <p className="text-sm text-[hsl(var(--agent-text-secondary))]">Tu wallet de ingresos</p>
+        </div>
+      </AgentPortalHeader>
 
       {/* Summary cards */}
       <div className="px-4 grid grid-cols-2 gap-3 mb-4">

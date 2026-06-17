@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, Percent, Receipt, Clock, FileText,
@@ -128,6 +129,20 @@ export function AltaDireccionCitas() {
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
   const queryClient = useQueryClient();
 
+  // Filtro por fecha de CREACIÓN (citas "generadas") dirigido por URL, para
+  // soportar el CTA "Citas comerciales" del Dashboard General (mes en curso).
+  const [searchParams] = useSearchParams();
+  const [creadoDesde, setCreadoDesde] = useState<string>(() => searchParams.get("desde") ?? "");
+  const [creadoHasta, setCreadoHasta] = useState<string>(() => searchParams.get("hasta") ?? "");
+  const creacionLabel = useMemo(() => {
+    const base = creadoDesde || creadoHasta;
+    if (!base) return "";
+    return new Date(base + "T00:00:00").toLocaleDateString("es-MX", {
+      month: "long",
+      year: "numeric",
+    });
+  }, [creadoDesde, creadoHasta]);
+
   const { data: citas = [], isLoading, error } = useQuery<CitaRow[]>({
     queryKey: ["alta-direccion-citas"],
     queryFn: async () => {
@@ -224,9 +239,16 @@ export function AltaDireccionCitas() {
         ].map(norm).join(" ");
         if (!hay.includes(searchQ)) return false;
       }
+      // Filtro por fecha de creación (citas generadas en el rango).
+      if (creadoDesde || creadoHasta) {
+        if (!c.fecha_creacion) return false;
+        const cd = new Date(c.fecha_creacion);
+        if (creadoDesde && cd < new Date(creadoDesde + "T00:00:00")) return false;
+        if (creadoHasta && cd > new Date(creadoHasta + "T23:59:59.999")) return false;
+      }
       return true;
     });
-  }, [citas, filters, estadoFilter, kpiFilter, semanaRange]);
+  }, [citas, filters, estadoFilter, kpiFilter, semanaRange, creadoDesde, creadoHasta]);
 
   // Conteos de KPI sobre los filtros globales (proyecto/canal/periodo/búsqueda/estado)
   // — pero ignorando el kpiFilter mismo, para que el usuario no pierda el conteo
@@ -272,7 +294,7 @@ export function AltaDireccionCitas() {
     return { semana, confirmadas, pendientes };
   }, [kpiBaseList, semanaRange]);
 
-  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all" || kpiFilter !== "all");
+  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all" || kpiFilter !== "all" || creadoDesde || creadoHasta);
   const totalDesc = hayFiltros
     ? `${filtradas.length} de ${citas.length} citas`
     : `${citas.length} citas en total`;
@@ -296,6 +318,19 @@ export function AltaDireccionCitas() {
   return (
     <>
       <PageHeader title="Citas Comerciales" description="Visitas y showrooms agendados" action={<LiveBadge />} />
+      {(creadoDesde || creadoHasta) && (
+        <div className="mb-4 flex items-center gap-2 text-[13px]">
+          <Pill className="bg-primary/10 text-primary">
+            Citas generadas en {creacionLabel}
+          </Pill>
+          <button
+            onClick={() => { setCreadoDesde(""); setCreadoHasta(""); }}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" /> Limpiar
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Kpi
           label="Citas esta semana"
@@ -431,8 +466,11 @@ export function AltaDireccionProspectos() {
   const [estatusFilter, setEstatusFilter] = useState<string>("all");
   const [desarrolloFilter, setDesarrolloFilter] = useState<string>("all");
   const [agenteFilter, setAgenteFilter] = useState<string>("all");
-  const [desde, setDesde] = useState<string>("");
-  const [hasta, setHasta] = useState<string>("");
+  // Filtro de fechas inicializado desde la URL (?desde=&hasta=) para soportar
+  // navegación desde el CTA "Prospectos" del Dashboard General (mes en curso).
+  const [searchParams] = useSearchParams();
+  const [desde, setDesde] = useState<string>(() => searchParams.get("desde") ?? "");
+  const [hasta, setHasta] = useState<string>(() => searchParams.get("hasta") ?? "");
 
   const { data: prospectos = [], isLoading, error } = useQuery<ProspectoRow[]>({
     queryKey: ["alta-direccion-prospectos"],

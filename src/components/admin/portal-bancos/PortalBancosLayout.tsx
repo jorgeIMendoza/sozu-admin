@@ -10,21 +10,24 @@ import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
+import { usePortalNav } from "@/hooks/usePortalNav";
 
-interface NavItem { label: string; path: string; icon: LucideIcon }
+const BANCOS_MENU_ID = 32;
 
-const NAV: NavItem[] = [
-  { label: "Bandeja",  path: "/admin/portal-bancos/bandeja",  icon: Inbox },
-  { label: "Pipeline", path: "/admin/portal-bancos/pipeline", icon: Workflow },
-  { label: "Tablero",  path: "/admin/portal-bancos/tablero",  icon: BarChart3 },
-  { label: "Equipo",   path: "/admin/portal-bancos/equipo",   icon: Users },
-];
+const iconMap: Record<string, LucideIcon> = {
+  "/admin/portal-bancos/bandeja":  Inbox,
+  "/admin/portal-bancos/pipeline": Workflow,
+  "/admin/portal-bancos/tablero":  BarChart3,
+  "/admin/portal-bancos/equipo":   Users,
+};
 
 export const PortalBancosLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const NAV = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";

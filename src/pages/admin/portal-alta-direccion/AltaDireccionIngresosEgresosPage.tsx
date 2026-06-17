@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -53,7 +53,6 @@ import { PageHeader, Kpi, Panel } from "@/components/admin/portal-alta-direccion
 import { RefreshButton } from "@/components/admin/portal-alta-direccion/RefreshButton";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import {
-  useResumenIngresosEgresos,
   DEFAULT_FILTROS,
   type IngresosEgresosFiltros,
 } from "@/hooks/usePortalAltaDireccion/useResumenIngresosEgresos";
@@ -73,13 +72,47 @@ const TIPOS: Array<TipoIngresoSozu> = ["Propiedad", "Producto", "Servicio"];
 type FiltroMov = "todos" | "ingresos" | "egresos";
 type SortDir = "desc" | "asc";
 
+/** Construye los filtros iniciales desde la URL (CTA del Dashboard General:
+ *  ?base=caja&periodo=este_mes&proyecto=todos&tipo=todos). Sin params usa los
+ *  defaults del módulo. */
+function buildInitialFiltros(sp: URLSearchParams): IngresosEgresosFiltros {
+  const base = sp.get("base");
+  const proyecto = sp.get("proyecto");
+  const tipo = sp.get("tipo");
+  const periodo = sp.get("periodo");
+  if (!base && !proyecto && !tipo && !periodo) return DEFAULT_FILTROS;
+  return {
+    ...DEFAULT_FILTROS,
+    base: base === "caja" ? "caja" : base === "devengado" ? "devengado" : DEFAULT_FILTROS.base,
+    proyecto: (proyecto ?? DEFAULT_FILTROS.proyecto) as IngresosEgresosFiltros["proyecto"],
+    tipoIngreso: (tipo ?? DEFAULT_FILTROS.tipoIngreso) as IngresosEgresosFiltros["tipoIngreso"],
+    periodoMeses: periodo === "este_mes" ? "este_mes" : DEFAULT_FILTROS.periodoMeses,
+    fechaInicio: null,
+    fechaFin: null,
+  };
+}
+
 export default function AltaDireccionIngresosEgresosPage() {
   const navigate = useNavigate();
-  const [filtros, setFiltros] = useState<IngresosEgresosFiltros>(DEFAULT_FILTROS);
-  const data = useResumenIngresosEgresos(filtros);
-  // Ledger real desde BD. El resumen (KPIs/waterfall/composiciones) se
-  // mantiene en mock hasta que se conecten las RPCs respectivas.
+  const [searchParams] = useSearchParams();
+  const [filtros, setFiltros] = useState<IngresosEgresosFiltros>(() =>
+    buildInitialFiltros(searchParams),
+  );
+  // Ledger real desde BD. KPIs, waterfall y composiciones se derivan de este
+  // mismo ledger (ver resumenReal/composicion*Real) para que coincidan con el
+  // Dashboard General.
   const movimientosRealQuery = useMovimientosIngresosEgresos(filtros);
+
+  // Enfoque desde el CTA "Egresos" del Dashboard General: al cargar, hacer
+  // scroll a la sección "Composición de egresos".
+  useEffect(() => {
+    if (searchParams.get("focus") === "egresos" && !movimientosRealQuery.isLoading) {
+      document
+        .getElementById("composicion-egresos")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movimientosRealQuery.isLoading]);
 
   // Rango personalizado (popover con calendar). Sincroniza con `filtros`
   // vía useEffect — al elegir un rango se cambia periodoMeses a "rango"
@@ -106,7 +139,10 @@ export default function AltaDireccionIngresosEgresosPage() {
 
   // Ledger local UI state.
   const [search, setSearch] = useState("");
-  const [filtroMov, setFiltroMov] = useState<FiltroMov>("todos");
+  const [filtroMov, setFiltroMov] = useState<FiltroMov>(() => {
+    const mov = searchParams.get("mov");
+    return mov === "ingresos" || mov === "egresos" ? mov : "todos";
+  });
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
@@ -264,6 +300,56 @@ export default function AltaDireccionIngresosEgresosPage() {
       }))
       .sort((a, b) => a.mes.localeCompare(b.mes));
   }, [movimientosReales, filtros.base]);
+
+  // Resumen REAL (KPIs + waterfall) desde el ledger real, sin IVA — sustituye
+  // al resumen mock para que coincida con el Dashboard General.
+  const resumenReal = useMemo(() => {
+    let ingSub = 0, ingIva = 0, extSub = 0, intSub = 0;
+    for (const m of movimientosReales) {
+      if (m.tipo_movimiento === "ingreso") {
+        ingSub += m.subtotal;
+        ingIva += m.iva;
+      } else if (m.origen_egreso === "externo") {
+        extSub += m.subtotal;
+      } else {
+        intSub += m.subtotal;
+      }
+    }
+    const egrTotal = extSub + intSub;
+    const neto = ingSub - egrTotal;
+    return {
+      base: filtros.base,
+      ingresos_subtotal: +ingSub.toFixed(2),
+      ingresos_iva: +ingIva.toFixed(2),
+      ingresos_total_con_iva: +(ingSub + ingIva).toFixed(2),
+      egresos_externos_subtotal: +extSub.toFixed(2),
+      egresos_internos_subtotal: +intSub.toFixed(2),
+      egresos_total_subtotal: +egrTotal.toFixed(2),
+      resultado_neto: +neto.toFixed(2),
+      margen_pct: ingSub > 0 ? +((neto / ingSub) * 100).toFixed(2) : 0,
+      exposicion_subtotal: +exposicionTotalReal.toFixed(2),
+      exposicion_count: exposicionReal.length,
+    };
+  }, [movimientosReales, filtros.base, exposicionTotalReal, exposicionReal.length]);
+
+  const composicionIngresosReal = useMemo(() => {
+    const map = new Map<string, { monto: number; count: number }>();
+    let total = 0;
+    for (const m of movimientosReales) {
+      if (m.tipo_movimiento !== "ingreso") continue;
+      const key = (m.tipo_ingreso ?? "Propiedad") as string;
+      const prev = map.get(key) ?? { monto: 0, count: 0 };
+      map.set(key, { monto: prev.monto + m.subtotal, count: prev.count + 1 });
+      total += m.subtotal;
+    }
+    return Array.from(map.entries()).map(([key, v]) => ({
+      key,
+      label: key,
+      monto: +v.monto.toFixed(2),
+      count: v.count,
+      pct: total > 0 ? +((v.monto / total) * 100).toFixed(1) : 0,
+    }));
+  }, [movimientosReales]);
 
   /* Filas para el drawer del Waterfall según bucket activo. */
   const waterfallDrillRows = useMemo(() => {
@@ -481,28 +567,28 @@ export default function AltaDireccionIngresosEgresosPage() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <Kpi
           label="Ingresos (Comisión SOZU)"
-          value={fmtMxn(data.resumen.ingresos_subtotal)}
+          value={fmtMxn(resumenReal.ingresos_subtotal)}
           hint={filtros.base === "devengado" ? "Comisiones facturadas" : "Comisiones cobradas"}
           icon={ArrowDownRight}
           tone="success"
         />
         <Kpi
           label="Egresos totales"
-          value={fmtMxn(data.resumen.egresos_total_subtotal)}
-          hint={`Externos ${fmtMxn(data.resumen.egresos_externos_subtotal)} · Internos ${fmtMxn(data.resumen.egresos_internos_subtotal)}`}
+          value={fmtMxn(resumenReal.egresos_total_subtotal)}
+          hint={`Externos ${fmtMxn(resumenReal.egresos_externos_subtotal)} · Internos ${fmtMxn(resumenReal.egresos_internos_subtotal)}`}
           icon={ArrowUpRight}
           tone="destructive"
         />
         <Kpi
           label="Resultado neto"
-          value={fmtMxn(data.resumen.resultado_neto)}
+          value={fmtMxn(resumenReal.resultado_neto)}
           hint={`Sin IVA · base: ${filtros.base === "devengado" ? "Devengado" : "Flujo de caja"}`}
-          icon={data.resumen.resultado_neto >= 0 ? TrendingUp : TrendingDown}
+          icon={resumenReal.resultado_neto >= 0 ? TrendingUp : TrendingDown}
           tone="primary"
         />
         <Kpi
           label="Margen"
-          value={`${data.resumen.margen_pct.toFixed(1)}%`}
+          value={`${resumenReal.margen_pct.toFixed(1)}%`}
           hint="Resultado / Ingresos · sin IVA"
           icon={Scale}
           tone="info"
@@ -525,7 +611,7 @@ export default function AltaDireccionIngresosEgresosPage() {
         className="mb-6"
       >
         <WaterfallChart
-          resumen={data.resumen}
+          resumen={resumenReal}
           onBarClick={(bucket) => setWaterfallDrill(bucket)}
         />
       </Panel>
@@ -553,9 +639,9 @@ export default function AltaDireccionIngresosEgresosPage() {
       </Panel>
 
       {/* Composición ingresos / egresos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div id="composicion-egresos" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <Panel title="Composición de ingresos" description="Distribución por tipo de comisión SOZU">
-          <ComposicionIngresos rows={data.composicionIngresos} total={data.resumen.ingresos_subtotal} />
+          <ComposicionIngresos rows={composicionIngresosReal} total={resumenReal.ingresos_subtotal} />
         </Panel>
         <Panel title="Composición de egresos" description="Externos (a aliados) vs Internos (equipo SOZU)">
           {movimientosRealQuery.isLoading ? (

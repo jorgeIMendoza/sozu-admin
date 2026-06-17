@@ -1,21 +1,26 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Home, ArrowLeft, LogOut, Menu } from "lucide-react";
+import { Home, ArrowLeft, LogOut, Menu, LucideIcon } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { usePortalNav } from "@/hooks/usePortalNav";
 
-const NAV = [
-  { label: "Inicio", path: "/admin/portal-juridico/inicio", icon: Home },
-];
+const JURIDICO_MENU_ID = 26;
+
+const iconMap: Record<string, LucideIcon> = {
+  "/admin/portal-juridico/inicio": Home,
+};
 
 export const PortalJuridicoLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const NAV = usePortalNav(JURIDICO_MENU_ID, iconMap, Home);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const isActive = (path: string) =>

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { UserCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -7,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { AMBASSADOR_TYPE_LABEL, DEFAULT_PAYMENT_DOCS } from '@/types/ambassadors';
+import { DEFAULT_PAYMENT_DOCS } from '@/types/ambassadors';
+import { useEmbajadorTipos } from '@/hooks/useEmbajadorTipos';
 
 interface Props {
   open: boolean;
@@ -32,7 +34,7 @@ interface FormState {
 
 const DEFAULT_FORM: FormState = {
   fullName: '', phone: '', clavePaisTelefono: 'MX', email: '', company: '',
-  type: 'otro', status: 'pendiente',
+  type: '', status: 'pendiente',
   commissionPct: '0.5', fixedAmount: '',
   commissionTrigger: 'enganche', protectionDays: '90', notes: '',
 };
@@ -43,8 +45,30 @@ const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: Props) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
+  const tipos = useEmbajadorTipos();
+  const [existingPersona, setExistingPersona] = useState<{ id: number; nombre_legal: string } | null>(null);
+  const [personaCheckDone, setPersonaCheckDone] = useState(false);
 
   const set = (k: keyof FormState, v: string) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (!open) {
+      setExistingPersona(null);
+      setPersonaCheckDone(false);
+    }
+  }, [open]);
+
+  const checkEmailExists = async (emailVal: string) => {
+    if (!EMAIL_REGEX.test(emailVal.trim())) return;
+    const { data } = await supabase
+      .from('personas')
+      .select('id, nombre_legal')
+      .eq('email', emailVal.trim().toLowerCase())
+      .maybeSingle();
+    setExistingPersona(data ?? null);
+    setPersonaCheckDone(true);
+    if (data) set('fullName', data.nombre_legal);
+  };
 
   const emailInvalid = form.email.trim().length > 0 && !EMAIL_REGEX.test(form.email.trim());
   const phoneInvalid = form.phone.length > 0 && form.phone.length !== 10;
@@ -52,6 +76,10 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
   const handleSubmit = async () => {
     if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error('Nombre, teléfono y email son obligatorios');
+      return;
+    }
+    if (!form.type) {
+      toast.error('Selecciona el tipo de embajador');
       return;
     }
     if (!EMAIL_REGEX.test(form.email.trim())) {
@@ -65,6 +93,8 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
 
     setLoading(true);
     try {
+      const emailNorm = form.email.trim().toLowerCase();
+
       // 1. Obtener tipo_entidad "Embajador"
       const { data: tipoData, error: tipoError } = await supabase
         .from('tipos_entidad')
@@ -73,40 +103,55 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .single();
       if (tipoError || !tipoData) throw new Error('Tipo de entidad "Embajador" no encontrado. Ejecuta la migración 20260527000002.');
 
-      // 2. Crear persona
-      const { data: persona, error: personaError } = await supabase
-        .from('personas')
-        .insert({
-          nombre_legal: form.fullName.trim(),
-          email: form.email.trim().toLowerCase(),
-          telefono: form.phone.trim(),
-          clave_pais_telefono: form.clavePaisTelefono,
-          tipo_persona: 'pf',
-          activo: true,
-        })
-        .select('id')
-        .single();
-      if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
+      // 2. Resolver persona (ruta A: nueva / ruta B: existente)
+      let personaId: number;
+      if (existingPersona) {
+        personaId = existingPersona.id;
+      } else {
+        const { data: persona, error: personaError } = await supabase
+          .from('personas')
+          .insert({
+            nombre_legal: form.fullName.trim(),
+            email: emailNorm,
+            telefono: form.phone.trim(),
+            clave_pais_telefono: form.clavePaisTelefono,
+            tipo_persona: 'pf',
+            activo: true,
+          })
+          .select('id')
+          .single();
+        if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
+        personaId = persona.id;
+      }
 
-      // 3. Crear fila en entidades_relacionadas tipo "Embajador"
+      // 3. Verificar que no sea ya embajadora (previene duplicados)
+      const { data: entidadExistente } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', tipoData.id)
+        .eq('activo', true)
+        .maybeSingle();
+      if (entidadExistente) {
+        toast.error('Esta persona ya está registrada como embajadora');
+        return;
+      }
+
+      // 4. Crear fila en entidades_relacionadas tipo "Embajador"
       const { data: erData, error: erError } = await supabase
         .from('entidades_relacionadas')
-        .insert({
-          id_persona: persona.id,
-          id_tipo_entidad: tipoData.id,
-          activo: true,
-        })
+        .insert({ id_persona: personaId, id_tipo_entidad: tipoData.id, activo: true })
         .select('id')
         .single();
       if (erError || !erData) throw erError ?? new Error('Error al crear entidades_relacionadas');
 
-      // 4. Crear embajadores_config (extensión 1:1 con campos específicos)
+      // 5. Crear embajadores_config
       const { error: cfgError } = await supabase
         .from('embajadores_config')
         .insert({
           id_entidad_relacionada: erData.id,
           empresa: form.company.trim() || null,
-          tipo: form.type,
+          tipo: Number(form.type),
           pct_comision: Number(form.commissionPct) || 0,
           monto_fijo: form.fixedAmount ? Number(form.fixedAmount) : null,
           trigger_comision: form.commissionTrigger,
@@ -117,21 +162,39 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         });
       if (cfgError) throw cfgError;
 
-      // 5. Crear usuario con rol Embajador (envía correo de activación)
-      const { error: createUserError } = await supabase.functions.invoke('create-user', {
-        body: {
-          email: form.email.trim().toLowerCase(),
-          nombre: form.fullName.trim(),
-          rol_id: ROLE_EMBAJADOR_ID,
-          id_persona: persona.id,
-          telefono: form.phone.trim(),
-          clave_pais_telefono: form.clavePaisTelefono,
-        },
-      });
-      if (createUserError) throw createUserError;
+      // 6. Usuario/rol (ruta A: create-user / ruta B: user_roles secundario)
+      if (existingPersona) {
+        const { data: rolExistente } = await (supabase as any)
+          .from('user_roles')
+          .select('id')
+          .eq('email', emailNorm)
+          .eq('rol_id', ROLE_EMBAJADOR_ID)
+          .maybeSingle();
+        if (!rolExistente) {
+          const { error: roleError } = await (supabase as any)
+            .from('user_roles')
+            .insert({ email: emailNorm, rol_id: ROLE_EMBAJADOR_ID, es_principal: false, activo: true, creado_por: 'admin' });
+          if (roleError) throw roleError;
+        }
+        toast.success(`Rol de embajador añadido a ${form.email}.`);
+      } else {
+        const { error: createUserError } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: emailNorm,
+            nombre: form.fullName.trim(),
+            rol_id: ROLE_EMBAJADOR_ID,
+            id_persona: personaId,
+            telefono: form.phone.trim(),
+            clave_pais_telefono: form.clavePaisTelefono,
+          },
+        });
+        if (createUserError) throw createUserError;
+        toast.success(`Embajador creado. Se envió correo de activación a ${form.email}.`);
+      }
 
-      toast.success(`Embajador creado. Se envió correo de activación a ${form.email}.`);
       setForm(DEFAULT_FORM);
+      setExistingPersona(null);
+      setPersonaCheckDone(false);
       onCreated();
       onOpenChange(false);
     } catch (err: any) {
@@ -187,6 +250,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
                 type="email"
                 value={form.email}
                 onChange={e => set('email', e.target.value)}
+                onBlur={e => checkEmailExists(e.target.value)}
                 placeholder="email@ejemplo.com"
                 className={emailInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}
               />
@@ -195,6 +259,21 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
               )}
             </div>
           </div>
+          {personaCheckDone && existingPersona && (
+            <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-sm">
+              <p className="font-medium text-blue-700 flex items-center gap-2">
+                <UserCheck className="h-4 w-4" />
+                Persona ya registrada en el sistema
+              </p>
+              <p className="text-muted-foreground mt-1">
+                <strong>{existingPersona.nombre_legal}</strong> ya existe con este correo.
+                Se añadirá el rol de embajador sin crear duplicados. Su acceso actual no se modifica.
+              </p>
+            </div>
+          )}
+          {personaCheckDone && !existingPersona && (
+            <p className="text-xs text-muted-foreground">Correo no registrado — se creará un nuevo perfil.</p>
+          )}
           <div>
             <Label>Empresa / origen</Label>
             <Input value={form.company} onChange={e => set('company', e.target.value)} placeholder="Opcional" />
@@ -203,10 +282,10 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
             <div>
               <Label>Tipo de embajador</Label>
               <Select value={form.type} onValueChange={v => set('type', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona tipo" /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(AMBASSADOR_TYPE_LABEL).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  {tipos.map(t => (
+                    <SelectItem key={t.id} value={String(t.id)}>{t.etiqueta}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
