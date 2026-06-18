@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { BankLead, BankId, LeadStatus, ActivityEntry } from "./bank-leads";
-import { SEED_LEADS } from "./seed-leads";
-import { useBankAgentsStore } from "./agents-store";
 
 interface BankStore {
   leads: BankLead[];
@@ -22,7 +20,8 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 export const useBankStore = create<BankStore>()(
   persist(
     (set, get) => ({
-      leads: structuredClone(SEED_LEADS),
+      // Sin datos mock: las solicitudes reales se conectarán en una iteración futura.
+      leads: [],
       getLeadsForBank: (bankId) => get().leads.filter((l) => l.bankId === bankId),
       getLead: (id) => get().leads.find((l) => l.id === id),
 
@@ -49,9 +48,8 @@ export const useBankStore = create<BankStore>()(
       assignLead: (id, agentId, author = "Sistema SOZU") => set((state) => ({
         leads: state.leads.map((l) => {
           if (l.id !== id) return l;
-          const name = useBankAgentsStore.getState().agentName(agentId);
           const wasAssigned = !!l.assignedAgentId;
-          const note = wasAssigned ? `Reasignado a ${name}` : `Asignado a ${name}`;
+          const note = wasAssigned ? "Reasignado" : "Asignado a ejecutivo";
           const toStatus: LeadStatus = l.status === "nuevo" ? "asignado" : l.status;
           return {
             ...l, assignedAgentId: agentId, status: toStatus, lastUpdate: nowISO(),
@@ -65,7 +63,7 @@ export const useBankStore = create<BankStore>()(
 
       reassignLead: (id, agentId, author = "Sistema SOZU") => get().assignLead(id, agentId, author),
 
-      resetSeed: () => set({ leads: structuredClone(SEED_LEADS) }),
+      resetSeed: () => set({ leads: [] }),
     }),
     { name: "sozu-portal-bancos-leads", version: 1 }
   )

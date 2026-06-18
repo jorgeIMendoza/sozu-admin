@@ -10,21 +10,30 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { useBankStore } from "@/lib/portal-bancos/bank-store";
-import { useBankAgentsStore, type Agent } from "@/lib/portal-bancos/agents-store";
 import {
-  BANKS, STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
+  STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
   HEALTH_DESCRIPTOR, deriveHealth, closedDescriptor, fmtMXN, fmtDate,
-  type BankLead, type LeadStatus, type BankId,
+  type BankLead, type LeadStatus,
 } from "@/lib/portal-bancos/bank-leads";
+import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
+import { useCurrentBanco } from "@/contexts/BankImpersonationContext";
 import {
-  useBankImpersonation, useCurrentBankAgent, visibleLeads,
-} from "@/contexts/BankImpersonationContext";
+  useBancosConvenio, useBancosCatalogo, useAgregarBancoConvenio,
+  useActualizarBancoConvenio, useToggleBancoConvenioActivo,
+} from "@/hooks/usePortalBancos/useBancosConvenio";
+import {
+  useBancosAgentes, useCrearAgente, useActualizarAgente, useSetActivoAgente,
+  type BancoAgente, type AgenteRol,
+} from "@/hooks/usePortalBancos/useBancosAgentes";
 import {
   computeFunnel, computeWinRate, STAGE_PROBABILITY,
 } from "@/lib/portal-bancos/metrics";
-import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
-import { Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity } from "lucide-react";
+import {
+  Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
+  Plus, Save, Power, ShieldAlert,
+} from "lucide-react";
 
 // ------------------------------ Helpers UI ------------------------------
 function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive") {
@@ -37,12 +46,18 @@ function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive"
   }[t];
 }
 
+/** Solo Super Admin (rol_id=1) administra agentes/bancos del Portal Bancos. */
+function useIsBancosAdmin() {
+  const { profile } = useAuth();
+  return profile?.rol_id === 1;
+}
+
 function useBankScopedLeads(): BankLead[] {
-  const agent = useCurrentBankAgent();
+  const banco = useCurrentBanco();
   const leads = useBankStore((s) => s.leads);
-  if (!agent) return [];
-  const sameBank = leads.filter((l) => l.bankId === agent.bankId);
-  return visibleLeads(agent, sameBank);
+  if (!banco) return [];
+  // Aún no hay fuente real de solicitudes → la lista queda vacía (estado real).
+  return leads.filter((l) => l.bankId === String(banco.id_banco));
 }
 
 function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => void }) {
@@ -50,7 +65,6 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
   const closed = closedDescriptor(lead.status);
   const health = deriveHealth(lead);
   const hd = HEALTH_DESCRIPTOR[health];
-  const agentName = useBankAgentsStore((s) => s.agentName(lead.assignedAgentId));
   return (
     <button
       onClick={() => onOpen(lead.id)}
@@ -70,7 +84,6 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
       </div>
       <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>Score: <strong className="text-foreground">{lead.sozu.score}</strong></span>
-        <span>{agentName}</span>
         <span>Escr. {fmtDate(lead.property.fechaEscrituracion)}</span>
       </div>
     </button>
@@ -78,20 +91,18 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
 }
 
 function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onClose: () => void }) {
+  const { profile } = useAuth();
+  const author = profile?.nombre || "Super Admin";
   const lead = useBankStore((s) => (leadId ? s.getLead(leadId) : undefined));
   const updateStatus = useBankStore((s) => s.updateStatus);
   const addNote = useBankStore((s) => s.addNote);
   const assignLead = useBankStore((s) => s.assignLead);
-  const agent = useCurrentBankAgent();
-  const allAgents = useBankAgentsStore((s) => s.agents);
-  const agents = useMemo(
-    () => (agent ? allAgents.filter((a) => a.bankId === agent.bankId && a.active) : []),
-    [allAgents, agent?.bankId],
-  );
+  const banco = useCurrentBanco();
+  const { data: agents = [] } = useBancosAgentes(banco?.id_banco);
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
 
-  if (!lead || !agent) return null;
+  if (!lead || !banco) return null;
   const desc = STATUS_DESCRIPTORS[lead.status];
   const transitions = VALID_TRANSITIONS[lead.status] || [];
 
@@ -100,7 +111,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
     if (to === "rechazado" || to === "desistido") {
       reason = closeReason || (to === "rechazado" ? REJECTION_REASONS[0] : DESIST_REASONS[0]);
     }
-    updateStatus(lead.id, to, agent.name, reason);
+    updateStatus(lead.id, to, author, reason);
     toast({ title: "Estado actualizado", description: `${desc.label} → ${STATUS_DESCRIPTORS[to].label}` });
   };
 
@@ -132,10 +143,12 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
 
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Asignación</p>
-            <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(lead.id, v, agent.name)}>
+            <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(lead.id, v, author)}>
               <SelectTrigger className="h-9"><SelectValue placeholder="Asignar ejecutivo" /></SelectTrigger>
               <SelectContent>
-                {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                {agents.filter((a) => a.activo).map((a) => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -166,7 +179,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Agregar nota</p>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Resumen del contacto, próximos pasos..." />
-            <Button size="sm" disabled={!note.trim()} onClick={() => { addNote(lead.id, agent.name, note.trim()); setNote(""); toast({ title: "Nota agregada" }); }}>
+            <Button size="sm" disabled={!note.trim()} onClick={() => { addNote(lead.id, author, note.trim()); setNote(""); toast({ title: "Nota agregada" }); }}>
               Guardar nota
             </Button>
           </div>
@@ -211,13 +224,26 @@ function EmptyState({ icon: Icon, title, hint }: { icon: any; title: string; hin
   );
 }
 
+function AccessDenied() {
+  return (
+    <div className="space-y-4">
+      <Header title="Acceso restringido" />
+      <EmptyState
+        icon={ShieldAlert}
+        title="Solo Super Administrador"
+        hint="Esta sección la administra el rol Super Administrador."
+      />
+    </div>
+  );
+}
+
 // ============================== BANDEJA ==============================
 export function BancosBandeja() {
   const leads = useBankScopedLeads();
+  const banco = useCurrentBanco();
   const [openId, setOpenId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"abiertas" | "mias" | "cerradas">("abiertas");
+  const [tab, setTab] = useState<"abiertas" | "cerradas">("abiertas");
   const [q, setQ] = useState("");
-  const agent = useCurrentBankAgent();
 
   const filtered = useMemo(() => {
     const norm = q.trim().toLowerCase();
@@ -225,7 +251,6 @@ export function BancosBandeja() {
       const desc = STATUS_DESCRIPTORS[l.status];
       if (tab === "abiertas" && desc.isTerminal) return false;
       if (tab === "cerradas" && !desc.isTerminal) return false;
-      if (tab === "mias" && (desc.isTerminal || l.assignedAgentId !== agent?.id)) return false;
       if (!norm) return true;
       return (
         l.client.fullName.toLowerCase().includes(norm) ||
@@ -234,23 +259,22 @@ export function BancosBandeja() {
         l.sozu.leadId.toLowerCase().includes(norm)
       );
     });
-  }, [leads, tab, q, agent?.id]);
+  }, [leads, tab, q]);
 
   return (
     <div className="space-y-4">
-      <Header title="Bandeja de solicitudes" subtitle={agent ? `${BANKS[agent.bankId].name} · ${agent.name}` : ""} />
+      <Header title="Bandeja de solicitudes" subtitle={banco?.nombre} />
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <TabsList>
             <TabsTrigger value="abiertas">Abiertas</TabsTrigger>
-            <TabsTrigger value="mias">Mías</TabsTrigger>
             <TabsTrigger value="cerradas">Cerradas</TabsTrigger>
           </TabsList>
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar cliente, proyecto, folio..." className="sm:w-80" />
         </div>
         <TabsContent value={tab} className="mt-4">
           {filtered.length === 0 ? (
-            <EmptyState icon={Inbox} title="Sin solicitudes" hint="Ajusta los filtros o el segmento." />
+            <EmptyState icon={Inbox} title="Sin solicitudes reales aún" hint="Las solicitudes hipotecarias se mostrarán aquí cuando estén disponibles." />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((l) => <LeadCard key={l.id} lead={l} onOpen={setOpenId} />)}
@@ -301,7 +325,7 @@ export function BancosPipeline() {
 // ============================== TABLERO ==============================
 export function BancosTablero() {
   const leads = useBankScopedLeads();
-  const agent = useCurrentBankAgent();
+  const banco = useCurrentBanco();
   const funnel = computeFunnel(leads);
   const wr = computeWinRate(leads);
   const totalMonto = leads.reduce((s, l) => s + l.credit.montoFinanciar, 0);
@@ -313,7 +337,7 @@ export function BancosTablero() {
 
   return (
     <div className="space-y-4">
-      <Header title="Tablero" subtitle={agent ? `${BANKS[agent.bankId].name}` : ""} />
+      <Header title="Tablero" subtitle={banco?.nombre} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi icon={Inbox} label="Solicitudes" value={leads.length.toString()} />
         <Kpi icon={Activity} label="Monto solicitado" value={fmtMXN(totalMonto)} />
@@ -321,44 +345,50 @@ export function BancosTablero() {
         <Kpi icon={ArrowRight} label="Pipeline ponderado" value={fmtMXN(expectedRevenue)} />
       </div>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Funnel del proceso</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {funnel.map((f) => {
-            const max = Math.max(1, funnel[0].count);
-            const pct = Math.round((f.count / max) * 100);
-            return (
-              <div key={f.status}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span>{f.label}</span>
-                  <span className="text-muted-foreground">{f.count}{f.conversionFromPrev !== null && ` · ${f.conversionFromPrev}%`}</span>
-                </div>
-                <div className="h-2 rounded bg-muted overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+      {leads.length === 0 ? (
+        <EmptyState icon={Activity} title="Sin datos reales aún" hint="Los indicadores se calcularán cuando existan solicitudes reales." />
+      ) : (
+        <>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Funnel del proceso</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {funnel.map((f) => {
+                const max = Math.max(1, funnel[0].count);
+                const pct = Math.round((f.count / max) * 100);
+                return (
+                  <div key={f.status}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span>{f.label}</span>
+                      <span className="text-muted-foreground">{f.count}{f.conversionFromPrev !== null && ` · ${f.conversionFromPrev}%`}</span>
+                    </div>
+                    <div className="h-2 rounded bg-muted overflow-hidden">
+                      <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
 
-      <div className="grid lg:grid-cols-2 gap-3">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Cierres</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 text-center">
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-              <CheckCircle2 className="h-6 w-6 mx-auto text-emerald-600" />
-              <p className="text-2xl font-bold text-emerald-700 mt-1">{wr.won}</p>
-              <p className="text-xs text-emerald-700">Formalizados</p>
-            </div>
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <XCircle className="h-6 w-6 mx-auto text-red-600" />
-              <p className="text-2xl font-bold text-red-700 mt-1">{wr.lost}</p>
-              <p className="text-xs text-red-700">Rechazados / desistidos</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="grid lg:grid-cols-2 gap-3">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Cierres</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3 text-center">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <CheckCircle2 className="h-6 w-6 mx-auto text-emerald-600" />
+                  <p className="text-2xl font-bold text-emerald-700 mt-1">{wr.won}</p>
+                  <p className="text-xs text-emerald-700">Formalizados</p>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <XCircle className="h-6 w-6 mx-auto text-red-600" />
+                  <p className="text-2xl font-bold text-red-700 mt-1">{wr.lost}</p>
+                  <p className="text-xs text-red-700">Rechazados / desistidos</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -378,89 +408,129 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
   );
 }
 
-// ============================== EQUIPO ==============================
+// ============================== EQUIPO (Agentes por banco — real) ==============================
 export function BancosEquipo() {
-  const agent = useCurrentBankAgent();
-  const allAgents = useBankAgentsStore((s) => s.agents);
-  const agentsForBank = useMemo(
-    () => (agent ? allAgents.filter((a) => a.bankId === agent.bankId) : []),
-    [allAgents, agent?.bankId],
-  );
-  const createAgent = useBankAgentsStore((s) => s.createAgent);
-  const updateAgent = useBankAgentsStore((s) => s.updateAgent);
-  const deactivateAgent = useBankAgentsStore((s) => s.deactivateAgent);
-  const reactivateAgent = useBankAgentsStore((s) => s.reactivateAgent);
+  const isAdmin = useIsBancosAdmin();
+  const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
+  const crear = useCrearAgente();
+  const actualizar = useActualizarAgente();
+  const setActivo = useSetActivoAgente();
 
-  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "agente" as "agente" | "admin" });
+  // Banco vinculado seleccionado (default: primer convenio activo).
+  const [bancoSel, setBancoSel] = useState<number | null>(null);
+  const selectedId = bancoSel ?? convenios.find((c) => c.activo)?.id_banco ?? convenios[0]?.id_banco ?? null;
+  const banco = convenios.find((c) => c.id_banco === selectedId) ?? null;
 
-  if (!agent) return null;
-  if (agent.role !== "admin") {
+  const { data: agents = [], isLoading } = useBancosAgentes(selectedId);
+  const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as AgenteRol });
+
+  if (!isAdmin) return <AccessDenied />;
+
+  if (!cargandoBancos && convenios.length === 0) {
     return (
       <div className="space-y-4">
-        <Header title="Equipo" />
-        <EmptyState icon={Building2} title="Solo administradores" hint="Pide a un administrador del banco que gestione el equipo." />
+        <Header title="Equipo" subtitle="Agentes por banco" />
+        <EmptyState
+          icon={Building2}
+          title="Aún no hay bancos con convenio"
+          hint="Agrega bancos en la sección «Bancos». Si es la primera vez, aplica la migración de Ejecuciones_manuales/portal_bancos_administrador.md."
+        />
       </div>
     );
   }
 
   const submit = () => {
-    if (!form.name || !form.email) return;
-    createAgent({ name: form.name, email: form.email, phone: form.phone, role: form.role, bankId: agent.bankId });
-    setForm({ name: "", email: "", phone: "", role: "agente" });
-    toast({ title: "Ejecutivo agregado" });
+    if (!form.nombre.trim() || selectedId == null) return;
+    crear.mutate(
+      { id_banco: selectedId, nombre: form.nombre.trim(), email: form.email.trim() || null, telefono: form.telefono.trim() || null, rol: form.rol },
+      {
+        onSuccess: () => { setForm({ nombre: "", email: "", telefono: "", rol: "agente" }); toast({ title: "Ejecutivo agregado", description: banco ? `Vinculado a ${banco.nombre}` : undefined }); },
+        onError: (e: any) => toast({ title: "No se pudo agregar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
   };
 
   return (
     <div className="space-y-4">
-      <Header title="Equipo" subtitle={BANKS[agent.bankId].name} />
+      <Header title="Equipo" subtitle="Da de alta agentes y vincúlalos a un banco aliado" />
+
+      {/* Selector de banco vinculado */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Banco:</span>
+        <Select value={selectedId != null ? String(selectedId) : ""} onValueChange={(v) => setBancoSel(Number(v))}>
+          <SelectTrigger className="w-full sm:w-[280px] h-9"><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
+          <SelectContent>
+            {convenios.map((c) => (
+              <SelectItem key={c.id} value={String(c.id_banco)}>
+                {c.nombre}{!c.activo ? " (inactivo)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Card>
-        <CardHeader><CardTitle className="text-base">Nuevo ejecutivo</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Nuevo ejecutivo</CardTitle>
+          {banco && <p className="text-xs text-muted-foreground">Se vinculará a <span className="font-medium text-foreground">{banco.nombre}</span></p>}
+        </CardHeader>
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <Input placeholder="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
           <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Teléfono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <Input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
           <div className="flex gap-2">
-            <Select value={form.role} onValueChange={(v: any) => setForm({ ...form, role: v })}>
+            <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="agente">Agente</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={submit}>Agregar</Button>
+            <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || selectedId == null}>Agregar</Button>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Equipo actual</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Equipo actual{banco ? ` · ${banco.nombre}` : ""}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          {agentsForBank.map((a) => (
-            <AgentRow key={a.id} a={a} onToggleActive={() => (a.active ? deactivateAgent(a.id) : reactivateAgent(a.id))} onChangeRole={(r) => updateAgent(a.id, { role: r })} />
-          ))}
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : agents.length === 0 ? (
+            <EmptyState icon={Building2} title="Sin ejecutivos" hint="Agrega el primer ejecutivo de este banco." />
+          ) : (
+            agents.map((a) => (
+              <AgentRow
+                key={a.id}
+                a={a}
+                onToggleActive={() => setActivo.mutate({ id: a.id, activo: !a.activo })}
+                onChangeRole={(rol) => actualizar.mutate({ id: a.id, patch: { rol } })}
+              />
+            ))
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function AgentRow({ a, onToggleActive, onChangeRole }: { a: Agent; onToggleActive: () => void; onChangeRole: (r: "agente" | "admin") => void }) {
+function AgentRow({ a, onToggleActive, onChangeRole }: { a: BancoAgente; onToggleActive: () => void; onChangeRole: (r: AgenteRol) => void }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border p-3">
-      <Avatar2 name={a.name} />
+    <div className={`flex items-center gap-3 rounded-lg border border-border p-3 ${a.activo ? "" : "opacity-60"}`}>
+      <Avatar2 name={a.nombre} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{a.name}</p>
-        <p className="text-xs text-muted-foreground truncate">{a.email} · {a.phone}</p>
+        <p className="text-sm font-medium truncate">{a.nombre}</p>
+        <p className="text-xs text-muted-foreground truncate">{[a.email, a.telefono].filter(Boolean).join(" · ") || "—"}</p>
       </div>
-      <Select value={a.role} onValueChange={(v: any) => onChangeRole(v)}>
+      <Select value={a.rol} onValueChange={(v: any) => onChangeRole(v)}>
         <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="agente">Agente</SelectItem>
           <SelectItem value="admin">Admin</SelectItem>
         </SelectContent>
       </Select>
-      <Button size="sm" variant={a.active ? "outline" : "default"} onClick={onToggleActive}>
-        {a.active ? "Desactivar" : "Reactivar"}
+      <Button size="sm" variant={a.activo ? "outline" : "default"} onClick={onToggleActive}>
+        {a.activo ? "Desactivar" : "Reactivar"}
       </Button>
     </div>
   );
@@ -469,6 +539,147 @@ function AgentRow({ a, onToggleActive, onChangeRole }: { a: Agent; onToggleActiv
 function Avatar2({ name }: { name: string }) {
   const ini = name.split(" ").slice(0, 2).map((s) => s[0]?.toUpperCase()).join("") || "U";
   return <div className="h-9 w-9 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">{ini}</div>;
+}
+
+// ============================== BANCOS (convenio — real) ==============================
+export function BancosBancos() {
+  const isAdmin = useIsBancosAdmin();
+  const { data: convenios = [], isLoading } = useBancosConvenio();
+  const { data: catalogo = [] } = useBancosCatalogo();
+  const agregar = useAgregarBancoConvenio();
+  const toggle = useToggleBancoConvenioActivo();
+
+  const [nuevo, setNuevo] = useState({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" });
+
+  if (!isAdmin) return <AccessDenied />;
+
+  const disponibles = catalogo.filter((c) => !convenios.some((cv) => cv.id_banco === c.id));
+
+  const submitNuevo = () => {
+    const idBanco = Number(nuevo.id_banco);
+    if (!idBanco) return;
+    agregar.mutate(
+      {
+        id_banco: idBanco,
+        producto_nombre: nuevo.producto_nombre.trim() || null,
+        tasa_desde: nuevo.tasa_desde ? Number(nuevo.tasa_desde) : null,
+        color_marca: nuevo.color_marca.trim() || null,
+        orden: nuevo.orden ? Number(nuevo.orden) : 100,
+      },
+      {
+        onSuccess: () => { setNuevo({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" }); toast({ title: "Banco agregado al convenio" }); },
+        onError: (e: any) => toast({ title: "No se pudo agregar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <Header title="Bancos con convenio" subtitle="Bancos con los que SOZU tiene convenio activo" />
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Agregar banco a convenio</CardTitle></CardHeader>
+        <CardContent className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <Select value={nuevo.id_banco} onValueChange={(v) => setNuevo({ ...nuevo, id_banco: v })}>
+            <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
+            <SelectContent>
+              {disponibles.length === 0 ? (
+                <SelectItem value="__none" disabled>Sin bancos disponibles</SelectItem>
+              ) : (
+                disponibles.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.nombre}</SelectItem>)
+              )}
+            </SelectContent>
+          </Select>
+          <Input placeholder="Producto (ej. Hipoteca Fija)" value={nuevo.producto_nombre} onChange={(e) => setNuevo({ ...nuevo, producto_nombre: e.target.value })} />
+          <Input placeholder="Tasa desde %" type="number" step="0.01" value={nuevo.tasa_desde} onChange={(e) => setNuevo({ ...nuevo, tasa_desde: e.target.value })} />
+          <Input placeholder="Color (#hex)" value={nuevo.color_marca} onChange={(e) => setNuevo({ ...nuevo, color_marca: e.target.value })} />
+          <div className="flex gap-2">
+            <Input placeholder="Orden" type="number" value={nuevo.orden} onChange={(e) => setNuevo({ ...nuevo, orden: e.target.value })} />
+            <Button onClick={submitNuevo} disabled={agregar.isPending || !nuevo.id_banco}>
+              <Plus className="h-4 w-4 mr-1" /> Agregar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Convenios actuales</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : convenios.length === 0 ? (
+            <EmptyState
+              icon={Landmark}
+              title="Sin bancos con convenio"
+              hint={disponibles.length > 0
+                ? "Agrega el primer banco con convenio usando el formulario de arriba."
+                : "Aplica primero la migración de Ejecuciones_manuales/portal_bancos_administrador.md para habilitar las tablas."}
+            />
+          ) : (
+            convenios.map((c) => <ConvenioRow key={c.id} c={c} onToggle={() => toggle.mutate({ id: c.id, activo: !c.activo })} />)
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ConvenioRow({
+  c,
+  onToggle,
+}: {
+  c: { id: number; nombre: string; color_marca: string | null; producto_nombre: string | null; tasa_desde: number | null; orden: number; activo: boolean };
+  onToggle: () => void;
+}) {
+  const actualizar = useActualizarBancoConvenio();
+  const [edit, setEdit] = useState({
+    producto_nombre: c.producto_nombre ?? "",
+    tasa_desde: c.tasa_desde != null ? String(c.tasa_desde) : "",
+    color_marca: c.color_marca ?? "",
+    orden: String(c.orden),
+  });
+
+  const guardar = () => {
+    actualizar.mutate(
+      {
+        id: c.id,
+        patch: {
+          producto_nombre: edit.producto_nombre.trim() || null,
+          tasa_desde: edit.tasa_desde ? Number(edit.tasa_desde) : null,
+          color_marca: edit.color_marca.trim() || null,
+          orden: edit.orden ? Number(edit.orden) : 100,
+        },
+      },
+      {
+        onSuccess: () => toast({ title: "Convenio actualizado" }),
+        onError: (e: any) => toast({ title: "No se pudo actualizar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <div className={`rounded-lg border border-border p-3 space-y-2 ${c.activo ? "" : "opacity-60"}`}>
+      <div className="flex items-center gap-3">
+        <span className="h-8 w-8 rounded-md shrink-0 border" style={{ backgroundColor: c.color_marca ?? "#e5e7eb" }} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate">{c.nombre}</p>
+          {!c.activo && <Badge variant="outline" className="text-[10px]">Inactivo</Badge>}
+        </div>
+        <Button size="sm" variant={c.activo ? "outline" : "default"} onClick={onToggle}>
+          <Power className="h-3.5 w-3.5 mr-1" /> {c.activo ? "Desactivar" : "Activar"}
+        </Button>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <Input placeholder="Producto" value={edit.producto_nombre} onChange={(e) => setEdit({ ...edit, producto_nombre: e.target.value })} />
+        <Input placeholder="Tasa desde %" type="number" step="0.01" value={edit.tasa_desde} onChange={(e) => setEdit({ ...edit, tasa_desde: e.target.value })} />
+        <Input placeholder="Color (#hex)" value={edit.color_marca} onChange={(e) => setEdit({ ...edit, color_marca: e.target.value })} />
+        <Input placeholder="Orden" type="number" value={edit.orden} onChange={(e) => setEdit({ ...edit, orden: e.target.value })} />
+        <Button variant="outline" onClick={guardar} disabled={actualizar.isPending}>
+          <Save className="h-4 w-4 mr-1" /> Guardar
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function Header({ title, subtitle }: { title: string; subtitle?: string }) {

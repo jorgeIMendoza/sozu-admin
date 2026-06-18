@@ -3,23 +3,11 @@
 // Portado del proyecto SOZU Bank Ally.
 // =============================================================
 
-export type BankId = "bbva" | "santander" | "banorte";
-
-export interface Bank {
-  id: BankId;
-  name: string;
-  brandColor: string;
-  productName: string;
-  rateFrom: number;
-}
-
-export const BANKS: Record<BankId, Bank> = {
-  bbva:      { id: "bbva",      name: "BBVA",      brandColor: "#004481", productName: "Hipoteca Fija",   rateFrom: 9.15 },
-  santander: { id: "santander", name: "Santander", brandColor: "#EC0000", productName: "Hipoteca Plus",   rateFrom: 8.85 },
-  banorte:   { id: "banorte",   name: "Banorte",   brandColor: "#EB0029", productName: "Hipoteca Fuerte", rateFrom: 9.15 },
-};
-
-export const BANK_LIST: Bank[] = Object.values(BANKS);
+// Identificador de banco asociado a una solicitud. Antes era un union de los 3
+// bancos mock; ahora es el id (string) del banco con convenio real. La fuente de
+// verdad de los bancos con convenio vive en `bancos_convenio` (ver hook
+// `useBancosConvenio`); aquí solo se conserva el tipo para las solicitudes.
+export type BankId = string;
 
 export type IngresoRange = "15k-30k" | "30k-60k" | "60k-120k" | "120k+";
 export type SituacionLaboral = "asalariado" | "honorarios" | "empresario" | "jubilado";
