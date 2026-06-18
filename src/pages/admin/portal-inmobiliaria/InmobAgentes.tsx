@@ -959,14 +959,23 @@ export default function InmobAgentes() {
       });
       if (error) throw error;
       if (data?.success) {
-        toast.success("Agente registrado exitosamente");
+        const summary = data.summary || {};
+        // Solo declarar "registrado" si realmente se creó o vinculó algo; si fue skip,
+        // el agente ya estaba vinculado a esta inmobiliaria (no afirmar éxito falso).
+        if ((summary.created || 0) + (summary.updated || 0) > 0) {
+          toast.success("Agente registrado exitosamente");
+        } else {
+          toast.info("Este agente ya estaba registrado en tu inmobiliaria");
+        }
         setIsAddAgentOpen(false);
         setNewAgentName("");
         setNewAgentEmail("");
         setNewAgentPhone("");
         queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
       } else {
-        toast.error(data?.error || data?.message || "Error al registrar agente");
+        // Mostrar el error específico del backend (p. ej. "ya pertenece a otra inmobiliaria")
+        const msg = data?.errors?.[0] || data?.error || data?.message || "Error al registrar agente";
+        toast.error(msg);
       }
     } catch (err: any) {
       toast.error("Error: " + (err.message || "Intenta de nuevo"));

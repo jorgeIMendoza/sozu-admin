@@ -728,9 +728,12 @@ export default function Agentes() {
       const isInternalAgent = cleanPersonData.email?.toLowerCase().endsWith('@sozu.com');
       const rolId = isInternalAgent ? 9 : 3; // 9 = Agente Interno, 3 = Agente Inmobiliario
 
-      // Crear usuario automáticamente
+      // Crear usuario automáticamente. NO tragar el fallo: reportarlo al onSuccess para
+      // que el toast no afirme falsamente que el usuario fue creado.
+      let userCreated = true;
+      let userErrorMsg: string | undefined;
       try {
-        const { error: userError } = await supabase.functions.invoke('create-user', {
+        const { data: userData, error: userError } = await supabase.functions.invoke('create-user', {
           body: {
             email: cleanPersonData.email,
             nombre: cleanPersonData.nombre_legal,
@@ -740,30 +743,44 @@ export default function Agentes() {
             clave_pais_telefono: cleanPersonData.clave_pais_telefono || null
           }
         });
-        
-        if (userError) {
-          console.error('Error al crear usuario automático:', userError);
+
+        if (userError || (userData && (userData as any).error)) {
+          userCreated = false;
+          userErrorMsg = userError?.message || (userData as any)?.error || 'Error desconocido al crear usuario';
+          console.error('Error al crear usuario automático:', userErrorMsg);
         }
-      } catch (e) {
+      } catch (e: any) {
+        userCreated = false;
+        userErrorMsg = e?.message || 'Error desconocido al crear usuario';
         console.error('Error al crear usuario automático:', e);
       }
+
+      return { userCreated, userErrorMsg };
     },
-    onSuccess: (_, variables: any) => {
+    onSuccess: (result: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['agentes'] });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsNewDialogOpen(false);
-      
+
       // Registrar actividad
       registrarCreacion('agente', {
         nombre_legal: variables.nombre_legal,
         email: variables.email,
         inmobiliaria_id: variables.inmobiliariaId
       });
-      
-      toast({
-        title: "Éxito",
-        description: "Agente y usuario creados correctamente.",
-      });
+
+      if (result?.userCreated) {
+        toast({
+          title: "Éxito",
+          description: "Agente y usuario creados correctamente.",
+        });
+      } else {
+        toast({
+          title: "Agente creado (sin usuario)",
+          description: "El agente se creó, pero falló la creación del usuario: no podrá iniciar sesión. Contacta al administrador.",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: any) => {
       toast({
