@@ -101,6 +101,10 @@ export default function AdministracionFacturasPorCobrarPage() {
   const [entidadDuenaFilter, setEntidadDuenaFilter] = useState<string>("all");
   const [facturaSozuFilter, setFacturaSozuFilter] = useState<string>("all");
   const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
+  const [tipoFilter, setTipoFilter] = useState<string>("all");
+  // Rango de fecha de venta (f.fecha_emision = fecha_compra de la cuenta).
+  const [ventaDesde, setVentaDesde] = useState<string>("");
+  const [ventaHasta, setVentaHasta] = useState<string>("");
   const [selected, setSelected] = useState<FacturaPorCobrar | null>(null);
   const [page, setPage] = useState(0);
 
@@ -128,13 +132,28 @@ export default function AdministracionFacturasPorCobrarPage() {
       if (entidadDuenaFilter !== "all" && f.entidad_duena !== entidadDuenaFilter) return false;
       if (facturaSozuFilter !== "all" && f.estado_factura_sozu !== facturaSozuFilter) return false;
       if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
+      if (tipoFilter !== "all" && f.tipo !== tipoFilter) return false;
+      // Rango por fecha de venta (fecha_emision = fecha_compra de la cuenta).
+      const venta = (f.fecha_emision || "").slice(0, 10);
+      if (ventaDesde && (!venta || venta < ventaDesde)) return false;
+      if (ventaHasta && (!venta || venta > ventaHasta)) return false;
       if (q) {
         const hay = [f.folio_cfdi, f.numero_departamento].map(norm).join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, proyectoFilter, entidadDuenaFilter, facturaSozuFilter, estatusPagoFilter, facturas]);
+  }, [
+    search,
+    proyectoFilter,
+    entidadDuenaFilter,
+    facturaSozuFilter,
+    estatusPagoFilter,
+    tipoFilter,
+    ventaDesde,
+    ventaHasta,
+    facturas,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
   const filteredPage = useMemo(
@@ -180,7 +199,10 @@ export default function AdministracionFacturasPorCobrarPage() {
     proyectoFilter !== "all" ||
     entidadDuenaFilter !== "all" ||
     facturaSozuFilter !== "all" ||
-    estatusPagoFilter !== "all";
+    estatusPagoFilter !== "all" ||
+    tipoFilter !== "all" ||
+    !!ventaDesde ||
+    !!ventaHasta;
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
     : `${facturas.length} facturas pendientes de cobro`;
@@ -191,6 +213,10 @@ export default function AdministracionFacturasPorCobrarPage() {
     setEntidadDuenaFilter("all");
     setFacturaSozuFilter("all");
     setEstatusPagoFilter("all");
+    setTipoFilter("all");
+    setVentaDesde("");
+    setVentaHasta("");
+    setPage(0);
   };
 
   return (
@@ -296,6 +322,54 @@ export default function AdministracionFacturasPorCobrarPage() {
               <SelectItem value="rechazada">Rechazada</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select
+            value={tipoFilter}
+            onValueChange={(v) => {
+              setTipoFilter(v);
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="h-8 w-full sm:w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los tipos</SelectItem>
+              <SelectItem value="Propiedad">Propiedad</SelectItem>
+              <SelectItem value="Producto">Producto</SelectItem>
+              <SelectItem value="Servicio">Servicio</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Rango por fecha de venta */}
+          <div className="flex w-full sm:w-auto items-center gap-1.5">
+            <label className="text-[11px] text-muted-foreground whitespace-nowrap">
+              Venta:
+            </label>
+            <Input
+              type="date"
+              value={ventaDesde}
+              max={ventaHasta || undefined}
+              onChange={(e) => {
+                setVentaDesde(e.target.value);
+                setPage(0);
+              }}
+              className="h-8 w-full sm:w-[150px] text-xs"
+              aria-label="Fecha de venta desde"
+            />
+            <span className="text-[11px] text-muted-foreground">a</span>
+            <Input
+              type="date"
+              value={ventaHasta}
+              min={ventaDesde || undefined}
+              onChange={(e) => {
+                setVentaHasta(e.target.value);
+                setPage(0);
+              }}
+              className="h-8 w-full sm:w-[150px] text-xs"
+              aria-label="Fecha de venta hasta"
+            />
+          </div>
 
           {hayFiltros && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={limpiar}>

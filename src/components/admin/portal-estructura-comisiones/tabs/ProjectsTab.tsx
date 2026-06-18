@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
-import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import { useForecastTotalGlobal } from '@/hooks/usePortalAltaDireccion/useForecastIngresos';
 import type { Project } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import PricingStrategy from '../shared/PricingStrategy';
 
 export default function ProjectsTab() {
   const { projects, addProject, updateProject, deleteProject } = useSimulator();
+  const { total: forecastTotal, isLoading: forecastLoading } = useForecastTotalGlobal();
   const [editing, setEditing] = useState<Project | null>(null);
   const [open, setOpen] = useState(false);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -59,6 +61,24 @@ export default function ProjectsTab() {
             <ProjectForm project={editing || emptyProject} onSave={handleSave} onCancel={() => setOpen(false)} />
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Forecast de Ingresos Totales — mismo número global del Forecast de
+          Ingresos del Portal Alta Dirección (cuentas con flujo + inventario
+          disponible, todos los tipos). */}
+      <div className="metric-card flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Forecast de Ingresos Totales</p>
+          <p className="text-2xl font-bold tabular-nums">
+            {forecastLoading ? '—' : formatCurrency(forecastTotal)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Cuentas con flujo + inventario disponible (Propiedad, Producto y Servicio)
+          </p>
+        </div>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
+          <TrendingUp className="h-5 w-5" />
+        </span>
       </div>
 
       <div className="space-y-4">
@@ -114,11 +134,6 @@ export default function ProjectsTab() {
                 <p className="text-xs text-muted-foreground">Entrega</p>
                 <p className="font-semibold text-xs">{project.deliveryDate || '—'}</p>
               </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t">
-              <p className="text-xs text-muted-foreground">Valor Total Inventario</p>
-              <p className="text-base font-bold">{formatCurrency(project.totalUnits * project.averagePrice)}</p>
             </div>
 
             {/* Expanded: Inventory & Pricing */}
