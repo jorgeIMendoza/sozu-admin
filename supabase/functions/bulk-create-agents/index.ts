@@ -23,10 +23,11 @@ interface ValidationResult {
   needsEntidad?: boolean;
   needsAuthUser?: boolean;
   needsUsuario?: boolean;
+  claimEntidadId?: number; // entidad tipo-19 independiente (owner null) a reclamar para esta inmobiliaria
 }
 
 interface CreatedRecord {
-  type: 'persona' | 'entidad' | 'usuario' | 'acceso';
+  type: 'persona' | 'entidad' | 'usuario' | 'acceso' | 'claim';
   id?: number;
   email?: string;
   authUserId?: string;
@@ -227,15 +228,38 @@ Deno.serve(async (req) => {
 
         validation.needsPersona = false;
 
-        // Verificar si ya tiene entidad de agente
-        const { data: existingEntidad } = await supabaseAdmin
+        // Verificar entidades de agente (tipo 19) existentes, CONSCIENTES DEL DUEÑO.
+        // El bug original ignoraba id_persona_duena_lead: cualquier entidad tipo-19 hacía
+        // needsEntidad=false, dejando al agente sin vínculo con la inmobiliaria solicitante.
+        const { data: agentEntidades } = await supabaseAdmin
           .from('entidades_relacionadas')
-          .select('id')
+          .select('id, id_persona_duena_lead')
           .eq('id_persona', existingPersona.id)
           .eq('id_tipo_entidad', 19)
-          .eq('activo', true)
-          .single();
-        validation.needsEntidad = !existingEntidad;
+          .eq('activo', true);
+
+        const entidades = agentEntidades || [];
+        const linkedToThis = entidades.find((e: any) => e.id_persona_duena_lead === validation.inmobiliariaId);
+        const independiente = entidades.find((e: any) => e.id_persona_duena_lead == null);
+
+        if (linkedToThis) {
+          // Ya vinculado a ESTA inmobiliaria: nada que crear (ya aparece en su lista).
+          validation.needsEntidad = false;
+        } else if (independiente) {
+          // Agente independiente (FK null): reclamarlo para esta inmobiliaria.
+          validation.needsEntidad = false;
+          validation.claimEntidadId = independiente.id;
+        } else if (entidades.length > 0) {
+          // Solo pertenece a otra(s) inmobiliaria(s): bloquear sin crear nada.
+          validation.isValid = false;
+          validation.error = 'Este agente ya pertenece a otra inmobiliaria';
+          validationErrors.push(`${email}: Este agente ya pertenece a otra inmobiliaria`);
+          validationResults.push(validation);
+          continue;
+        } else {
+          // Sin entidad de agente: crear una nueva vinculada a esta inmobiliaria.
+          validation.needsEntidad = true;
+        }
 
       } else {
         validation.needsPersona = true;
@@ -353,6 +377,23 @@ Deno.serve(async (req) => {
           createdRecords.push({ type: 'entidad', id: newEntidad.id, email });
           didCreateSomething = true;
           console.log(`[bulk-create-agents] Entidad creada para: ${email}`);
+        }
+
+        // 2b. Reclamar agente independiente (owner null) para esta inmobiliaria
+        if (validation.claimEntidadId) {
+          const { error: claimError } = await supabaseAdmin
+            .from('entidades_relacionadas')
+            .update({ id_persona_duena_lead: validation.inmobiliariaId })
+            .eq('id', validation.claimEntidadId);
+
+          if (claimError) {
+            throw new Error(`Error reclamando agente ${email}: ${claimError.message}`);
+          }
+
+          // Para rollback: revertir el dueño a null (estado previo de un agente independiente).
+          createdRecords.push({ type: 'claim', id: validation.claimEntidadId, email });
+          didCreateSomething = true;
+          console.log(`[bulk-create-agents] Agente reclamado (entidad ${validation.claimEntidadId}) para: ${email}`);
         }
 
         // 3. Crear auth user y usuario si es necesario
@@ -542,6 +583,10 @@ interface CreatedRecordWithProyecto extends CreatedRecord {
             await supabaseAdmin.from('usuarios').delete().eq('email', record.email);
             console.log(`[bulk-create-agents] ROLLBACK: Eliminado usuario ${record.email}`);
             // Nota: No eliminamos auth.users para evitar problemas
+          }
+          if (record.type === 'claim' && record.id) {
+            await supabaseAdmin.from('entidades_relacionadas').update({ id_persona_duena_lead: null }).eq('id', record.id);
+            console.log(`[bulk-create-agents] ROLLBACK: Revertido dueño de entidad ${record.id} a null`);
           }
           if (record.type === 'entidad' && record.id) {
             await supabaseAdmin.from('entidades_relacionadas').delete().eq('id', record.id);
