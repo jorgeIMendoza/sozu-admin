@@ -399,6 +399,7 @@ const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index
 const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
 const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
 const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBancos })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -972,6 +973,7 @@ const App = () => (
                   <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
                   <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
                   <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+                  <Route path="portal-bancos/bancos"   element={<BancosBancos />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
