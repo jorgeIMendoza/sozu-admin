@@ -390,6 +390,9 @@ export function useGenerarFacturaComisionSozu() {
       // Mantener invalidación cruzada con el Admin Panel para que ambas vistas se sincronicen.
       queryClient.invalidateQueries({ queryKey: ["comisiones"] });
       queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+      // Refresca la lista de Facturas por Cobrar (Portal Administración / Alta
+      // Dirección) que reusa este detalle para las facturas "sin_generar".
+      queryClient.invalidateQueries({ queryKey: ["facturas_por_cobrar_alta_direccion"] });
     },
   });
 }
@@ -415,6 +418,9 @@ export function useTimbrarFacturaComisionSozu() {
       queryClient.invalidateQueries({ queryKey: ["facturas_comision_sozu_por_generar"] });
       queryClient.invalidateQueries({ queryKey: ["comisiones"] });
       queryClient.invalidateQueries({ queryKey: ["expediente_venta_detalle"] });
+      // Refresca la lista de Facturas por Cobrar (Portal Administración / Alta
+      // Dirección) que reusa este detalle para las facturas "sin_generar".
+      queryClient.invalidateQueries({ queryKey: ["facturas_por_cobrar_alta_direccion"] });
     },
   });
 }

@@ -46,6 +46,7 @@ export interface FacturaPorCobrar {
   producto_nombre: string;
   numero_departamento: string;
   entidad_duena: string;
+  edificio_nombre: string;
   precio_final: number;
   porcentaje_comision: number;
   iva_incluido: boolean;
@@ -55,6 +56,18 @@ export interface FacturaPorCobrar {
   estado_factura_sozu: EstadoFacturaSozu;
   estatus_pago: EstatusPagoFactura;
   fecha_pago_comision: string | null;
+  // ─── Datos fiscales del receptor (entidad dueña) + CLABE STP de comisión ───
+  // Permiten reusar el detalle "Generar Factura" (EjecucionFacturaSozuContent)
+  // cuando la factura está en estado "sin_generar".
+  cuenta_stp_comisiones: string | null;
+  cliente_nombre: string | null;
+  cliente_rfc: string | null;
+  receptor_razon_social: string | null;
+  receptor_rfc: string | null;
+  receptor_regimen_codigo: string | null;
+  receptor_regimen_nombre: string | null;
+  receptor_uso_cfdi_codigo: string | null;
+  receptor_uso_cfdi_nombre: string | null;
 }
 
 const IVA_RATE = 0.16;
@@ -282,7 +295,9 @@ export function useFacturasPorCobrar() {
       const { data: entidadesDuenas, error: entDError } = entidadDuenoIds.length
         ? await (supabase as any)
             .from("entidades_relacionadas")
-            .select("id, id_persona, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+            .select(
+              "id, id_persona, cuenta_stp_comisiones, personas!fk_entrel_persona(nombre_legal, nombre_comercial, rfc, regimen, uso_cfdi)",
+            )
             .in("id", entidadDuenoIds)
         : { data: [] as any[], error: null };
       if (entDError) throw entDError;
@@ -292,6 +307,61 @@ export function useFacturasPorCobrar() {
           e.id,
           e.personas?.nombre_comercial || e.personas?.nombre_legal || "",
         ]),
+      );
+
+      // Datos fiscales del receptor + CLABE STP (para el detalle Generar Factura).
+      const entidadDuenoFiscalMap = new Map<
+        number,
+        {
+          cuentaStp: string | null;
+          razonSocial: string | null;
+          rfc: string | null;
+          regimen: string | null;
+          usoCfdi: string | null;
+        }
+      >(
+        ((entidadesDuenas || []) as any[]).map((e) => [
+          e.id,
+          {
+            cuentaStp: e.cuenta_stp_comisiones ?? null,
+            razonSocial: e.personas?.nombre_legal ?? null,
+            rfc: e.personas?.rfc ?? null,
+            regimen: e.personas?.regimen ?? null,
+            usoCfdi: e.personas?.uso_cfdi ?? null,
+          },
+        ]),
+      );
+
+      // Catálogos fiscales: traducen código → nombre (régimen y uso de CFDI).
+      const regimenCodigos = Array.from(
+        new Set(
+          ((entidadesDuenas || []) as any[])
+            .map((e) => e.personas?.regimen)
+            .filter((x): x is string => !!x),
+        ),
+      );
+      const { data: regimenes } = regimenCodigos.length
+        ? await (supabase as any).from("regimen").select("id, nombre").in("id", regimenCodigos)
+        : { data: [] as any[] };
+      const regimenMap = new Map<string, string>(
+        ((regimenes || []) as any[]).map((r) => [String(r.id), r.nombre as string]),
+      );
+
+      const usoCfdiCodigos = Array.from(
+        new Set(
+          ((entidadesDuenas || []) as any[])
+            .map((e) => e.personas?.uso_cfdi)
+            .filter((x): x is string => !!x),
+        ),
+      );
+      const { data: usosCfdi } = usoCfdiCodigos.length
+        ? await (supabase as any)
+            .from("uso_cfdi")
+            .select("codigo, nombre")
+            .in("codigo", usoCfdiCodigos)
+        : { data: [] as any[] };
+      const usoCfdiMap = new Map<string, string>(
+        ((usosCfdi || []) as any[]).map((u) => [u.codigo as string, u.nombre as string]),
       );
 
       const { data: entidadesDes, error: entError } = proyectoIds.length
@@ -349,6 +419,11 @@ export function useFacturasPorCobrar() {
         const entidadDuenaNombre = prop?.idEntidadDueno != null
           ? entidadDuenoMap.get(prop.idEntidadDueno) ?? ""
           : "";
+        const duenoFiscal = prop?.idEntidadDueno != null
+          ? entidadDuenoFiscalMap.get(prop.idEntidadDueno)
+          : undefined;
+        const regimenCod = duenoFiscal?.regimen ?? null;
+        const usoCfdiCod = duenoFiscal?.usoCfdi ?? null;
         const idPersona = edif?.idProyecto != null ? proyectoToPersona.get(edif.idProyecto) : undefined;
         const persona = idPersona != null ? personaMap.get(idPersona) : undefined;
 
@@ -429,6 +504,7 @@ export function useFacturasPorCobrar() {
           producto_nombre: producto?.nombre ?? "",
           numero_departamento: numeroDepto,
           entidad_duena: entidadDuenaNombre,
+          edificio_nombre: edif?.nombre ?? "",
           precio_final: precioFinal,
           porcentaje_comision: pct,
           iva_incluido: ivaIncluido,
@@ -440,6 +516,16 @@ export function useFacturasPorCobrar() {
           fecha_pago_comision: c.fecha_pago_comision
             ? new Date(c.fecha_pago_comision).toISOString().slice(0, 10)
             : null,
+          // Datos fiscales del receptor + STP (para el detalle Generar Factura).
+          cuenta_stp_comisiones: duenoFiscal?.cuentaStp ?? null,
+          cliente_nombre: null,
+          cliente_rfc: null,
+          receptor_razon_social: duenoFiscal?.razonSocial ?? null,
+          receptor_rfc: duenoFiscal?.rfc ?? null,
+          receptor_regimen_codigo: regimenCod,
+          receptor_regimen_nombre: regimenCod ? regimenMap.get(regimenCod) ?? null : null,
+          receptor_uso_cfdi_codigo: usoCfdiCod,
+          receptor_uso_cfdi_nombre: usoCfdiCod ? usoCfdiMap.get(usoCfdiCod) ?? null : null,
         };
       });
     },
