@@ -182,11 +182,13 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
 
-  // Adquisiciones adicionales con precio final (las que suman al valor de
-  // escrituración): bodegas con cuenta y estacionamientos NO incluidos.
+  // Adquisiciones con precio final que suman al valor de escrituración.
+  // Estacionamiento: cualquiera ligado con precio final > 0, sin importar el
+  // flag "incluido con el depa" — un cajón puede venir "incluido" pero tener
+  // su propia cuenta con precio (p.ej. tándem cobrado aparte).
   const bodegasAdquiridas = row.bodegas.filter((b) => b.tieneCuenta);
   const estacionamientosAdicionales = row.estacionamientos.filter(
-    (e) => !e.esIncluido && e.tieneCuenta,
+    (e) => e.tieneCuenta && e.precioFinal > 0,
   );
   const totalBodegas = bodegasAdquiridas.reduce((s, b) => s + b.precioFinal, 0);
   const totalEstacionamientos = estacionamientosAdicionales.reduce(
