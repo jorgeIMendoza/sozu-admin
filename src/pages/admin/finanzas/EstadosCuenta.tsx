@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import {
   Upload,
   FileText,
@@ -154,35 +155,12 @@ interface EstadoCuenta {
   archivo_url: string;   // url_estado_cuenta en BD
 }
 
-// ─── Mock estados de cuenta (se reemplaza cuando exista tabla en BD) ───────────
-
-function genMock(): EstadoCuenta[] {
-  const rows: EstadoCuenta[] = [];
-  const proyectos = ["Bottura", "Margot", "Daiku", "Monocolo"];
-  const bancos = ["Santander", "BBVA", "Banorte", "HSBC"];
-  const cuentas = ["real_estate", "cuenta_principal", "operativa_mx", "recaudacion_proyectos"];
-  const numeros = ["****7842", "****1239", "****5501", "****9983"];
-  for (let i = 0; i < 48; i++) {
-    const anio = 2024 + Math.floor(i / 24);
-    const mes = (i % 12) + 1;
-    rows.push({
-      id: i + 1,
-      anio,
-      mes,
-      proyecto: proyectos[i % proyectos.length],
-      banco: bancos[i % bancos.length],
-      cuenta: cuentas[i % cuentas.length],
-      numero_cuenta: numeros[i % numeros.length],
-      fecha_subida: `${anio}-${String(mes).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
-      archivo_url: "https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf",
-    });
-  }
-  return rows;
-}
-
-const MOCK_DATA = genMock();
 
 // ─── DB Hooks ──────────────────────────────────────────────────────────────────
+
+const STORAGE_BASE = import.meta.env.VITE_SUPABASE_URL
+  ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/estados_cuenta`
+  : "";
 
 function useProyectosSozu() {
   return useQuery<Proyecto[]>({
@@ -243,6 +221,67 @@ function useCuentasSozu() {
   });
 }
 
+function useEstadosCuenta() {
+  return useQuery<EstadoCuenta[]>({
+    queryKey: ["estados-cuenta"],
+    staleTime: 1000 * 60 * 2,
+    queryFn: async () => {
+      const { data: ec } = await (supabase as any)
+        .from("estados_cuenta")
+        .select("id, id_proyecto, id_cuenta_sozu, anio, mes, url_estado_cuenta, nombre_archivo, fecha_creacion")
+        .eq("activo", true)
+        .order("anio", { ascending: false })
+        .order("mes", { ascending: false });
+
+      if (!ec?.length) return [];
+
+      const cuentaIds = [...new Set(ec.map((r: any) => r.id_cuenta_sozu))] as number[];
+      const { data: cuentas } = await (supabase as any)
+        .from("cuentas_sozu")
+        .select("id, alias, id_banco, numero_cuenta, clabe")
+        .in("id", cuentaIds);
+
+      const cuentaMap: Record<number, any> = Object.fromEntries(
+        (cuentas ?? []).map((c: any) => [c.id, c])
+      );
+
+      const bancoIds = [...new Set((cuentas ?? []).map((c: any) => c.id_banco))] as number[];
+      const { data: bancos } = bancoIds.length
+        ? await supabase.from("bancos").select("id, nombre").in("id", bancoIds)
+        : { data: [] };
+      const bancoMap: Record<number, string> = Object.fromEntries(
+        (bancos ?? []).map((b: any) => [b.id, b.nombre])
+      );
+
+      const proyIds = [...new Set(ec.map((r: any) => r.id_proyecto))] as number[];
+      const { data: proyectos } = proyIds.length
+        ? await supabase.from("proyectos").select("id, nombre").in("id", proyIds)
+        : { data: [] };
+      const proyMap: Record<number, string> = Object.fromEntries(
+        (proyectos ?? []).map((p: any) => [p.id, p.nombre])
+      );
+
+      return ec.map((r: any): EstadoCuenta => {
+        const cuenta = cuentaMap[r.id_cuenta_sozu] ?? {};
+        const urlFull = r.url_estado_cuenta?.startsWith("http")
+          ? r.url_estado_cuenta
+          : `${STORAGE_BASE}/${r.url_estado_cuenta}`;
+        return {
+          id: r.id,
+          anio: r.anio,
+          mes: r.mes,
+          proyecto: proyMap[r.id_proyecto] ?? String(r.id_proyecto),
+          banco: bancoMap[cuenta.id_banco] ?? "",
+          cuenta: cuenta.alias ?? "",
+          numero_cuenta: cuenta.numero_cuenta ?? cuenta.clabe ?? "",
+          fecha_subida: r.fecha_creacion?.slice(0, 10) ?? "",
+          archivo_url: urlFull,
+        };
+      });
+    },
+  });
+}
+
 // ─── Upload Dialog ─────────────────────────────────────────────────────────────
 
 interface UploadDialogProps {
@@ -251,9 +290,19 @@ interface UploadDialogProps {
   proyectos: Proyecto[];
   bancos: Banco[];
   cuentasSozu: CuentaSozu[];
+  userEmail: string | null;
 }
 
-function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu }: UploadDialogProps) {
+const slugify = (s: string) =>
+  s.normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+
+function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu, userEmail }: UploadDialogProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [anio, setAnio] = useState("");
   const [mes, setMes] = useState("");
   const [proyectoId, setProyectoId] = useState("");
@@ -278,6 +327,45 @@ function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu }: UploadD
   const handleClose = () => { reset(); onClose(); };
 
   const valid = anio && mes && proyectoId && cuentaSozuId && archivo;
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!archivo || !proyectoId || !cuentaSozuId || !anio || !mes) throw new Error("Datos incompletos");
+
+      const proyecto = proyectos.find(p => String(p.id) === proyectoId);
+      const cuenta = cuentasSozu.find(c => String(c.id) === cuentaSozuId);
+      if (!proyecto || !cuenta) throw new Error("Proyecto o cuenta no encontrado");
+
+      const bancoNombre = bancoNombreMap[cuenta.id_banco] ?? "banco";
+      const ruta = `${slugify(proyecto.nombre)}/${slugify(bancoNombre)}/${cuenta.alias}/${anio}/${archivo.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("estados_cuenta")
+        .upload(ruta, archivo, { upsert: false });
+
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { error: insertError } = await (supabase as any).from("estados_cuenta").insert({
+        id_proyecto: Number(proyectoId),
+        id_cuenta_sozu: Number(cuentaSozuId),
+        anio: Number(anio),
+        mes: Number(mes),
+        url_estado_cuenta: ruta,
+        nombre_archivo: archivo.name,
+        subido_por: userEmail,
+      });
+
+      if (insertError) throw new Error(insertError.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["estados-cuenta"] });
+      toast({ title: "Estado de cuenta subido", description: "El archivo se subio correctamente." });
+      handleClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error al subir", description: err.message, variant: "destructive" });
+    },
+  });
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -428,10 +516,21 @@ function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu }: UploadD
         <Separator />
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={handleClose}>Cancelar</Button>
-          <Button size="sm" disabled={!valid} className="gap-1.5">
-            <Upload className="size-3.5" />
-            Subir
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={uploadMutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={!valid || uploadMutation.isPending}
+            className="gap-1.5"
+            onClick={() => uploadMutation.mutate()}
+          >
+            {uploadMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Upload className="size-3.5" />
+            )}
+            {uploadMutation.isPending ? "Subiendo..." : "Subir"}
           </Button>
         </div>
       </DialogContent>
@@ -544,11 +643,34 @@ interface EditUrlDialogProps {
 }
 
 function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
 
   useEffect(() => {
     if (row) setUrl(row.archivo_url);
   }, [row]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const ruta = url.trim().startsWith("http")
+        ? url.trim().replace(/.*\/estados_cuenta\//, "")
+        : url.trim();
+      const { error } = await (supabase as any)
+        .from("estados_cuenta")
+        .update({ url_estado_cuenta: ruta })
+        .eq("id", row!.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["estados-cuenta"] });
+      toast({ title: "URL actualizada" });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error al guardar", description: err.message, variant: "destructive" });
+    },
+  });
 
   if (!row) return null;
 
@@ -570,7 +692,7 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://... o ruta relativa en bucket"
               className="h-9 text-sm font-mono"
             />
             <p className="text-[11px] text-muted-foreground">
@@ -580,8 +702,15 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
         </div>
         <Separator />
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
-          <Button size="sm" disabled={!url.trim()} onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saveMutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={!url.trim() || saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Guardar
           </Button>
         </div>
@@ -595,10 +724,12 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
 export default function EstadosCuenta() {
   const { profile } = useAuth();
   const isSuperAdmin = profile?.rol_id === 1;
+  const userEmail = profile?.email ?? null;
 
   const { data: proyectos = [] } = useProyectosSozu();
   const { data: bancos = [] } = useBancos();
   const { data: cuentasSozu = [] } = useCuentasSozu();
+  const { data: estadosCuenta = [], isLoading: loadingEC } = useEstadosCuenta();
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [viewRow, setViewRow] = useState<EstadoCuenta | null>(null);
@@ -613,14 +744,14 @@ export default function EstadosCuenta() {
   const resetPage = () => setCurrentPage(1);
 
   const filtered = useMemo(() => {
-    return MOCK_DATA.filter((r) => {
+    return estadosCuenta.filter((r) => {
       if (searchAnio && !String(r.anio).includes(searchAnio.trim())) return false;
       if (filterMes !== "all" && String(r.mes) !== filterMes) return false;
       if (searchProyecto && !r.proyecto.toLowerCase().includes(searchProyecto.toLowerCase())) return false;
       if (searchBanco && !r.banco.toLowerCase().includes(searchBanco.toLowerCase())) return false;
       return true;
     });
-  }, [searchAnio, filterMes, searchProyecto, searchBanco]);
+  }, [estadosCuenta, searchAnio, filterMes, searchProyecto, searchBanco]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -636,9 +767,9 @@ export default function EstadosCuenta() {
       return acc;
     }, []);
 
-  const totalRegistros = MOCK_DATA.length;
-  const proyectosUnicos = new Set(MOCK_DATA.map((r) => r.proyecto)).size;
-  const aniosUnicos = new Set(MOCK_DATA.map((r) => r.anio)).size;
+  const totalRegistros = estadosCuenta.length;
+  const proyectosUnicos = new Set(estadosCuenta.map((r) => r.proyecto)).size;
+  const aniosUnicos = new Set(estadosCuenta.map((r) => r.anio)).size;
 
   return (
     <div className="p-6 space-y-6">
@@ -651,11 +782,26 @@ export default function EstadosCuenta() {
             Gestion centralizada de estados de cuenta bancarios por proyecto
           </p>
         </div>
-        <Button size="sm" onClick={() => setUploadOpen(true)} className="gap-1.5 shrink-0">
-          <Upload className="size-3.5" />
-          Subir estado de cuenta
-        </Button>
+        {isSuperAdmin && (
+          <Button size="sm" onClick={() => setUploadOpen(true)} className="gap-1.5 shrink-0">
+            <Upload className="size-3.5" />
+            Subir estado de cuenta
+          </Button>
+        )}
       </div>
+
+      {/* Banner sin cuentas configuradas */}
+      {isSuperAdmin && cuentasSozu.length === 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <Landmark className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Sin cuentas bancarias configuradas</p>
+            <p className="text-[12px] mt-0.5 text-amber-700">
+              Inserta registros en <span className="font-mono">cuentas_sozu</span> (banco + alias) para habilitar la subida de archivos.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -762,7 +908,13 @@ export default function EstadosCuenta() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginated.length === 0 ? (
+              {loadingEC ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-32 text-center">
+                    <Loader2 className="size-5 animate-spin text-muted-foreground mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-sm text-muted-foreground">
                     {hasFilters
@@ -866,6 +1018,7 @@ export default function EstadosCuenta() {
         proyectos={proyectos}
         bancos={bancos}
         cuentasSozu={cuentasSozu}
+        userEmail={userEmail}
       />
       <ViewerDialog row={viewRow} onClose={() => setViewRow(null)} />
       <EditUrlDialog row={editUrlRow} onClose={() => setEditUrlRow(null)} />
