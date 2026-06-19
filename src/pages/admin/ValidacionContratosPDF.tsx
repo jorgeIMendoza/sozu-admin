@@ -778,6 +778,7 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
   const [montoReal, setMontoReal]       = useState("");
   const [motivo, setMotivo]             = useState("");
   const [actualizarFechaDB, setActualizarFechaDB] = useState(false);
+  const [actualizarPrecioDB, setActualizarPrecioDB] = useState(false);
   const queryClient = useQueryClient();
   const { toast }   = useToast();
 
@@ -793,6 +794,7 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
     setMontoReal(row.monto_real != null ? String(row.monto_real) : String(row.precio_final));
     setMotivo(row.motivo ?? "");
     setActualizarFechaDB(false);
+    setActualizarPrecioDB(false);
   }, [row]);
 
   const mutation = useMutation({
@@ -829,6 +831,14 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
           .update({ fecha_compra: row.fecha_extraida.substring(0, 10) })
           .eq("id", row.cuenta_id);
         if (errFecha) throw errFecha;
+      }
+
+      if (actualizarPrecioDB && montoRealNum !== null) {
+        const { error: errPrecio } = await supabase
+          .from("cuentas_cobranza")
+          .update({ precio_final: montoRealNum })
+          .eq("id", row.cuenta_id);
+        if (errPrecio) throw errPrecio;
       }
     },
     onSuccess: () => {
@@ -922,6 +932,25 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
                       {fmtCurrency(parseFloat(montoReal) - row.precio_final)}
                     </span>
                   </p>
+                )}
+                {montoReal && !isNaN(parseFloat(montoReal)) &&
+                  parseFloat(montoReal) !== row.precio_final && (
+                  <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={actualizarPrecioDB}
+                      onChange={(e) => setActualizarPrecioDB(e.target.checked)}
+                      className="mt-0.5 rounded shrink-0"
+                    />
+                    <div>
+                      <p className="text-[12px] text-blue-800 font-medium">
+                        Actualizar precio_final en DB
+                      </p>
+                      <p className="text-[11px] text-blue-600 mt-0.5">
+                        Cambiará {fmtCurrency(row.precio_final)} → {fmtCurrency(parseFloat(montoReal))} en cuentas_cobranza
+                      </p>
+                    </div>
+                  </label>
                 )}
               </div>
             )}
@@ -1177,10 +1206,15 @@ export default function ValidacionContratosPDF() {
       // Step 9: parallel — contrato_validaciones + personas dueños
       const erPersonaIds = [...new Set((erDuenoRes.data ?? []).map((er: any) => er.id_persona).filter(Boolean))] as number[];
 
+      // DDL probe: fecha_extraida/estado_fecha added by 01_validacion_contratos_fecha.md
+      const fechaColProbe = await (supabase as any)
+        .from("contrato_validaciones").select("fecha_extraida").limit(0);
+      const hasFechaColumnas = !fechaColProbe.error;
+
       const [valRes, personasDuenoRes] = await Promise.all([
         docIds.length
           ? (supabase as any).from("contrato_validaciones")
-              .select("id_documento, estado, monto_real, motivo, fecha_creacion")
+              .select(`id_documento, estado, monto_real, motivo, fecha_creacion${hasFechaColumnas ? ", fecha_extraida, estado_fecha" : ""}`)
               .in("id_documento", docIds)
               .order("fecha_creacion", { ascending: false })
           : Promise.resolve({ data: [] }),
@@ -1197,8 +1231,8 @@ export default function ValidacionContratosPDF() {
             estado: v.estado,
             monto_real: v.monto_real ?? null,
             motivo: v.motivo ?? null,
-            fecha_extraida: v.fecha_extraida ?? null,
-            estado_fecha: v.estado_fecha ?? null,
+            fecha_extraida: hasFechaColumnas ? (v.fecha_extraida ?? null) : null,
+            estado_fecha:   hasFechaColumnas ? (v.estado_fecha ?? null) : null,
           });
         }
       }
