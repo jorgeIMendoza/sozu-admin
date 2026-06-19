@@ -773,20 +773,23 @@ function CuentaDetalleModal({
 
 // ── Modal: edición manual de validación ────────────────────────────────────────
 
-function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClose: () => void }) {
+function EditValidacionModal({ row, onClose, hasFechaColumnas }: { row: ContratoRow | null; onClose: () => void; hasFechaColumnas: boolean }) {
   const [estado, setEstado]             = useState<"coincide" | "no_coincide" | "error">("coincide");
   const [montoReal, setMontoReal]       = useState("");
   const [motivo, setMotivo]             = useState("");
   const [actualizarFechaDB, setActualizarFechaDB] = useState(false);
   const [actualizarPrecioDB, setActualizarPrecioDB] = useState(false);
+  const [fechaManual, setFechaManual]   = useState("");
   const queryClient = useQueryClient();
   const { toast }   = useToast();
 
-  const fechaDBStr  = row?.fecha_compra?.substring(0, 10) ?? null;
-  const fechaPDFStr = row?.fecha_extraida?.substring(0, 10) ?? null;
-  const fechasDifieren    = !!(fechaDBStr && fechaPDFStr && fechaDBStr !== fechaPDFStr);
+  const fechaDBStr        = row?.fecha_compra?.substring(0, 10) ?? null;
+  const fechaPDFStr       = row?.fecha_extraida?.substring(0, 10) ?? null;
+  // fechaEfectiva: PDF-extracted OR user-entered manual date
+  const fechaEfectiva     = fechaPDFStr ?? (fechaManual || null);
   const tieneFechaExtraida = !!fechaPDFStr;
-  const sinExtraccion      = row?.estado_fecha === "sin_extraccion" && !tieneFechaExtraida;
+  const sinExtraccion      = hasFechaColumnas && !tieneFechaExtraida && (row?.estado_fecha === "sin_extraccion" || row?.estado_validacion !== null);
+  const fechasDifieren    = !!(fechaDBStr && fechaEfectiva && fechaDBStr !== fechaEfectiva);
 
   useEffect(() => {
     if (!row) return;
@@ -795,6 +798,7 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
     setMotivo(row.motivo ?? "");
     setActualizarFechaDB(false);
     setActualizarPrecioDB(false);
+    setFechaManual("");
   }, [row]);
 
   const mutation = useMutation({
@@ -806,10 +810,13 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
           : parseFloat(montoReal.replace(/,/g, "")) || null;
 
       let estadoFechaFinal: string | null = row.estado_fecha ?? null;
-      if (tieneFechaExtraida) {
-        if (actualizarFechaDB)  estadoFechaFinal = "actualizado";
-        else if (fechasDifieren) estadoFechaFinal = "no_coincide";
+      const fechaParaGuardar = fechaEfectiva; // PDF o manual
+      if (hasFechaColumnas && fechaParaGuardar) {
+        if (actualizarFechaDB)   estadoFechaFinal = "actualizado";
+        else if (fechasDifieren) estadoFechaFinal = tieneFechaExtraida ? "no_coincide" : "manual";
         else                     estadoFechaFinal = "coincide";
+      } else if (hasFechaColumnas && !fechaParaGuardar && row.estado_validacion !== null) {
+        estadoFechaFinal = "sin_extraccion";
       }
 
       const { error } = await (supabase as any)
@@ -820,15 +827,15 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
           monto_real:     montoRealNum,
           estado,
           motivo:         motivo.trim() || null,
-          ...(estadoFechaFinal !== null ? { estado_fecha: estadoFechaFinal } : {}),
-          ...(row.fecha_extraida       ? { fecha_extraida: row.fecha_extraida } : {}),
+          ...(hasFechaColumnas && estadoFechaFinal ? { estado_fecha: estadoFechaFinal } : {}),
+          ...(hasFechaColumnas && fechaParaGuardar ? { fecha_extraida: fechaParaGuardar } : {}),
         });
       if (error) throw error;
 
-      if (actualizarFechaDB && row.fecha_extraida) {
+      if (actualizarFechaDB && fechaParaGuardar) {
         const { error: errFecha } = await supabase
           .from("cuentas_cobranza")
-          .update({ fecha_compra: row.fecha_extraida.substring(0, 10) })
+          .update({ fecha_compra: fechaParaGuardar })
           .eq("id", row.cuenta_id);
         if (errFecha) throw errFecha;
       }
@@ -956,7 +963,7 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
             )}
 
             {/* Fecha de compra */}
-            {(tieneFechaExtraida || sinExtraccion) && (
+            {hasFechaColumnas && (
               <>
                 <Separator />
                 <div className="space-y-3">
@@ -965,13 +972,7 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
                     Fecha de compra
                   </p>
 
-                  {sinExtraccion && (
-                    <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 text-[12px] text-muted-foreground flex items-center gap-2">
-                      <Info className="size-4 shrink-0" />
-                      AI no pudo extraer la fecha del PDF
-                    </div>
-                  )}
-
+                  {/* PDF extrajo fecha → comparar con DB */}
                   {tieneFechaExtraida && (
                     <>
                       <div className="grid grid-cols-2 gap-2">
@@ -991,33 +992,68 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
                           </p>
                         </div>
                       </div>
-
                       {!fechasDifieren && (
                         <div className="flex items-center gap-2 text-[12px] text-emerald-600">
                           <CheckCircle2 className="size-4" />
                           Fechas coinciden
                         </div>
                       )}
-
-                      {fechasDifieren && (
-                        <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={actualizarFechaDB}
-                            onChange={(e) => setActualizarFechaDB(e.target.checked)}
-                            className="mt-0.5 rounded shrink-0"
-                          />
-                          <div>
-                            <p className="text-[12px] text-amber-800 font-medium">
-                              Actualizar fecha_compra en DB
-                            </p>
-                            <p className="text-[11px] text-amber-600 mt-0.5">
-                              Cambiara {fmtDate(row.fecha_compra)} → {fmtDate(row.fecha_extraida)} en cuentas_cobranza
-                            </p>
-                          </div>
-                        </label>
-                      )}
                     </>
+                  )}
+
+                  {/* No fecha extraida → input manual */}
+                  {!tieneFechaExtraida && (
+                    <>
+                      {sinExtraccion && (
+                        <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 text-[12px] text-muted-foreground flex items-center gap-2">
+                          <Info className="size-4 shrink-0" />
+                          AI no pudo extraer la fecha del PDF — ingresa manualmente si la conoces
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <Label className="text-[12px]">
+                          Fecha del contrato{sinExtraccion ? " (ingreso manual)" : " (del PDF o manual)"}
+                        </Label>
+                        <Input
+                          type="date"
+                          value={fechaManual}
+                          onChange={(e) => setFechaManual(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                        {!fechaManual && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Fecha en DB: {fmtDate(row.fecha_compra) ?? "sin fecha"}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Checkbox actualizar en DB: aparece cuando fechas difieren (PDF o manual) */}
+                  {fechasDifieren && (
+                    <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={actualizarFechaDB}
+                        onChange={(e) => setActualizarFechaDB(e.target.checked)}
+                        className="mt-0.5 rounded shrink-0"
+                      />
+                      <div>
+                        <p className="text-[12px] text-amber-800 font-medium">
+                          Actualizar fecha_compra en DB
+                        </p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">
+                          Cambiará {fmtDate(row.fecha_compra)} → {fmtDate(fechaEfectiva)} en cuentas_cobranza
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                  {/* Cuando usuario ingresa fecha que coincide con DB */}
+                  {!fechasDifieren && fechaEfectiva && (
+                    <div className="flex items-center gap-2 text-[12px] text-emerald-600">
+                      <CheckCircle2 className="size-4" />
+                      Fecha coincide con la registrada en DB
+                    </div>
                   )}
                 </div>
               </>
@@ -1087,10 +1123,10 @@ export default function ValidacionContratosPDF() {
 
   const resetPage = () => setCurrentPage(1);
 
-  const { data: rows = [], isLoading, isError } = useQuery({
+  const { data: _qd, isLoading, isError } = useQuery({
     queryKey: ["validacion-contratos-pdf"],
     staleTime: 1000 * 60 * 5,
-    queryFn: async (): Promise<ContratoRow[]> => {
+    queryFn: async (): Promise<{ rows: ContratoRow[]; hasFechaColumnas: boolean }> => {
       // Step 1: proyectos SOZU
       const { data: erSozu } = await supabase
         .from("entidades_relacionadas")
@@ -1289,9 +1325,12 @@ export default function ValidacionContratosPDF() {
         return (a.numero_propiedad ?? "").localeCompare(b.numero_propiedad ?? "", "es");
       });
 
-      return result;
+      return { rows: result, hasFechaColumnas };
     },
   });
+
+  const rows = _qd?.rows ?? [];
+  const hasFechaColumnas = _qd?.hasFechaColumnas ?? false;
 
   const proyectos = useMemo(() => Array.from(new Set(rows.map((r) => r.proyecto))).sort(), [rows]);
 
@@ -1530,26 +1569,35 @@ export default function ValidacionContratosPDF() {
                             </Badge>
                           )}
                           {/* Fecha indicator */}
-                          {c.fecha_extraida && (() => {
-                            const ef = c.estado_fecha;
-                            const difiere = c.fecha_compra?.substring(0, 10) !== c.fecha_extraida.substring(0, 10);
-                            if (ef === "actualizado") return (
-                              <span className="text-[9px] text-blue-600 flex items-center gap-0.5">
-                                <Calendar className="size-2.5" />Fecha actualizada
-                              </span>
-                            );
-                            if (ef === "no_coincide" || (!ef && difiere)) return (
+                          {!hasFechaColumnas ? (
+                            <span className="text-[9px] text-muted-foreground/60 flex items-center gap-0.5" title="DDL 01_validacion_contratos_fecha.md pendiente de ejecutar">
+                              <Clock className="size-2.5" />DDL pendiente
+                            </span>
+                          ) : c.estado_fecha === "actualizado" ? (
+                            <span className="text-[9px] text-blue-600 flex items-center gap-0.5">
+                              <Calendar className="size-2.5" />Fecha actualizada
+                            </span>
+                          ) : c.fecha_extraida ? (
+                            c.fecha_compra?.substring(0, 10) !== c.fecha_extraida.substring(0, 10) ? (
                               <span className="text-[9px] text-amber-600 flex items-center gap-0.5">
                                 <Calendar className="size-2.5" />Fecha diferente
                               </span>
-                            );
-                            if (ef === "coincide" || (!ef && !difiere)) return (
+                            ) : (
                               <span className="text-[9px] text-emerald-600 flex items-center gap-0.5">
                                 <Calendar className="size-2.5" />Fecha OK
                               </span>
-                            );
-                            return null;
-                          })()}
+                            )
+                          ) : c.estado_validacion !== null ? (
+                            c.estado_fecha === "sin_extraccion" ? (
+                              <span className="text-[9px] text-muted-foreground flex items-center gap-0.5" title="AI no pudo extraer la fecha del PDF">
+                                <AlertCircle className="size-2.5" />Sin extracción
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-muted-foreground/60 flex items-center gap-0.5" title="Fecha de contrato aún no registrada">
+                                <Clock className="size-2.5" />Fecha pendiente
+                              </span>
+                            )
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
@@ -1634,6 +1682,7 @@ export default function ValidacionContratosPDF() {
       <EditValidacionModal
         row={editRow}
         onClose={() => setEditRow(null)}
+        hasFechaColumnas={hasFechaColumnas}
       />
     </div>
   );
