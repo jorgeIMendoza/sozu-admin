@@ -387,7 +387,7 @@ function TabPersonal() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entidades_relacionadas')
-        .select('id, id_persona, activo, personas(id, nombre_legal, nombre_comercial, email, telefono)')
+        .select('id, id_persona, activo, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, nombre_comercial, email, telefono)')
         .eq('id_tipo_entidad', ID_TIPO_PERSONAL)
         .order('fecha_creacion', { ascending: false });
       if (error) throw error;
@@ -543,7 +543,7 @@ function TabProveedores() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entidades_relacionadas')
-        .select('id, id_persona, activo, personas(id, nombre_legal, nombre_comercial, email, telefono)')
+        .select('id, id_persona, activo, personas!entidades_relacionadas_id_persona_fkey(id, nombre_legal, nombre_comercial, email, telefono)')
         .eq('id_tipo_entidad', ID_TIPO_PROVEEDOR)
         .order('fecha_creacion', { ascending: false });
       if (error) throw error;
