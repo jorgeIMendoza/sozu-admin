@@ -38,6 +38,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 // ─── FilterAutocomplete ────────────────────────────────────────────────────────
@@ -592,6 +593,9 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function EstadosCuenta() {
+  const { profile } = useAuth();
+  const isSuperAdmin = profile?.rol_id === 1;
+
   const { data: proyectos = [] } = useProyectosSozu();
   const { data: bancos = [] } = useBancos();
   const { data: cuentasSozu = [] } = useCuentasSozu();
@@ -797,13 +801,15 @@ export default function EstadosCuenta() {
                         >
                           <FileText className="size-4" />
                         </button>
-                        <button
-                          onClick={() => setEditUrlRow(row)}
-                          title="Actualizar URL"
-                          className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => setEditUrlRow(row)}
+                            title="Actualizar URL"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
