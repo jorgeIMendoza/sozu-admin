@@ -1584,9 +1584,13 @@ export default function ValidacionContratosPDF() {
                             </span>
                           ) : c.fecha_extraida ? (
                             c.fecha_compra?.substring(0, 10) !== c.fecha_extraida.substring(0, 10) ? (
-                              <span className="text-[9px] text-amber-600 flex items-center gap-0.5">
-                                <Calendar className="size-2.5" />Fecha diferente
-                              </span>
+                              <div className="text-center">
+                                <span className="text-[9px] text-amber-600 flex items-center justify-center gap-0.5">
+                                  <Calendar className="size-2.5" />Fecha diferente
+                                </span>
+                                <p className="text-[9px] text-muted-foreground tabular-nums">PDF: {fmtDate(c.fecha_extraida)}</p>
+                                <p className="text-[9px] text-muted-foreground tabular-nums">DB: {fmtDate(c.fecha_compra)}</p>
+                              </div>
                             ) : (
                               <span className="text-[9px] text-emerald-600 flex items-center gap-0.5">
                                 <Calendar className="size-2.5" />Fecha OK
