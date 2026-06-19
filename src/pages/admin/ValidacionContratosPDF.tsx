@@ -1180,7 +1180,7 @@ export default function ValidacionContratosPDF() {
       const [valRes, personasDuenoRes] = await Promise.all([
         docIds.length
           ? (supabase as any).from("contrato_validaciones")
-              .select("id_documento, estado, monto_real, motivo, fecha_extraida, estado_fecha, fecha_creacion")
+              .select("id_documento, estado, monto_real, motivo, fecha_creacion")
               .in("id_documento", docIds)
               .order("fecha_creacion", { ascending: false })
           : Promise.resolve({ data: [] }),
