@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Inbox, Workflow, BarChart3, Users, ArrowLeft, LogOut, Menu, LucideIcon,
+  Inbox, Workflow, BarChart3, Users, Landmark, ArrowLeft, LogOut, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
 import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { usePortalNav } from "@/hooks/usePortalNav";
+import { usePortalNav, type PortalNavItem } from "@/hooks/usePortalNav";
 
 const BANCOS_MENU_ID = 32;
 
@@ -19,7 +19,22 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-bancos/pipeline": Workflow,
   "/admin/portal-bancos/tablero":  BarChart3,
   "/admin/portal-bancos/equipo":   Users,
+  "/admin/portal-bancos/bancos":   Landmark,
 };
+
+// Rutas de administración: solo visibles para Super Admin (rol_id=1).
+const ADMIN_ONLY_PATHS = new Set([
+  "/admin/portal-bancos/equipo",
+  "/admin/portal-bancos/bancos",
+]);
+
+// Ítems de administración garantizados para Super Admin, aunque su submenu aún
+// no exista en BD (la navegación del portal se lee de `submenus`). Así el
+// Administrador funciona sin depender del INSERT del menú.
+const ADMIN_ITEMS: PortalNavItem[] = [
+  { path: "/admin/portal-bancos/equipo", label: "Equipo", icon: Users },
+  { path: "/admin/portal-bancos/bancos", label: "Bancos", icon: Landmark },
+];
 
 export const PortalBancosLayout = () => {
   const location = useLocation();
@@ -27,7 +42,12 @@ export const PortalBancosLayout = () => {
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const NAV = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
+  const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
+  const isSuperAdmin = profile?.rol_id === 1;
+  // Operativo (todos): lo que viene de BD sin las rutas de administración.
+  const operativos = navAll.filter((i) => !ADMIN_ONLY_PATHS.has(i.path));
+  // Super Admin ve además Equipo y Bancos (garantizados aunque falte el submenu en BD).
+  const NAV = isSuperAdmin ? [...operativos, ...ADMIN_ITEMS] : operativos;
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";

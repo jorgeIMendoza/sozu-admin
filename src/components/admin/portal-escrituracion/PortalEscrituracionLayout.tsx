@@ -16,6 +16,7 @@ import {
   Scale,
   HeartHandshake,
   GitBranch,
+  FileSearch,
   ClipboardList,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -39,10 +40,11 @@ const navItems: NavItem[] = [
   { label: "Créditos Hipotecarios", path: "/admin/portal-escrituracion/credito",        icon: Landmark },
   { label: "Programar Citas",       path: "/admin/portal-escrituracion/citas",          icon: CalendarDays },
   { label: "Demandas",              path: "/admin/portal-escrituracion/demandas",       icon: Scale },
-  { label: "Entregas",              path: "/admin/portal-escrituracion/entregas",                    icon: PackageCheck },
-  { label: "Config. Checklist",     path: "/admin/portal-escrituracion/checklist-configuracion",    icon: ClipboardList },
-  { label: "Postventa",             path: "/admin/portal-escrituracion/postventa",                  icon: HeartHandshake },
-  { label: "Workflow",              path: "/admin/portal-escrituracion/workflow",                    icon: GitBranch },
+  { label: "Entregas",              path: "/admin/portal-escrituracion/entregas",                       icon: PackageCheck },
+  { label: "Config. Checklist",     path: "/admin/portal-escrituracion/checklist-configuracion",       icon: ClipboardList },
+  { label: "Postventa",             path: "/admin/portal-escrituracion/postventa",                     icon: HeartHandshake },
+  { label: "Workflow",              path: "/admin/portal-escrituracion/workflow",                       icon: GitBranch },
+  { label: "Validación Contratos",  path: "/admin/portal-escrituracion/validacion-contratos",          icon: FileSearch },
 ];
 
 export const PortalEscrituracionLayout = () => {

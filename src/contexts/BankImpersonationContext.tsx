@@ -1,58 +1,69 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-import { DEFAULT_BANK_AGENT_ID, useBankAgentsStore, type Agent } from "@/lib/portal-bancos/agents-store";
+import {
+  useBancosConvenio,
+  type BancoConvenio,
+} from "@/hooks/usePortalBancos/useBancosConvenio";
 
-interface BankImpersonationContextType {
-  impersonatedAgentId: string;
-  setImpersonatedAgentId: (id: string) => void;
-  clearImpersonation: () => void;
-  isImpersonating: boolean;
+/**
+ * Scope por banco del Portal Bancos.
+ *
+ * Antes era una impersonación de agentes mock; ahora simplemente determina qué
+ * banco con convenio (real) se está viendo en las pantallas operativas. El
+ * selector solo se muestra a Super Admin (ver `BankImpersonationSelector`).
+ */
+
+interface BankScopeContextType {
+  selectedBancoId: number | null;
+  setSelectedBancoId: (id: number | null) => void;
 }
 
-const STORAGE_KEY = "sozu-portal-bancos-impersonation";
+const STORAGE_KEY = "sozu-portal-bancos-selected";
 
-const BankImpersonationContext = createContext<BankImpersonationContextType>({
-  impersonatedAgentId: DEFAULT_BANK_AGENT_ID,
-  setImpersonatedAgentId: () => {},
-  clearImpersonation: () => {},
-  isImpersonating: false,
+const BankScopeContext = createContext<BankScopeContextType>({
+  selectedBancoId: null,
+  setSelectedBancoId: () => {},
 });
 
 export function BankImpersonationProvider({ children }: { children: ReactNode }) {
-  const [agentId, setAgentId] = useState<string>(() => {
-    if (typeof window === "undefined") return DEFAULT_BANK_AGENT_ID;
-    return window.localStorage.getItem(STORAGE_KEY) ?? DEFAULT_BANK_AGENT_ID;
+  const [selectedBancoId, setSelectedBancoIdState] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw ? Number(raw) || null : null;
   });
 
-  const setImpersonatedAgentId = (id: string) => {
-    setAgentId(id);
-    try { window.localStorage.setItem(STORAGE_KEY, id); } catch { /* noop */ }
-  };
-
-  const clearImpersonation = () => {
-    setAgentId(DEFAULT_BANK_AGENT_ID);
-    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+  const setSelectedBancoId = (id: number | null) => {
+    setSelectedBancoIdState(id);
+    try {
+      if (id == null) window.localStorage.removeItem(STORAGE_KEY);
+      else window.localStorage.setItem(STORAGE_KEY, String(id));
+    } catch {
+      /* noop */
+    }
   };
 
   return (
-    <BankImpersonationContext.Provider value={{
-      impersonatedAgentId: agentId,
-      setImpersonatedAgentId,
-      clearImpersonation,
-      isImpersonating: agentId !== DEFAULT_BANK_AGENT_ID,
-    }}>
+    <BankScopeContext.Provider value={{ selectedBancoId, setSelectedBancoId }}>
       {children}
-    </BankImpersonationContext.Provider>
+    </BankScopeContext.Provider>
   );
 }
 
-export function useBankImpersonation() { return useContext(BankImpersonationContext); }
-
-export function useCurrentBankAgent(): Agent | null {
-  const { impersonatedAgentId } = useBankImpersonation();
-  return useBankAgentsStore((s) => s.agents.find((a) => a.id === impersonatedAgentId) ?? null);
+export function useBancoScope() {
+  return useContext(BankScopeContext);
 }
 
-export function visibleLeads<T extends { assignedAgentId?: string }>(agent: Agent, leads: T[]): T[] {
-  if (agent.role === "admin") return leads;
-  return leads.filter((l) => l.assignedAgentId === agent.id);
+/**
+ * Banco con convenio actualmente seleccionado. Si no hay selección explícita,
+ * cae al primer convenio activo. Devuelve `null` mientras no haya convenios
+ * (p.ej. DDL pendiente).
+ */
+export function useCurrentBanco(): BancoConvenio | null {
+  const { selectedBancoId } = useBancoScope();
+  const { data: convenios = [] } = useBancosConvenio();
+  if (convenios.length === 0) return null;
+  if (selectedBancoId != null) {
+    const match = convenios.find((b) => b.id_banco === selectedBancoId);
+    if (match) return match;
+  }
+  return convenios.find((b) => b.activo) ?? convenios[0];
 }
