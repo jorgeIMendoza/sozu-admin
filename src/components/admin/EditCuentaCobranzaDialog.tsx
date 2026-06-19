@@ -472,11 +472,26 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     enabled: !!ofertaProductoData.id_producto && !!ofertaProductoData.id_propiedad && tipoCuenta === 'Producto'
   });
 
+  // Entidad DUEÑA (vendedor) según tipo de cuenta:
+  //   Producto/Servicio -> productos_servicios.id_entidad_relacionada_dueno (vía ofertas.id_producto)
+  //   Propiedad          -> propiedades.id_entidad_relacionada_dueno
+  // Antes siempre usaba el dueño de la propiedad, mostrando al dueño del depto en cuentas de producto.
   const { data: vendedorDetalle } = useQuery({
-    queryKey: ["vendedor_detalle", propiedadDetalle?.id_entidad_relacionada_dueno],
+    queryKey: ["vendedor_detalle", ofertaTipoData?.id_producto, propiedadDetalle?.id_entidad_relacionada_dueno],
     queryFn: async () => {
-      if (!propiedadDetalle?.id_entidad_relacionada_dueno) return null;
-      
+      // Resolver la entidad dueña: producto -> dueño del producto; si no -> dueño de la propiedad
+      let duenoEntidadId: number | null | undefined = propiedadDetalle?.id_entidad_relacionada_dueno;
+      if (ofertaTipoData?.id_producto) {
+        const { data: prod } = await supabase
+          .from('productos_servicios')
+          .select('id_entidad_relacionada_dueno')
+          .eq('id', ofertaTipoData.id_producto)
+          .maybeSingle();
+        if (prod?.id_entidad_relacionada_dueno) duenoEntidadId = prod.id_entidad_relacionada_dueno;
+      }
+
+      if (!duenoEntidadId) return null;
+
       const { data } = await supabase
         .from('entidades_relacionadas')
         .select(`
@@ -484,12 +499,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           nombre_api_key_draft,
           personas!entidades_relacionadas_id_persona_fkey(*)
         `)
-        .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
+        .eq('id', duenoEntidadId)
         .single();
 
       return data;
     },
-    enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
+    enabled: !!(ofertaTipoData?.id_producto || propiedadDetalle?.id_entidad_relacionada_dueno)
   });
 
   // Query para obtener estatus de la propiedad
