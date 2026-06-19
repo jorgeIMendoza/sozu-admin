@@ -916,10 +916,12 @@ function EditValidacionModal({ row, onClose, hasFechaColumnas }: { row: Contrato
               </Select>
             </div>
 
-            {/* Monto real (solo si no_coincide) */}
-            {estado === "no_coincide" && (
+            {/* Monto real (cuando no coincide o error) */}
+            {estado !== "coincide" && (
               <div className="space-y-1.5">
-                <Label className="text-[12px]">Monto encontrado en PDF (MXN)</Label>
+                <Label className="text-[12px]">
+                  {estado === "error" ? "Monto real del contrato (si se pudo leer)" : "Monto encontrado en PDF (MXN)"}
+                </Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -962,8 +964,8 @@ function EditValidacionModal({ row, onClose, hasFechaColumnas }: { row: Contrato
               </div>
             )}
 
-            {/* Fecha de compra */}
-            {hasFechaColumnas && (
+            {/* Fecha de compra (solo cuando no coincide o error) */}
+            {hasFechaColumnas && estado !== "coincide" && (
               <>
                 <Separator />
                 <div className="space-y-3">
@@ -1536,7 +1538,7 @@ export default function ValidacionContratosPDF() {
                         {fmtCurrency(c.precio_final)}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-center">
-                        <div className="flex flex-col items-center gap-0.5">
+                        <div className="flex flex-col items-center gap-1">
                           {c.estado_validacion === "coincide" ? (
                             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] gap-1 px-2 py-0.5">
                               <CheckCircle2 className="size-3" />Coincide
@@ -1547,9 +1549,12 @@ export default function ValidacionContratosPDF() {
                                 <XCircle className="size-3" />No coincide
                               </Badge>
                               {c.monto_real !== null && (
-                                <span className="text-[10px] tabular-nums text-red-600 font-medium">
-                                  {fmtCurrency(c.monto_real - c.precio_final)}
-                                </span>
+                                <div className="text-center">
+                                  <p className="text-[10px] text-muted-foreground">PDF: <span className="font-medium tabular-nums text-foreground">{fmtCurrency(c.monto_real)}</span></p>
+                                  <p className="text-[10px] tabular-nums font-semibold text-red-600">
+                                    {c.monto_real > c.precio_final ? "+" : ""}{fmtCurrency(c.monto_real - c.precio_final)}
+                                  </p>
+                                </div>
                               )}
                             </>
                           ) : c.estado_validacion === "error" ? (

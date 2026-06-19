@@ -105,7 +105,7 @@ const OfferPage = () => {
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
   const mockOffer = useOfferById(offerId ?? "");
-  const offer = dbOffer ?? mockOffer;
+  const offer = dbOffer ?? (import.meta.env.DEV ? mockOffer : null);
   const injectOffer = useInjectOffer();
 
   useEffect(() => {
@@ -604,7 +604,7 @@ const OfferPage = () => {
               <OfferLocation location={offer.location} />
             </div>
 
-            <LifestyleCountryClubSection zoneName="Country Club" />
+            {import.meta.env.DEV && <LifestyleCountryClubSection zoneName="Country Club" />}
 
             {/* DEVELOPMENT */}
             <div id="development" className={sectionClass("development")}>

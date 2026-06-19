@@ -8,8 +8,10 @@ import type { Agent } from "./agent-data";
 function toEmbedUrl(url: string): string {
   if (!url) return url;
   if (url.includes("/embed/")) return url;
-  const match = url.match(/[?&]v=([^&#]+)/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  const watchMatch = url.match(/[?&]v=([^&#]+)/);
+  if (watchMatch) return `https://www.youtube.com/embed/${watchMatch[1]}`;
+  const shortMatch = url.match(/youtu\.be\/([^?&#]+)/);
+  if (shortMatch) return `https://www.youtube.com/embed/${shortMatch[1]}`;
   return url;
 }
 
@@ -498,6 +500,6 @@ export function useOfferFromDB(ofertaId: string) {
     queryKey: ["oferta-db", ofertaId],
     queryFn:  () => fetchOfertaFromDB(ofertaId),
     enabled:  !!ofertaId && !isNaN(parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10)),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 }
