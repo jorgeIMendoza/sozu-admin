@@ -345,7 +345,7 @@ const Propiedades = () => {
   } = useProjectAccess();
   
   // Page permissions
-  const { canCreate, canUpdate, canDelete, canGenerateOffer, isLoading: isLoadingPermissions, isSuperAdmin } = usePagePermissions('/admin/propiedades');
+  const { canCreate, canUpdate, canDelete, canGenerateOffer, canGenerateDigitalOffer, isLoading: isLoadingPermissions, isSuperAdmin } = usePagePermissions('/admin/propiedades');
   
   // Activity logger
   const { registrarAprobacion, registrarEliminacion, registrarCreacion } = useActivityLogger();
@@ -4954,10 +4954,11 @@ const Propiedades = () => {
                           )}
                           {/* Generar oferta para propiedades Disponible - si es Reventa, forzar modo manual */}
                           {(canGenerateOffer || isSuperAdmin) && property.disponibilidad === "Disponible" && property.tiene_sozu_como_inmobiliaria && (
-                            <NewOfferDialog 
-                              propertyId={property.id} 
+                            <NewOfferDialog
+                              propertyId={property.id}
                               propertyNumber={property.numero_propiedad}
                               forceManualMode={property.tipo_transaccion === "Re-venta"}
+                              enableDigitalOffer={canGenerateDigitalOffer || isSuperAdmin}
                             />
                           )}
                           {/* No mostrar botón de generar oferta de productos para propiedades en Reventa */}

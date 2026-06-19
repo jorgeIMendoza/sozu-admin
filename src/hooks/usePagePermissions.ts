@@ -10,6 +10,7 @@ interface PagePermissions {
   canApprove: boolean;
   canExport: boolean;
   canGenerateOffer: boolean;
+  canGenerateDigitalOffer: boolean;
 }
 
 const DEFAULT_PERMISSIONS: PagePermissions = {
@@ -20,6 +21,7 @@ const DEFAULT_PERMISSIONS: PagePermissions = {
   canApprove: false,
   canExport: false,
   canGenerateOffer: false,
+  canGenerateDigitalOffer: false,
 };
 
 const SUPER_ADMIN_PERMISSIONS: PagePermissions = {
@@ -30,6 +32,7 @@ const SUPER_ADMIN_PERMISSIONS: PagePermissions = {
   canApprove: true,
   canExport: true,
   canGenerateOffer: true,
+  canGenerateDigitalOffer: true,
 };
 
 export function usePagePermissions(pagePath: string) {
@@ -110,6 +113,7 @@ export function usePagePermissions(pagePath: string) {
         canApprove: permissionNames.has('aprobar'),
         canExport: permissionNames.has('exportar'),
         canGenerateOffer: permissionNames.has('generar_oferta'),
+        canGenerateDigitalOffer: permissionNames.has('generar_oferta_digital'),
       });
       hasLoadedOnce.current = true;
     } catch (err) {
