@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  AlertCircle, Car, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
+  AlertCircle, Calendar, Car, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
   ChevronUp, Clock, Eye, FileSearch, FileText, Home,
   Info, Loader2, Package, Pencil, RotateCw, XCircle,
 } from "lucide-react";
@@ -36,6 +36,8 @@ interface ContratoRow {
   estado_validacion: "coincide" | "no_coincide" | "error" | null;
   monto_real: number | null;
   motivo: string | null;
+  fecha_extraida: string | null;
+  estado_fecha: string | null;
 }
 
 interface CuentaDetalle {
@@ -115,7 +117,7 @@ function ContratoViewerModal({ url, onClose }: { url: string | null; onClose: ()
             {url && (
               <a href={url} target="_blank" rel="noreferrer"
                 className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mr-7">
-                Abrir en pestana -&gt;
+                Abrir en pestaña →
               </a>
             )}
           </div>
@@ -493,7 +495,7 @@ function CuentaDetalleModal({
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : !detalle ? (
-          <p className="text-[13px] text-destructive px-5 py-6">No se pudo cargar la informacion de esta cuenta.</p>
+          <p className="text-[13px] text-destructive px-5 py-6">No se pudo cargar la información de esta cuenta.</p>
         ) : (
           <div className="px-5 pb-6 pt-4 space-y-5">
 
@@ -630,7 +632,7 @@ function CuentaDetalleModal({
                   </div>
                   <p className="text-[11px] text-muted-foreground/60 mt-1.5 flex items-center gap-1">
                     <Info className="size-3 shrink-0" />
-                    Validacion PDF aplica solo al precio del departamento vs contrato firmado.
+                    Validación PDF aplica solo al precio del departamento vs contrato firmado.
                   </p>
                 </div>
               </>
@@ -772,17 +774,25 @@ function CuentaDetalleModal({
 // ── Modal: edición manual de validación ────────────────────────────────────────
 
 function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClose: () => void }) {
-  const [estado, setEstado]       = useState<"coincide" | "no_coincide" | "error">("coincide");
-  const [montoReal, setMontoReal] = useState("");
-  const [motivo, setMotivo]       = useState("");
+  const [estado, setEstado]             = useState<"coincide" | "no_coincide" | "error">("coincide");
+  const [montoReal, setMontoReal]       = useState("");
+  const [motivo, setMotivo]             = useState("");
+  const [actualizarFechaDB, setActualizarFechaDB] = useState(false);
   const queryClient = useQueryClient();
   const { toast }   = useToast();
+
+  const fechaDBStr  = row?.fecha_compra?.substring(0, 10) ?? null;
+  const fechaPDFStr = row?.fecha_extraida?.substring(0, 10) ?? null;
+  const fechasDifieren    = !!(fechaDBStr && fechaPDFStr && fechaDBStr !== fechaPDFStr);
+  const tieneFechaExtraida = !!fechaPDFStr;
+  const sinExtraccion      = row?.estado_fecha === "sin_extraccion" && !tieneFechaExtraida;
 
   useEffect(() => {
     if (!row) return;
     setEstado(row.estado_validacion ?? "coincide");
     setMontoReal(row.monto_real != null ? String(row.monto_real) : String(row.precio_final));
     setMotivo(row.motivo ?? "");
+    setActualizarFechaDB(false);
   }, [row]);
 
   const mutation = useMutation({
@@ -792,6 +802,14 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
         estado === "coincide"
           ? row.precio_final
           : parseFloat(montoReal.replace(/,/g, "")) || null;
+
+      let estadoFechaFinal: string | null = row.estado_fecha ?? null;
+      if (tieneFechaExtraida) {
+        if (actualizarFechaDB)  estadoFechaFinal = "actualizado";
+        else if (fechasDifieren) estadoFechaFinal = "no_coincide";
+        else                     estadoFechaFinal = "coincide";
+      }
+
       const { error } = await (supabase as any)
         .from("contrato_validaciones")
         .insert({
@@ -800,12 +818,23 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
           monto_real:     montoRealNum,
           estado,
           motivo:         motivo.trim() || null,
+          ...(estadoFechaFinal !== null ? { estado_fecha: estadoFechaFinal } : {}),
+          ...(row.fecha_extraida       ? { fecha_extraida: row.fecha_extraida } : {}),
         });
       if (error) throw error;
+
+      if (actualizarFechaDB && row.fecha_extraida) {
+        const { error: errFecha } = await supabase
+          .from("cuentas_cobranza")
+          .update({ fecha_compra: row.fecha_extraida.substring(0, 10) })
+          .eq("id", row.cuenta_id);
+        if (errFecha) throw errFecha;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["validacion-contratos-pdf"] });
-      toast({ title: "Validacion actualizada correctamente" });
+      queryClient.invalidateQueries({ queryKey: ["cuenta-detalle-modal"] });
+      toast({ title: "Validación actualizada correctamente" });
       onClose();
     },
     onError: (err: any) => {
@@ -855,9 +884,9 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
               </div>
             )}
 
-            {/* Estado */}
+            {/* Estado monto */}
             <div className="space-y-1.5">
-              <Label className="text-[12px]">Estado de validacion</Label>
+              <Label className="text-[12px]">Estado de validacion (monto)</Label>
               <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue />
@@ -895,6 +924,74 @@ function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClos
                   </p>
                 )}
               </div>
+            )}
+
+            {/* Fecha de compra */}
+            {(tieneFechaExtraida || sinExtraccion) && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
+                    <Calendar className="size-3" />
+                    Fecha de compra
+                  </p>
+
+                  {sinExtraccion && (
+                    <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 text-[12px] text-muted-foreground flex items-center gap-2">
+                      <Info className="size-4 shrink-0" />
+                      AI no pudo extraer la fecha del PDF
+                    </div>
+                  )}
+
+                  {tieneFechaExtraida && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg bg-muted/40 border border-border px-3 py-2">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">En base de datos</p>
+                          <p className="text-[13px] font-medium tabular-nums">{fmtDate(row.fecha_compra)}</p>
+                        </div>
+                        <div className={cn(
+                          "rounded-lg border px-3 py-2",
+                          fechasDifieren ? "bg-amber-50 border-amber-200" : "bg-muted/40 border-border"
+                        )}>
+                          <p className={cn("text-[10px] mb-0.5", fechasDifieren ? "text-amber-600" : "text-muted-foreground")}>
+                            Extraida del PDF
+                          </p>
+                          <p className={cn("text-[13px] font-medium tabular-nums", fechasDifieren ? "text-amber-700" : "")}>
+                            {fmtDate(row.fecha_extraida)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {!fechasDifieren && (
+                        <div className="flex items-center gap-2 text-[12px] text-emerald-600">
+                          <CheckCircle2 className="size-4" />
+                          Fechas coinciden
+                        </div>
+                      )}
+
+                      {fechasDifieren && (
+                        <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={actualizarFechaDB}
+                            onChange={(e) => setActualizarFechaDB(e.target.checked)}
+                            className="mt-0.5 rounded shrink-0"
+                          />
+                          <div>
+                            <p className="text-[12px] text-amber-800 font-medium">
+                              Actualizar fecha_compra en DB
+                            </p>
+                            <p className="text-[11px] text-amber-600 mt-0.5">
+                              Cambiara {fmtDate(row.fecha_compra)} → {fmtDate(row.fecha_extraida)} en cuentas_cobranza
+                            </p>
+                          </div>
+                        </label>
+                      )}
+                    </>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Motivo */}
@@ -1083,7 +1180,7 @@ export default function ValidacionContratosPDF() {
       const [valRes, personasDuenoRes] = await Promise.all([
         docIds.length
           ? (supabase as any).from("contrato_validaciones")
-              .select("id_documento, estado, monto_real, motivo, fecha_creacion")
+              .select("id_documento, estado, monto_real, motivo, fecha_extraida, estado_fecha, fecha_creacion")
               .in("id_documento", docIds)
               .order("fecha_creacion", { ascending: false })
           : Promise.resolve({ data: [] }),
@@ -1093,10 +1190,16 @@ export default function ValidacionContratosPDF() {
       ]);
 
       // Most recent validation per doc
-      const valByDoc = new Map<number, { estado: string; monto_real: number | null; motivo: string | null }>();
+      const valByDoc = new Map<number, { estado: string; monto_real: number | null; motivo: string | null; fecha_extraida: string | null; estado_fecha: string | null }>();
       for (const v of valRes.data ?? []) {
         if (!valByDoc.has(v.id_documento)) {
-          valByDoc.set(v.id_documento, { estado: v.estado, monto_real: v.monto_real ?? null, motivo: v.motivo ?? null });
+          valByDoc.set(v.id_documento, {
+            estado: v.estado,
+            monto_real: v.monto_real ?? null,
+            motivo: v.motivo ?? null,
+            fecha_extraida: v.fecha_extraida ?? null,
+            estado_fecha: v.estado_fecha ?? null,
+          });
         }
       }
 
@@ -1141,6 +1244,8 @@ export default function ValidacionContratosPDF() {
           estado_validacion: (valInfo?.estado ?? null) as ContratoRow["estado_validacion"],
           monto_real:        valInfo?.monto_real != null ? safeNum(valInfo.monto_real) : null,
           motivo:            valInfo?.motivo ?? null,
+          fecha_extraida:    valInfo?.fecha_extraida ?? null,
+          estado_fecha:      valInfo?.estado_fecha ?? null,
         });
       }
 
@@ -1191,9 +1296,9 @@ export default function ValidacionContratosPDF() {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Validacion Contratos PDF</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Validación Contratos PDF</h1>
         <p className="text-muted-foreground mt-1">
-          Contratos de propiedades SOZU - verificacion precio PDF vs precio DB (departamento)
+          Contratos de propiedades SOZU — verificación precio PDF vs precio DB (departamento)
         </p>
       </div>
 
@@ -1287,7 +1392,7 @@ export default function ValidacionContratosPDF() {
           </SelectContent>
         </Select>
         <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
-          {isLoading ? "Cargando..." : `${filtered.length} de ${stats.total} - Pag. ${currentPage}/${totalPages}`}
+          {isLoading ? "Cargando..." : `${filtered.length} de ${stats.total} — Pág. ${currentPage}/${totalPages}`}
         </p>
       </div>
 
@@ -1358,37 +1463,60 @@ export default function ValidacionContratosPDF() {
                         {fmtCurrency(c.precio_final)}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-center">
-                        {c.estado_validacion === "coincide" ? (
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] gap-1 px-2 py-0.5">
-                            <CheckCircle2 className="size-3" />Coincide
-                          </Badge>
-                        ) : c.estado_validacion === "no_coincide" ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[11px] gap-1 px-2 py-0.5">
-                              <XCircle className="size-3" />No coincide
+                        <div className="flex flex-col items-center gap-0.5">
+                          {c.estado_validacion === "coincide" ? (
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] gap-1 px-2 py-0.5">
+                              <CheckCircle2 className="size-3" />Coincide
                             </Badge>
-                            {c.monto_real !== null && (
-                              <span className="text-[10px] tabular-nums text-red-600 font-medium">
-                                {fmtCurrency(c.monto_real - c.precio_final)}
-                              </span>
-                            )}
-                          </div>
-                        ) : c.estado_validacion === "error" ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[11px] gap-1 px-2 py-0.5">
-                              <AlertCircle className="size-3" />Error
+                          ) : c.estado_validacion === "no_coincide" ? (
+                            <>
+                              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[11px] gap-1 px-2 py-0.5">
+                                <XCircle className="size-3" />No coincide
+                              </Badge>
+                              {c.monto_real !== null && (
+                                <span className="text-[10px] tabular-nums text-red-600 font-medium">
+                                  {fmtCurrency(c.monto_real - c.precio_final)}
+                                </span>
+                              )}
+                            </>
+                          ) : c.estado_validacion === "error" ? (
+                            <>
+                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[11px] gap-1 px-2 py-0.5">
+                                <AlertCircle className="size-3" />Error
+                              </Badge>
+                              {c.motivo && (
+                                <span className="text-[10px] text-amber-600 max-w-[120px] truncate" title={c.motivo}>
+                                  {c.motivo}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <Badge variant="outline" className="border-border text-muted-foreground text-[11px] px-2 py-0.5">
+                              Sin registro
                             </Badge>
-                            {c.motivo && (
-                              <span className="text-[10px] text-amber-600 max-w-[120px] truncate" title={c.motivo}>
-                                {c.motivo}
+                          )}
+                          {/* Fecha indicator */}
+                          {c.fecha_extraida && (() => {
+                            const ef = c.estado_fecha;
+                            const difiere = c.fecha_compra?.substring(0, 10) !== c.fecha_extraida.substring(0, 10);
+                            if (ef === "actualizado") return (
+                              <span className="text-[9px] text-blue-600 flex items-center gap-0.5">
+                                <Calendar className="size-2.5" />Fecha actualizada
                               </span>
-                            )}
-                          </div>
-                        ) : (
-                          <Badge variant="outline" className="border-border text-muted-foreground text-[11px] px-2 py-0.5">
-                            Sin registro
-                          </Badge>
-                        )}
+                            );
+                            if (ef === "no_coincide" || (!ef && difiere)) return (
+                              <span className="text-[9px] text-amber-600 flex items-center gap-0.5">
+                                <Calendar className="size-2.5" />Fecha diferente
+                              </span>
+                            );
+                            if (ef === "coincide" || (!ef && !difiere)) return (
+                              <span className="text-[9px] text-emerald-600 flex items-center gap-0.5">
+                                <Calendar className="size-2.5" />Fecha OK
+                              </span>
+                            );
+                            return null;
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
