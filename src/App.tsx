@@ -61,6 +61,7 @@ const Inmobiliarias = lazyRetry(() => import("./pages/admin/Inmobiliarias"));
 const Administradoras = lazyRetry(() => import("./pages/admin/Administradoras"));
 const Notarias = lazyRetry(() => import("./pages/admin/Notarias"));
 const Bancos = lazyRetry(() => import("./pages/admin/Bancos"));
+const CuentasSozu = lazyRetry(() => import("./pages/admin/CuentasSozu"));
 const Prospectos = lazyRetry(() => import("./pages/admin/Prospectos"));
 const Compradores = lazyRetry(() => import("./pages/admin/Compradores"));
 const DetalleCuentaMantenimiento = lazyRetry(() => import("./pages/admin/DetalleCuentaMantenimiento"));
@@ -97,6 +98,8 @@ const ConfiguracionReportes = lazyRetry(() => import("./pages/admin/Configuracio
 const VersionProduccion = lazyRetry(() => import("./pages/admin/VersionProduccion"));
 const ReportesInventarios = lazyRetry(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas"));
+const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
+const EstadosCuenta = lazyRetry(() => import("./pages/admin/finanzas/EstadosCuenta"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -695,6 +698,7 @@ const App = () => (
                   <Route path="administradoras" element={<Administradoras />} />
                   <Route path="notarias" element={<Notarias />} />
                   <Route path="bancos" element={<Bancos />} />
+                  <Route path="cuentas-sozu" element={<CuentasSozu />} />
                   <Route path="prospectos" element={<Prospectos />} />
                   <Route path="compradores" element={<Compradores />} />
                   <Route path="vendedores" element={<Vendedores />} />
@@ -738,6 +742,8 @@ const App = () => (
                  <Route path="version-produccion" element={<VersionProduccion />} />
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
+                  <Route path="finanzas/validacion-contratos" element={<ValidacionContratosPDF />} />
+                  <Route path="finanzas/estados-cuenta" element={<EstadosCuenta />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
@@ -874,6 +880,7 @@ const App = () => (
                   <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
                   <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
                   <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  <Route path="portal-escrituracion/validacion-contratos" element={<ValidacionContratosPDF />} />
                   {/* Portal Notaría — independiente del Portal Escrituración */}
                   <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
                   {/* Portal Jurídico — independiente del Portal Escrituración */}
@@ -1061,6 +1068,7 @@ const App = () => (
                  <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
                  <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                  <Route path="legal-flow/escrituracion/expedientes" element={<LegalFlowEscExpedientes />} />
+                 <Route path="legal-flow/validacion-contratos" element={<ValidacionContratosPDF />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
