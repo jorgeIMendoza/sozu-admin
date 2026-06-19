@@ -333,6 +333,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             descripcion,
             precio_lista,
             id_categoria,
+            id_entidad_relacionada_dueno,
             categorias_producto!productos_servicios_id_categoria_fkey(nombre, tiene_metraje)
           )
         `)
@@ -472,11 +473,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     enabled: !!ofertaProductoData.id_producto && !!ofertaProductoData.id_propiedad && tipoCuenta === 'Producto'
   });
 
+  // Entidad DUEÑA (vendedor) según tipo de cuenta: Producto/Servicio -> dueño del producto;
+  // Propiedad -> dueño de la propiedad. Antes siempre usaba el dueño de la propiedad.
+  const duenoEntidadId = (ofertaTipoData?.id_producto && (ofertaTipoData?.productos_servicios as any)?.id_entidad_relacionada_dueno)
+    ? (ofertaTipoData.productos_servicios as any).id_entidad_relacionada_dueno as number
+    : propiedadDetalle?.id_entidad_relacionada_dueno;
+
   const { data: vendedorDetalle } = useQuery({
-    queryKey: ["vendedor_detalle", propiedadDetalle?.id_entidad_relacionada_dueno],
+    queryKey: ["vendedor_detalle", duenoEntidadId],
     queryFn: async () => {
-      if (!propiedadDetalle?.id_entidad_relacionada_dueno) return null;
-      
+      if (!duenoEntidadId) return null;
+
       const { data } = await supabase
         .from('entidades_relacionadas')
         .select(`
@@ -484,12 +491,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           nombre_api_key_draft,
           personas!entidades_relacionadas_id_persona_fkey(*)
         `)
-        .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
+        .eq('id', duenoEntidadId)
         .single();
 
       return data;
     },
-    enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
+    enabled: !!duenoEntidadId
   });
 
   // Query para obtener estatus de la propiedad
