@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
+import { expandirTramos } from "@/utils/escalonadoUtils";
 
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
@@ -60,14 +61,38 @@ function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
     const finalPrice  = listPrice * (1 + pctDesc / 100);
     const pctEnganche = Number(e.porcentaje_enganche ?? 0);
-    const pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
-    const pctEntrega  = Number(e.porcentaje_entrega ?? 0);
-    const nMensual    = Number(e.numero_mensualidades ?? 0);
+    const downPaymentAmount = finalPrice * (pctEnganche / 100);
 
-    const downPaymentAmount   = finalPrice * (pctEnganche / 100);
-    const installmentsTotal   = finalPrice * (pctMensual / 100);
-    const monthlyAmount       = nMensual > 0 ? installmentsTotal / nMensual : 0;
-    const finalPaymentAmount  = finalPrice * (pctEntrega / 100);
+    // Escalonado: tramos with fixed monthly amounts (stored in centavos)
+    const tramos = e.tramos_mensualidad;
+    const isEscalonado = Array.isArray(tramos) && tramos.length > 0
+      && tramos.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
+
+    let nMensual: number;
+    let monthlyAmount: number;
+    let installmentsTotal: number;
+    let finalPaymentAmount: number;
+    let pctMensual: number;
+    let pctEntrega: number;
+
+    if (isEscalonado) {
+      const tramosExpanded = expandirTramos(tramos);
+      nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+      installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
+        return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
+      }, 0);
+      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
+      pctMensual         = finalPrice > 0 ? (installmentsTotal / finalPrice) * 100 : 0;
+      pctEntrega         = finalPrice > 0 ? (finalPaymentAmount / finalPrice) * 100 : 0;
+    } else {
+      pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
+      pctEntrega  = Number(e.porcentaje_entrega ?? 0);
+      nMensual    = Number(e.numero_mensualidades ?? 0);
+      installmentsTotal  = finalPrice * (pctMensual / 100);
+      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      finalPaymentAmount = finalPrice * (pctEntrega / 100);
+    }
 
     return {
       id: String(e.id),
@@ -173,7 +198,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     // Esquemas filtrados por proyecto (no todos los esquemas de la BD)
     supabase
       .from("esquemas_pago")
-      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden")
+      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden, tramos_mensualidad")
       .eq("id_proyecto", proyectoId)
       .eq("activo", true)
       .order("orden", { ascending: true }),

@@ -1,6 +1,5 @@
 import sozuLogo from "@/assets/sozu-logo.png";
 import AmenitiesGridSection from "@/components/offer/AmenitiesGridSection";
-import LifestyleCountryClubSection from "@/components/offer/LifestyleCountryClubSection";
 import PaymentPlansComparatorSection from "@/components/offer/PaymentPlansComparatorSection";
 import Tour360Section from "@/components/offer/Tour360Section";
 import AgentCard from "@/components/offer/AgentCard";
@@ -603,8 +602,6 @@ const OfferPage = () => {
             <div id="location" className={sectionClass("location")}>
               <OfferLocation location={offer.location} />
             </div>
-
-            {import.meta.env.DEV && <LifestyleCountryClubSection zoneName="Country Club" />}
 
             {/* DEVELOPMENT */}
             <div id="development" className={sectionClass("development")}>
