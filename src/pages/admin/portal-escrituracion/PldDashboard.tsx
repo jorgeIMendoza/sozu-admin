@@ -1,5 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  derivePld, clasificarRfcCurp, normalizarTexto, normalizarRfc,
+  type PldStatus, type RiskLevel, type PagoInfo, type OrdenanteDistinto,
+} from '@/lib/pld/pld-engine';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -12,33 +16,7 @@ import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type PldStatus = 'APROBADO' | 'PENDIENTE' | 'INCOMPLETO' | 'EN_REVISION' | 'OBSERVADO' | 'BLOQUEADO';
-type RiskLevel = 'BAJO' | 'MEDIO' | 'ALTO';
 type PldFilter  = 'TODOS' | 'APROBADOS' | 'INCOMPLETOS' | 'RIESGO';
-
-interface PagoInfo {
-  id: number;
-  monto: number;
-  fecha_pago: string;
-  clave_rastreo: string | null;
-  url_cep: string | null;
-  url_recibo: string | null;
-  descripcion: string | null;
-  id_metodos_pago: number | null;   // para detectar pagos en efectivo (id=1)
-  nombre_ordenante: string | null;  // de pagos_stp_raw
-  rfc_ordenante: string | null;     // de pagos_stp_raw.rfc_curp_ordenante clasificado como RFC
-  curp_ordenante: string | null;    // de pagos_stp_raw.rfc_curp_ordenante clasificado como CURP
-}
-
-interface OrdenanteDistinto {
-  pagoId: number;
-  monto: number;
-  fecha_pago: string;
-  nombre_ordenante: string;
-  rfc_ordenante: string | null;
-  curp_ordenante: string | null;
-  clave_rastreo: string;
-}
 
 interface PldRow {
   cuentaId: number;
@@ -88,194 +66,6 @@ interface PldAlert {
   titulo: string;
   descripcion: string;
   fecha: string;
-}
-
-// ─── PLD Engine ───────────────────────────────────────────────────────────────
-
-// Normaliza texto para comparación: minúsculas, sin tildes, sin chars especiales
-function normalizarTexto(s: string | null | undefined): string {
-  return (s ?? '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita tildes/diacríticos
-    .replace(/[^a-z0-9\s]/g, '')  // quita todo lo que no sea letra, número o espacio
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Normaliza RFC: mayúsculas, sin espacios, sin guiones, sin caracteres especiales
-function normalizarRfc(s: string | null | undefined): string {
-  return (s ?? '')
-    .toUpperCase()
-    .replace(/[\s\-\.]/g, '')     // eliminar espacios, guiones, puntos
-    .replace(/[^A-ZÑ&0-9]/g, '') // conservar solo alfanumérico + Ñ + &
-    .trim();
-}
-
-// Detecta si un valor rfc_curp_ordenante es RFC o CURP y lo clasifica
-function clasificarRfcCurp(raw: string | null): { rfc: string | null; curp: string | null } {
-  if (!raw) return { rfc: null, curp: null };
-  const v = raw.toUpperCase().replace(/[\s\-]/g, '');
-  // CURP: exactamente 18 chars con patrón específico
-  if (/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$/.test(v)) {
-    return { rfc: null, curp: v };
-  }
-  // RFC persona física (13) o moral (12)
-  if (/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(v)) {
-    return { rfc: v, curp: null };
-  }
-  // Ambiguo: longitud >= 17 → probable CURP; <= 13 → probable RFC
-  if (v.length >= 17) return { rfc: null, curp: v };
-  if (v.length >= 9)  return { rfc: v,    curp: null };
-  return { rfc: null, curp: null };
-}
-
-function derivePld(
-  pagos: PagoInfo[],
-  precioFinal: number,
-  clienteNombre: string,
-  clienteRfc: string | null,
-  clienteCurp: string | null,
-  valorUma: number,
-): {
-  pldStatus: PldStatus;
-  riesgo: RiskLevel;
-  hasSinCR: boolean;
-  hasSinCep: boolean;
-  // Regla 1 — PRECAUCIÓN: nombre ordenante ≠ nombre cliente
-  hasNombreDistinto: boolean;
-  pagosNombreDistinto: OrdenanteDistinto[];
-  // Regla 2 — BLOQUEO: RFC ordenante ≠ RFC cliente
-  hasRfcDistinto: boolean;
-  pagosRfcDistinto: OrdenanteDistinto[];
-  // Regla 3 — BLOQUEO: efectivo excedido
-  hasEfectivoExcedido: boolean;
-  montoPagadoEfectivo: number;
-  limiteEfectivo: number;
-  // Regla 4 — INFO: CEP sin RFC (solo CURP)
-  hasCepSinRfc: boolean;
-  // Regla 5 — INFO: Comprador sin RFC registrado
-  hasBuyerSinRfc: boolean;
-  // Legacy alias
-  hasOrdenanteDistinto: boolean;
-  pagosOrdenanteDistinto: OrdenanteDistinto[];
-  escrituraBloqueada: boolean;
-  totalPagado: number;
-} {
-  const limiteEfectivo = (valorUma || 0) * 8025;
-  const empty = {
-    pldStatus: 'PENDIENTE' as PldStatus,
-    riesgo: 'BAJO' as RiskLevel,
-    hasSinCR: false, hasSinCep: false,
-    hasNombreDistinto: false, pagosNombreDistinto: [] as OrdenanteDistinto[],
-    hasRfcDistinto: false,    pagosRfcDistinto:    [] as OrdenanteDistinto[],
-    hasEfectivoExcedido: false, montoPagadoEfectivo: 0, limiteEfectivo,
-    hasCepSinRfc: false, hasBuyerSinRfc: false,
-    hasOrdenanteDistinto: false, pagosOrdenanteDistinto: [] as OrdenanteDistinto[],
-    escrituraBloqueada: false, totalPagado: 0,
-  };
-  if (!pagos.length) return empty;
-
-  const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
-  const hasSinCR    = pagos.some(p => !p.clave_rastreo);
-  const hasSinCep   = pagos.some(p => p.clave_rastreo && !p.url_cep);
-
-  const clienteNorm     = normalizarTexto(clienteNombre);
-  const clienteRfcNorm  = normalizarRfc(clienteRfc);
-  const clienteCurpNorm = normalizarRfc(clienteCurp);
-
-  // ── Regla 1: Nombre ordenante ≠ nombre cliente → PRECAUCIÓN ──────────────
-  const seenNombre = new Set<string>();
-  const pagosNombreDistinto: OrdenanteDistinto[] = [];
-  for (const p of pagos) {
-    if (!p.clave_rastreo || !p.nombre_ordenante) continue;
-    if (normalizarTexto(p.nombre_ordenante) === clienteNorm) continue; // coincide → sin alerta
-    const key = normalizarTexto(p.nombre_ordenante);
-    if (!seenNombre.has(key)) {
-      seenNombre.add(key);
-      pagosNombreDistinto.push({
-        pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
-        nombre_ordenante: p.nombre_ordenante, rfc_ordenante: p.rfc_ordenante,
-        curp_ordenante: p.curp_ordenante,
-        clave_rastreo: p.clave_rastreo,
-      });
-    }
-  }
-  const hasNombreDistinto = pagosNombreDistinto.length > 0;
-
-  // ── Regla 2: RFC/CURP ordenante ≠ RFC/CURP cliente → BLOQUEO ────────────
-  // Compara el valor del CEP contra RFC Y CURP del comprador.
-  // Si coincide con cualquiera → sin alerta. Si no coincide → BLOQUEO.
-  const seenRfc = new Set<string>();
-  const pagosRfcDistinto: OrdenanteDistinto[] = [];
-  // ── Regla 5: Comprador sin RFC ni CURP registrado → alerta informativa ────
-  const hasBuyerSinRfc = !clienteRfcNorm && !clienteCurpNorm &&
-    pagos.some(p => p.clave_rastreo && (p.rfc_ordenante || p.curp_ordenante));
-
-  for (const p of pagos) {
-    if (!p.clave_rastreo) continue;
-
-    // Valor de identidad en el CEP (RFC o CURP, cualquiera que haya)
-    const rawCepVal = p.rfc_ordenante ?? p.curp_ordenante;
-    if (!rawCepVal) continue; // Sin identidad en CEP → no aplicable
-
-    // Comprador sin RFC ni CURP → no se puede verificar, no bloquear
-    if (!clienteRfcNorm && !clienteCurpNorm) continue;
-
-    const cepNorm = normalizarRfc(rawCepVal);
-    const matchesRfc  = !!clienteRfcNorm  && cepNorm === clienteRfcNorm;
-    const matchesCurp = !!clienteCurpNorm && cepNorm === clienteCurpNorm;
-
-    if (matchesRfc || matchesCurp) continue; // coincide con RFC o CURP → sin alerta
-
-    const key = cepNorm;
-    if (!seenRfc.has(key)) {
-      seenRfc.add(key);
-      pagosRfcDistinto.push({
-        pagoId: p.id, monto: p.monto, fecha_pago: p.fecha_pago,
-        nombre_ordenante: p.nombre_ordenante ?? '—',
-        rfc_ordenante: p.rfc_ordenante,
-        curp_ordenante: p.curp_ordenante,
-        clave_rastreo: p.clave_rastreo,
-      });
-    }
-  }
-  const hasRfcDistinto = pagosRfcDistinto.length > 0;
-
-  // ── Regla 3: Efectivo excedido → BLOQUEO ──────────────────────────────────
-  const montoPagadoEfectivo = pagos
-    .filter(p => p.id_metodos_pago === 1) // id=1 = efectivo
-    .reduce((s, p) => s + p.monto, 0);
-  const hasEfectivoExcedido = limiteEfectivo > 0 && montoPagadoEfectivo > limiteEfectivo;
-
-  // ── Status general ────────────────────────────────────────────────────────
-  // BLOQUEO: RFC distinto O efectivo excedido
-  // OBSERVADO (precaución): solo nombre distinto
-  const escrituraBloqueada = hasRfcDistinto || hasEfectivoExcedido;
-  const hasOrdenanteDistinto = hasNombreDistinto || hasRfcDistinto; // legacy alias
-  const pagosOrdenanteDistinto = pagosNombreDistinto; // legacy alias
-
-  const riesgo: RiskLevel = escrituraBloqueada ? 'ALTO' : hasNombreDistinto ? 'MEDIO' : 'BAJO';
-
-  let pldStatus: PldStatus;
-  if (escrituraBloqueada) {
-    pldStatus = 'BLOQUEADO';
-  } else if (hasNombreDistinto) {
-    pldStatus = 'OBSERVADO'; // precaución — no bloquea, requiere revisión
-  } else if (precioFinal > 0 && totalPagado >= precioFinal * 0.99) {
-    pldStatus = 'APROBADO';
-  } else {
-    pldStatus = 'PENDIENTE';
-  }
-
-  return {
-    pldStatus, riesgo, hasSinCR, hasSinCep,
-    hasNombreDistinto, pagosNombreDistinto,
-    hasRfcDistinto,    pagosRfcDistinto,
-    hasEfectivoExcedido, montoPagadoEfectivo, limiteEfectivo,
-    hasCepSinRfc: false, hasBuyerSinRfc,
-    hasOrdenanteDistinto, pagosOrdenanteDistinto,
-    escrituraBloqueada, totalPagado,
-  };
 }
 
 function buildAlerts(rows: PldRow[]): PldAlert[] {
@@ -968,6 +758,15 @@ export function PldDashboard() {
   const [showAlerts, setShowAlerts]     = useState(true);
   const [showBlockDetails, setShowBlockDetails] = useState(false);
 
+  const [searchParams] = useSearchParams();
+  const cuentaParam = searchParams.get('cuenta');
+  useEffect(() => {
+    if (cuentaParam) {
+      const id = Number(cuentaParam);
+      if (id > 0) setSearch(`CC-${String(id).padStart(6, '0')}`);
+    }
+  }, [cuentaParam]);
+
   useEffect(() => { setPage(0); setSelected(null); }, [proyectoId, activeFilter, search, filtroStatus, filtroRiesgo]);
 
   // ── Proyectos ──────────────────────────────────────────────────────────────
@@ -1168,6 +967,15 @@ export function PldDashboard() {
     staleTime: 30_000,
     refetchInterval: 60_000, // polling 60s for near-realtime
   });
+
+  // ── Deep link: auto-select cuenta from ?cuenta= ────────────────────────────
+  useEffect(() => {
+    if (!cuentaParam || rows.length === 0 || selected) return;
+    const id = Number(cuentaParam);
+    const match = rows.find(r => r.cuentaId === id);
+    if (match) setSelected(match);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuentaParam, rows]);
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {

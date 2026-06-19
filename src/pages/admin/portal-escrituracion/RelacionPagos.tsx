@@ -3,15 +3,17 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Download, ExternalLink, X, FileText,
   Loader2, ChevronDown, DollarSign, AlertTriangle,
-  FolderOpen, ArrowLeft,
+  FolderOpen, ArrowLeft, ShieldCheck, ShieldAlert, Shield,
 } from 'lucide-react';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCuentaCobranzaFinancials } from '@/hooks/useCuentaCobranzaFinancials';
+import { useProyectoFinancials } from '@/hooks/useProyectoFinancials';
 import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { usePldForCuenta, type PldPaymentFlagInfo } from '@/hooks/usePldForCuenta';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50;
@@ -81,10 +83,10 @@ function DetailCardSkeleton() {
   );
 }
 
-function TableRowSkeleton() {
+function TableRowSkeleton({ colCount = 10 }: { colCount?: number }) {
   return (
     <tr>
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: colCount }).map((_, i) => (
         <td key={i} className="px-4 py-3.5">
           <Shimmer className="h-4 w-full" />
         </td>
@@ -217,6 +219,65 @@ function AccesorioCard({ titulo, precioFinal, totalPagado, saldoPendiente }: Acc
   );
 }
 
+// ─── PLD sub-components ───────────────────────────────────────────────────────
+
+const PLD_STATUS_CFG: Record<string, { label: string; dotClass: string; cardClass: string; icon: React.ReactNode }> = {
+  BLOQUEADO: { label: 'Bloqueado',       dotClass: 'bg-red-500',     cardClass: 'border-red-300',    icon: <ShieldAlert className="w-4 h-4 text-red-500" /> },
+  OBSERVADO: { label: 'En observación',  dotClass: 'bg-amber-500',   cardClass: 'border-amber-300',  icon: <ShieldAlert className="w-4 h-4 text-amber-500" /> },
+  APROBADO:  { label: 'Aprobado',        dotClass: 'bg-emerald-500', cardClass: 'border-emerald-200', icon: <ShieldCheck className="w-4 h-4 text-emerald-500" /> },
+  PENDIENTE: { label: 'Pendiente',       dotClass: 'bg-slate-400',   cardClass: 'border-slate-200',  icon: <Shield className="w-4 h-4 text-slate-400" /> },
+};
+
+const FLAG_DOT: Record<string, string> = {
+  verde:    'bg-emerald-500',
+  amarillo: 'bg-amber-400',
+  naranja:  'bg-orange-500',
+  rojo:     'bg-red-500',
+  gris:     'bg-slate-300',
+};
+
+interface PldSummaryCardProps {
+  pldStatus: string;
+  motivoPrincipal: string;
+  escrituraBloqueada: boolean;
+  cuentaId: number;
+}
+
+function PldSummaryCard({ pldStatus, motivoPrincipal, escrituraBloqueada, cuentaId }: PldSummaryCardProps) {
+  const navigate = useNavigate();
+  const cfg = PLD_STATUS_CFG[pldStatus] ?? PLD_STATUS_CFG.PENDIENTE;
+  return (
+    <div className={`bg-white border rounded-2xl p-4 shadow-sm ${cfg.cardClass}`}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">PLD</p>
+        {cfg.icon}
+      </div>
+      <div className="flex items-center gap-2 mb-1">
+        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dotClass}`} />
+        <p className={`text-lg font-bold ${
+          pldStatus === 'BLOQUEADO' ? 'text-red-600' :
+          pldStatus === 'OBSERVADO' ? 'text-amber-600' :
+          pldStatus === 'APROBADO'  ? 'text-emerald-600' : 'text-slate-700'
+        }`}>{cfg.label}</p>
+      </div>
+      <p className="text-xs text-slate-500 mt-0.5 leading-snug">{motivoPrincipal}</p>
+      {escrituraBloqueada && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-red-600 font-medium">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Escritura bloqueada
+        </div>
+      )}
+      <button
+        onClick={() => navigate(`/admin/portal-escrituracion/pld?cuenta=${cuentaId}`)}
+        className="mt-3 text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 underline underline-offset-2 decoration-dotted"
+      >
+        <ExternalLink className="w-3 h-3 shrink-0" />
+        Ver en PLD
+      </button>
+    </div>
+  );
+}
+
 interface FilterBarProps {
   proyectoId: number | null;
   proyectos: { id: number; nombre: string }[];
@@ -264,12 +325,16 @@ interface PaymentsTableProps {
   pagos: PagoRecord[];
   isLoading: boolean;
   onViewComprobante: (url: string) => void;
+  flagsPorPago?: Map<number, PldPaymentFlagInfo>;
 }
 
-function PaymentsTable({ pagos, isLoading, onViewComprobante }: PaymentsTableProps) {
+function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago }: PaymentsTableProps) {
+  const hasPld = !!flagsPorPago;
   const HEADERS = [
     'Proyecto', 'Estatus', 'Comprador', 'Depto', 'Producto',
-    'Fecha del Pago', 'Concepto', 'Pago', 'Método de Pago', 'Comprobante',
+    'Fecha del Pago', 'Concepto', 'Pago', 'Método de Pago',
+    ...(hasPld ? ['PLD'] : []),
+    'Comprobante',
   ];
 
   return (
@@ -287,9 +352,10 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante }: PaymentsTablePro
           </thead>
           <tbody className="divide-y divide-slate-100">
             {isLoading
-              ? Array.from({ length: 8 }).map((_, i) => <TableRowSkeleton key={i} />)
+              ? Array.from({ length: 8 }).map((_, i) => <TableRowSkeleton key={i} colCount={HEADERS.length} />)
               : pagos.map((p) => {
                   const comprobanteUrl = p.url_cep || p.url_recibo;
+                  const pldInfo = hasPld ? flagsPorPago!.get(p.pago_id) : undefined;
                   return (
                     <tr key={p.pago_id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="px-4 py-3.5 text-sm text-slate-700 whitespace-nowrap">{p.proyecto ?? '—'}</td>
@@ -306,6 +372,18 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante }: PaymentsTablePro
                       <td className="px-4 py-3.5 text-sm text-slate-600 max-w-[180px] truncate">{normConcepto(p.aplicaciones_detalle ?? [], p.descripcion) ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap tabular-nums">{fmtMxn(p.monto)}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{p.metodo_pago ?? '—'}</td>
+                      {hasPld && (
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          {pldInfo ? (
+                            <span
+                              title={pldInfo.tooltip}
+                              className={`inline-block w-3 h-3 rounded-full cursor-default ${FLAG_DOT[pldInfo.flag] ?? 'bg-slate-300'}`}
+                            />
+                          ) : (
+                            <span className="text-slate-300 text-xs">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         {comprobanteUrl ? (
                           <button
@@ -490,6 +568,14 @@ export function RelacionPagos() {
 
   // isRpMode: activo cuando hay cuenta principal identificada — usa queries directas en tabla
   const isRpMode = !!primaryCuentaId;
+
+  // Financials de proyecto — solo en modo global (sin cuenta principal identificada).
+  // Disabled en rpMode: para ese caso useCuentaCobranzaFinancials es la fuente.
+  const {
+    data: proyectoFinancials,
+    isLoading: proyectoFinancialsLoading,
+    isError: proyectoFinancialsError,
+  } = useProyectoFinancials(isRpMode ? null : proyectoId);
 
   // Transforma pagos directos en PagoRecord[] para reutilizar PaymentsTable sin modificarla
   const rpTableRows = useMemo((): PagoRecord[] => {
@@ -930,31 +1016,52 @@ export function RelacionPagos() {
     },
   });
 
-  // ── Derived account-level values ────────────────────────────────────────────
-  // Para cuenta única: el hook replica EXACTAMENTE la lógica de DetalleCuentaCobranza.
-  // Para multi-cuenta: fallback a los totales genéricos del cuentaResumen.
-  const precioFinal = financials?.precioFinal ?? (cuentaResumen?.precioFinal ?? 0);
+  // ── Derived card values ─────────────────────────────────────────────────────
+  // Switch: rpMode (cuenta individual) → financials + cuentaResumen (sin cambios)
+  //         global (proyecto completo) → proyectoFinancials RPC (datos reales)
+  const precioFinal = isRpMode
+    ? (financials?.precioFinal ?? (cuentaResumen?.precioFinal ?? 0))
+    : (proyectoFinancials?.precio_final ?? 0);
 
-  // Total Pagado: SUM(aplicaciones_pago.monto) excluyendo conceptos 7 y 9
-  const totalPagadoCuenta = financials?.totalPagadoAplicaciones
-    ?? (cuentaResumen?.totalPagadoCuenta ?? totalMonto);
+  const totalPagadoCuenta = isRpMode
+    ? (financials?.totalPagadoAplicaciones ?? (cuentaResumen?.totalPagadoCuenta ?? totalMonto))
+    : (proyectoFinancials?.total_pagado ?? 0);
 
-  // Saldo Pendiente usa totalPagadoReal = SUM(pagos.monto), igual que DetalleCuentaCobranza
-  const haySobrepago  = financials ? financials.haySobrepago : false;
-  const totalPendiente = financials?.saldoPendiente ?? Math.max(0, precioFinal - totalPagadoCuenta);
-  const montoSobrepago = financials?.montoSobrepago ?? 0;
-  const esPagadoCompleto = !!financials && precioFinal > 0 && !financials.haySobrepago && financials.saldoPendiente === 0;
+  const haySobrepago   = isRpMode ? (financials?.haySobrepago ?? false) : false;
+  const totalPendiente = isRpMode
+    ? (financials?.saldoPendiente ?? Math.max(0, precioFinal - totalPagadoCuenta))
+    : (proyectoFinancials?.saldo_pendiente ?? 0);
+  const montoSobrepago = isRpMode ? (financials?.montoSobrepago ?? 0) : 0;
+  const esPagadoCompleto = isRpMode
+    ? (!!financials && precioFinal > 0 && !financials.haySobrepago && financials.saldoPendiente === 0)
+    : false;
 
-  // Pago en efectivo: waterfall aplicaciones_pago WHERE pagos.id_metodos_pago=1
-  // (NO suma pagos.monto directamente)
-  const limiteEfectivo = financials?.limiteEfectivo ?? (((cuentaResumen?.valorUma ?? 0) || 0) * 8025);
-  const pagadoEfectivo = financials?.pagadoEfectivo ?? 0;
-  const aunPermitidoEfectivo = financials?.aunPermitidoEfectivo ?? (limiteEfectivo - pagadoEfectivo);
+  const limiteEfectivo = isRpMode
+    ? (financials?.limiteEfectivo ?? (((cuentaResumen?.valorUma ?? 0) || 0) * 8025))
+    : (proyectoFinancials?.limite_efectivo ?? 0);
+  const pagadoEfectivo = isRpMode
+    ? (financials?.pagadoEfectivo ?? 0)
+    : (proyectoFinancials?.efectivo_pagado ?? 0);
+  const aunPermitidoEfectivo = isRpMode
+    ? (financials?.aunPermitidoEfectivo ?? (limiteEfectivo - pagadoEfectivo))
+    : (proyectoFinancials?.efectivo_aun_permitido ?? 0);
 
-  // Valor de escrituración: propiedad + bodegas + estacionamientos vía waterfall correcto
-  const valorEscrituracion = financials?.valorEscrituracion ?? cuentaResumen?.escrituracion;
+  const valorEscrituracion = isRpMode
+    ? (financials?.valorEscrituracion ?? cuentaResumen?.escrituracion)
+    : (proyectoFinancials?.valor_escrituracion ?? null);
 
-  const isLoadingCards = isLoadingResumen || (!!primaryCuentaId && financialsLoading);
+  const isLoadingCards = isRpMode
+    ? (isLoadingResumen || financialsLoading)
+    : proyectoFinancialsLoading;
+
+  // ── PLD — hook acotado a la cuenta principal ────────────────────────────────
+  // Llamado aquí porque depende de precioFinal y cuentaResumen?.valorUma.
+  const pld = usePldForCuenta(
+    primaryCuentaId,
+    rpPagosCuenta ?? [],
+    cuentaResumen?.valorUma ?? 0,
+    precioFinal,
+  );
 
   // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
   const rpTotalMonto = useMemo(
@@ -1102,20 +1209,28 @@ export function RelacionPagos() {
             </>
           ) : (
             <>
-              <KpiCard label="Total pagos" value={(isRpMode ? (rpPagosCuenta?.length ?? 0) : total).toLocaleString('es-MX')} />
+              <KpiCard label="Total pagos" value={(isRpMode ? (rpPagosCuenta?.length ?? 0) : (proyectoFinancials?.total_pagos ?? 0)).toLocaleString('es-MX')} />
               <KpiCard
                 label="Total pagado"
-                value={fmtMxn(isRpMode ? rpTotalMonto : totalMonto)}
+                value={fmtMxn(isRpMode ? rpTotalMonto : (proyectoFinancials?.total_pagado_todas_cuentas ?? 0))}
                 valueClass="text-emerald-600"
               />
-              <KpiCard label="Con comprobante" value={(isRpMode ? rpConComprobante : totalConCep).toLocaleString('es-MX')} colSpan />
+              <KpiCard label="Con comprobante" value={(isRpMode ? rpConComprobante : (proyectoFinancials?.total_con_comprobante ?? 0)).toLocaleString('es-MX')} colSpan />
             </>
           )}
         </div>
       )}
 
+      {/* Aviso discreto si falla la RPC de proyecto (modo global) */}
+      {hasResults && !isRpMode && proyectoFinancialsError && (
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          No se pudo cargar el resumen financiero del proyecto. Reintenta o recarga la página.
+        </div>
+      )}
+
       {/* ── Cards financieros — siempre visibles cuando hay resultados ─────── */}
-      {hasResults && (isLoadingCards || !!cuentaResumen || !!financials) && (
+      {hasResults && (isLoadingCards || (isRpMode ? (!!cuentaResumen || !!financials) : !!proyectoFinancials)) && (
         <div className="space-y-4 mb-6">
           {/* Fila 1: 4 cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1236,6 +1351,22 @@ export function RelacionPagos() {
                   />
                 </div>
               )}
+
+              {/* PLD — solo en rpMode */}
+              {isRpMode && primaryCuentaId && (
+                pld.isLoading ? (
+                  <div className="md:w-72"><DetailCardSkeleton /></div>
+                ) : (
+                  <div className="md:w-72">
+                    <PldSummaryCard
+                      pldStatus={pld.pldStatus}
+                      motivoPrincipal={pld.motivoPrincipal}
+                      escrituraBloqueada={pld.escrituraBloqueada}
+                      cuentaId={primaryCuentaId}
+                    />
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
@@ -1260,6 +1391,7 @@ export function RelacionPagos() {
                 pagos={pagedPagos}
                 isLoading={displayLoading}
                 onViewComprobante={setViewerUrl}
+                flagsPorPago={isRpMode ? pld.flagsPorPago : undefined}
               />
 
               {/* Paginación */}
