@@ -345,12 +345,14 @@ function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu, userEmail
 
       if (uploadError) throw new Error(uploadError.message);
 
+      const urlCompleta = `${STORAGE_BASE}/${ruta}`;
+
       const { error: insertError } = await (supabase as any).from("estados_cuenta").insert({
         id_proyecto: Number(proyectoId),
         id_cuenta_sozu: Number(cuentaSozuId),
         anio: Number(anio),
         mes: Number(mes),
-        url_estado_cuenta: ruta,
+        url_estado_cuenta: urlCompleta,
         nombre_archivo: archivo.name,
         subido_por: userEmail,
       });
@@ -359,7 +361,7 @@ function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu, userEmail
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["estados-cuenta"] });
-      toast({ title: "Estado de cuenta subido", description: "El archivo se subio correctamente." });
+      toast({ title: "Estado de cuenta subido", description: "El archivo se subió correctamente." });
       handleClose();
     },
     onError: (err: Error) => {
@@ -505,7 +507,7 @@ function UploadDialog({ open, onClose, proyectos, bancos, cuentasSozu, userEmail
               ) : (
                 <div className="text-muted-foreground space-y-1">
                   <Upload className="size-7 mx-auto text-muted-foreground/50" />
-                  <p className="text-sm">Arrastra aqui o <span className="text-primary underline underline-offset-2">selecciona</span></p>
+                  <p className="text-sm">Arrastra aquí o <span className="text-primary underline underline-offset-2">selecciona</span></p>
                   <p className="text-[11px] text-muted-foreground/60">PDF, Excel o CSV</p>
                 </div>
               )}
@@ -591,7 +593,7 @@ function ViewerDialog({ row, onClose }: ViewerDialogProps) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-medium border hover:bg-muted transition-colors"
               >
-                Abrir en pestana
+                Abrir en pestaña
               </a>
             </div>
           </div>
@@ -617,7 +619,7 @@ function ViewerDialog({ row, onClose }: ViewerDialogProps) {
                 rel="noreferrer"
                 className="text-[12px] text-primary underline"
               >
-                Abrir en pestana
+                Abrir en pestaña
               </a>
             </div>
           )}
@@ -653,12 +655,9 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const ruta = url.trim().startsWith("http")
-        ? url.trim().replace(/.*\/estados_cuenta\//, "")
-        : url.trim();
       const { error } = await (supabase as any)
         .from("estados_cuenta")
-        .update({ url_estado_cuenta: ruta })
+        .update({ url_estado_cuenta: url.trim() })
         .eq("id", row!.id);
       if (error) throw new Error(error.message);
     },
@@ -692,11 +691,11 @@ function EditUrlDialog({ row, onClose }: EditUrlDialogProps) {
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://... o ruta relativa en bucket"
+              placeholder="https://...supabase.co/storage/v1/object/public/estados_cuenta/..."
               className="h-9 text-sm font-mono"
             />
             <p className="text-[11px] text-muted-foreground">
-              Ruta bucket: estados_cuenta/proyecto/banco/alias/anio/archivo.pdf
+              URL completa del archivo en Storage (se guarda tal cual)
             </p>
           </div>
         </div>
@@ -771,6 +770,15 @@ export default function EstadosCuenta() {
   const proyectosUnicos = new Set(estadosCuenta.map((r) => r.proyecto)).size;
   const aniosUnicos = new Set(estadosCuenta.map((r) => r.anio)).size;
 
+  const proyectosConRegistros = useMemo(
+    () => [...new Set(estadosCuenta.map((r) => r.proyecto))].sort(),
+    [estadosCuenta]
+  );
+  const bancosConRegistros = useMemo(
+    () => [...new Set(estadosCuenta.map((r) => r.banco))].filter(Boolean).sort(),
+    [estadosCuenta]
+  );
+
   return (
     <div className="p-6 space-y-6">
 
@@ -779,7 +787,7 @@ export default function EstadosCuenta() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Estados de Cuenta</h1>
           <p className="text-muted-foreground mt-1">
-            Gestion centralizada de estados de cuenta bancarios por proyecto
+            Gestión centralizada de estados de cuenta bancarios por proyecto
           </p>
         </div>
         {isSuperAdmin && (
@@ -825,7 +833,7 @@ export default function EstadosCuenta() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Anos con registros</CardTitle>
+            <CardTitle className="text-sm font-medium">Años con registros</CardTitle>
             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -838,7 +846,7 @@ export default function EstadosCuenta() {
       <div className="flex flex-wrap gap-2 items-center">
         <Input
           type="number"
-          placeholder="Ano"
+          placeholder="Año"
           value={searchAnio}
           onChange={(e) => { setSearchAnio(e.target.value); resetPage(); }}
           className="h-9 text-sm w-[100px]"
@@ -856,20 +864,28 @@ export default function EstadosCuenta() {
             ))}
           </SelectContent>
         </Select>
-        <FilterAutocomplete
-          value={searchProyecto}
-          onChange={(v) => { setSearchProyecto(v); resetPage(); }}
-          options={proyectos.map((p) => p.nombre)}
-          placeholder="Proyecto"
-          className="w-[180px] sm:w-[200px]"
-        />
-        <FilterAutocomplete
-          value={searchBanco}
-          onChange={(v) => { setSearchBanco(v); resetPage(); }}
-          options={bancos.map((b) => b.nombre)}
-          placeholder="Banco"
-          className="w-[140px] sm:w-[160px]"
-        />
+        <Select value={searchProyecto} onValueChange={(v) => { setSearchProyecto(v === "all" ? "" : v); resetPage(); }}>
+          <SelectTrigger className="h-9 w-[180px] sm:w-[200px] text-sm">
+            <SelectValue placeholder="Proyecto" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[220px] overflow-y-auto">
+            <SelectItem value="all">Todos los proyectos</SelectItem>
+            {proyectosConRegistros.map((p) => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={searchBanco} onValueChange={(v) => { setSearchBanco(v === "all" ? "" : v); resetPage(); }}>
+          <SelectTrigger className="h-9 w-[150px] text-sm">
+            <SelectValue placeholder="Banco" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[220px] overflow-y-auto">
+            <SelectItem value="all">Todos los bancos</SelectItem>
+            {bancosConRegistros.map((b) => (
+              <SelectItem key={b} value={b}>{b}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilters && (
           <Button
             variant="outline"
@@ -886,7 +902,7 @@ export default function EstadosCuenta() {
           </Button>
         )}
         <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
-          {`${filtered.length} de ${totalRegistros} - Pag. ${safePage}/${totalPages}`}
+          {`${filtered.length} de ${totalRegistros} — Pág. ${safePage}/${totalPages}`}
         </p>
       </div>
 
@@ -896,7 +912,7 @@ export default function EstadosCuenta() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[70px]">Ano</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[70px]">Año</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Mes</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Proyecto</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Banco</TableHead>
