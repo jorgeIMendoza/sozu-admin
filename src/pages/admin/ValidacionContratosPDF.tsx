@@ -1,19 +1,22 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, Car, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
   ChevronUp, Clock, Eye, FileSearch, FileText, Home,
-  Info, Loader2, Package, XCircle,
+  Info, Loader2, Package, Pencil, RotateCw, XCircle,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +24,7 @@ const ITEMS_PER_PAGE = 25;
 
 interface ContratoRow {
   cuenta_id: number;
+  id_documento: number | null;
   proyecto: string;
   edificio: string | null;
   modelo: string | null;
@@ -155,12 +159,52 @@ function StatCell({
 
 function CuentaDetalleModal({
   cuentaId,
+  contratoUrl,
   onClose,
 }: {
   cuentaId: number | null;
+  contratoUrl?: string | null;
   onClose: () => void;
 }) {
-  const [acuerdosOpen, setAcuerdosOpen] = useState(false);
+  const [acuerdosOpen,    setAcuerdosOpen]    = useState(false);
+  const [pdfRotation,     setPdfRotation]     = useState(0);
+  const [containerDims,   setContainerDims]   = useState({ w: 0, h: 0 });
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset rotation when a new document opens
+  useEffect(() => { setPdfRotation(0); }, [contratoUrl]);
+
+  // Track container size for dimension-swap on 90°/270°
+  useEffect(() => {
+    const el = pdfContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setContainerDims({ w: el.clientWidth, h: el.clientHeight });
+    });
+    ro.observe(el);
+    setContainerDims({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, [contratoUrl]);
+
+  function getPdfStyle(): React.CSSProperties {
+    const isSwapped = pdfRotation % 180 !== 0;
+    if (!isSwapped) {
+      return { width: "100%", height: "100%", transform: `rotate(${pdfRotation}deg)`, transition: "transform 0.25s ease" };
+    }
+    const { w, h } = containerDims;
+    if (!w || !h) return { width: "100%", height: "100%" };
+    const scale = Math.min(w / h, h / w);
+    return {
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      width: `${h}px`,
+      height: `${w}px`,
+      transformOrigin: "center center",
+      transform: `translate(-50%, -50%) rotate(${pdfRotation}deg) scale(${scale})`,
+      transition: "transform 0.25s ease",
+    };
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["cuenta-detalle-modal", cuentaId],
@@ -375,7 +419,48 @@ function CuentaDetalleModal({
 
   return (
     <Dialog open={cuentaId !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="w-[95vw] max-w-xl max-h-[92vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className={cn(
+        "w-[95vw] max-h-[92vh] overflow-hidden p-0 gap-0 flex flex-col",
+        contratoUrl ? "md:flex-row md:max-w-5xl max-w-xl" : "max-w-xl"
+      )}>
+
+        {/* PDF panel — desktop only, only when there's a URL */}
+        {contratoUrl && (
+          <div className="hidden md:flex flex-col border-r border-border bg-muted/10 md:w-[56%] shrink-0">
+            <div className="px-4 py-2.5 border-b shrink-0 flex items-center gap-2">
+              <FileText className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="text-[12px] text-muted-foreground">Contrato firmado</span>
+              <button
+                onClick={() => setPdfRotation(r => (r + 90) % 360)}
+                title="Rotar PDF"
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <RotateCw className="size-3.5" />
+                {pdfRotation !== 0 && <span className="tabular-nums">{pdfRotation}°</span>}
+              </button>
+              <a
+                href={contratoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Abrir -&gt;
+              </a>
+            </div>
+            <div ref={pdfContainerRef} className="flex-1 min-h-0 relative overflow-hidden">
+              <iframe
+                key={contratoUrl}
+                src={contratoUrl}
+                style={getPdfStyle()}
+                className="border-0"
+                title="Contrato PDF"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Detail panel */}
+        <div className={cn("flex flex-col overflow-hidden min-h-0", contratoUrl ? "md:w-[44%]" : "w-full")}>
 
         {/* Header */}
         <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
@@ -402,6 +487,7 @@ function CuentaDetalleModal({
           </DialogTitle>
         </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-52">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -676,6 +762,185 @@ function CuentaDetalleModal({
 
           </div>
         )}
+        </div>{/* end scroll container */}
+        </div>{/* end detail panel */}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Modal: edición manual de validación ────────────────────────────────────────
+
+function EditValidacionModal({ row, onClose }: { row: ContratoRow | null; onClose: () => void }) {
+  const [estado, setEstado]       = useState<"coincide" | "no_coincide" | "error">("coincide");
+  const [montoReal, setMontoReal] = useState("");
+  const [motivo, setMotivo]       = useState("");
+  const queryClient = useQueryClient();
+  const { toast }   = useToast();
+
+  useEffect(() => {
+    if (!row) return;
+    setEstado(row.estado_validacion ?? "coincide");
+    setMontoReal(row.monto_real != null ? String(row.monto_real) : String(row.precio_final));
+    setMotivo(row.motivo ?? "");
+  }, [row]);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!row?.id_documento) throw new Error("Esta cuenta no tiene contrato registrado");
+      const montoRealNum =
+        estado === "coincide"
+          ? row.precio_final
+          : parseFloat(montoReal.replace(/,/g, "")) || null;
+      const { error } = await (supabase as any)
+        .from("contrato_validaciones")
+        .insert({
+          id_documento:   row.id_documento,
+          monto_esperado: row.precio_final,
+          monto_real:     montoRealNum,
+          estado,
+          motivo:         motivo.trim() || null,
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["validacion-contratos-pdf"] });
+      toast({ title: "Validacion actualizada correctamente" });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error al guardar", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleClose = () => { if (!mutation.isPending) onClose(); };
+
+  const canSubmit =
+    !mutation.isPending &&
+    !!row?.id_documento &&
+    (estado !== "no_coincide" || !!montoReal);
+
+  return (
+    <Dialog open={row !== null} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-md w-[95vw] p-0 gap-0">
+        <DialogHeader className="px-5 py-4 border-b">
+          <DialogTitle className="text-[14px] flex items-center gap-2">
+            <Pencil className="size-4 text-muted-foreground" />
+            Corregir validacion manualmente
+          </DialogTitle>
+          {row && (
+            <p className="text-[11px] text-muted-foreground mt-0.5 font-normal">
+              {formatCuentaCobranzaId(row.cuenta_id)}
+              {row.proyecto ? ` - ${row.proyecto}` : ""}
+              {row.numero_propiedad ? ` · Unidad ${row.numero_propiedad}` : ""}
+            </p>
+          )}
+        </DialogHeader>
+
+        {row && (
+          <div className="px-5 py-5 space-y-4">
+
+            {/* Precio esperado */}
+            <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">
+                Precio final en DB (monto esperado)
+              </p>
+              <p className="text-[15px] font-bold tabular-nums">{fmtCurrency(row.precio_final)}</p>
+            </div>
+
+            {!row.id_documento && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12px] text-amber-700 flex items-center gap-2">
+                <AlertCircle className="size-4 shrink-0" />
+                Sin contrato registrado - no se puede guardar validacion
+              </div>
+            )}
+
+            {/* Estado */}
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Estado de validacion</Label>
+              <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="coincide">Coincide - monto PDF igual a DB</SelectItem>
+                  <SelectItem value="no_coincide">No coincide - monto PDF diferente</SelectItem>
+                  <SelectItem value="error">Error - no se pudo leer el PDF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Monto real (solo si no_coincide) */}
+            {estado === "no_coincide" && (
+              <div className="space-y-1.5">
+                <Label className="text-[12px]">Monto encontrado en PDF (MXN)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={montoReal}
+                  onChange={(e) => setMontoReal(e.target.value)}
+                  placeholder="0.00"
+                  className="h-9 text-sm font-mono"
+                />
+                {montoReal && !isNaN(parseFloat(montoReal)) && (
+                  <p className="text-[11px] text-muted-foreground tabular-nums">
+                    Diferencia:{" "}
+                    <span className={cn(
+                      "font-semibold",
+                      parseFloat(montoReal) - row.precio_final > 0 ? "text-red-600" : "text-amber-600"
+                    )}>
+                      {fmtCurrency(parseFloat(montoReal) - row.precio_final)}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Motivo */}
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">
+                Motivo / observacion
+                {estado !== "error" && (
+                  <span className="text-muted-foreground ml-1 font-normal">(opcional)</span>
+                )}
+              </Label>
+              <Textarea
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder={
+                  estado === "error"
+                    ? "Describe el error encontrado al leer el PDF..."
+                    : "Observacion adicional..."
+                }
+                className="text-sm min-h-[72px] resize-none"
+              />
+            </div>
+
+            {/* Acciones */}
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1 h-9"
+                onClick={handleClose}
+                disabled={mutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 h-9"
+                onClick={() => mutation.mutate()}
+                disabled={!canSubmit}
+              >
+                {mutation.isPending ? (
+                  <><Loader2 className="size-3.5 animate-spin mr-1.5" />Guardando...</>
+                ) : (
+                  "Guardar correccion"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -689,8 +954,10 @@ export default function ValidacionContratosPDF() {
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
   const [filtroEstado,   setFiltroEstado]   = useState("todos");
   const [currentPage,    setCurrentPage]    = useState(1);
-  const [modalCuentaId,  setModalCuentaId]  = useState<number | null>(null);
-  const [contratoUrl,    setContratoUrl]    = useState<string | null>(null);
+  const [modalCuentaId,    setModalCuentaId]    = useState<number | null>(null);
+  const [modalContratoUrl, setModalContratoUrl] = useState<string | null>(null);
+  const [contratoUrl,      setContratoUrl]      = useState<string | null>(null);
+  const [editRow,          setEditRow]          = useState<ContratoRow | null>(null);
 
   const resetPage = () => setCurrentPage(1);
 
@@ -862,6 +1129,7 @@ export default function ValidacionContratosPDF() {
 
         result.push({
           cuenta_id:         cuenta.id,
+          id_documento:      docInfo?.id ?? null,
           proyecto:          proyNombre,
           edificio:          edifNombre,
           modelo:            modeloNombre,
@@ -1141,11 +1409,19 @@ export default function ValidacionContratosPDF() {
                             </span>
                           )}
                           <button
-                            onClick={() => setModalCuentaId(c.cuenta_id)}
+                            onClick={() => { setModalCuentaId(c.cuenta_id); setModalContratoUrl(c.contrato_url); }}
                             title="Ver detalles de la cuenta"
                             className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                           >
                             <Eye className="size-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditRow(c)}
+                            title="Corregir validacion manualmente"
+                            disabled={!c.id_documento}
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-25 disabled:cursor-default"
+                          >
+                            <Pencil className="size-4" />
                           </button>
                         </div>
                       </TableCell>
@@ -1186,11 +1462,16 @@ export default function ValidacionContratosPDF() {
       {/* Modales */}
       <CuentaDetalleModal
         cuentaId={modalCuentaId}
-        onClose={() => setModalCuentaId(null)}
+        contratoUrl={modalContratoUrl}
+        onClose={() => { setModalCuentaId(null); setModalContratoUrl(null); }}
       />
       <ContratoViewerModal
         url={contratoUrl}
         onClose={() => setContratoUrl(null)}
+      />
+      <EditValidacionModal
+        row={editRow}
+        onClose={() => setEditRow(null)}
       />
     </div>
   );
