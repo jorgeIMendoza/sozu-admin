@@ -743,8 +743,7 @@ const App = () => (
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                   <Route path="validacion-contratos" element={<ValidacionContratosPDF />} />
-                  <Route path="finanzas/validacion-contratos" element={<ValidacionContratosPDF />} />
-                  <Route path="finanzas/estados-cuenta" element={<EstadosCuenta />} />
+                  <Route path="estados-cuenta" element={<EstadosCuenta />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
