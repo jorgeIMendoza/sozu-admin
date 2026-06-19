@@ -3574,7 +3574,7 @@ export default function DetalleCuentaCobranza() {
                   </div>
                 )}
                 <div>
-                  <label className="text-sm font-medium">Dueño</label>
+                  <label className="text-sm font-medium">Vendedor</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
                 </div>
                 <div>
@@ -3653,6 +3653,10 @@ export default function DetalleCuentaCobranza() {
                     <p className="text-sm text-muted-foreground">{cuentaDetalle.producto_servicio_nombre}</p>
                   </div>
                 )}
+                <div>
+                  <label className="text-sm font-medium">Vendedor</label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
+                </div>
                 <div>
                   <label className="text-sm font-medium">CLABE STP</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
