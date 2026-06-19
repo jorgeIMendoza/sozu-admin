@@ -9,8 +9,8 @@ import { toast } from 'sonner';
 import {
   HeartHandshake, Bell, Package2, AlertCircle, Clock, TimerOff,
   ShieldOff, ShieldCheck, Star, CalendarDays, Users, AlertTriangle,
-  Eye, Search, ChevronRight, CheckCircle2, Upload, X, Plus,
-  FileText, Settings, BarChart2, Loader2,
+  Eye, Search, ChevronRight, CheckCircle2, X, Plus,
+  Settings, BarChart2, Loader2,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -73,27 +73,7 @@ const PRIORIDAD_META: Record<PrioridadTicket, { label: string; cls: string; colo
 };
 
 
-const DEMO_RESPONSABLES = ['Isabel Hernández', 'Miguel Torres', 'Luis García', 'Ana Pérez'];
-const DEMO_PROVEEDORES  = ['Juan López (Plomería Express)', 'Miguel Torres (HVAC Solutions)', 'Carlos Méndez (Eléctrica Pro)', 'Acabados del Valle', 'Carpintería Integral', 'Sin proveedor'];
-const CANALES           = ['Portal cliente', 'WhatsApp', 'Teléfono', 'Interno', 'Observación de entrega'];
-
-const TIEMPO_RESOLUCION = [
-  { cat: 'Eléctrica',       dias: 1.2, color: '#3B82F6' },
-  { cat: 'Sanitaria',       dias: 1.6, color: '#10B981' },
-  { cat: 'Hidráulica',      dias: 1.8, color: '#06B6D4' },
-  { cat: 'HVAC',            dias: 2.1, color: '#8B5CF6' },
-  { cat: 'Cal./Boiler',     dias: 1.4, color: '#F59E0B' },
-  { cat: 'Acabados',        dias: 2.5, color: '#EC4899' },
-  { cat: 'Carpintería',     dias: 2.2, color: '#F97316' },
-];
-
-const PROVEEDORES_TOP = [
-  { nombre: 'Juan López',     empresa: 'Plomería Express',   tickets: 8 },
-  { nombre: 'Miguel Torres',  empresa: 'HVAC Solutions',     tickets: 6 },
-  { nombre: 'Carlos Méndez',  empresa: 'Eléctrica Pro',      tickets: 5 },
-  { nombre: 'Acabados del Valle', empresa: '',               tickets: 4 },
-  { nombre: 'Carpintería Integral', empresa: '',             tickets: 3 },
-];
+const CANALES = ['Portal cliente', 'WhatsApp', 'Teléfono', 'Interno', 'Observación de entrega'];
 
 // ─── Wizard form state ────────────────────────────────────────────────────────
 
@@ -104,10 +84,9 @@ interface WizardForm {
   subcategoria: string;
   descripcion: string;
   canal: string;
-  files: File[];
   prioridad: PrioridadTicket | '';
-  responsable: string;     // nombre del personal de mantenimiento asignado
-  personalId: number | null;  // id en tabla personas
+  responsable: string;
+  personalId: number | null;
   proveedor: string;
   fechaCompromiso: string;
   comentarios: string;
@@ -115,7 +94,7 @@ interface WizardForm {
 
 const EMPTY_FORM: WizardForm = {
   unidadId: '', categoria: '', categoriaId: null, subcategoria: '', descripcion: '', canal: '',
-  files: [], prioridad: '', responsable: '', personalId: null, proveedor: '', fechaCompromiso: '', comentarios: '',
+  prioridad: '', responsable: '', personalId: null, proveedor: '', fechaCompromiso: '', comentarios: '',
 };
 
 // ─── Subcomponents ────────────────────────────────────────────────────────────
@@ -408,7 +387,7 @@ export function PostventaDashboard() {
       const { data } = await (supabase as any)
         .from('postventa_categorias_personal')
         .select('id_persona, id_tipo_entidad, personas(id, nombre, apellido_paterno, apellido_materno, email)')
-        .eq('id_categoria', form.categoriaId)
+        .eq('id_postventa_categoria_garantia', form.categoriaId)
         .eq('activo', true);
       return (data ?? []) as any[];
     },
@@ -419,7 +398,7 @@ export function PostventaDashboard() {
   const mantWiz = catPersonalWiz.filter(p => p.id_tipo_entidad !== 8);
 
   // ── Query de tickets reales ────────────────────────────────────────────────
-  const { data: tickets = [], isLoading: ticketsLoading, refetch: refetchTickets } = useQuery<TicketRow[]>({
+  const { data: tickets = [], isLoading: ticketsLoading } = useQuery<TicketRow[]>({
     queryKey: ['pv-tickets-rows', proyectoIds.join(','), pvTablesExist],
     queryFn: async (): Promise<TicketRow[]> => {
       if (!pvTablesExist || !proyectoIds.length) return [];
@@ -544,16 +523,6 @@ export function PostventaDashboard() {
     })).filter(d => d.value > 0);
   }, [tickets]);
 
-  const garantiaData = useMemo(() => {
-    if (!tickets.length) return [{ name: 'Vigentes', value: 100, color: '#10B981' }];
-    const total = tickets.length;
-    return [
-      { name: 'Vigentes',   value: Math.round((tickets.filter(t => t.garantiaEstatus === 'VIGENTE').length / total) * 100),   color: '#10B981' },
-      { name: 'Por vencer', value: Math.round((tickets.filter(t => t.garantiaEstatus === 'POR_VENCER').length / total) * 100), color: '#F59E0B' },
-      { name: 'Vencidas',   value: Math.round((tickets.filter(t => t.garantiaEstatus === 'VENCIDA').length / total) * 100),    color: '#EF4444' },
-    ].filter(d => d.value > 0);
-  }, [tickets]);
-
   // ── Filtered tickets ──────────────────────────────────────────────────────
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
@@ -586,9 +555,6 @@ export function PostventaDashboard() {
     });
   }, [personalSearch, mantWiz]);
 
-  const step1Valid = Boolean(form.unidadId && form.categoria && form.subcategoria && form.descripcion && form.canal);
-  const step2Valid = form.files.length > 0;
-  const step3Valid = Boolean(form.prioridad && form.fechaCompromiso);
 
   function handleNextStep() {
     if (wizardStep === 0) {
@@ -610,7 +576,6 @@ export function PostventaDashboard() {
       if (!form.descripcion.trim()) { toast.error('Escribe la descripción del problema'); return; }
       if (!form.canal)        { toast.error('Selecciona el canal de recepción'); return; }
     }
-    if (wizardStep === 1 && !step2Valid) { toast.error('Sube al menos una evidencia'); return; }
     setCompletedSteps((prev) => new Set([...prev, wizardStep]));
     setStep1Tried(false);
     setWizardStep((s) => Math.min(s + 1, 3));
@@ -631,10 +596,13 @@ export function PostventaDashboard() {
     else if (form.prioridad === 'BAJA') slaHoras = (cat?.sla_baja_dias ?? 5) * 24;
     const fechaLimiteSla = new Date(Date.now() + slaHoras * 3600000).toISOString();
 
+    const ticketProyectoId = selectedUnidad?.proyectoId ?? null;
+
     const { data: ticket, error } = await (supabase as any)
       .from('postventa_tickets')
       .insert({
         id_propiedad: propIdRaw,
+        id_proyecto: ticketProyectoId,
         id_cuenta_cobranza: selectedUnidad?.cuentaId,
         id_postventa_categoria_garantia: cat?.id ?? null,
         subcategoria: form.subcategoria,
@@ -671,16 +639,9 @@ export function PostventaDashboard() {
     setUnidadDropOpen(false);
     setPersonalSearch('');
     setPersonalDropOpen(false);
+    // Sincronizar filtro del dashboard al proyecto del ticket recién creado (BUG #1 fix)
+    if (ticketProyectoId) setProyectoId(ticketProyectoId);
     qc.invalidateQueries({ queryKey: ['pv-tickets-rows'] });
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const chosen = Array.from(e.target.files ?? []);
-    setForm((f) => ({ ...f, files: [...f.files, ...chosen] }));
-  }
-
-  function removeFile(idx: number) {
-    setForm((f) => ({ ...f, files: f.files.filter((_, i) => i !== idx) }));
   }
 
   function openWizard() {
@@ -755,7 +716,11 @@ export function PostventaDashboard() {
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <Bell size={18} strokeWidth={1.75} style={{ color: 'var(--sz-text-secondary)' }} />
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">4</span>
+            {(kpis.slaVencidos + kpis.criticos) > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {kpis.slaVencidos + kpis.criticos}
+              </span>
+            )}
           </button>
           <button
             onClick={openWizard}
@@ -981,23 +946,13 @@ export function PostventaDashboard() {
           </SectionCard>
 
           {/* Col 4 — Tiempo resolución */}
-          <SectionCard
-            title="Tiempo promedio de resolución (días)"
-            action={<LinkBtn>Ver métricas completas</LinkBtn>}
-          >
-            <div className="flex flex-col gap-2.5">
-              {TIEMPO_RESOLUCION.map((r) => (
-                <div key={r.cat} className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 w-24 flex-shrink-0">{r.cat}</span>
-                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${(r.dias / 3) * 100}%`, background: r.color }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-slate-700 w-6 text-right flex-shrink-0">{r.dias}</span>
-                </div>
-              ))}
+          <SectionCard title="Tiempo promedio de resolución (días)">
+            <div className="flex flex-col items-center justify-center gap-2 py-6 text-slate-400">
+              <Clock className="w-8 h-8 opacity-30" />
+              <p className="text-xs text-center text-slate-400">
+                Sin datos suficientes.<br />
+                Disponible cuando haya tickets resueltos.
+              </p>
             </div>
           </SectionCard>
         </div>
@@ -1013,25 +968,13 @@ export function PostventaDashboard() {
                 <span>Garantías por vencer</span>
               </div>
             }
-            action={<LinkBtn>Ver todas</LinkBtn>}
           >
-            <div>
-              <p className="text-3xl font-bold text-amber-600">8</p>
-              <p className="text-xs text-slate-500">Próximos 15 días</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                <span className="text-slate-600">4 categorías / 15 días o menos</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                <span className="text-slate-600">6 categorías / 30 días o menos</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full bg-amber-300 flex-shrink-0" />
-                <span className="text-slate-600">12 categorías / 60 días o menos</span>
-              </div>
+            <div className="flex flex-col items-center justify-center gap-2 py-4 text-slate-400">
+              <CalendarDays className="w-6 h-6 opacity-30" />
+              <p className="text-xs text-center text-slate-400">
+                Sin datos suficientes.<br />
+                Requiere configurar garantías por unidad.
+              </p>
             </div>
           </SectionCard>
 
@@ -1043,21 +986,13 @@ export function PostventaDashboard() {
                 <span>Garantías vencidas</span>
               </div>
             }
-            action={<LinkBtn>Ver detalle</LinkBtn>}
           >
-            <div>
-              <p className="text-3xl font-bold text-red-600">3</p>
-              <p className="text-xs text-slate-500">Categorías vencidas</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-center">
-                <span className="w-8 h-8 rounded-full bg-red-100 text-red-700 text-sm font-bold flex items-center justify-center">2</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">Críticos</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 text-sm font-bold flex items-center justify-center">3</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">Medios</span>
-              </div>
+            <div className="flex flex-col items-center justify-center gap-2 py-4 text-slate-400">
+              <ShieldOff className="w-6 h-6 opacity-30" />
+              <p className="text-xs text-center text-slate-400">
+                Sin datos suficientes.<br />
+                Requiere configurar garantías por unidad.
+              </p>
             </div>
           </SectionCard>
 
@@ -1075,16 +1010,7 @@ export function PostventaDashboard() {
               <p className="text-3xl font-bold text-red-600">{kpis.slaVencidos}</p>
               <p className="text-xs text-slate-500">Tickets fuera de SLA</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-center">
-                <span className="w-8 h-8 rounded-full bg-red-100 text-red-700 text-sm font-bold flex items-center justify-center">2</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">Críticos</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 text-sm font-bold flex items-center justify-center">3</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">Medios</span>
-              </div>
-            </div>
+            <p className="text-xs text-slate-400">Desglose por prioridad próximamente.</p>
           </SectionCard>
 
           {/* 4 — Proveedores */}
@@ -1095,20 +1021,13 @@ export function PostventaDashboard() {
                 <span>Proveedores con más tickets</span>
               </div>
             }
-            action={<LinkBtn>Ver todos</LinkBtn>}
           >
-            <div className="flex flex-col gap-1.5">
-              {PROVEEDORES_TOP.map((p) => (
-                <div key={p.nombre} className="flex items-center justify-between text-xs">
-                  <div className="min-w-0">
-                    <p className="text-slate-700 font-medium truncate">{p.nombre}</p>
-                    {p.empresa && <p className="text-slate-400 truncate">{p.empresa}</p>}
-                  </div>
-                  <span className="ml-2 flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                    {p.tickets}
-                  </span>
-                </div>
-              ))}
+            <div className="flex flex-col items-center justify-center gap-2 py-4 text-slate-400">
+              <Users className="w-6 h-6 opacity-30" />
+              <p className="text-xs text-center text-slate-400">
+                Sin datos suficientes.<br />
+                Disponible con módulo de proveedores activo.
+              </p>
             </div>
           </SectionCard>
 
@@ -1124,18 +1043,18 @@ export function PostventaDashboard() {
           >
             <div className="flex flex-col gap-1.5">
               {[
-                { label: 'SLA vencidos',                  count: kpis.slaVencidos, dot: 'bg-red-500' },
-                { label: 'Tickets críticos sin asignar',  count: kpis.criticos, dot: 'bg-red-500' },
-                { label: 'Garantías próx. a vencer',      count: 8, dot: 'bg-amber-400' },
-                { label: 'Garantías vencidas',            count: 3, dot: 'bg-orange-500' },
-                { label: 'Tickets reabiertos',            count: tickets.filter(t => t.estatus === 'REABIERTO').length, dot: 'bg-purple-500' },
+                { label: 'SLA vencidos',                 value: String(kpis.slaVencidos),                                          dot: 'bg-red-500' },
+                { label: 'Tickets críticos sin asignar', value: String(kpis.criticos),                                             dot: 'bg-red-500' },
+                { label: 'Garantías próx. a vencer',     value: '—',                                                              dot: 'bg-amber-400' },
+                { label: 'Garantías vencidas',           value: '—',                                                              dot: 'bg-orange-500' },
+                { label: 'Tickets reabiertos',           value: String(tickets.filter(t => t.estatus === 'REABIERTO').length),    dot: 'bg-purple-500' },
               ].map((a) => (
                 <div key={a.label} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.dot}`} />
                     <span className="text-slate-600 truncate">{a.label}</span>
                   </div>
-                  <span className="ml-2 font-semibold text-slate-700 flex-shrink-0">{a.count}</span>
+                  <span className="ml-2 font-semibold text-slate-700 flex-shrink-0">{a.value}</span>
                 </div>
               ))}
             </div>
@@ -1242,21 +1161,11 @@ export function PostventaDashboard() {
 
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-              <span className="text-xs text-slate-500">Mostrando {Math.min(filteredTickets.length, 50)} de {filteredTickets.length} registros</span>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, '...', 9].map((p, i) => (
-                  <button
-                    key={i}
-                    className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
-                      p === 1
-                        ? 'bg-emerald-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
+              <span className="text-xs text-slate-500">
+                {filteredTickets.length === 0
+                  ? 'Sin registros'
+                  : `${filteredTickets.length} registro${filteredTickets.length !== 1 ? 's' : ''}`}
+              </span>
             </div>
           </div>
 
@@ -1264,47 +1173,13 @@ export function PostventaDashboard() {
           <div className="flex flex-col gap-4">
 
             {/* Cobertura de garantías */}
-            <SectionCard
-              title="Cobertura de garantías"
-              action={<LinkBtn>Ver reporte completo</LinkBtn>}
-            >
-              <div className="relative h-36">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={garantiaData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={44}
-                      outerRadius={64}
-                      paddingAngle={2}
-                    >
-                      {garantiaData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <DonutCenter>
-                  <p className="text-lg font-bold text-emerald-600">
-                    {garantiaData.find(d => d.name === 'Vigentes')?.value ?? 100}%
-                  </p>
-                  <p className="text-[10px] text-slate-500">Vigentes</p>
-                </DonutCenter>
-              </div>
-              <div className="flex flex-col gap-1">
-                {garantiaData.map((d) => (
-                  <div key={d.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                      <span className="text-slate-600">{d.name}</span>
-                    </div>
-                    <span className="text-slate-500">{d.value}%</span>
-                  </div>
-                ))}
+            <SectionCard title="Cobertura de garantías">
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-slate-400">
+                <ShieldCheck className="w-8 h-8 opacity-30" />
+                <p className="text-xs text-center text-slate-400">
+                  Sin datos suficientes.<br />
+                  Requiere tabla <span className="font-mono text-[11px]">postventa_garantias_unidad</span> poblada.
+                </p>
               </div>
             </SectionCard>
 
@@ -1615,56 +1490,17 @@ export function PostventaDashboard() {
               {/* Step 2 — Evidencia */}
               {wizardStep === 1 && (
                 <div className="flex flex-col gap-4">
-                  <p className="text-xs text-slate-500">Sube al menos una imagen o video como evidencia inicial del problema.</p>
-
-                  <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 rounded-xl p-8 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-colors">
-                    <Upload className="w-8 h-8 text-slate-400" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-slate-700">Haz clic para subir archivos</p>
-                      <p className="text-xs text-slate-400 mt-1">Imágenes y videos (JPG, PNG, MP4…)</p>
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">Carga de evidencias pendiente de habilitar</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        La subida de archivos desde este wizard estará disponible próximamente.
+                        El ticket se creará sin evidencias iniciales. Podrás subirlas desde el detalle del ticket una vez creado.
+                      </p>
                     </div>
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                  </label>
-
-                  {form.files.length === 0 && (
-                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                      <p className="text-xs text-amber-700">Debes subir al menos una evidencia para continuar.</p>
-                    </div>
-                  )}
-
-                  {form.files.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {form.files.map((file, idx) => (
-                        <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 aspect-square flex items-center justify-center">
-                          {file.type.startsWith('image/') ? (
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt={file.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center gap-1">
-                              <FileText className="w-6 h-6 text-slate-400" />
-                              <span className="text-[10px] text-slate-500 truncate px-1 w-full text-center">{file.name}</span>
-                            </div>
-                          )}
-                          <button
-                            onClick={() => removeFile(idx)}
-                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  </div>
+                  <p className="text-xs text-slate-500">Haz clic en <strong>Siguiente</strong> para continuar con la asignación.</p>
                 </div>
               )}
 
@@ -1862,7 +1698,7 @@ export function PostventaDashboard() {
                       </div>
                       <div>
                         <p className="text-slate-400">Evidencias</p>
-                        <p className="text-slate-800 font-medium">{form.files.length} archivo(s)</p>
+                        <p className="text-slate-500 italic">Pendiente de habilitar</p>
                       </div>
                       <div>
                         <p className="text-slate-400">Prioridad</p>
@@ -1884,10 +1720,10 @@ export function PostventaDashboard() {
                       </div>
                     </div>
 
-                    {/* Garantía vigente indicator */}
-                    <div className="flex items-center gap-2 mt-1 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <span className="text-xs text-emerald-700 font-medium">Garantía vigente — unidad dentro del periodo de cobertura</span>
+                    {/* Nota de garantía — estado real disponible en Fase 2 */}
+                    <div className="flex items-center gap-2 mt-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                      <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <span className="text-xs text-slate-500">Estado de garantía disponible próximamente.</span>
                     </div>
                   </div>
                 </div>
