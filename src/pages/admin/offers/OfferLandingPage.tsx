@@ -31,7 +31,6 @@ import DevelopmentLogo from "@/components/admin/offers/offer/DevelopmentLogo";
 import PreReservationActiveView from "@/components/admin/offers/offer/PreReservationActiveView";
 import CustomerAccountView from "@/components/admin/offers/offer/CustomerAccountView";
 import sozuLogo from "@/assets/sozu-logo.png";
-import LifestyleCountryClubSection from "@/components/admin/offers/offer/LifestyleCountryClubSection";
 import { MapPin, Calendar, Sparkles, ChevronRight, AlertCircle } from "lucide-react";
 
 const OfferLandingPage = () => {
@@ -278,9 +277,6 @@ const OfferLandingPage = () => {
         {/* 18.11.E: ValidacionSocialSection eliminada por retro comercial (sin testimonios reales) */}
 
         <OfferLocation location={offer.location} />
-
-        {/* 18.11.D: Lifestyle de la zona — la zona es parte del producto */}
-        <LifestyleCountryClubSection zoneName="Country Club" />
 
         {offer.development && (
           <DevelopmentPresenceSection

@@ -302,9 +302,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
+  const allEsqs      = (esquemas ?? []).filter((e: any) => !e.es_manual);
   const filteredEsqs = oferta.id_esquema_pago_seleccionado
-    ? (esquemas ?? []).filter((e: any) => e.id === oferta.id_esquema_pago_seleccionado)
-    : (esquemas ?? []).filter((e: any) => !e.es_manual).slice(0, 6);
+    ? [
+        ...allEsqs.filter((e: any) => e.id === oferta.id_esquema_pago_seleccionado),
+        ...allEsqs.filter((e: any) => e.id !== oferta.id_esquema_pago_seleccionado),
+      ].slice(0, 6)
+    : allEsqs.slice(0, 6);
   const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice);
 
   // 10. Expiración (7 días desde generación)
