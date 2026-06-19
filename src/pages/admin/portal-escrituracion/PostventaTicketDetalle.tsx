@@ -526,8 +526,7 @@ export function PostventaDetalle() {
         .select(`
           id, id_propiedad, id_cuenta_cobranza, id_postventa_categoria_garantia,
           subcategoria, descripcion, canal_recepcion, prioridad, estatus,
-          garantia_estatus, fecha_vencimiento_garantia, sla_horas,
-          fecha_limite_sla, sla_cumplido, responsable,
+          sla_horas, fecha_limite_sla, sla_cumplido,
           diagnostico, causa_probable, solucion_propuesta,
           descripcion_reparacion, piezas_reemplazadas,
           fecha_reparacion, fecha_creacion, fecha_actualizacion,
@@ -696,13 +695,11 @@ export function PostventaDetalle() {
     descripcion: ticketDB.descripcion ?? '',
     prioridad: ticketDB.prioridad as PrioridadTicket,
     estatus: ticketDB.estatus as EstatusTicket,
-    garantiaEstatus: (ticketDB.garantia_estatus ?? 'VIGENTE') as GarantiaEstatus,
-    fechaVencimientoGarantia: ticketDB.fecha_vencimiento_garantia
-      ? new Date(ticketDB.fecha_vencimiento_garantia + 'T00:00:00').toLocaleDateString('es-MX')
-      : '—',
+    garantiaEstatus: 'VIGENTE' as GarantiaEstatus,
+    fechaVencimientoGarantia: '—',
     slaLabel,
     slaVencido,
-    responsable: ticketDB.responsable ?? 'Sin asignar',
+    responsable: 'Sin asignar',
     proveedor: 'Sin proveedor',
     diagnostico,
     causaProbable,
@@ -814,7 +811,7 @@ export function PostventaDetalle() {
     refetchActividad();
   }
 
-  async function subirEvidencias(files: File[], tipoEvidencia: 'inicial' | 'reparacion'): Promise<void> {
+  async function subirEvidencias(files: File[], tipoEvidencia: 'INICIAL' | 'REPARACION'): Promise<void> {
     let subidos = 0;
     for (const file of files) {
       const path = `postventa/${numericId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
@@ -846,7 +843,7 @@ export function PostventaDetalle() {
     const files = Array.from(e.target.files ?? []);
     if (fileInputInicialRef.current) fileInputInicialRef.current.value = '';
     if (files.length === 0) return;
-    await subirEvidencias(files, 'inicial');
+    await subirEvidencias(files, 'INICIAL');
   }
 
   async function handleSubirEvidenciaReparacion(e: React.ChangeEvent<HTMLInputElement>) {
@@ -854,7 +851,7 @@ export function PostventaDetalle() {
     if (fileInputReparacionRef.current) fileInputReparacionRef.current.value = '';
     if (files.length === 0) return;
     setEvidreparacionFiles(prev => [...prev, ...files]);
-    await subirEvidencias(files, 'reparacion');
+    await subirEvidencias(files, 'REPARACION');
   }
 
   function handleEscalar() {

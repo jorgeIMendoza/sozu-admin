@@ -35,6 +35,8 @@ import { fmtMxn } from "@/data/administracion/mockData";
 import { cn } from "@/lib/utils";
 import { ExpedienteDrawer } from "@/components/admin/portal-administracion/drawers/ExpedienteDrawer";
 import { VentaParaFacturarContent } from "@/components/admin/portal-administracion/drawers/content/VentaParaFacturarContent";
+import { EjecucionFacturaSozuContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionFacturaSozuContent";
+import type { FacturaComisionSozuPorGenerar } from "@/hooks/useFacturasComisionSozuPorGenerar";
 import { getVentaContext } from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useFacturasPorCobrar,
@@ -91,6 +93,44 @@ function Antiguedad({ dias, isVencida }: { dias: number; isVencida: boolean }) {
   );
 }
 
+/**
+ * Mapea una FacturaPorCobrar (estado "sin_generar") al shape
+ * FacturaComisionSozuPorGenerar que consume EjecucionFacturaSozuContent —
+ * el mismo detalle de "Generar Factura" de la Bandeja de Ejecución. El resto
+ * de los datos enriquecidos (comprador, comprobantes, documentos, metraje)
+ * los carga el propio componente vía useExpedienteVentaDetalle(folio_cuenta).
+ */
+function toComisionSozuEntity(f: FacturaPorCobrar): FacturaComisionSozuPorGenerar {
+  return {
+    id_cuenta_cobranza: f.id_cuenta_cobranza,
+    folio_cuenta: f.folio_cfdi,
+    tipo: f.tipo,
+    proyecto_nombre: f.proyecto_nombre || null,
+    edificio_nombre: f.edificio_nombre || null,
+    modelo_nombre: f.modelo_nombre || null,
+    producto_nombre: f.producto_nombre || null,
+    numero_departamento: f.numero_departamento || null,
+    entidad_duena: f.entidad_duena || null,
+    cuenta_stp_comisiones: f.cuenta_stp_comisiones,
+    precio_final: f.precio_final,
+    porcentaje_comision_venta: f.porcentaje_comision,
+    iva_incluido: f.iva_incluido,
+    monto_comision: f.monto_comision,
+    fecha_compra: f.fecha_emision || null,
+    estado_factura: "por_generar",
+    url_factura_comision: f.url_factura_comision,
+    url_factura_xml_comision: f.url_factura_xml_comision,
+    cliente_nombre: f.cliente_nombre,
+    cliente_rfc: f.cliente_rfc,
+    receptor_razon_social: f.receptor_razon_social,
+    receptor_rfc: f.receptor_rfc,
+    receptor_regimen_codigo: f.receptor_regimen_codigo,
+    receptor_regimen_nombre: f.receptor_regimen_nombre,
+    receptor_uso_cfdi_codigo: f.receptor_uso_cfdi_codigo,
+    receptor_uso_cfdi_nombre: f.receptor_uso_cfdi_nombre,
+  };
+}
+
 /* ──────────────────────────────────────────────────────────
    Página
    ────────────────────────────────────────────────────────── */
@@ -101,6 +141,10 @@ export default function AdministracionFacturasPorCobrarPage() {
   const [entidadDuenaFilter, setEntidadDuenaFilter] = useState<string>("all");
   const [facturaSozuFilter, setFacturaSozuFilter] = useState<string>("all");
   const [estatusPagoFilter, setEstatusPagoFilter] = useState<string>("all");
+  const [tipoFilter, setTipoFilter] = useState<string>("all");
+  // Rango de fecha de venta (f.fecha_emision = fecha_compra de la cuenta).
+  const [ventaDesde, setVentaDesde] = useState<string>("");
+  const [ventaHasta, setVentaHasta] = useState<string>("");
   const [selected, setSelected] = useState<FacturaPorCobrar | null>(null);
   const [page, setPage] = useState(0);
 
@@ -128,13 +172,28 @@ export default function AdministracionFacturasPorCobrarPage() {
       if (entidadDuenaFilter !== "all" && f.entidad_duena !== entidadDuenaFilter) return false;
       if (facturaSozuFilter !== "all" && f.estado_factura_sozu !== facturaSozuFilter) return false;
       if (estatusPagoFilter !== "all" && f.estatus_pago !== estatusPagoFilter) return false;
+      if (tipoFilter !== "all" && f.tipo !== tipoFilter) return false;
+      // Rango por fecha de venta (fecha_emision = fecha_compra de la cuenta).
+      const venta = (f.fecha_emision || "").slice(0, 10);
+      if (ventaDesde && (!venta || venta < ventaDesde)) return false;
+      if (ventaHasta && (!venta || venta > ventaHasta)) return false;
       if (q) {
         const hay = [f.folio_cfdi, f.numero_departamento].map(norm).join(" ");
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, proyectoFilter, entidadDuenaFilter, facturaSozuFilter, estatusPagoFilter, facturas]);
+  }, [
+    search,
+    proyectoFilter,
+    entidadDuenaFilter,
+    facturaSozuFilter,
+    estatusPagoFilter,
+    tipoFilter,
+    ventaDesde,
+    ventaHasta,
+    facturas,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
   const filteredPage = useMemo(
@@ -180,7 +239,10 @@ export default function AdministracionFacturasPorCobrarPage() {
     proyectoFilter !== "all" ||
     entidadDuenaFilter !== "all" ||
     facturaSozuFilter !== "all" ||
-    estatusPagoFilter !== "all";
+    estatusPagoFilter !== "all" ||
+    tipoFilter !== "all" ||
+    !!ventaDesde ||
+    !!ventaHasta;
   const totalDesc = hayFiltros
     ? `${filtered.length} de ${facturas.length} facturas`
     : `${facturas.length} facturas pendientes de cobro`;
@@ -191,6 +253,10 @@ export default function AdministracionFacturasPorCobrarPage() {
     setEntidadDuenaFilter("all");
     setFacturaSozuFilter("all");
     setEstatusPagoFilter("all");
+    setTipoFilter("all");
+    setVentaDesde("");
+    setVentaHasta("");
+    setPage(0);
   };
 
   return (
@@ -296,6 +362,54 @@ export default function AdministracionFacturasPorCobrarPage() {
               <SelectItem value="rechazada">Rechazada</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select
+            value={tipoFilter}
+            onValueChange={(v) => {
+              setTipoFilter(v);
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="h-8 w-full sm:w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los tipos</SelectItem>
+              <SelectItem value="Propiedad">Propiedad</SelectItem>
+              <SelectItem value="Producto">Producto</SelectItem>
+              <SelectItem value="Servicio">Servicio</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Rango por fecha de venta */}
+          <div className="flex w-full sm:w-auto items-center gap-1.5">
+            <label className="text-[11px] text-muted-foreground whitespace-nowrap">
+              Venta:
+            </label>
+            <Input
+              type="date"
+              value={ventaDesde}
+              max={ventaHasta || undefined}
+              onChange={(e) => {
+                setVentaDesde(e.target.value);
+                setPage(0);
+              }}
+              className="h-8 w-full sm:w-[150px] text-xs"
+              aria-label="Fecha de venta desde"
+            />
+            <span className="text-[11px] text-muted-foreground">a</span>
+            <Input
+              type="date"
+              value={ventaHasta}
+              min={ventaDesde || undefined}
+              onChange={(e) => {
+                setVentaHasta(e.target.value);
+                setPage(0);
+              }}
+              className="h-8 w-full sm:w-[150px] text-xs"
+              aria-label="Fecha de venta hasta"
+            />
+          </div>
 
           {hayFiltros && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={limpiar}>
@@ -501,19 +615,28 @@ export default function AdministracionFacturasPorCobrarPage() {
           ventaContext={getVentaContext(selected.folio_cfdi)}
           hideVentaContext
         >
-          <VentaParaFacturarContent
-            entity={{
-              folio_cuenta: selected.folio_cfdi,
-              fecha_venta: selected.fecha_emision,
-              dias_esperando: selected.dias_desde_emision,
-              monto_factura_desarrollador: selected.monto_total,
-              comprador_principal: "",
-              rfc_comprador: "",
-              desarrollador_nombre: selected.desarrollador_nombre,
-            }}
-            ventaContext={getVentaContext(selected.folio_cfdi)}
-            onClose={() => setSelected(null)}
-          />
+          {selected.estado_factura_sozu === "sin_generar" ? (
+            // Detalle estilo "Generar Factura" + CTA Generar CFDI para facturas
+            // cuya Factura de Comisión SOZU aún no se ha generado.
+            <EjecucionFacturaSozuContent
+              entity={toComisionSozuEntity(selected)}
+              onClose={() => setSelected(null)}
+            />
+          ) : (
+            <VentaParaFacturarContent
+              entity={{
+                folio_cuenta: selected.folio_cfdi,
+                fecha_venta: selected.fecha_emision,
+                dias_esperando: selected.dias_desde_emision,
+                monto_factura_desarrollador: selected.monto_total,
+                comprador_principal: "",
+                rfc_comprador: "",
+                desarrollador_nombre: selected.desarrollador_nombre,
+              }}
+              ventaContext={getVentaContext(selected.folio_cfdi)}
+              onClose={() => setSelected(null)}
+            />
+          )}
         </ExpedienteDrawer>
       )}
     </>

@@ -1,6 +1,8 @@
 import type { BankLead, LeadStatus, LeadHealth } from "./bank-leads";
 import { PIPELINE_ORDER, STATUS_DESCRIPTORS, deriveHealth } from "./bank-leads";
-import type { Agent } from "./agents-store";
+
+/** Shape mínimo de agente para estadísticas (id/nombre/activo). */
+interface AgentLike { id: string; name: string; active: boolean }
 
 export const STAGE_PROBABILITY: Record<LeadStatus, number> = {
   nuevo: 0.10, asignado: 0.15, contactado: 0.25, en_evaluacion: 0.40,
@@ -73,7 +75,7 @@ export function computeByProject(leads: BankLead[]) {
 
 export interface AgentStats { agentId: string; name: string; active: boolean; activos: number; urgentes: number; formalizados: number; winRate: number }
 
-export function computeByAgent(leads: BankLead[], agents: Agent[]): AgentStats[] {
+export function computeByAgent(leads: BankLead[], agents: AgentLike[]): AgentStats[] {
   return agents.map((a) => {
     const mine = leads.filter((l) => l.assignedAgentId === a.id);
     const activos = mine.filter((l) => !STATUS_DESCRIPTORS[l.status].isTerminal).length;

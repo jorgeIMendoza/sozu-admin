@@ -449,6 +449,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
   const [search, setSearch] = useState("");
   const [proyectoFilter, setProyectoFilter] = useState<string>("all");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [propietarioFilter, setPropietarioFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
 
   const { data: casos = [], isLoading, error } = useCicloVentaCasos();
@@ -461,11 +462,20 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
     [casos],
   );
 
+  const propietarioOptions = useMemo(
+    () =>
+      Array.from(new Set(casos.map((c) => c.propietario).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [casos],
+  );
+
   const filtrados = useMemo(() => {
     const q = search ? norm(search) : null;
     return casos.filter((c) => {
       if (proyectoFilter !== "all" && c.proyecto_nombre !== proyectoFilter) return false;
       if (tipoFilter !== "all" && c.tipo !== tipoFilter) return false;
+      if (propietarioFilter !== "all" && c.propietario !== propietarioFilter) return false;
       if (q) {
         const hay = [
           c.folio,
@@ -480,7 +490,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       }
       return true;
     });
-  }, [search, proyectoFilter, tipoFilter, casos]);
+  }, [search, proyectoFilter, tipoFilter, propietarioFilter, casos]);
 
   const totalPages = Math.max(1, Math.ceil(filtrados.length / ADMIN_PAGE_SIZE));
   const filtradosPage = useMemo(
@@ -488,12 +498,15 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
     [filtrados, page],
   );
 
-  const hayFiltros = !!search || proyectoFilter !== "all" || tipoFilter !== "all";
+  const hayFiltros =
+    !!search || proyectoFilter !== "all" || tipoFilter !== "all" || propietarioFilter !== "all";
 
   const limpiar = () => {
     setSearch("");
     setProyectoFilter("all");
     setTipoFilter("all");
+    setPropietarioFilter("all");
+    setPage(0);
   };
 
   const totalDesc = hayFiltros
@@ -541,6 +554,23 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
               <SelectItem value="Propiedad">Propiedad</SelectItem>
               <SelectItem value="Producto">Producto</SelectItem>
               <SelectItem value="Servicio">Servicio</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={propietarioFilter}
+            onValueChange={(v) => { setPropietarioFilter(v); setPage(0); }}
+          >
+            <SelectTrigger className="h-8 w-full sm:w-[220px] text-xs">
+              <SelectValue placeholder="Propietario" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los propietarios</SelectItem>
+              {propietarioOptions.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

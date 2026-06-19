@@ -189,6 +189,15 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // "Banco" entrar directamente (fallback por si los submenús aún no están
   // asignados a su rol en BD para ese ambiente).
   if (location.pathname.startsWith('/admin/portal-bancos')) {
+    // Administración del portal (agentes / bancos con convenio): solo Super Admin.
+    const esAdminPortalBancos =
+      location.pathname.startsWith('/admin/portal-bancos/equipo') ||
+      location.pathname.startsWith('/admin/portal-bancos/bancos');
+    if (esAdminPortalBancos) {
+      return profile?.rol_id === 1
+        ? <>{children}</>
+        : <Navigate to="/admin/access-denied" replace />;
+    }
     if (profile?.rol_nombre === 'Banco') return <>{children}</>;
     let tieneAccesoBancos = false;
     for (const p of allowedPaths) {

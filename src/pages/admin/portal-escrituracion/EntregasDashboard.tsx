@@ -743,7 +743,7 @@ export function EntregasDashboard() {
             })()}
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">DAIKU completado</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Paquete de Muebles completado</p>
             {isLoading ? <Shimmer className="h-20" /> : (() => {
               const completado = rows.filter(r => r.daikuEstatus === 'COMPLETADO').length;
               const aplica = rows.filter(r => r.daikuEstatus !== 'NO_APLICA').length;
@@ -822,7 +822,7 @@ export function EntregasDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
-                    {['ID Cuenta', 'Unidad / Cliente', 'Precio Final', 'Estatus', 'Fecha programada', 'Checklist', 'DAIKU', 'Acta', 'Acciones'].map(h => (
+                    {['ID Cuenta', 'Unidad / Cliente', 'Precio Final', 'Estatus', 'Fecha programada', 'Checklist', 'Paquete de Muebles', 'Acta', 'Acciones'].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>

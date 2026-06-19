@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet } from 'lucide-react';
+import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows, fetchInBatches, fetchInBatchesPaged } from '@/utils/supabasePagination';
 import { useToast } from '@/hooks/use-toast';
 import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
+import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ type BodegaDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   ubicacion: string | null;
+  fechaCompra: string | null;
   cuentaId: number | null;
   cuentaLabel: string | null;
   tieneCuenta: boolean;
@@ -50,6 +52,7 @@ type EstacionamientoDetalle = {
   precioFinal: number;
   ubicacion: string | null;
   esIncluido: boolean;
+  fechaCompra: string | null;
   cuentaId: number | null;
   cuentaLabel: string | null;
   tieneCuenta: boolean;
@@ -63,6 +66,7 @@ type PaqueteDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   compradores: Person[];
+  fechaCompra: string | null;
   cuentaId: number;
   cuentaLabel: string;
 };
@@ -75,6 +79,7 @@ type CondensadoraDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   compradores: Person[];
+  fechaCompra: string | null;
   cuentaId: number;
   cuentaLabel: string;
 };
@@ -177,11 +182,13 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
 
-  // Adquisiciones adicionales con precio final (las que suman al valor de
-  // escrituración): bodegas con cuenta y estacionamientos NO incluidos.
+  // Adquisiciones con precio final que suman al valor de escrituración.
+  // Estacionamiento: cualquiera ligado con precio final > 0, sin importar el
+  // flag "incluido con el depa" — un cajón puede venir "incluido" pero tener
+  // su propia cuenta con precio (p.ej. tándem cobrado aparte).
   const bodegasAdquiridas = row.bodegas.filter((b) => b.tieneCuenta);
   const estacionamientosAdicionales = row.estacionamientos.filter(
-    (e) => !e.esIncluido && e.tieneCuenta,
+    (e) => e.tieneCuenta && e.precioFinal > 0,
   );
   const totalBodegas = bodegasAdquiridas.reduce((s, b) => s + b.precioFinal, 0);
   const totalEstacionamientos = estacionamientosAdicionales.reduce(
@@ -189,6 +196,17 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
     0,
   );
   const valorEscrituracion = row.precioFinal + totalBodegas + totalEstacionamientos;
+
+  // Fecha de compra por concepto: si los ítems comparten fecha se muestra esa;
+  // si hay varias distintas, "Varias"; si no hay, "—".
+  const fechaConcepto = (fechas: Array<string | null>) => {
+    const dias = [...new Set(fechas.filter(Boolean).map((f) => (f as string).slice(0, 10)))];
+    if (dias.length === 0) return '—';
+    if (dias.length === 1) return fmtDate(dias[0]);
+    return 'Varias';
+  };
+  const fechaBodegas = fechaConcepto(bodegasAdquiridas.map((b) => b.fechaCompra));
+  const fechaEstacionamientos = fechaConcepto(estacionamientosAdicionales.map((e) => e.fechaCompra));
 
   return (
     <>
@@ -382,28 +400,33 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2 font-medium">Concepto</th>
+                    <th className="px-4 py-2 font-medium">Fecha de compra</th>
                     <th className="px-4 py-2 font-medium text-right">Precio final</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">Propiedad · Unidad {row.unidad}</td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(row.fechaVenta)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(row.precioFinal)}</td>
                   </tr>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">
                       Bodegas{bodegasAdquiridas.length > 0 ? ` (${bodegasAdquiridas.length})` : ''}
                     </td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fechaBodegas}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalBodegas)}</td>
                   </tr>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">
                       Estacionamiento adicional{estacionamientosAdicionales.length > 0 ? ` (${estacionamientosAdicionales.length})` : ''}
                     </td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fechaEstacionamientos}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalEstacionamientos)}</td>
                   </tr>
                   <tr className="border-t-2 border-border bg-primary/5 text-[13px] font-bold">
                     <td className="px-4 py-2.5">Valor de escrituración</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">—</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-primary">{fmtMxn2(valorEscrituracion)}</td>
                   </tr>
                 </tbody>
@@ -770,6 +793,7 @@ function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null;
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Compradores</th>
               </tr>
             </thead>
@@ -783,10 +807,11 @@ function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null;
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(paq.precioFinal)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(paq.totalPagado)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(paq.saldoPendiente)}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(paq.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{paq.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
               )}
             </tbody>
           </table>
@@ -815,6 +840,7 @@ function CondensadorasModal({ row, open, onOpenChange }: { row: ExpedienteRow | 
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Compradores</th>
               </tr>
             </thead>
@@ -825,10 +851,11 @@ function CondensadorasModal({ row, open, onOpenChange }: { row: ExpedienteRow | 
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(cond.precioFinal)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(cond.totalPagado)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(cond.saldoPendiente)}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(cond.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{cond.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin condensadora ligada</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin condensadora ligada</td></tr>
               )}
             </tbody>
           </table>
@@ -913,6 +940,7 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Ubicación</th>
               </tr>
             </thead>
@@ -930,10 +958,11 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{bodega.tieneCuenta ? fmtMxn2(bodega.precioFinal) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{bodega.tieneCuenta ? fmtMxn2(bodega.totalPagado) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{bodega.tieneCuenta ? fmtMxn2(bodega.saldoPendiente) : '—'}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(bodega.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{bodega.ubicacion || 'N/A'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin bodegas ligadas</td></tr>
+                <tr><td colSpan={8} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin bodegas ligadas</td></tr>
               )}
             </tbody>
           </table>
@@ -953,6 +982,7 @@ export default function LegalFlowEscrituracionExpedientes() {
   const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
   const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
   const [selected, setSelected] = useState<ExpedienteRow | null>(null);
+  const { exportToExcel, isExporting } = useExportToExcel();
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['legal-flow-escrituracion-expedientes'],
@@ -994,6 +1024,36 @@ export default function LegalFlowEscrituracionExpedientes() {
       ].join(' ').toLowerCase().includes(q);
     });
   }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter]);
+
+  // Exporta a Excel (CSV) los expedientes según los filtros activos.
+  const handleExport = () => {
+    const exportData = filtered.map((row) => {
+      const totalBodegas = row.bodegas.filter((b) => b.tieneCuenta).reduce((s, b) => s + b.precioFinal, 0);
+      const totalEstac = row.estacionamientos
+        .filter((e) => !e.esIncluido && e.tieneCuenta)
+        .reduce((s, e) => s + e.precioFinal, 0);
+      const valorEscrituracion = row.precioFinal + totalBodegas + totalEstac;
+      return {
+        'ID Cuenta': row.cuentaLabel,
+        'Compradores': row.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', '),
+        'Propietario': row.propietario,
+        'Tipo': row.tipo,
+        'Estatus': row.estatus,
+        'Unidad': row.unidad,
+        'Proyecto': row.proyecto,
+        'Edificio': row.edificio,
+        'Modelo': row.modelo,
+        'Fecha venta': fmtDate(row.fechaVenta),
+        'Estacionamientos': row.estacionamientos.map((e) => e.nombre).join(', '),
+        'Bodegas': row.bodegas.map((b) => b.nombre).join(', '),
+        'Muebles': row.paquetes.length ? 'Sí' : 'No',
+        'Condensadora': row.tieneCondensadora ? 'Sí' : 'No',
+        'Precio final propiedad': row.precioFinal,
+        'Valor de escrituración': valorEscrituracion,
+      };
+    });
+    exportToExcel({ data: exportData, filename: 'escrituracion_expedientes' });
+  };
 
   return (
     <div className="max-w-[1600px] space-y-6 px-10 py-8">
@@ -1047,6 +1107,15 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[150px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Piso" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los pisos</SelectItem>{options.floors.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          className="ml-auto h-[38px] gap-2 text-[13px]"
+          onClick={handleExport}
+          disabled={isExporting || filtered.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {isExporting ? 'Exportando…' : 'Exportar a Excel'}
+        </Button>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="panel overflow-hidden">
@@ -1062,6 +1131,7 @@ export default function LegalFlowEscrituracionExpedientes() {
                 <th className="table-head">Unidad</th>
                 <th className="table-head">Proyecto</th>
                 <th className="table-head">Modelo</th>
+                <th className="table-head">Fecha venta</th>
                 <th className="table-head">Estacionamientos</th>
                 <th className="table-head">Bodegas</th>
                 <th className="table-head">Muebles</th>
@@ -1071,11 +1141,11 @@ export default function LegalFlowEscrituracionExpedientes() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
@@ -1086,6 +1156,7 @@ export default function LegalFlowEscrituracionExpedientes() {
                   <td className="table-cell text-[13px] font-medium">{row.unidad}</td>
                   <td className="table-cell text-[13px]">{row.proyecto}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.modelo}</td>
+                  <td className="table-cell text-[13px] tabular-nums text-muted-foreground">{fmtDate(row.fechaVenta)}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.estacionamientos.length ? row.estacionamientos.map((e) => e.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.bodegas.length ? row.bodegas.map((b) => b.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px]">
@@ -1384,6 +1455,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           ubicacion: fila?.ubicacion || null,
+          fechaCompra: cuenta?.fecha_compra ?? null,
           cuentaId: cuenta?.id ?? null,
           cuentaLabel: cuenta ? ccLabel(cuenta.id) : null,
           tieneCuenta: !!cuenta,
@@ -1409,6 +1481,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           precioFinal,
           ubicacion: fila?.ubicacion || null,
           esIncluido: !!fila?.es_incluido,
+          fechaCompra: cuenta?.fecha_compra ?? null,
           cuentaId: cuenta?.id ?? null,
           cuentaLabel: cuenta ? ccLabel(cuenta.id) : null,
           tieneCuenta: !!cuenta,
@@ -1427,6 +1500,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           compradores: buyersByAccount.get(c.id) || [],
+          fechaCompra: c.fecha_compra ?? null,
           cuentaId: c.id,
           cuentaLabel: ccLabel(c.id),
         };
@@ -1443,6 +1517,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           compradores: buyersByAccount.get(c.id) || [],
+          fechaCompra: c.fecha_compra ?? null,
           cuentaId: c.id,
           cuentaLabel: ccLabel(c.id),
         };

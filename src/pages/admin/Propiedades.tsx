@@ -353,16 +353,24 @@ const Propiedades = () => {
   // Auth context for prospect ownership check
   const { profile } = useAuth();
   
-  // Check if user can see all prospects or only their own
+  // Check if user can see all prospects or only their own.
+  // profile.ver_todos_prospectos_compradores ahora refleja el flag EFECTIVO (usuario OR rol),
+  // espejo de la función backend can_view_all_prospects() — ver get_current_user_profile().
   const canSeeAllProspects = profile?.ver_todos_prospectos_compradores || isSuperAdmin;
+  // Mirror de is_admin_user(): roles internos admin (Super Admin = 1, Administrador de Proyecto = 2).
+  const isAdminRole = profile?.rol_id === 1 || profile?.rol_id === 2;
   const currentUserPersonaId = profile?.id_persona;
-  
+
   // Check if user can see advanced filters and deleted tab
   const canSeeAdvancedFilters = isSuperAdmin || (profile?.ver_filtros_avanzados_eliminados ?? true);
-  
-  // Helper function to check if user can access an offer
+
+  // Helper function to check if user can access an offer.
+  // Espeja el OR de la función backend can_access_agent_owned_lead:
+  //   is_admin_user() OR can_view_all_prospects() OR dueño del lead.
+  // (Las ramas de agente-lead tipo 19 y acceso por proyecto viven solo en backend;
+  //  exponerlas como RPC evitaría desincronización front/back para esos casos.)
   const canAccessOffer = (offer: any) => {
-    if (canSeeAllProspects) return true;
+    if (isAdminRole || canSeeAllProspects) return true;
     if (!currentUserPersonaId) return false;
     // User can access if they are the owner of the lead
     return offer.id_persona_duena_lead === currentUserPersonaId;

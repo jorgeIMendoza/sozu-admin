@@ -228,6 +228,7 @@ const EscWorkflow     = lazyRetry(() => import("./pages/admin/portal-escrituraci
 const EscAppNotaria         = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotaria })));
 const EscAppNotariaUsuarios = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppNotariaUsuarios })));
 const EscAppJuridico        = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscAppJuridico })));
+const EscChecklistConfig    = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscChecklistConfig })));
 const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotariaLogin"));
 
 // Portal Alta Dirección
@@ -401,6 +402,7 @@ const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index
 const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
 const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
 const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBancos })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -866,6 +868,7 @@ const App = () => (
                   <Route path="portal-escrituracion/citas" element={<EscCitas />} />
                   <Route path="portal-escrituracion/entregas" element={<EscEntregas />} />
                   <Route path="portal-escrituracion/entregas/:id" element={<EscEntregaDetalle />} />
+                  <Route path="portal-escrituracion/checklist-configuracion" element={<EscChecklistConfig />} />
                   <Route path="portal-escrituracion/rpp" element={<EscRPP />} />
                   <Route path="portal-escrituracion/reportes" element={<EscReportesPage />} />
                   <Route path="portal-escrituracion/auditoria" element={<EscAuditoria />} />
@@ -977,6 +980,7 @@ const App = () => (
                   <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
                   <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
                   <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+                  <Route path="portal-bancos/bancos"   element={<BancosBancos />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
