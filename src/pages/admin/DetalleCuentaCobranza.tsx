@@ -645,6 +645,7 @@ export default function DetalleCuentaCobranza() {
             id,
             nombre,
             id_categoria,
+            id_entidad_relacionada_dueno,
             categorias_producto!productos_servicios_id_categoria_fkey(
               nombre
             )
@@ -652,6 +653,14 @@ export default function DetalleCuentaCobranza() {
         `)
         .eq('id', cuenta.id_oferta)
         .maybeSingle();
+
+      // Resolver la entidad DUEÑA (vendedor) según el tipo de cuenta:
+      //   Producto/Servicio -> productos_servicios.id_entidad_relacionada_dueno (vía ofertas.id_producto)
+      //   Propiedad          -> propiedades.id_entidad_relacionada_dueno
+      // Antes siempre tomaba el dueño de la propiedad, mostrando al dueño del depto en cuentas de producto.
+      const duenoEntidadId = oferta?.id_producto
+        ? oferta?.productos_servicios?.id_entidad_relacionada_dueno
+        : oferta?.propiedades?.id_entidad_relacionada_dueno;
 
       // Get compradores with spouse information
       const { data: compradores } = await supabase
@@ -688,7 +697,7 @@ export default function DetalleCuentaCobranza() {
           .select(`
             personas!entidades_relacionadas_id_persona_fkey(nombre_legal)
           `)
-          .eq('id', oferta?.propiedades?.id_entidad_relacionada_dueno)
+          .eq('id', duenoEntidadId)
           .maybeSingle(),
         oferta?.propiedades?.id_estatus_disponibilidad 
           ? supabase
@@ -3565,7 +3574,7 @@ export default function DetalleCuentaCobranza() {
                   </div>
                 )}
                 <div>
-                  <label className="text-sm font-medium">Dueño</label>
+                  <label className="text-sm font-medium">Vendedor</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
                 </div>
                 <div>
@@ -3644,6 +3653,10 @@ export default function DetalleCuentaCobranza() {
                     <p className="text-sm text-muted-foreground">{cuentaDetalle.producto_servicio_nombre}</p>
                   </div>
                 )}
+                <div>
+                  <label className="text-sm font-medium">Vendedor</label>
+                  <p className="text-sm text-muted-foreground">{cuentaDetalle.dueno}</p>
+                </div>
                 <div>
                   <label className="text-sm font-medium">CLABE STP</label>
                   <p className="text-sm text-muted-foreground">{cuentaDetalle.clabe_stp || 'No asignada'}</p>
