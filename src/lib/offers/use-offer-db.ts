@@ -83,8 +83,8 @@ function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
       }, 0);
       monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
       finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
-      pctMensual         = finalPrice > 0 ? (installmentsTotal / finalPrice) * 100 : 0;
-      pctEntrega         = finalPrice > 0 ? (finalPaymentAmount / finalPrice) * 100 : 0;
+      pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
+      pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
     } else {
       pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
       pctEntrega  = Number(e.porcentaje_entrega ?? 0);
