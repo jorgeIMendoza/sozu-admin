@@ -61,6 +61,7 @@ const Inmobiliarias = lazyRetry(() => import("./pages/admin/Inmobiliarias"));
 const Administradoras = lazyRetry(() => import("./pages/admin/Administradoras"));
 const Notarias = lazyRetry(() => import("./pages/admin/Notarias"));
 const Bancos = lazyRetry(() => import("./pages/admin/Bancos"));
+const CuentasSozu = lazyRetry(() => import("./pages/admin/CuentasSozu"));
 const Prospectos = lazyRetry(() => import("./pages/admin/Prospectos"));
 const Compradores = lazyRetry(() => import("./pages/admin/Compradores"));
 const DetalleCuentaMantenimiento = lazyRetry(() => import("./pages/admin/DetalleCuentaMantenimiento"));
@@ -98,6 +99,7 @@ const VersionProduccion = lazyRetry(() => import("./pages/admin/VersionProduccio
 const ReportesInventarios = lazyRetry(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas"));
 const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
+const EstadosCuenta = lazyRetry(() => import("./pages/admin/finanzas/EstadosCuenta"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -694,6 +696,7 @@ const App = () => (
                   <Route path="administradoras" element={<Administradoras />} />
                   <Route path="notarias" element={<Notarias />} />
                   <Route path="bancos" element={<Bancos />} />
+                  <Route path="cuentas-sozu" element={<CuentasSozu />} />
                   <Route path="prospectos" element={<Prospectos />} />
                   <Route path="compradores" element={<Compradores />} />
                   <Route path="vendedores" element={<Vendedores />} />
@@ -738,6 +741,7 @@ const App = () => (
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
                   <Route path="finanzas/validacion-contratos" element={<ValidacionContratosPDF />} />
+                  <Route path="finanzas/estados-cuenta" element={<EstadosCuenta />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
