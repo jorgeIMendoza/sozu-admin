@@ -902,7 +902,7 @@ export default function EstadosCuenta() {
           </Button>
         )}
         <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
-          {`${filtered.length} de ${totalRegistros} — Pág. ${safePage}/${totalPages}`}
+          {`${filtered.length} de ${totalRegistros} - Pág. ${safePage}/${totalPages}`}
         </p>
       </div>
 
