@@ -170,7 +170,7 @@ const ActivitySection = ({ portfolio, onPayNow }: ActivitySectionProps) => {
                         {item.category === "active_patrimony" ? "Patrimonio" : "En adquisición"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{item.dueDate}</p>
+                    {item.dueDate && <p className="text-xs text-muted-foreground leading-relaxed">{item.dueDate}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
                     {hasAmount ? (

@@ -484,10 +484,10 @@ function buildFromData(
       stages: buildStages(estatusId, pendingBalance, deliveryDate),
       payments: paymentRecords,
       maintenance:
-        maintenanceFee > 0
+        maintenanceFee > 0 && estatusId === 8
           ? {
               monthlyFee: maintenanceFee,
-              nextDueDate: "—",
+              nextDueDate: "",
               status: "pendiente",
               history: [],
             }
