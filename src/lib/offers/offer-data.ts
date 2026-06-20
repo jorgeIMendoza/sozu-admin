@@ -51,6 +51,7 @@ export interface PaymentPlan {
   id: string;
   name: string;
   type: "escalonado" | "standard";
+  isPersonalized?: boolean;
   finalPrice: number;
   discountPct: number;
   discountAmount: number;

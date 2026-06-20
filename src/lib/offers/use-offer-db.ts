@@ -98,6 +98,7 @@ function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
       id: String(e.id),
       name: e.nombre ?? `Plan ${e.orden ?? e.id}`,
       type: nMensual > 0 ? "escalonado" : "standard",
+      isPersonalized: e.es_manual === true,
       finalPrice,
       discountPct:    pctDesc < 0 ? Math.abs(pctDesc) : undefined,
       discountAmount: pctDesc < 0 ? Math.abs(listPrice - finalPrice) : undefined,
@@ -327,13 +328,35 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
+  const selectedId   = oferta.id_esquema_pago_seleccionado;
   const allEsqs      = (esquemas ?? []).filter((e: any) => !e.es_manual);
-  const filteredEsqs = oferta.id_esquema_pago_seleccionado
-    ? [
-        ...allEsqs.filter((e: any) => e.id === oferta.id_esquema_pago_seleccionado),
-        ...allEsqs.filter((e: any) => e.id !== oferta.id_esquema_pago_seleccionado),
-      ].slice(0, 6)
-    : allEsqs.slice(0, 6);
+  const selectedIsManual = selectedId
+    ? (esquemas ?? []).some((e: any) => e.id === selectedId && e.es_manual)
+    : false;
+
+  // Strip internal naming pattern (manual_NNNN_*) and show clean label
+  const normalizeManualName = (e: any): any => {
+    if (!e.es_manual) return e;
+    const cleaned = e.nombre.replace(/^manual_\d+_/i, '').replace(/_/g, ' ').trim();
+    return { ...e, nombre: cleaned || 'Plan personalizado' };
+  };
+
+  let filteredEsqs: any[];
+  if (selectedIsManual && selectedId) {
+    // Manual selected: show it first (clean name) + all non-manual for comparison
+    const manualEsq = (esquemas ?? []).find((e: any) => e.id === selectedId);
+    filteredEsqs = [
+      ...(manualEsq ? [normalizeManualName(manualEsq)] : []),
+      ...allEsqs,
+    ].slice(0, 6);
+  } else {
+    filteredEsqs = selectedId
+      ? [
+          ...allEsqs.filter((e: any) => e.id === selectedId),
+          ...allEsqs.filter((e: any) => e.id !== selectedId),
+        ].slice(0, 6)
+      : allEsqs.slice(0, 6);
+  }
   const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice);
 
   // 10. Expiración (7 días desde generación)

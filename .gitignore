@@ -47,6 +47,9 @@ Ejecuciones_manuales/*
 *.png
 !src/assets/*.png
 !public/*.png
+
+# Reportes semanales (generados localmente, no subir al repo)
+reportes_semanales/
 bundle*.js
 
 # Archivos temporales de Vite (transpilación del config)
