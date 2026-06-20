@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   MessageCircle,
   Phone,
@@ -13,6 +14,7 @@ import {
   buildAgentWhatsAppLink,
   buildAgentPhoneLink,
   buildAgentEmailLink,
+  AGENT_PHOTO_FALLBACK,
 } from "@/lib/offers/agent-data";
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
 }
 
 const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const isLogo = !agent.photoUrl || photoFailed;
   const whatsappMsg = offerId
     ? `Hola ${agent.firstName}, tengo interés en la oferta ${offerId}${
         offerLabel ? ` (${offerLabel})` : ""
@@ -59,11 +63,12 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
       <div className="p-5 md:p-6">
         <div className="flex flex-row md:flex-row gap-4 md:gap-5">
           {/* Foto + identidad */}
-          <div className="flex-shrink-0">
+          <div className={`flex-shrink-0 w-20 h-20 md:w-32 md:h-32 rounded-xl overflow-hidden${isLogo ? " bg-muted/60 flex items-center justify-center" : ""}`}>
             <img
-              src={agent.photoUrl}
+              src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
               alt={agent.fullName}
-              className="w-20 h-20 md:w-32 md:h-32 rounded-xl object-cover"
+              className={isLogo ? "w-[70%] h-[70%] object-contain dark:invert" : "w-full h-full object-cover"}
+              onError={() => setPhotoFailed(true)}
             />
           </div>
 
