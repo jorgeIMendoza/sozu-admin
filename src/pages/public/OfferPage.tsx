@@ -1,6 +1,5 @@
 import sozuLogo from "@/assets/sozu-logo.png";
 import AmenitiesGridSection from "@/components/offer/AmenitiesGridSection";
-import LifestyleCountryClubSection from "@/components/offer/LifestyleCountryClubSection";
 import PaymentPlansComparatorSection from "@/components/offer/PaymentPlansComparatorSection";
 import Tour360Section from "@/components/offer/Tour360Section";
 import AgentCard from "@/components/offer/AgentCard";
@@ -105,7 +104,7 @@ const OfferPage = () => {
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
   const mockOffer = useOfferById(offerId ?? "");
-  const offer = dbOffer ?? mockOffer;
+  const offer = dbOffer ?? (import.meta.env.DEV ? mockOffer : null);
   const injectOffer = useInjectOffer();
 
   useEffect(() => {
@@ -603,8 +602,6 @@ const OfferPage = () => {
             <div id="location" className={sectionClass("location")}>
               <OfferLocation location={offer.location} />
             </div>
-
-            <LifestyleCountryClubSection zoneName="Country Club" />
 
             {/* DEVELOPMENT */}
             <div id="development" className={sectionClass("development")}>

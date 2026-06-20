@@ -1139,17 +1139,31 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           if (import.meta.env.DEV) {
             console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
           }
-          const { sendMultipleOffersEmailDirect } = await emailServicePromise;
-          await sendMultipleOffersEmailDirect({
-            offerIds: allOfferIdsForEmail,
-            propertyNumber,
-            recipientEmail: result.leadEmail,
-            recipientName: result.leadName,
-            reservationLink: ofertaLink,
-            preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
-              ? digitalAttachments.filter(a => a.tipo === 'propiedad')
-              : digitalAttachments.length > 0 ? digitalAttachments : undefined,
-          });
+          if (sendEmailOnGenerate) {
+            const { sendMultipleOffersEmailDirect } = await emailServicePromise;
+            await sendMultipleOffersEmailDirect({
+              offerIds: allOfferIdsForEmail,
+              propertyNumber,
+              recipientEmail: result.leadEmail,
+              recipientName: result.leadName,
+              reservationLink: ofertaLink,
+              preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
+                ? digitalAttachments.filter(a => a.tipo === 'propiedad')
+                : digitalAttachments.length > 0 ? digitalAttachments : undefined,
+            });
+            toast({
+              title: "Correo enviado",
+              description: "La oferta digital fue enviada al correo del prospecto.",
+              duration: 5000,
+              variant: "success",
+            });
+          } else {
+            toast({
+              title: "Oferta digital generada",
+              description: "La oferta se generó correctamente. No se envió correo al cliente.",
+              duration: 5000,
+            });
+          }
         } catch (digitalErr: any) {
           console.error('Error en flujo oferta digital:', digitalErr);
           toast({
@@ -1168,6 +1182,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             propertyNumber,
             recipientEmail: result.leadEmail,
             recipientName: result.leadName,
+          });
+          toast({
+            title: "Correo enviado",
+            description: "La oferta fue enviada al correo del prospecto.",
+            duration: 5000,
+            variant: "success",
           });
         } catch (emailErr) {
           console.error('Error sending offer email after PDF generation:', emailErr);

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +22,7 @@ import {
   Check,
   AlertTriangle,
   FileImage,
+  ExternalLink,
   MessageSquare,
   Activity,
   Layers,
@@ -49,7 +50,8 @@ type GarantiaEstatus = 'VIGENTE' | 'POR_VENCER' | 'VENCIDA' | 'FUERA_GARANTIA';
 
 interface EvidenciaItem {
   nombre: string;
-  tipo: 'FOTO' | 'VIDEO';
+  tipo: 'FOTO' | 'VIDEO' | 'DOCUMENTO';
+  url: string;
   fecha: string;
   subidoPor: string;
 }
@@ -450,17 +452,52 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function EvidenciaCard({ item }: { item: EvidenciaItem }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-3 bg-white hover:border-slate-300 transition-colors">
-      <div className="flex items-center gap-2 mb-2">
-        {item.tipo === 'FOTO' ? (
-          <Camera size={18} className="text-slate-400 flex-shrink-0" />
-        ) : (
-          <Video size={18} className="text-slate-400 flex-shrink-0" />
-        )}
-        <span className="text-xs font-medium text-slate-700 truncate">{item.nombre}</span>
+    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white hover:border-slate-300 transition-colors">
+      {/* Preview */}
+      {item.tipo === 'FOTO' && item.url && (
+        <img
+          src={item.url}
+          alt={item.nombre}
+          className="w-full h-32 object-cover bg-slate-100"
+        />
+      )}
+      {item.tipo === 'VIDEO' && item.url && (
+        <video
+          src={item.url}
+          controls
+          className="w-full h-32 object-cover bg-black"
+        />
+      )}
+      {item.tipo === 'DOCUMENTO' && (
+        <div className="w-full h-32 bg-slate-50 flex items-center justify-center">
+          <FileImage size={36} className="text-slate-300" />
+        </div>
+      )}
+
+      {/* Metadata + acción */}
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-1 mb-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {item.tipo === 'FOTO'     && <Camera    size={13} className="text-slate-400 flex-shrink-0" />}
+            {item.tipo === 'VIDEO'    && <Video     size={13} className="text-slate-400 flex-shrink-0" />}
+            {item.tipo === 'DOCUMENTO'&& <FileImage size={13} className="text-slate-400 flex-shrink-0" />}
+            <span className="text-xs font-medium text-slate-700 truncate">{item.nombre}</span>
+          </div>
+          {item.url && (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver archivo"
+              className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <ExternalLink size={13} />
+            </a>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500">{item.fecha}</p>
+        <p className="text-[11px] text-slate-400">Por: {item.subidoPor}</p>
       </div>
-      <p className="text-[11px] text-slate-500">{item.fecha}</p>
-      <p className="text-[11px] text-slate-400">Por: {item.subidoPor}</p>
     </div>
   );
 }
@@ -530,6 +567,9 @@ export function PostventaDetalle() {
           diagnostico, causa_probable, solucion_propuesta,
           descripcion_reparacion, piezas_reemplazadas,
           fecha_reparacion, fecha_creacion, fecha_actualizacion,
+          id_responsable_interno, id_proveedor_externo,
+          responsable_er:entidades_relacionadas!postventa_tickets_id_responsable_interno_fkey(id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial, email, telefono)),
+          proveedor_er:entidades_relacionadas!postventa_tickets_id_proveedor_externo_fkey(id, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal, email, telefono)),
           postventa_categorias_garantia(id, nombre)
         `)
         .eq('id', numericId)
@@ -598,6 +638,49 @@ export function PostventaDetalle() {
   const [tipoComentario, setTipoComentario] = useState<'INTERNO' | 'CLIENTE' | 'PROVEEDOR'>('CLIENTE');
   const fileInputInicialRef = useRef<HTMLInputElement>(null);
   const fileInputReparacionRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+
+  // Modal de asignación
+  const [asignModal, setAsignModal] = useState<'interno' | 'proveedor' | null>(null);
+  const [asignSaving, setAsignSaving] = useState(false);
+  const [asignSearch, setAsignSearch] = useState('');
+  const [pendingResponsableId, setPendingResponsableId] = useState<number | null>(null);
+  const [pendingProveedorId, setPendingProveedorId] = useState<number | null>(null);
+
+  // IDs de asignación actuales del ticket (null hasta que cargue ticketDB)
+  const responsableErId = (ticketDB as any)?.id_responsable_interno as number | null ?? null;
+  const proveedorErId   = (ticketDB as any)?.id_proveedor_externo   as number | null ?? null;
+
+  // Catálogo personal interno para el modal (id_tipo_entidad = 22 = Personal de mantenimiento)
+  // PostventaConfiguracion.tsx Tab "Personal" inserta con id_tipo_entidad = 22
+  const { data: personalInterno = [] } = useQuery({
+    queryKey: ['pv-personal-interno-modal'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial, email, telefono)')
+        .eq('id_tipo_entidad', 22)
+        .eq('activo', true)
+        .order('id_persona');
+      return (data ?? []) as any[];
+    },
+    enabled: asignModal === 'interno',
+  });
+
+  // Catálogo proveedores externos para el modal (id_tipo_entidad = 8)
+  const { data: proveedoresExtModal = [] } = useQuery({
+    queryKey: ['pv-proveedores-ext-modal'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal, email, telefono)')
+        .eq('id_tipo_entidad', 8)
+        .eq('activo', true)
+        .order('id_persona');
+      return (data ?? []) as any[];
+    },
+    enabled: asignModal === 'proveedor',
+  });
 
   // ── Sync editable fields from DB ─────────────────────────────────────────────
 
@@ -650,7 +733,8 @@ export function PostventaDetalle() {
     .filter((e: any) => e.tipo_evidencia === 'INICIAL')
     .map((e: any) => ({
       nombre: e.nombre ?? 'archivo',
-      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : 'FOTO',
+      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : e.tipo_archivo === 'DOCUMENTO' ? 'DOCUMENTO' : 'FOTO',
+      url: e.url ?? '',
       fecha: e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleString('es-MX') : '—',
       subidoPor: e.subido_por ?? '—',
     }));
@@ -659,7 +743,8 @@ export function PostventaDetalle() {
     .filter((e: any) => e.tipo_evidencia === 'REPARACION')
     .map((e: any) => ({
       nombre: e.nombre ?? 'archivo',
-      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : 'FOTO',
+      tipo: e.tipo_archivo === 'VIDEO' ? 'VIDEO' : e.tipo_archivo === 'DOCUMENTO' ? 'DOCUMENTO' : 'FOTO',
+      url: e.url ?? '',
       fecha: e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleString('es-MX') : '—',
       subidoPor: e.subido_por ?? '—',
     }));
@@ -678,6 +763,16 @@ export function PostventaDetalle() {
     fecha: c.fecha_creacion ? new Date(c.fecha_creacion).toLocaleString('es-MX') : '—',
     por: c.creado_por ?? '—',
   }));
+
+  // Nombres de asignaciones resueltos directamente del join en el ticket query
+  const responsablePersona = (ticketDB as any)?.responsable_er?.personas;
+  const proveedorPersona   = (ticketDB as any)?.proveedor_er?.personas;
+  const responsableNombre = responsablePersona
+    ? (responsablePersona.nombre_legal || responsablePersona.email || '—')
+    : null;
+  const proveedorNombre = proveedorPersona
+    ? (proveedorPersona.nombre_comercial ?? proveedorPersona.nombre_legal ?? proveedorPersona.email ?? '—')
+    : null;
 
   // Build TicketDetalle for render helpers
   const ticket: TicketDetalle = {
@@ -699,8 +794,8 @@ export function PostventaDetalle() {
     fechaVencimientoGarantia: '—',
     slaLabel,
     slaVencido,
-    responsable: 'Sin asignar',
-    proveedor: 'Sin proveedor',
+    responsable: responsableNombre ?? 'Sin asignar',
+    proveedor: proveedorNombre ?? 'Sin proveedor',
     diagnostico,
     causaProbable,
     solucionPropuesta,
@@ -715,7 +810,8 @@ export function PostventaDetalle() {
 
   const canCerrar = evidReparacion.length > 0 && descReparacion.trim().length > 0;
   const canSolicitarConfirmacion = evidReparacion.length > 0 && descReparacion.trim().length > 0;
-  const sinProveedor = true; // no id_proveedor in wizard for now
+  const sinResponsable = !responsableErId;
+  const sinProveedor   = !proveedorErId;
 
   // ── DB helpers ───────────────────────────────────────────────────────────────
 
@@ -823,7 +919,11 @@ export function PostventaDetalle() {
         url: publicUrl,
         tipo_evidencia: tipoEvidencia,
         nombre: file.name,
-        tipo_archivo: file.type || 'application/octet-stream',
+        tipo_archivo: file.type.startsWith('video/')
+          ? 'VIDEO'
+          : file.type.startsWith('image/')
+            ? 'FOTO'
+            : 'DOCUMENTO',
         subido_por: profile?.email ?? 'admin',
       });
       if (insertError) { toast.error(`Error al registrar evidencia: ${insertError.message}`); continue; }
@@ -831,7 +931,7 @@ export function PostventaDetalle() {
     }
     if (subidos > 0) {
       await insertLog(
-        tipoEvidencia === 'inicial' ? 'EVIDENCIA_INICIAL' : 'EVIDENCIA_REPARACION',
+        tipoEvidencia === 'INICIAL' ? 'EVIDENCIA_INICIAL' : 'EVIDENCIA_REPARACION',
         `${subidos} archivo(s) de evidencia ${tipoEvidencia} subido(s)`,
       );
       refetchEvidencias();
@@ -862,8 +962,50 @@ export function PostventaDetalle() {
     toast.success('Abriendo comunicación con el cliente');
   }
 
-  function handleAsignarProveedor() {
-    toast.success('Abriendo selector de proveedor');
+  async function handleGuardarResponsable() {
+    if (!pendingResponsableId) return;
+    setAsignSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('postventa_tickets')
+        .update({ id_responsable_interno: pendingResponsableId })
+        .eq('id', numericId);
+      if (error) throw error;
+      await insertLog('ASIGNACION', `Responsable interno asignado (ER #${pendingResponsableId})`);
+      await refetchTicket();
+      qc.invalidateQueries({ queryKey: ['pv-actividad', numericId] });
+      toast.success('Responsable interno asignado');
+      setAsignModal(null);
+      setPendingResponsableId(null);
+      setAsignSearch('');
+    } catch (e: any) {
+      toast.error(e.message ?? 'Error al asignar responsable');
+    } finally {
+      setAsignSaving(false);
+    }
+  }
+
+  async function handleGuardarProveedor() {
+    if (!pendingProveedorId) return;
+    setAsignSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('postventa_tickets')
+        .update({ id_proveedor_externo: pendingProveedorId })
+        .eq('id', numericId);
+      if (error) throw error;
+      await insertLog('ASIGNACION', `Proveedor externo asignado (ER #${pendingProveedorId})`);
+      await refetchTicket();
+      qc.invalidateQueries({ queryKey: ['pv-actividad', numericId] });
+      toast.success('Proveedor externo asignado');
+      setAsignModal(null);
+      setPendingProveedorId(null);
+      setAsignSearch('');
+    } catch (e: any) {
+      toast.error(e.message ?? 'Error al asignar proveedor');
+    } finally {
+      setAsignSaving(false);
+    }
   }
 
   // ── Render helpers ──
@@ -1308,12 +1450,21 @@ export function PostventaDetalle() {
               Contactar cliente
             </button>
 
-            {sinProveedor && (
+            {sinResponsable && (
               <button
-                onClick={handleAsignarProveedor}
+                onClick={() => { setPendingResponsableId(null); setAsignSearch(''); setAsignModal('interno'); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition-colors"
               >
                 <UserPlus size={14} />
+                Asignar mantenimiento
+              </button>
+            )}
+            {sinProveedor && (
+              <button
+                onClick={() => { setPendingProveedorId(null); setAsignSearch(''); setAsignModal('proveedor'); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <Wrench size={14} />
                 Asignar proveedor
               </button>
             )}
@@ -1444,14 +1595,42 @@ export function PostventaDetalle() {
           {/* 5. Asignacion */}
           <div>
             <SectionLabel>Asignación</SectionLabel>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <User size={13} className="text-slate-400 flex-shrink-0" />
-                <span>{ticket.responsable}</span>
+            <div className="space-y-3">
+              {/* Responsable interno */}
+              <div>
+                <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1">Responsable interno</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <User size={13} className={responsableNombre ? 'text-indigo-500 flex-shrink-0' : 'text-slate-300 flex-shrink-0'} />
+                    <span className={`text-sm truncate ${responsableNombre ? 'text-slate-700 font-medium' : 'text-slate-400 italic'}`}>
+                      {ticket.responsable}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { setPendingResponsableId(responsableErId); setAsignSearch(''); setAsignModal('interno'); }}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 whitespace-nowrap flex-shrink-0"
+                  >
+                    {sinResponsable ? 'Asignar' : 'Cambiar'}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <Wrench size={13} className="text-slate-400 flex-shrink-0" />
-                <span>{ticket.proveedor}</span>
+              {/* Proveedor externo */}
+              <div>
+                <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1">Proveedor externo</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Wrench size={13} className={proveedorNombre ? 'text-amber-500 flex-shrink-0' : 'text-slate-300 flex-shrink-0'} />
+                    <span className={`text-sm truncate ${proveedorNombre ? 'text-slate-700 font-medium' : 'text-slate-400 italic'}`}>
+                      {ticket.proveedor}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { setPendingProveedorId(proveedorErId); setAsignSearch(''); setAsignModal('proveedor'); }}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 whitespace-nowrap flex-shrink-0"
+                  >
+                    {sinProveedor ? 'Asignar' : 'Cambiar'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1502,6 +1681,110 @@ export function PostventaDetalle() {
           <div className="p-6">{renderTabContent()}</div>
         </main>
       </div>
+
+      {/* ── Modal de asignación ─────────────────────────────────────────────────── */}
+      {asignModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => { setAsignModal(null); setAsignSearch(''); }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                {asignModal === 'interno' ? <User size={16} className="text-indigo-500" /> : <Wrench size={16} className="text-amber-500" />}
+                <h3 className="text-sm font-semibold text-slate-800">
+                  {asignModal === 'interno' ? 'Asignar responsable interno' : 'Asignar proveedor externo'}
+                </h3>
+              </div>
+              <button onClick={() => { setAsignModal(null); setAsignSearch(''); }} className="p-1 rounded hover:bg-slate-100">
+                <X size={16} className="text-slate-400" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-5 pt-4 pb-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={asignModal === 'interno' ? 'Buscar personal…' : 'Buscar proveedor…'}
+                  value={asignSearch}
+                  onChange={e => setAsignSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="px-5 pb-3 max-h-64 overflow-y-auto">
+              {(asignModal === 'interno' ? personalInterno : proveedoresExtModal)
+                .filter((er: any) => {
+                  const p = er.personas;
+                  const label = asignModal === 'interno'
+                    ? (p?.nombre_legal ?? p?.email ?? '')
+                    : (p?.nombre_comercial ?? p?.nombre_legal ?? '');
+                  return !asignSearch || label.toLowerCase().includes(asignSearch.toLowerCase())
+                    || (p?.email ?? '').toLowerCase().includes(asignSearch.toLowerCase());
+                })
+                .map((er: any) => {
+                  const p = er.personas;
+                  const nombre = asignModal === 'interno'
+                    ? (p?.nombre_legal || p?.email || '—')
+                    : (p?.nombre_comercial ?? p?.nombre_legal ?? p?.email ?? '—');
+                  const sub = asignModal === 'interno'
+                    ? [p?.nombre_comercial, p?.email].filter(Boolean).join(' · ')
+                    : (p?.telefono ?? p?.email ?? '');
+                  const isSelected = asignModal === 'interno'
+                    ? pendingResponsableId === er.id
+                    : pendingProveedorId === er.id;
+                  return (
+                    <button
+                      key={er.id}
+                      onClick={() => asignModal === 'interno' ? setPendingResponsableId(er.id) : setPendingProveedorId(er.id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg mb-1 transition-colors flex items-center justify-between gap-2 ${
+                        isSelected ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50 border border-transparent'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{nombre}</p>
+                        {sub && <p className="text-[11px] text-slate-400 truncate">{sub}</p>}
+                      </div>
+                      {isSelected && <Check size={14} className="text-indigo-600 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              {(asignModal === 'interno' ? personalInterno : proveedoresExtModal).length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-6">
+                  {asignModal === 'interno' ? 'Sin personal interno registrado' : 'Sin proveedores registrados'}
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50">
+              <button
+                onClick={() => { setAsignModal(null); setAsignSearch(''); }}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={asignModal === 'interno' ? handleGuardarResponsable : handleGuardarProveedor}
+                disabled={asignSaving || (asignModal === 'interno' ? !pendingResponsableId : !pendingProveedorId)}
+                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+              >
+                {asignSaving && <Loader2 size={13} className="animate-spin" />}
+                Guardar asignación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

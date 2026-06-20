@@ -40,8 +40,7 @@ interface TicketRow {
   proveedor: string;
   evidenciaInicial: number;
   evidenciaReparacion: number;
-  cuentaId: number;      // NUEVO
-  precioFinal: number;   // NUEVO
+  cuentaId: number;
 }
 
 interface Proyecto {
@@ -226,6 +225,22 @@ export function PostventaDashboard() {
     if (proyectos.length > 0 && proyectoId === null) setProyectoId(proyectos[0].id);
   }, [proyectos, proyectoId]);
 
+  // Reset edificio filter when project changes
+  useEffect(() => { setSelectedTorre('Todas'); }, [proyectoId]);
+
+  // Edificios activos del proyecto seleccionado (para filtro dinámico)
+  const { data: edificiosDeProyecto = [] } = useQuery<{ id: number; nombre: string }[]>({
+    queryKey: ['edificios-pv-filter', proyectoId],
+    queryFn: async () => {
+      if (!proyectoId) return [];
+      const { data } = await supabase
+        .from('edificios').select('id, nombre')
+        .eq('id_proyecto', proyectoId).eq('activo', true).order('nombre');
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+    enabled: !!proyectoId,
+  });
+
   // ── Query de unidades entregadas (para el wizard) ─────────────────────────
   // Usa los mismos criterios que EntregasDashboard:
   //   id_estatus_disponibilidad IN (5,7,8,9) = Vendido/Escrituración/Entregado/Pagado
@@ -402,26 +417,47 @@ export function PostventaDashboard() {
     queryKey: ['pv-tickets-rows', proyectoIds.join(','), pvTablesExist],
     queryFn: async (): Promise<TicketRow[]> => {
       if (!pvTablesExist || !proyectoIds.length) return [];
-      const { data: edificios } = await supabase.from('edificios').select('id').in('id_proyecto', proyectoIds).eq('activo', true);
+      const { data: edificios } = await supabase.from('edificios').select('id, nombre').in('id_proyecto', proyectoIds).eq('activo', true);
       const edificioIds = (edificios ?? []).map((e: any) => e.id);
       if (!edificioIds.length) return [];
-      const { data: modelos } = await supabase.from('edificios_modelos').select('id').in('id_edificio', edificioIds);
+      const edificioNombreMap: Record<number, string> = Object.fromEntries((edificios ?? []).map((e: any) => [e.id, e.nombre]));
+      const { data: modelos } = await supabase.from('edificios_modelos').select('id, id_edificio').in('id_edificio', edificioIds);
       const modeloIds = (modelos ?? []).map((m: any) => m.id);
       if (!modeloIds.length) return [];
+      const modeloToEdificioId: Record<number, number> = Object.fromEntries((modelos ?? []).map((m: any) => [m.id, m.id_edificio]));
       const { data: propiedades } = await supabase.from('propiedades').select('id, numero_propiedad, id_edificio_modelo').in('id_edificio_modelo', modeloIds).eq('activo', true);
       if (!propiedades?.length) return [];
       const propIds = propiedades.map((p: any) => p.id);
       const propMap: Record<number, any> = Object.fromEntries(propiedades.map((p: any) => [p.id, p]));
-      const { data: cuentas } = await supabase.from('cuentas_cobranza').select('id, id_propiedad, precio_final').in('id_propiedad', propIds).eq('activo', true);
+      const propToEdificioNombre: Record<number, string> = Object.fromEntries(
+        (propiedades ?? []).map((p: any) => [p.id, edificioNombreMap[modeloToEdificioId[p.id_edificio_modelo]] ?? '—'])
+      );
+      const { data: cuentas } = await supabase.from('cuentas_cobranza').select('id, id_propiedad').in('id_propiedad', propIds).eq('activo', true);
       const cuentaByPropId: Record<number, any> = Object.fromEntries((cuentas ?? []).map((c: any) => [c.id_propiedad, c]));
       // Tickets — el join de proveedor va directo a personas (no existe pv_proveedores)
       const { data: rawTickets } = await (supabase as any)
         .from('postventa_tickets')
-        .select('id, id_propiedad, id_cuenta_cobranza, id_postventa_categoria_garantia, subcategoria, prioridad, estatus, fecha_limite_sla, sla_cumplido, fecha_creacion, postventa_categorias_garantia(id, nombre)')
+        .select('id, id_propiedad, id_cuenta_cobranza, id_postventa_categoria_garantia, subcategoria, prioridad, estatus, fecha_limite_sla, sla_cumplido, fecha_creacion, id_responsable_interno, id_proveedor_externo, postventa_categorias_garantia(id, nombre)')
         .in('id_propiedad', propIds)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
       if (!rawTickets?.length) return [];
+
+      // Nombres de responsable/proveedor (entidades_relacionadas → personas)
+      const erIds = [...new Set((rawTickets as any[])
+        .flatMap((t: any) => [t.id_responsable_interno, t.id_proveedor_externo])
+        .filter(Boolean))] as number[];
+      let erNombreMap: Record<number, string> = {};
+      if (erIds.length) {
+        const { data: erRows } = await supabase
+          .from('entidades_relacionadas')
+          .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial, email)')
+          .in('id', erIds);
+        (erRows ?? []).forEach((er: any) => {
+          const p = er.personas;
+          erNombreMap[er.id] = p?.nombre_legal || p?.nombre_comercial || p?.email || '—';
+        });
+      }
 
       // Clientes (compradores de cada cuenta)
       const cuentaIds = [...new Set((rawTickets as any[]).map((t: any) => t.id_cuenta_cobranza).filter(Boolean))];
@@ -456,7 +492,7 @@ export function PostventaDashboard() {
         return {
           id: `PV-${t.id}`,
           unidad: prop?.numero_propiedad ?? '—',
-          torre: '—',
+          torre: propToEdificioNombre[t.id_propiedad] ?? '—',
           proyecto: '—',
           cliente: cuentaToPersona[t.id_cuenta_cobranza] ?? '—',
           categoria: t.postventa_categorias_garantia?.nombre ?? '—',
@@ -468,12 +504,13 @@ export function PostventaDashboard() {
           fechaCreacion: t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleDateString('es-MX') : '—',
           slaLabel,
           slaVencido,
-          responsable: 'Sin asignar',
-          proveedor: 'Sin proveedor',
+          responsable: t.id_responsable_interno
+            ? (erNombreMap[t.id_responsable_interno] ?? 'Sin asignar')
+            : (t.id_proveedor_externo ? (erNombreMap[t.id_proveedor_externo] ?? 'Sin asignar') : 'Sin asignar'),
+          proveedor: t.id_proveedor_externo ? (erNombreMap[t.id_proveedor_externo] ?? 'Sin proveedor') : 'Sin proveedor',
           evidenciaInicial: 0,
           evidenciaReparacion: 0,
           cuentaId: cuenta?.id ?? 0,
-          precioFinal: Number(cuenta?.precio_final ?? 0),
         };
       });
     },
@@ -696,15 +733,18 @@ export function PostventaDashboard() {
               <option key={p.id} value={p.id}>{p.nombre}</option>
             ))}
           </select>
-          <select
-            value={selectedTorre}
-            onChange={(e) => setSelectedTorre(e.target.value)}
-            style={{ height: 'var(--sz-input-h)', padding: '0 12px', border: '1px solid var(--sz-border)', borderRadius: 'var(--sz-radius-md)', fontSize: 'var(--sz-text-base)', color: 'var(--sz-text-primary)', background: 'var(--sz-surface)', outline: 'none', cursor: 'pointer', transition: 'var(--sz-transition)' }}
-          >
-            {['Todas', 'Torre A', 'Torre B', 'Torre C'].map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+          {proyectoId !== null && edificiosDeProyecto.length >= 2 && (
+            <select
+              value={selectedTorre}
+              onChange={(e) => setSelectedTorre(e.target.value)}
+              style={{ height: 'var(--sz-input-h)', padding: '0 12px', border: '1px solid var(--sz-border)', borderRadius: 'var(--sz-radius-md)', fontSize: 'var(--sz-text-base)', color: 'var(--sz-text-primary)', background: 'var(--sz-surface)', outline: 'none', cursor: 'pointer', transition: 'var(--sz-transition)' }}
+            >
+              <option value="Todas">Todos los edificios</option>
+              {edificiosDeProyecto.map((e) => (
+                <option key={e.id} value={e.nombre}>{e.nombre}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex-1" />
@@ -1100,7 +1140,7 @@ export function PostventaDashboard() {
                 <table className="sz-table w-full">
                   <thead>
                     <tr>
-                      {['Ticket','ID Cuenta','Unidad / Cliente','Precio Final','Categoría','Prioridad','Estatus','Garantía','SLA','Responsable','Creado',''].map((h) => (
+                      {['Ticket','ID Cuenta','Unidad / Cliente','Categoría','Prioridad','Estatus','Garantía','SLA','Responsable','Creado',''].map((h) => (
                         <th key={h}>{h}</th>
                       ))}
                     </tr>
@@ -1120,9 +1160,6 @@ export function PostventaDashboard() {
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <p className="font-medium text-slate-800">{t.unidad}</p>
                             <p className="text-[11px] text-slate-400">{t.cliente}</p>
-                          </td>
-                          <td className="px-3 py-2.5 whitespace-nowrap tabular-nums text-slate-700 text-xs">
-                            {t.precioFinal > 0 ? new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(t.precioFinal) : '—'}
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{t.categoria}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
