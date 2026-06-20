@@ -97,6 +97,9 @@ function buildFlagsPorPago(
     } else if (hasEfectivoExcedido && p.id_metodos_pago === 1) {
       flag    = 'naranja';
       tooltip = `Pago en efectivo — límite excedido (${fmtMxn(limiteEfectivo)})`;
+    } else if (!p.clave_rastreo && p.id_metodos_pago === 1 && p.url_recibo) {
+      flag    = 'amarillo';
+      tooltip = 'Comprobante adjunto — pendiente validación PLD';
     } else if (!p.clave_rastreo) {
       flag    = 'gris';
       tooltip = 'Sin clave de rastreo — no verificable';
