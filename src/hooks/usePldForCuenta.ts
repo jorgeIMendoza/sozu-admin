@@ -47,6 +47,7 @@ export interface PagoInputPld {
   url_recibo: string | null;
   descripcion: string | null;
   id_metodos_pago: number | null;
+  validacion_documental_efectivo: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -91,18 +92,21 @@ function buildFlagsPorPago(
     if (rfcSet.has(p.id)) {
       flag    = 'rojo';
       tooltip = 'RFC/CURP en CEP no coincide con el comprador';
+    } else if (hasEfectivoExcedido && p.id_metodos_pago === 1) {
+      flag    = 'rojo';
+      tooltip = 'Límite de efectivo excedido en la cuenta';
     } else if (nombreSet.has(p.id)) {
       flag    = 'amarillo';
       tooltip = 'Nombre de ordenante difiere del comprador';
-    } else if (hasEfectivoExcedido && p.id_metodos_pago === 1) {
-      flag    = 'naranja';
-      tooltip = `Pago en efectivo — límite excedido (${fmtMxn(limiteEfectivo)})`;
+    } else if (!p.clave_rastreo && p.id_metodos_pago === 1 && p.validacion_documental_efectivo) {
+      flag    = 'verde';
+      tooltip = 'Ticket de depósito y estado de cuenta validados';
     } else if (!p.clave_rastreo && p.url_recibo && (p.id_metodos_pago === 1 || p.id_metodos_pago === 2 || p.id_metodos_pago === 5)) {
       flag    = 'amarillo';
-      tooltip = 'Comprobante adjunto — pendiente validación PLD';
+      tooltip = 'Comprobante adjunto — pendiente confirmar ticket y estado de cuenta';
     } else if (!p.clave_rastreo) {
       flag    = 'gris';
-      tooltip = 'Sin clave de rastreo — no verificable';
+      tooltip = 'Sin clave de rastreo ni comprobante documental';
     } else {
       flag    = 'verde';
       tooltip = 'Sin alerta PLD';
