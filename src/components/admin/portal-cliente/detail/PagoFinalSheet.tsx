@@ -112,6 +112,14 @@ const PagoFinalSheet = ({
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<PaymentMethod>(null);
   const [process, setProcess] = useState<MortgageProcess | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   const isFullyPaid = financials.pendingBalance <= 0;
 
@@ -199,13 +207,17 @@ const PagoFinalSheet = ({
     setStep("mortgage-select");
   };
 
+  const sheetSideClass = isDesktop
+    ? "w-full max-w-[520px] overflow-y-auto [&>button:last-child]:hidden"
+    : "rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden";
+
   // ── Fully paid state ──
   if (isFullyPaid) {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
         <SheetContent
-          side="bottom"
-          className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8"
+          side={isDesktop ? "right" : "bottom"}
+          className={`${sheetSideClass} px-5 pb-8`}
         >
           <div className="flex flex-col items-center text-center pt-6 pb-4 gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -521,8 +533,8 @@ const PagoFinalSheet = ({
   return (
     <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
       <SheetContent
-        side="bottom"
-        className="rounded-t-2xl max-h-[75dvh] overflow-y-auto px-5 pb-8 [&>button:last-child]:hidden"
+        side={isDesktop ? "right" : "bottom"}
+        className={`${sheetSideClass} px-5 pb-8`}
       >
         <SheetHeader className="text-left pb-3">
           <div className="flex items-center gap-3">

@@ -74,8 +74,10 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
 
   const handlePay = () => {
+    const pendingPayments = investment.payments.filter(p => p.status !== "pagado");
+    const isLastPayment = pendingPayments.length === 1;
     const sinForma = investment.property.tipoFinanciamiento == null;
-    if (activeStage?.id === 'pago_final' && sinForma) {
+    if (isLastPayment && sinForma) {
       setShowPagoFinalSheet(true);
     } else {
       setShowPaySheet(true);

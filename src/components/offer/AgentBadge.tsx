@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Agent } from "@/lib/offers/agent-data";
 import { buildAgentWhatsAppLink, AGENT_PHOTO_FALLBACK } from "@/lib/offers/agent-data";
 
@@ -8,15 +9,20 @@ interface Props {
 }
 
 const AgentBadge = ({ agent, variant = "compact", showStatus = true }: Props) => {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const isLogo = !agent.photoUrl || photoFailed;
+
   if (variant === "inline") {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs">
-        <img
-          src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
-          alt={agent.fullName}
-          className="w-5 h-5 rounded-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).src = AGENT_PHOTO_FALLBACK; }}
-        />
+        <span className={`w-5 h-5 rounded-full overflow-hidden flex-shrink-0 inline-flex items-center justify-center${isLogo ? " bg-muted/60" : ""}`}>
+          <img
+            src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
+            alt={agent.fullName}
+            className={isLogo ? "w-[75%] h-[75%] object-contain dark:invert" : "w-full h-full object-cover"}
+            onError={() => setPhotoFailed(true)}
+          />
+        </span>
         <span className="font-medium">{agent.firstName}</span>
       </span>
     );
@@ -30,12 +36,14 @@ const AgentBadge = ({ agent, variant = "compact", showStatus = true }: Props) =>
       className="inline-flex items-center gap-2 group"
     >
       <div className="relative">
-        <img
-          src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
-          alt={agent.fullName}
-          className="w-9 h-9 rounded-full object-cover ring-2 ring-card"
-          onError={(e) => { (e.target as HTMLImageElement).src = AGENT_PHOTO_FALLBACK; }}
-        />
+        <div className={`w-9 h-9 rounded-full overflow-hidden ring-2 ring-card flex items-center justify-center${isLogo ? " bg-muted/60" : ""}`}>
+          <img
+            src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
+            alt={agent.fullName}
+            className={isLogo ? "w-[65%] h-[65%] object-contain dark:invert" : "w-full h-full object-cover"}
+            onError={() => setPhotoFailed(true)}
+          />
+        </div>
         {showStatus && (
           <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success ring-2 ring-card" />
         )}
