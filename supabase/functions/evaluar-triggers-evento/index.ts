@@ -884,6 +884,7 @@ Deno.serve(async (req) => {
             } else {
               try {
                 const waToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN') || '';
+                const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
                 const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/enviar-notificacion`;
                 const templateId = aviso.postmark_template_id || 36978552;
 
@@ -909,8 +910,9 @@ Deno.serve(async (req) => {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                    'apikey': waToken,
+                    'Authorization': `Bearer ${sbKey}`,
+                    'apikey': sbKey,                 // misma llave Supabase en ambos → sin conflicto en gateway
+                    'x-evolution-apikey': waToken,   // token Evolution movido a header propio
                   },
                   body: JSON.stringify(payloadN8N),
                 });
