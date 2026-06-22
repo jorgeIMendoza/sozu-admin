@@ -838,6 +838,36 @@ function EditValidacionModal({ row, onClose, hasFechaColumnas }: { row: Contrato
           .update({ precio_final: montoInputNum })
           .eq("id", row.cuenta_id);
         if (e) throw e;
+
+        // Ajustar último acuerdo para que cuadre con el nuevo precio_final
+        const { data: acuerdos } = await supabase
+          .from("acuerdos_pago")
+          .select("id, monto, orden, pago_completado, id_concepto")
+          .eq("id_cuenta_cobranza", row.cuenta_id)
+          .eq("activo", true)
+          .not("id_concepto", "in", "(7,9)")
+          .order("orden", { ascending: false });
+
+        if (acuerdos && acuerdos.length > 0) {
+          const sumaActual = acuerdos.reduce((s, a) => s + (a.monto || 0), 0);
+          const diff = montoInputNum - sumaActual;
+
+          if (Math.abs(diff) > 0.01) {
+            const ultimo = acuerdos.find(a => !a.pago_completado);
+            if (ultimo) {
+              const { error: eAcuerdo } = await supabase
+                .from("acuerdos_pago")
+                .update({ monto: ultimo.monto + diff })
+                .eq("id", ultimo.id);
+              if (eAcuerdo) throw eAcuerdo;
+            }
+          }
+        }
+
+        // Redistribuir aplicaciones_pago para que reflejen los acuerdos actualizados
+        await supabase.functions.invoke("recalcular-aplicaciones", {
+          body: { id_cuenta_cobranza: row.cuenta_id },
+        });
       }
       if (fechaChanged) {
         const { error: e } = await supabase
@@ -1275,7 +1305,12 @@ export default function ValidacionContratosPDF() {
     if (filtroFecha !== "todos") {
       if (getEfectivoFecha(c) !== filtroFecha) return false;
     }
-    if (searchUnidad  && !c.numero_propiedad?.toLowerCase().includes(searchUnidad.toLowerCase()))  return false;
+    if (searchUnidad) {
+      const q = searchUnidad.toLowerCase();
+      const matchUnidad = c.numero_propiedad?.toLowerCase().includes(q);
+      const matchCuenta = formatCuentaCobranzaId(c.cuenta_id).toLowerCase().includes(q) || String(c.cuenta_id).includes(q);
+      if (!matchUnidad && !matchCuenta) return false;
+    }
     if (searchCliente && !c.dueno?.toLowerCase().includes(searchCliente.toLowerCase()))            return false;
     return true;
   }), [rows, filtroProyecto, filtroEstado, filtroFecha, searchUnidad, searchCliente]);
@@ -1367,10 +1402,10 @@ export default function ValidacionContratosPDF() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <Input
-          placeholder="Unidad (No. propiedad)"
+          placeholder="Unidad o Cuenta (CC-...)"
           value={searchUnidad}
           onChange={(e) => { setSearchUnidad(e.target.value); resetPage(); }}
-          className="h-9 text-sm w-[160px] sm:w-[180px]"
+          className="h-9 text-sm w-[180px] sm:w-[210px]"
         />
         <Input
           placeholder="Cliente / Dueno"
