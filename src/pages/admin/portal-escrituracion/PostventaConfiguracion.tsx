@@ -406,7 +406,7 @@ function TabPersonal() {
   const saveMutation = useMutation({
     mutationFn: async (d: typeof form & { erId?: number; personaId?: number }) => {
       if (d.personaId) {
-        // Editar persona existente
+        // ── Editar técnico existente ──────────────────────────────────────────
         const { error } = await supabase.from('personas').update({
           nombre_legal: d.nombre,
           nombre_comercial: d.especialidad || null,
@@ -419,17 +419,59 @@ function TabPersonal() {
           if (e2) throw e2;
         }
       } else {
-        // Crear persona nueva
-        const { data: newPersona, error: e1 } = await supabase.from('personas')
-          .insert({ nombre_legal: d.nombre, nombre_comercial: d.especialidad || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'fisica' })
-          .select('id').single();
-        if (e1) throw e1;
-        const { error: e2 } = await supabase.from('entidades_relacionadas')
-          .insert({ id_persona: newPersona.id, id_tipo_entidad: ID_TIPO_PERSONAL, activo: true });
-        if (e2) throw e2;
+        // ── Alta de técnico nuevo ─────────────────────────────────────────────
+        // 1. Buscar si ya existe en personas por email
+        let personaId: number | null = null;
+        if (d.email) {
+          const { data: existing } = await supabase
+            .from('personas')
+            .select('id')
+            .eq('email', d.email)
+            .maybeSingle();
+          if (existing) personaId = existing.id;
+        }
+
+        // 2. Si no existe, crear persona nueva
+        if (!personaId) {
+          const { data: newPersona, error: e1 } = await supabase.from('personas')
+            .insert({ nombre_legal: d.nombre, nombre_comercial: d.especialidad || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'fisica' })
+            .select('id').single();
+          if (e1) throw e1;
+          personaId = newPersona.id;
+        }
+
+        // 3. Verificar si ya existe vínculo como técnico de postventa
+        const { data: vinculo } = await supabase
+          .from('entidades_relacionadas')
+          .select('id, activo')
+          .eq('id_persona', personaId)
+          .eq('id_tipo_entidad', ID_TIPO_PERSONAL)
+          .maybeSingle();
+
+        if (vinculo) {
+          if (vinculo.activo) {
+            throw new Error('Esta persona ya está registrada como técnico de postventa');
+          }
+          // Reactivar vínculo inactivo
+          const { error: e3 } = await supabase.from('entidades_relacionadas')
+            .update({ activo: true }).eq('id', vinculo.id);
+          if (e3) throw e3;
+        } else {
+          // Crear vínculo nuevo
+          const { error: e4 } = await supabase.from('entidades_relacionadas')
+            .insert({ id_persona: personaId, id_tipo_entidad: ID_TIPO_PERSONAL, activo: true });
+          if (e4) throw e4;
+        }
       }
     },
-    onSuccess: () => { toast.success('Personal guardado'); qc.invalidateQueries({ queryKey: ['pv-personal-er'] }); setShowForm(false); setEditing(null); },
+    onSuccess: () => {
+      const msg = editing ? 'Personal actualizado' : 'Técnico registrado correctamente';
+      toast.success(msg);
+      qc.invalidateQueries({ queryKey: ['pv-personal-er'] });
+      qc.invalidateQueries({ queryKey: ['pv-personal-interno-modal'] });
+      setShowForm(false);
+      setEditing(null);
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
