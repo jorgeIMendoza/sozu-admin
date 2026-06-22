@@ -3,11 +3,11 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Download, ExternalLink, X, FileText,
   Loader2, ChevronDown, DollarSign, AlertTriangle,
-  FolderOpen, ArrowLeft, ShieldCheck, ShieldAlert, Shield,
+  FolderOpen, ArrowLeft, ShieldCheck, ShieldAlert, Shield, CheckCircle2,
 } from 'lucide-react';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useExportToExcel } from '@/hooks/useExportToExcel';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCuentaCobranzaFinancials } from '@/hooks/useCuentaCobranzaFinancials';
 import { useProyectoFinancials } from '@/hooks/useProyectoFinancials';
@@ -321,14 +321,23 @@ function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSea
   );
 }
 
+interface PldPaymentMeta {
+  idMetodosPago: number;
+  clave_rastreo: string | null;
+  validado: boolean;
+}
+
 interface PaymentsTableProps {
   pagos: PagoRecord[];
   isLoading: boolean;
   onViewComprobante: (url: string) => void;
   flagsPorPago?: Map<number, PldPaymentFlagInfo>;
+  pldMeta?: Map<number, PldPaymentMeta>;
+  onToggleValidacion?: (pagoId: number, value: boolean) => Promise<void>;
+  validandoPagoId?: number | null;
 }
 
-function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago }: PaymentsTableProps) {
+function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldMeta, onToggleValidacion, validandoPagoId }: PaymentsTableProps) {
   const hasPld = !!flagsPorPago;
   const HEADERS = [
     'Proyecto', 'Estatus', 'Comprador', 'Depto', 'Producto',
@@ -384,18 +393,51 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago }: Pa
                           )}
                         </td>
                       )}
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        {comprobanteUrl ? (
-                          <button
-                            onClick={() => onViewComprobante(comprobanteUrl)}
-                            className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 underline underline-offset-2 decoration-dotted"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                            Ver comprobante
-                          </button>
-                        ) : (
-                          <span className="text-slate-400 text-xs">Sin comprobante</span>
-                        )}
+                      <td className="px-4 py-3.5 min-w-[160px]">
+                        <div className="flex flex-col gap-1">
+                          {comprobanteUrl ? (
+                            <button
+                              onClick={() => onViewComprobante(comprobanteUrl)}
+                              className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 underline underline-offset-2 decoration-dotted whitespace-nowrap"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                              Ver comprobante
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 text-xs whitespace-nowrap">Sin comprobante</span>
+                          )}
+                          {(() => {
+                            const meta = pldMeta?.get(p.pago_id);
+                            if (!meta || meta.idMetodosPago !== 1 || meta.clave_rastreo || !p.url_recibo || !onToggleValidacion) return null;
+                            const isPending = validandoPagoId === p.pago_id;
+                            return meta.validado ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium whitespace-nowrap">
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                  Validado PLD
+                                </span>
+                                <button
+                                  onClick={() => onToggleValidacion(p.pago_id, false)}
+                                  disabled={isPending}
+                                  className="text-xs text-slate-400 hover:text-red-500 underline decoration-dotted disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  {isPending ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Quitar'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => onToggleValidacion(p.pago_id, true)}
+                                disabled={isPending}
+                                className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 underline decoration-dotted disabled:opacity-50 whitespace-nowrap"
+                              >
+                                {isPending
+                                  ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                                  : <CheckCircle2 className="w-3 h-3 shrink-0" />}
+                                Validar ticket + EC
+                              </button>
+                            );
+                          })()}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -421,7 +463,9 @@ export function RelacionPagos() {
   const [search, setSearch] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
   const [page, setPage] = useState(1);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [validandoPagoId, setValidandoPagoId] = useState<number | null>(null);
   const { exportToExcel, isExporting } = useExportToExcel();
+  const qc = useQueryClient();
 
   // Debounce: only apply filter after 300 ms of inactivity
   useEffect(() => {
@@ -529,7 +573,7 @@ export function RelacionPagos() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('pagos')
-        .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, descripcion, url_recibo, url_cep, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
+        .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, descripcion, url_recibo, url_cep, validacion_documental_efectivo, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
         .eq('id_cuenta_cobranza', primaryCuentaId!)
         .eq('activo', true)
         .order('fecha_pago', { ascending: true });
@@ -537,6 +581,7 @@ export function RelacionPagos() {
         id: number; fecha_pago: string; monto: number; clave_rastreo: string | null;
         id_metodos_pago: number; descripcion: string | null;
         url_recibo: string | null; url_cep: string | null;
+        validacion_documental_efectivo: boolean;
         metodos_pago: { nombre: string } | null;
       }>;
     },
@@ -1063,6 +1108,33 @@ export function RelacionPagos() {
     precioFinal,
   );
 
+  // Mapa pago_id → metadata PLD para botón de validación documental
+  const pldMeta = useMemo(() => {
+    const map = new Map<number, PldPaymentMeta>();
+    for (const p of rpPagosCuenta ?? []) {
+      map.set(p.id, {
+        idMetodosPago: p.id_metodos_pago,
+        clave_rastreo: p.clave_rastreo,
+        validado: p.validacion_documental_efectivo,
+      });
+    }
+    return map;
+  }, [rpPagosCuenta]);
+
+  const toggleValidacion = async (pagoId: number, value: boolean) => {
+    setValidandoPagoId(pagoId);
+    try {
+      const { error } = await (supabase as any)
+        .from('pagos')
+        .update({ validacion_documental_efectivo: value })
+        .eq('id', pagoId);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+    } finally {
+      setValidandoPagoId(null);
+    }
+  };
+
   // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
   const rpTotalMonto = useMemo(
     () => (rpPagosCuenta ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0),
@@ -1392,6 +1464,9 @@ export function RelacionPagos() {
                 isLoading={displayLoading}
                 onViewComprobante={setViewerUrl}
                 flagsPorPago={isRpMode ? pld.flagsPorPago : undefined}
+                pldMeta={isRpMode ? pldMeta : undefined}
+                onToggleValidacion={isRpMode ? toggleValidacion : undefined}
+                validandoPagoId={validandoPagoId}
               />
 
               {/* Paginación */}
