@@ -250,7 +250,6 @@ Deno.serve(async (req) => {
     console.log(`Sending notification for ${tipo_evento} to ${filteredUsers.length} users`);
 
     console.log('Notification payload:', JSON.stringify(notificationPayload));
-    const incomingAuthHeader = req.headers.get('Authorization') || req.headers.get('authorization');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const evolutionWaToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN');
 
@@ -258,9 +257,10 @@ Deno.serve(async (req) => {
       throw new Error('SUPABASE_ANON_KEY no configurada');
     }
 
+    // Nuevo gateway sb_: la llave Supabase SOLO en apikey (sin Authorization)
+    // para evitar 401 "Conflicting API keys".
     const webhookHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': incomingAuthHeader || `Bearer ${supabaseAnonKey}`,
       'apikey': supabaseAnonKey,
     };
 

@@ -55,9 +55,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Token de Evolution (WhatsApp) llega en header propio x-evolution-apikey.
-    // Fallback a apikey legacy para rollout (callers viejos aún lo mandan en apikey).
-    const incomingEvolutionKey = req.headers.get('x-evolution-apikey') || req.headers.get('apikey');
+    // El token de Evolution (WhatsApp) llega en header propio x-evolution-apikey.
+    // (Antes se reutilizaba 'apikey', pero el nuevo gateway de Supabase (sb_) lo reserva
+    //  para la llave Supabase y rechaza con 401 "Conflicting API keys".)
+    const incomingEvolutionKey = req.headers.get('x-evolution-apikey');
 
     const outgoingHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -65,11 +66,11 @@ Deno.serve(async (req) => {
     };
 
     if (incomingEvolutionKey) {
-      // Se reenvía a n8n como apikey (n8n no es gateway Supabase → sin conflicto)
+      // n8n no es gateway Supabase: se reenvía como apikey, sin conflicto
       outgoingHeaders['apikey'] = incomingEvolutionKey;
-      console.log('Forwarding apikey header to N8N');
+      console.log('Forwarding Evolution apikey header to N8N');
     } else {
-      console.warn('No Evolution apikey received - WhatsApp notifications may fail');
+      console.warn('No x-evolution-apikey received - WhatsApp notifications may fail');
     }
 
     console.log('[enviar-notificacion] PAYLOAD OUT to N8N:', JSON.stringify(enrichedBody, null, 2));

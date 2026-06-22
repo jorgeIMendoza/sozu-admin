@@ -884,7 +884,6 @@ Deno.serve(async (req) => {
             } else {
               try {
                 const waToken = Deno.env.get('EVOLUTION_WA_COBRANZA_TOKEN') || '';
-                const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
                 const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/enviar-notificacion`;
                 const templateId = aviso.postmark_template_id || 36978552;
 
@@ -910,9 +909,11 @@ Deno.serve(async (req) => {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${sbKey}`,
-                    'apikey': sbKey,                 // misma llave Supabase en ambos → sin conflicto en gateway
-                    'x-evolution-apikey': waToken,   // token Evolution movido a header propio
+                    // Nuevo gateway sb_: la llave Supabase SOLO en apikey (sin Authorization)
+                    // para evitar 401 "Conflicting API keys".
+                    'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+                    // Token Evolution (WhatsApp) en header propio.
+                    'x-evolution-apikey': waToken,
                   },
                   body: JSON.stringify(payloadN8N),
                 });
