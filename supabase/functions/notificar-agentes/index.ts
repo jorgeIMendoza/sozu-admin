@@ -265,8 +265,9 @@ Deno.serve(async (req) => {
     };
 
     if (evolutionWaToken) {
-      webhookHeaders['apikey'] = evolutionWaToken;
-      console.log('EVOLUTION_WA_COBRANZA_TOKEN included in headers as apikey');
+      // apikey queda con la llave Supabase; el token Evolution va en header propio
+      webhookHeaders['x-evolution-apikey'] = evolutionWaToken;
+      console.log('EVOLUTION_WA_COBRANZA_TOKEN included in x-evolution-apikey header');
     } else {
       console.warn('EVOLUTION_WA_COBRANZA_TOKEN not configured - WhatsApp may fail with 401');
     }

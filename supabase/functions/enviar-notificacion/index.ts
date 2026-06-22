@@ -2,7 +2,7 @@
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, x-evolution-apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 Deno.serve(async (req) => {
@@ -55,19 +55,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Forward the apikey header from the incoming request (EVOLUTION_WA_COBRANZA_TOKEN)
-    const incomingApiKey = req.headers.get('apikey');
+    // Token de Evolution (WhatsApp) llega en header propio x-evolution-apikey.
+    // Fallback a apikey legacy para rollout (callers viejos aún lo mandan en apikey).
+    const incomingEvolutionKey = req.headers.get('x-evolution-apikey') || req.headers.get('apikey');
 
     const outgoingHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-postmark-server-token': token,
     };
 
-    if (incomingApiKey) {
-      outgoingHeaders['apikey'] = incomingApiKey;
+    if (incomingEvolutionKey) {
+      // Se reenvía a n8n como apikey (n8n no es gateway Supabase → sin conflicto)
+      outgoingHeaders['apikey'] = incomingEvolutionKey;
       console.log('Forwarding apikey header to N8N');
     } else {
-      console.warn('No apikey header received - WhatsApp notifications may fail');
+      console.warn('No Evolution apikey received - WhatsApp notifications may fail');
     }
 
     console.log('[enviar-notificacion] PAYLOAD OUT to N8N:', JSON.stringify(enrichedBody, null, 2));
