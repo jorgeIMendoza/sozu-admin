@@ -31,3 +31,4 @@ export function getPropertyImage(propertyId: string, projectName?: string): stri
   }
   return undefined;
 }
+
