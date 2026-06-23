@@ -188,10 +188,13 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       const featuredVideoUrl = latest ? toEmbedUrl(latest.link) : undefined;
       const featuredVideoTitle = latest?.nombre ?? "Recorrido del avance";
 
-      const photos: ConstructionPhoto[] = fotoRows.map((f) => ({
-        url: f.url,
-        alt: `Foto ${p.nombre}`,
-      }));
+      const photos: ConstructionPhoto[] = fotoRows.map((f) => {
+        const raw = f.url;
+        if (!raw.includes(".supabase.co/storage/v1/object/public/")) return { url: raw, alt: `Foto ${p.nombre}` };
+        const base = raw.split("?")[0];
+        const optimized = base.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + "?quality=90&format=webp";
+        return { url: optimized, alt: `Foto ${p.nombre}` };
+      });
 
       const updates: ConstructionUpdate[] = videoRows.map((v, idx) => ({
         id: String(v.id),
@@ -246,7 +249,13 @@ export function useProjectPhotos(projectId: number | undefined) {
         .order("id", { ascending: false })
         .limit(8);
       if (error) throw error;
-      return (data ?? []).map((f) => ({ url: f.url as string, alt: "" }));
+      return (data ?? []).map((f) => {
+        const raw = f.url as string;
+        if (!raw.includes(".supabase.co/storage/v1/object/public/")) return { url: raw, alt: "" };
+        const base = raw.split("?")[0];
+        const optimized = base.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + "?quality=90&format=webp";
+        return { url: optimized, alt: "" };
+      });
     },
     enabled: !!projectId,
     staleTime: 300_000,

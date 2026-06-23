@@ -264,8 +264,8 @@ const ClientePerfil = () => {
     <div className="max-w-lg mx-auto lg:max-w-none px-4 py-6 pb-28 space-y-6 lg:px-0">
       {/* Identity Hero */}
       <section className="flex flex-col items-center text-center">
-        <div className="w-[72px] h-[72px] rounded-full bg-[hsl(var(--inmob-green))]/10 flex items-center justify-center mb-3">
-          <User className="w-8 h-8 text-[hsl(var(--inmob-green))]" />
+        <div className="w-[72px] h-[72px] rounded-full bg-primary/10 flex items-center justify-center mb-3">
+          <User className="w-8 h-8 text-primary" />
         </div>
         <h2 className="font-bold text-lg text-foreground">{displayName}</h2>
         <p className="text-xs text-muted-foreground mb-2">{tipoPersona === "Moral" ? "Persona Moral" : "Inversionista"}</p>
@@ -510,7 +510,7 @@ const ClientePerfil = () => {
                 onClick={handleChangePassword}
                 className={`w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
                   pwButtonReady
-                    ? "bg-[hsl(var(--inmob-green))] text-white hover:bg-[hsl(var(--inmob-green))]/90 active:scale-[0.98]"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]"
                     : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -525,13 +525,13 @@ const ClientePerfil = () => {
         );
         return isDesktop ? (
           <Dialog open={showChangePassword} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="p-0 max-w-md max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden">
+            <DialogContent className="inmob-portal p-0 max-w-md max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden">
               {pwContent}
             </DialogContent>
           </Dialog>
         ) : (
           <Sheet open={showChangePassword} onOpenChange={(v) => !v && onClose()}>
-            <SheetContent side="bottom" className="p-0 rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden">
+            <SheetContent side="bottom" className="inmob-portal p-0 rounded-t-2xl max-h-[75dvh] overflow-y-auto [&>button:last-child]:hidden">
               {pwContent}
             </SheetContent>
           </Sheet>
