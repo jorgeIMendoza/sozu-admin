@@ -113,6 +113,7 @@ type ExpedienteRow = {
   precioM2: number | null;
   contratoFirmado: boolean;
   contratoUrl: string | null;
+  ofertaId: number | null;
   documentosCount: number;
   relatedAccounts: RelatedAccount[];
 };
@@ -127,8 +128,17 @@ const fmtMxn2 = (value: number) =>
 
 const fmtM2 = (value: number) => `${(value || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })} m²`;
 
-const fmtDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtDate = (value: string | null) => {
+  if (!value) return '—';
+  // Mostrar la fecha tal como viene en BD (YYYY-MM-DD), sin desfase por zona
+  // horaria: `new Date('2022-08-26')` se interpreta como UTC y en MX (UTC-6)
+  // retrocede un día. Construimos la fecha con los componentes locales.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(value);
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const fmtFechaHora = (value: string) =>
   new Date(value).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -250,6 +260,20 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                     <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
                 ) : (row.contratoFirmado ? 'Validado' : 'Pendiente')}
+              />
+              <DetailItem
+                label="Oferta comercial"
+                value={row.ofertaId ? (
+                  <a
+                    href={`/oferta/${row.ofertaId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-mono text-primary underline-offset-2 hover:underline"
+                  >
+                    OF-{String(row.ofertaId).padStart(6, '0')}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : '—'}
               />
             </div>
           </section>
@@ -1567,6 +1591,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           docsForAccount.find((doc: any) => doc.id_tipo_documento === 18 && doc.id_estatus_verificacion === 2) ||
           docsForAccount.find((doc: any) => doc.id_tipo_documento === 18)
         )?.url ?? null,
+        ofertaId: account.id_oferta ?? null,
         documentosCount: docsForAccount.length,
         relatedAccounts: productCuentas.map((c: any) => ({
           id: c.id,
