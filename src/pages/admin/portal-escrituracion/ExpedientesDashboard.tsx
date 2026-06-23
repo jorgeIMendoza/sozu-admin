@@ -741,17 +741,51 @@ export function ExpedientesDashboard() {
 
       const propIds = props.map(p => p.id);
 
-      // Paso 2: Cuentas de cobranza (más reciente por propiedad)
+      // Paso 2a: Cuentas de cobranza — incluye id_oferta para distinguir principal vs accesoria
       const { data: cuentas } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, fecha_actualizacion')
+        .select('id, id_propiedad, precio_final, fecha_actualizacion, id_oferta')
         .eq('activo', true)
         .in('id_propiedad', propIds);
 
-      const cuentaByProp: Record<number, { id: number; precio_final: number; fecha_actualizacion: string }> = {};
+      // Paso 2b: Identificar ofertas principales (id_producto null = propiedad)
+      // vs accesorias (id_producto not null = bodega, cajón, paquete)
+      const ofertaIds = [...new Set(
+        (cuentas || []).map(c => c.id_oferta).filter((id): id is number => id != null),
+      )];
+      const ofertaPrincipalSet = new Set<number>();
+      if (ofertaIds.length) {
+        const { data: ofertas } = await supabase
+          .from('ofertas')
+          .select('id, id_producto')
+          .in('id', ofertaIds);
+        (ofertas || []).forEach(o => {
+          if (o.id_producto == null) ofertaPrincipalSet.add(o.id);
+        });
+      }
+
+      // Paso 2c: cuentaByProp — una cuenta por propiedad con prioridad explícita:
+      // (a) principal > accesoria  (b) mayor precio_final  (c) mayor fecha_actualizacion  (d) mayor id
+      type CuentaEntry = { id: number; precio_final: number; fecha_actualizacion: string; esPrincipal: boolean };
+      const cuentaByProp: Record<number, CuentaEntry> = {};
       (cuentas || []).forEach(c => {
-        const ex = cuentaByProp[c.id_propiedad];
-        if (!ex || c.fecha_actualizacion > ex.fecha_actualizacion) cuentaByProp[c.id_propiedad] = c;
+        const esPrincipal = c.id_oferta == null || ofertaPrincipalSet.has(c.id_oferta);
+        const candidata: CuentaEntry = { id: c.id, precio_final: c.precio_final, fecha_actualizacion: c.fecha_actualizacion, esPrincipal };
+        const actual = cuentaByProp[c.id_propiedad];
+        if (!actual) { cuentaByProp[c.id_propiedad] = candidata; return; }
+        if (candidata.esPrincipal !== actual.esPrincipal) {
+          if (candidata.esPrincipal) cuentaByProp[c.id_propiedad] = candidata;
+          return;
+        }
+        if (candidata.precio_final !== actual.precio_final) {
+          if (candidata.precio_final > actual.precio_final) cuentaByProp[c.id_propiedad] = candidata;
+          return;
+        }
+        if (candidata.fecha_actualizacion !== actual.fecha_actualizacion) {
+          if (candidata.fecha_actualizacion > actual.fecha_actualizacion) cuentaByProp[c.id_propiedad] = candidata;
+          return;
+        }
+        if (candidata.id > actual.id) cuentaByProp[c.id_propiedad] = candidata;
       });
 
       const cuentaIds = Object.values(cuentaByProp).map(c => c.id);
