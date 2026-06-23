@@ -54,8 +54,8 @@ const ClientePropiedadPago = () => {
 
       <div className="px-5 pt-5 space-y-4">
         {/* Info banner */}
-        <div className="rounded-xl bg-[hsl(var(--inmob-green))]/8 border border-[hsl(var(--inmob-green))]/20 p-4 flex gap-3">
-          <Info className="w-5 h-5 text-[hsl(var(--inmob-green))] shrink-0 mt-0.5" />
+        <div className="rounded-xl bg-primary/8 border border-primary/20 p-4 flex gap-3">
+          <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <p className="text-xs text-foreground leading-relaxed">
             Realiza la transferencia desde tu banca en línea utilizando esta CLABE única vinculada a tu propiedad. 
             El pago se reflejará automáticamente una vez confirmado por el banco.
@@ -104,7 +104,7 @@ const ClientePropiedadPago = () => {
         <button
           data-cta="cliente.propiedad-pago.copiar-clabe"
           onClick={() => copyToClipboard(clabe, "CLABE")}
-          className="w-full py-3.5 rounded-xl bg-[hsl(var(--inmob-green))] text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform mt-2"
+          className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform mt-2"
         >
           <Copy className="w-4 h-4" />
           Copiar CLABE

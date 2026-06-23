@@ -50,8 +50,8 @@ Deno.serve(async (req) => {
     }
 
     // Generate confirmation link - redirect to frontend thank-you page
-    const portal = usuario.rol_id === 23 ? 'clientes' : 'inmobiliarias';
-    const host = usuario.rol_id === 23 ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
+    const portal = usuario.rol_id === 23 ? 'clientes' : usuario.rol_id === 3 ? 'agentes' : 'inmobiliarias';
+    const host = usuario.rol_id === 23 ? 'https://clientes.sozu.com' : usuario.rol_id === 3 ? 'https://agentes.sozu.com' : 'https://inmobiliarias.sozu.com';
     const thankYouUrl = `${host}/auth/confirmacion-email?email=${encodeURIComponent(emailLower)}&nombre=${encodeURIComponent(usuario.nombre || '')}&portal=${portal}&destination=change-password`;
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
