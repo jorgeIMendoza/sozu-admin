@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
 import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
+import { ExpedienteDocumentos } from '@/components/admin/legal-flow/ExpedienteDocumentos';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
 import { cn } from '@/lib/utils';
 
@@ -499,6 +500,8 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 </table>
               </div>
             )}
+
+            <ExpedienteDocumentos cuentaId={row.cuentaId} />
           </section>
 
           <BitacoraSection cuentaId={row.cuentaId} />
