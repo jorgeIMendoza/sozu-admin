@@ -25,7 +25,7 @@ interface Props {
 
 const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
   const [photoFailed, setPhotoFailed] = useState(false);
-  const isLogo = !agent.photoUrl || photoFailed;
+  const hasPersonPhoto = !!agent.photoUrl && !photoFailed;
   const whatsappMsg = offerId
     ? `Hola ${agent.firstName}, tengo interés en la oferta ${offerId}${
         offerLabel ? ` (${offerLabel})` : ""
@@ -63,13 +63,21 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
       <div className="p-5 md:p-6">
         <div className="flex flex-row md:flex-row gap-4 md:gap-5">
           {/* Foto + identidad */}
-          <div className={`flex-shrink-0 w-20 h-20 md:w-32 md:h-32 rounded-xl overflow-hidden${isLogo ? " bg-muted/60 flex items-center justify-center" : ""}`}>
-            <img
-              src={agent.photoUrl || AGENT_PHOTO_FALLBACK}
-              alt={agent.fullName}
-              className={isLogo ? "w-[70%] h-[70%] object-contain dark:invert" : "w-full h-full object-cover"}
-              onError={() => setPhotoFailed(true)}
-            />
+          <div className="flex-shrink-0 w-20 h-20 md:w-32 md:h-32 rounded-xl overflow-hidden bg-white flex items-center justify-center">
+            {hasPersonPhoto ? (
+              <img
+                src={agent.photoUrl!}
+                alt={agent.fullName}
+                className="w-full h-full object-cover"
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <img
+                src={AGENT_PHOTO_FALLBACK}
+                alt="SOZU"
+                className="w-4/5 object-contain"
+              />
+            )}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -90,14 +98,9 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
                     {agent.isAllied ? "Aliado" : "Equipo"}
                   </span>
                 )}
-                <div className="flex flex-col leading-none">
-                  <span className="text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground font-semibold">
-                    {agent.isAllied ? "Agente aliado" : "Equipo"}
-                  </span>
-                  <span className="text-xs font-bold text-foreground mt-0.5">
-                    {agent.brokerage}
-                  </span>
-                </div>
+                <span className="text-xs font-bold text-foreground">
+                  {agent.brokerage}
+                </span>
               </div>
             )}
           </div>

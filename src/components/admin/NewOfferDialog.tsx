@@ -69,7 +69,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Switch } from "@/components/ui/switch";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 import {
   Tooltip,
   TooltipContent,
@@ -436,7 +436,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               nombre,
               mostrar_piso_en_oferta,
               mostrar_precio_m2_en_oferta,
-              mostrar_seccion_efectivo_en_oferta
+              mostrar_seccion_efectivo_en_oferta,
+              fecha_entrega
             )
           )
         `)
@@ -1435,6 +1436,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
+  const proyectoFechaEntrega = (propertyDetails?.entidades_relacionadas?.proyectos as any)?.fecha_entrega as string | null | undefined;
+  const efectivaMesesHoy = proyectoFechaEntrega ? mesesEntreFechas(new Date(), proyectoFechaEntrega) : 0;
 
   return (
     <>
@@ -1494,7 +1497,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                if (isEscalonado) {
                                  return formatEscalonadoLabel(scheme, tramos, propertyDetails?.precio_lista);
                                }
-                               return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%`;
+                               const dynPrice = propertyDetails?.precio_lista || 0;
+               const dynMeses = (efectivaMesesHoy > 0 && scheme.porcentaje_mensualidades > 0) ? efectivaMesesHoy : 0;
+               const dyn = dynPrice > 0 ? calcDynamicScheme(scheme, dynPrice, dynMeses) : null;
+               const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+               const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+               const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+               return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%`;
                             })()}
                             {(() => {
                               const tramos = scheme.tramos_mensualidad as any[];
@@ -1665,7 +1674,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                       if (isEscalonado) {
                                         return formatEscalonadoLabel(scheme, tramos, p.precioFinal);
                                       }
-                                      return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%`;
+                                      const dynPrice = propertyDetails?.precio_lista || 0;
+               const dynMeses = (efectivaMesesHoy > 0 && scheme.porcentaje_mensualidades > 0) ? efectivaMesesHoy : 0;
+               const dyn = dynPrice > 0 ? calcDynamicScheme(scheme, dynPrice, dynMeses) : null;
+               const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+               const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+               const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+               return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%`;
                                     })()}
                                   </span>
                                 </div>
@@ -2598,7 +2613,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                  if (isEscalonado) {
                                    return formatEscalonadoLabel(scheme, tramos, propertyDetails?.precio_lista);
                                  }
-                                 return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%`;
+                                 const dynPrice = propertyDetails?.precio_lista || 0;
+               const dynMeses = (efectivaMesesHoy > 0 && scheme.porcentaje_mensualidades > 0) ? efectivaMesesHoy : 0;
+               const dyn = dynPrice > 0 ? calcDynamicScheme(scheme, dynPrice, dynMeses) : null;
+               const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+               const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+               const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+               return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%`;
                                })()}
                               {(() => {
                                 const tramos = scheme.tramos_mensualidad as any[];
@@ -2657,7 +2678,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                            if (isEscalonado) {
                                              return formatEscalonadoLabel(scheme, tramos, p.precioFinal);
                                            }
-                                           return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%`;
+                                           const dynPrice = propertyDetails?.precio_lista || 0;
+               const dynMeses = (efectivaMesesHoy > 0 && scheme.porcentaje_mensualidades > 0) ? efectivaMesesHoy : 0;
+               const dyn = dynPrice > 0 ? calcDynamicScheme(scheme, dynPrice, dynMeses) : null;
+               const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+               const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+               const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+               return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%`;
                                          })()}
                                       </span>
                                     </div>

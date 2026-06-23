@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 
 // Icon imports - we'll convert them to base64 on load
 import recamarasIcon from "@/assets/icons/recamaras.png";
@@ -45,6 +46,7 @@ interface PropertyDetails {
     mostrar_piso_en_oferta?: boolean;
     mostrar_seccion_efectivo_en_oferta?: boolean;
     precio_m2_actual?: number;
+    fecha_entrega?: string | null;
   };
   ownerData?: {
     id: number;
@@ -209,21 +211,17 @@ export class OfertaPdfNativeService {
     };
 
     // Calculate payment amounts for a scheme
-    const calculatePaymentAmounts = (scheme: PaymentScheme) => {
-      const basePrice = data.propertyDetails.precio_lista;
-      const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
-      const finalPrice = basePrice + adjustment;
-
+    const calculatePaymentAmounts = (scheme: PaymentScheme, mesesEfectivos: number = 0) => {
+      const result = calcDynamicScheme(scheme, data.propertyDetails.precio_lista, mesesEfectivos);
       return {
-        enganche: finalPrice * (scheme.porcentaje_enganche / 100),
-        mensualidad:
-          scheme.numero_mensualidades > 0
-            ? (finalPrice * (scheme.porcentaje_mensualidades / 100)) /
-              scheme.numero_mensualidades
-            : 0,
-        entrega: finalPrice * (scheme.porcentaje_entrega / 100),
-        finalPrice,
-        adjustment,
+        enganche: result.enganche,
+        mensualidad: result.mensualidad,
+        entrega: result.entrega,
+        finalPrice: result.precioFinal,
+        adjustment: result.adjustment,
+        porcentajeMensualidades: result.porcentajeMensualidades,
+        porcentajeEntrega: result.porcentajeEntrega,
+        meses: result.meses,
       };
     };
 
@@ -266,27 +264,33 @@ export class OfertaPdfNativeService {
         ? Math.max(0, amounts.finalPrice - amounts.enganche - totalFixedMens)
         : amounts.entrega;
 
-      // Calculate end date
+      // Calculate end date and total months
       let fechaFinalText = '';
+      let totalMeses = 0;
       if (isEscalonado) {
         const tramos = scheme.tramos_mensualidad!;
         const lastTramo = tramos[tramos.length - 1];
         if (lastTramo.fecha_limite) {
           const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
           fechaFinalText = `hasta ${d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+          totalMeses = mesesEntreFechas(fechaGeneracion, lastTramo.fecha_limite);
         } else {
-          const totalMeses = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+          totalMeses = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
           const startDate = new Date(fechaGeneracion);
           startDate.setMonth(startDate.getMonth() + totalMeses);
           fechaFinalText = `hasta ${startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
         }
       }
 
+      const porcentajeEntrega = amounts.finalPrice > 0 ? (montoEntrega / amounts.finalPrice) * 100 : 0;
+
       return {
         isEscalonado,
         montoMensualText,
         montoEntregaText: formatCurrency(montoEntrega),
+        porcentajeEntrega,
         fechaFinalText,
+        totalMeses,
       };
     };
 
@@ -601,7 +605,12 @@ export class OfertaPdfNativeService {
 
         const isSelected =
           data.offerData.id_esquema_pago_seleccionado === scheme.id;
-        const amounts = calculatePaymentAmounts(scheme);
+        const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
+        const fechaEntregaProyecto = data.propertyDetails.projectData?.fecha_entrega;
+        const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
+          ? mesesEntreFechas(data.offerData.fecha_generacion, fechaEntregaProyecto)
+          : 0;
+        const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
         const hasSavings = amounts.adjustment < 0;
         const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, data.offerData.fecha_generacion);
 
@@ -698,39 +707,37 @@ export class OfertaPdfNativeService {
         pdf.setFontSize(8);
         pdf.setFont("helvetica", "normal");
 
-        if (!escalonadoDisplay.isEscalonado) {
-          // Final price
+        // Final price — all schemes
+        pdf.setTextColor(grayColor);
+        pdf.text("Precio final:", schemeX + schemePadding, lineY);
+        pdf.setTextColor(primaryColor);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(
+          formatCurrency(amounts.finalPrice),
+          schemeX + schemeWidth - schemePadding,
+          lineY,
+          { align: "right" }
+        );
+        lineY += 4;
+
+        // Savings (if applicable) — all schemes
+        if (hasSavings) {
+          pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          pdf.text("Precio final:", schemeX + schemePadding, lineY);
+          pdf.text(
+            `Ahorro (${Math.abs(scheme.porcentaje_descuento_aumento)}%):`,
+            schemeX + schemePadding,
+            lineY
+          );
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
-            formatCurrency(amounts.finalPrice),
+            formatCurrency(Math.abs(amounts.adjustment)),
             schemeX + schemeWidth - schemePadding,
             lineY,
             { align: "right" }
           );
           lineY += 4;
-
-          // Savings (if applicable)
-          if (hasSavings) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setTextColor(grayColor);
-            pdf.text(
-              `Ahorro (${Math.abs(scheme.porcentaje_descuento_aumento)}%):`,
-              schemeX + schemePadding,
-              lineY
-            );
-            pdf.setTextColor(primaryColor);
-            pdf.setFont("helvetica", "bold");
-            pdf.text(
-              formatCurrency(Math.abs(amounts.adjustment)),
-              schemeX + schemeWidth - schemePadding,
-              lineY,
-              { align: "right" }
-            );
-            lineY += 4;
-          }
         }
 
         // Down payment
@@ -755,9 +762,14 @@ export class OfertaPdfNativeService {
         }
 
         if (escalonadoDisplay.isEscalonado) {
+          // Monthly instalments row
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          pdf.text("Monto mensual:", schemeX + schemePadding, lineY);
+          pdf.text(
+            `${escalonadoDisplay.totalMeses} mensualidades:`,
+            schemeX + schemePadding,
+            lineY
+          );
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
@@ -768,6 +780,7 @@ export class OfertaPdfNativeService {
           );
           lineY += 3;
 
+          // Date sub-line
           if (escalonadoDisplay.fechaFinalText) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(6);
@@ -782,13 +795,14 @@ export class OfertaPdfNativeService {
           }
           lineY += 4;
 
+          // Delivery row
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          pdf.text("Monto a la entrega:", schemeX + schemePadding, lineY);
+          pdf.text("A la entrega:", schemeX + schemePadding, lineY);
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
-            escalonadoDisplay.montoEntregaText,
+            `${escalonadoDisplay.porcentajeEntrega.toFixed(1)}% ${escalonadoDisplay.montoEntregaText}`,
             schemeX + schemeWidth - schemePadding,
             lineY,
             { align: "right" }
@@ -802,7 +816,7 @@ export class OfertaPdfNativeService {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
             pdf.text(
-              `${scheme.numero_mensualidades} mensualidades:`,
+              `${amounts.meses} mensualidades (${amounts.porcentajeMensualidades.toFixed(1)}%):`,
               schemeX + schemePadding,
               lineY
             );
@@ -825,7 +839,7 @@ export class OfertaPdfNativeService {
             pdf.setTextColor(primaryColor);
             pdf.setFont("helvetica", "bold");
             pdf.text(
-              `${scheme.porcentaje_entrega}% ${formatCurrency(amounts.entrega)}`,
+              `${amounts.porcentajeEntrega.toFixed(1)}% ${formatCurrency(amounts.entrega)}`,
               schemeX + schemeWidth - schemePadding,
               lineY,
               { align: "right" }

@@ -48,7 +48,7 @@ import { ReventaDialog } from "@/components/admin/ReventaDialog";
 import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
-import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -875,7 +875,7 @@ const Propiedades = () => {
     queryFn: async () => {
       let query = supabase
         .from('proyectos')
-        .select('id, nombre')
+        .select('id, nombre, fecha_entrega')
         .eq('activo', true)
         .not("id_tipo_uso", "in", "(9,10,11)")
         .order('nombre', { ascending: true });
@@ -6034,7 +6034,16 @@ const Propiedades = () => {
                                            <span className="text-xs text-muted-foreground">
                                              {isEscalonado
                                                ? formatEscalonadoLabel(scheme, tramos, selectedPropertyForOffers?.precio_lista)
-                                               : `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%${scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}`
+                                               : (() => {
+                                                   const proyFechaEntrega = (proyectos as any[])?.find((p: any) => p.id === selectedPropertyForOffers?.proyecto_id)?.fecha_entrega as string | null | undefined;
+                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesEntreFechas(new Date(), proyFechaEntrega) : 0;
+                                                   const precioLista = selectedPropertyForOffers?.precio_lista || 0;
+                                                   const dyn = precioLista > 0 ? calcDynamicScheme(scheme, precioLista, dynMeses) : null;
+                                                   const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+                                                   const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+                                                   const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+                                                   return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%${scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}`;
+                                                 })()
                                              }
                                            </span>
                                         </div>

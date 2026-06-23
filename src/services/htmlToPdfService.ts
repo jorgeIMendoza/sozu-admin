@@ -61,6 +61,7 @@ interface PropertyDetails {
     mostrar_piso_en_oferta?: boolean;
     mostrar_seccion_efectivo_en_oferta?: boolean;
     precio_m2_actual?: number;
+    fecha_entrega?: string | null;
   };
   ownerStpBankAccount?: {
     numero_cuenta: string;
@@ -733,14 +734,15 @@ class HTMLToPDFService {
             const proyectoQuery = await supabase
               .from('proyectos')
               .select(`
-                id, 
-                nombre, 
+                id,
+                nombre,
                 url_imagen_portada,
                 url_logo,
                 mostrar_precio_m2_en_oferta,
                 mostrar_piso_en_oferta,
                 mostrar_seccion_efectivo_en_oferta,
-                precio_m2_actual
+                precio_m2_actual,
+                fecha_entrega
               `)
               .eq('id', edificioData.id_proyecto)
               .single();
