@@ -14,6 +14,7 @@ import { useProyectoFinancials } from '@/hooks/useProyectoFinancials';
 import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { usePldForCuenta, type PldPaymentFlagInfo } from '@/hooks/usePldForCuenta';
+import { toast } from 'sonner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50;
@@ -57,6 +58,45 @@ function normConcepto(
     if (lower.includes('pago final')) return 'Pago Final';
   }
   return null;
+}
+
+// ─── Comprobante classification (sin librería, solo fetch + regex binario) ────
+
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+function getUrlExtension(url: string): string {
+  return url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? '';
+}
+
+type ComprobanteType =
+  | 'imagen'
+  | 'pdf_una_pagina'
+  | 'pdf_multipagina'
+  | 'pdf_indeterminado'
+  | 'otro';
+
+async function getPdfPageCount(url: string): Promise<number | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const text = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+    const matches = [...text.matchAll(/\/Count\s+(\d+)/g)];
+    if (!matches.length) return null;
+    // El mayor /Count es siempre el nodo root; árboles anidados tienen valores menores
+    return Math.max(...matches.map(m => parseInt(m[1], 10)));
+  } catch {
+    return null;
+  }
+}
+
+async function detectarTipoComprobante(url: string): Promise<ComprobanteType> {
+  const ext = getUrlExtension(url);
+  if (IMAGE_EXTS.has(ext)) return 'imagen';
+  if (ext !== 'pdf') return 'otro';
+  const pages = await getPdfPageCount(url);
+  if (pages === null) return 'pdf_indeterminado';
+  return pages >= 2 ? 'pdf_multipagina' : 'pdf_una_pagina';
 }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
@@ -334,10 +374,11 @@ interface PaymentsTableProps {
   flagsPorPago?: Map<number, PldPaymentFlagInfo>;
   pldMeta?: Map<number, PldPaymentMeta>;
   onToggleValidacion?: (pagoId: number, value: boolean) => Promise<void>;
+  onAnalizarComprobante?: (pagoId: number, url: string) => Promise<void>;
   validandoPagoId?: number | null;
 }
 
-function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldMeta, onToggleValidacion, validandoPagoId }: PaymentsTableProps) {
+function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldMeta, onToggleValidacion, onAnalizarComprobante, validandoPagoId }: PaymentsTableProps) {
   const hasPld = !!flagsPorPago;
   const HEADERS = [
     'Proyecto', 'Estatus', 'Comprador', 'Depto', 'Producto',
@@ -408,7 +449,8 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldM
                           )}
                           {(() => {
                             const meta = pldMeta?.get(p.pago_id);
-                            if (!meta || meta.idMetodosPago !== 1 || meta.clave_rastreo || !p.url_recibo || !onToggleValidacion) return null;
+                            if (!meta || meta.idMetodosPago !== 1 || meta.clave_rastreo || !p.url_recibo) return null;
+                            if (!onToggleValidacion && !onAnalizarComprobante) return null;
                             const isPending = validandoPagoId === p.pago_id;
                             return meta.validado ? (
                               <div className="flex items-center gap-1.5">
@@ -417,7 +459,7 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldM
                                   Validado PLD
                                 </span>
                                 <button
-                                  onClick={() => onToggleValidacion(p.pago_id, false)}
+                                  onClick={() => onToggleValidacion?.(p.pago_id, false)}
                                   disabled={isPending}
                                   className="text-xs text-slate-400 hover:text-red-500 underline decoration-dotted disabled:opacity-50 whitespace-nowrap"
                                 >
@@ -426,7 +468,7 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldM
                               </div>
                             ) : (
                               <button
-                                onClick={() => onToggleValidacion(p.pago_id, true)}
+                                onClick={() => onAnalizarComprobante?.(p.pago_id, p.url_recibo!)}
                                 disabled={isPending}
                                 className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 underline decoration-dotted disabled:opacity-50 whitespace-nowrap"
                               >
@@ -1135,6 +1177,45 @@ export function RelacionPagos() {
     }
   };
 
+  // Analiza url_recibo por extensión y páginas PDF antes de marcar validación
+  const handleAnalizarComprobante = async (pagoId: number, url: string) => {
+    // Regla 1: límite de efectivo excedido — no permitir verde
+    if (pld.hasEfectivoExcedido) {
+      toast.error('Límite de efectivo excedido — no se puede validar documentalmente.');
+      return;
+    }
+    setValidandoPagoId(pagoId);
+    try {
+      const tipo = await detectarTipoComprobante(url);
+      switch (tipo) {
+        case 'imagen':
+          toast.warning('Imagen adjunta; requiere PDF con ticket de depósito y estado de cuenta.');
+          break;
+        case 'pdf_una_pagina':
+          toast.warning('PDF de 1 página; falta estado de cuenta.');
+          break;
+        case 'pdf_multipagina': {
+          const { error } = await (supabase as any)
+            .from('pagos')
+            .update({ validacion_documental_efectivo: true })
+            .eq('id', pagoId);
+          if (error) throw error;
+          qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+          toast.success('PDF de múltiples páginas validado: ticket de depósito + estado de cuenta.');
+          break;
+        }
+        case 'pdf_indeterminado':
+          toast.warning('No se pudo determinar el número de páginas; revisar manualmente.');
+          break;
+        case 'otro':
+          toast.error('Formato no reconocido como comprobante válido para PLD.');
+          break;
+      }
+    } finally {
+      setValidandoPagoId(null);
+    }
+  };
+
   // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
   const rpTotalMonto = useMemo(
     () => (rpPagosCuenta ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0),
@@ -1466,6 +1547,7 @@ export function RelacionPagos() {
                 flagsPorPago={isRpMode ? pld.flagsPorPago : undefined}
                 pldMeta={isRpMode ? pldMeta : undefined}
                 onToggleValidacion={isRpMode ? toggleValidacion : undefined}
+                onAnalizarComprobante={isRpMode ? handleAnalizarComprobante : undefined}
                 validandoPagoId={validandoPagoId}
               />
 
