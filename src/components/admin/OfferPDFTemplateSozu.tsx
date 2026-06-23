@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { mesesEntreFechas, calcDynamicScheme } from '@/utils/escalonadoUtils';
 import recamarasIcon from '@/assets/icons/recamaras.png';
 import banosIcon from '@/assets/icons/banos.png';
 import mediosBanosIcon from '@/assets/icons/medios-banos.png';
@@ -51,6 +52,7 @@ interface PropertyDetails {
     mostrar_piso_en_oferta?: boolean;
     mostrar_seccion_efectivo_en_oferta?: boolean;
     precio_m2_actual?: number;
+    fecha_entrega?: string | null;
   };
   ownerData?: {
     id: number;
@@ -180,17 +182,37 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
       return textMap[num] || num.toString();
     };
 
-    const calculatePaymentAmounts = (scheme: PaymentScheme) => {
+    const calculatePaymentAmounts = (scheme: PaymentScheme, mesesEfectivos = 0) => {
       const basePrice = propertyDetails.precio_lista;
+      const isEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
+      if (!isEscalonado && mesesEfectivos > 0 && scheme.porcentaje_mensualidades > 0) {
+        const dyn = calcDynamicScheme(scheme, basePrice, mesesEfectivos);
+        return {
+          enganche: dyn.enganche,
+          mensualidad: dyn.mensualidad,
+          mensualidadesTotal: dyn.mensualidadesTotal,
+          entrega: dyn.entrega,
+          finalPrice: dyn.precioFinal,
+          adjustment: dyn.adjustment,
+          meses: dyn.meses,
+          porcentajeMensualidades: dyn.porcentajeMensualidades,
+          porcentajeEntrega: dyn.porcentajeEntrega,
+        };
+      }
       const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
-      const finalPrice = basePrice + adjustment; // Cambio crítico: ahora suma el ajuste
-      
+      const finalPrice = basePrice + adjustment;
       return {
         enganche: finalPrice * (scheme.porcentaje_enganche / 100),
-        mensualidad: (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades,
+        mensualidad: scheme.numero_mensualidades > 0
+          ? (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades
+          : 0,
+        mensualidadesTotal: finalPrice * (scheme.porcentaje_mensualidades / 100),
         entrega: finalPrice * (scheme.porcentaje_entrega / 100),
         finalPrice,
-        adjustment
+        adjustment,
+        meses: scheme.numero_mensualidades,
+        porcentajeMensualidades: scheme.porcentaje_mensualidades,
+        porcentajeEntrega: scheme.porcentaje_entrega,
       };
     };
 
@@ -495,7 +517,12 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               fontSize: '36px'
             }}>
               {filteredPaymentSchemes.map((scheme, index) => {
-                const amounts = calculatePaymentAmounts(scheme);
+                const isSchemeEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
+                const fechaEntregaStr = propertyDetails.projectData?.fecha_entrega ?? null;
+                const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaStr && scheme.porcentaje_mensualidades > 0)
+                  ? mesesEntreFechas(offerData.fecha_generacion, fechaEntregaStr)
+                  : 0;
+                const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
                 const isSelected = offerData.id_esquema_pago_seleccionado === scheme.id;
                 const adjustmentPercentage = scheme.porcentaje_descuento_aumento;
                 const hasSavings = amounts.adjustment < 0; // Negativo = descuento
@@ -566,10 +593,13 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                               const isEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
 
                               if (isEscalonado) {
+                                const tramosArr = scheme.tramos_mensualidad!;
+                                const totalMesesEscalonado = tramosArr.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+
                                 const montoMensualTexto = hasFixedAmountTramos
                                   ? Array.from(
                                       new Set(
-                                        scheme.tramos_mensualidad!.map((tramo) =>
+                                        tramosArr.map((tramo) =>
                                           formatCurrency((tramo.monto_mensualidad || 0) / 100)
                                         )
                                       )
@@ -578,39 +608,45 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                 const montoEntregaTexto = hasFixedAmountTramos
                                   ? formatCurrency(
                                       amounts.finalPrice - amounts.enganche -
-                                        scheme.tramos_mensualidad!.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
+                                        tramosArr.reduce((sum, t) => sum + ((t.monto_mensualidad || 0) / 100) * t.numero_mensualidades, 0)
                                     )
                                   : formatCurrency(amounts.entrega);
 
-                                const tramosArr = scheme.tramos_mensualidad!;
                                 const lastTramo = tramosArr[tramosArr.length - 1];
                                 let fechaFinalStr = '';
                                 if (lastTramo.fecha_limite) {
                                   const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
                                   fechaFinalStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 } else {
-                                  const totalMeses = tramosArr.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
                                   const startDate = new Date(offerData.fecha_generacion);
-                                  startDate.setMonth(startDate.getMonth() + totalMeses);
+                                  startDate.setMonth(startDate.getMonth() + totalMesesEscalonado);
                                   fechaFinalStr = startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 }
 
                                 return (
                                   <>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                      <span style={{ color: '#000000' }}>Monto mensual:</span>
+                                      <span style={{ color: '#000000' }}>Durante la obra:</span>
+                                      <span style={{ color: '#000000', fontWeight: 'bold' }}>
+                                        {amounts.porcentajeMensualidades.toFixed(1)}% {formatCurrency(amounts.mensualidadesTotal)}
+                                      </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: '#000000' }}>{totalMesesEscalonado} mensualidades:</span>
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                         {montoMensualTexto}
                                       </span>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '7px', color: '#666' }}>
-                                      <span></span>
-                                      <span>hasta {fechaFinalStr}</span>
-                                    </div>
+                                    {fechaFinalStr && (
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '27px', color: '#666666' }}>
+                                        <span>Hasta {fechaFinalStr}</span>
+                                        <span></span>
+                                      </div>
+                                    )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                      <span style={{ color: '#000000' }}>Monto a la entrega:</span>
+                                      <span style={{ color: '#000000' }}>A la entrega:</span>
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                        {montoEntregaTexto}
+                                        {amounts.porcentajeEntrega.toFixed(1)}% {montoEntregaTexto}
                                       </span>
                                     </div>
                                   </>
@@ -619,16 +655,16 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
 
                               return (
                                 <>
-                                  {scheme.porcentaje_mensualidades > 0 && scheme.numero_mensualidades > 0 && (
+                                  {amounts.porcentajeMensualidades > 0 && amounts.meses > 0 && (
                                     <>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ color: '#000000' }}>Durante la obra:</span>
                                         <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                          {scheme.porcentaje_mensualidades}% {formatCurrency(amounts.finalPrice * (scheme.porcentaje_mensualidades / 100))}
+                                          {amounts.porcentajeMensualidades.toFixed(1)}% {formatCurrency(amounts.mensualidadesTotal)}
                                         </span>
                                       </div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ color: '#000000' }}>{scheme.numero_mensualidades} mensualidades:</span>
+                                        <span style={{ color: '#000000' }}>{amounts.meses} mensualidades:</span>
                                         <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                           {formatCurrency(amounts.mensualidad)}
                                         </span>
@@ -636,11 +672,11 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                     </>
                                   )}
 
-                                  {scheme.porcentaje_entrega > 0 && (
+                                  {amounts.porcentajeEntrega > 0 && (
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                       <span style={{ color: '#000000' }}>A la entrega:</span>
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
-                                        {scheme.porcentaje_entrega}% {formatCurrency(amounts.entrega)}
+                                        {amounts.porcentajeEntrega.toFixed(1)}% {formatCurrency(amounts.entrega)}
                                       </span>
                                     </div>
                                   )}
