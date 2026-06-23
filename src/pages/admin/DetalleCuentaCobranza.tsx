@@ -2812,6 +2812,9 @@ export default function DetalleCuentaCobranza() {
   // Check if property is "En demanda" (id=11) - also makes account read-only
   const isEnDemanda = cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id_estatus_disponibilidad === 11;
 
+  // Check if property status is "Dación en pago" (id=12) - hides payment cards/buttons and marks pagos as dación
+  const esDacionEnPago = cuentaDetalle?.id_estatus_disponibilidad === 12;
+
   const handleGenerarFacturaSozu = async () => {
     setGenerarFacturaLoading(true);
     try {
@@ -3008,7 +3011,8 @@ export default function DetalleCuentaCobranza() {
             )}
 
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
-              <Button 
+              {!esDacionEnPago && (
+              <Button
                 onClick={async () => {
                   if (!id) return;
                   try {
@@ -3044,7 +3048,8 @@ export default function DetalleCuentaCobranza() {
                 )}
                 Estado de Cuenta
               </Button>
-              
+              )}
+
               {(canUpdate || isSuperAdmin) && (
               <>
                 <div className="h-5 w-px bg-border" />
@@ -3061,8 +3066,8 @@ export default function DetalleCuentaCobranza() {
               )}
               
               {/* Botón Poner en Demanda */}
-              {(canUpdate || isSuperAdmin) && cuentaDetalle.tipo_cuenta === 'Propiedad' && 
-               cuentaDetalle.id_estatus_disponibilidad !== 11 && 
+              {(canUpdate || isSuperAdmin) && cuentaDetalle.tipo_cuenta === 'Propiedad' &&
+               cuentaDetalle.id_estatus_disponibilidad !== 11 && !esDacionEnPago &&
                totalPagado < (cuentaDetalle?.precio_final || 0) && (
                 <>
                   <div className="h-5 w-px bg-border" />
@@ -3227,6 +3232,23 @@ export default function DetalleCuentaCobranza() {
         </div>
       )}
 
+      {/* Banner Dación en pago */}
+      {esDacionEnPago && (
+        <Card className="border-2 border-purple-300 bg-purple-50 dark:bg-purple-950/30 dark:border-purple-800">
+          <CardContent className="flex items-center gap-4 py-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/50">
+              <Banknote className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-purple-700 dark:text-purple-300">Dación en pago</p>
+              <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">
+                Esta propiedad fue saldada mediante dación en pago. Los pagos registrados se consideran liquidados bajo esta modalidad.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Información general de la cuenta */}
       <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-4 ${esCuentaCancelada ? 'opacity-60' : ''}`}>
         <Card>
@@ -3239,6 +3261,7 @@ export default function DetalleCuentaCobranza() {
           </CardContent>
         </Card>
 
+        {!esDacionEnPago && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Pagado</CardTitle>
@@ -3253,6 +3276,7 @@ export default function DetalleCuentaCobranza() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Cards para cuentas canceladas */}
         {esCuentaCancelada ? (
@@ -3292,7 +3316,7 @@ export default function DetalleCuentaCobranza() {
         ) : (
           <>
             {/* Cards normales para cuentas activas */}
-            {cuentaDetalle.precio_final > 0 && (
+            {!esDacionEnPago && cuentaDetalle.precio_final > 0 && (
               <Card className={haySobrepago ? "border-orange-500" : ""}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
@@ -3369,7 +3393,7 @@ export default function DetalleCuentaCobranza() {
             )}
 
             {/* Cash payments card for property accounts only */}
-            {cuentaDetalle.tipo_cuenta === 'Propiedad' && cashPaymentsData && (
+            {!esDacionEnPago && cuentaDetalle.tipo_cuenta === 'Propiedad' && cashPaymentsData && (
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-2">
@@ -3791,9 +3815,15 @@ export default function DetalleCuentaCobranza() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="acuerdos-aplicaciones" className="w-full">
-            <TabsList className={cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 'grid w-full grid-cols-3' : 'grid w-full grid-cols-2'}>
+            <TabsList className={(() => {
+              const numTabs = 1 + (esDacionEnPago ? 0 : 1) + (cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 1 : 0);
+              const colsClass = numTabs === 1 ? 'grid-cols-1' : numTabs === 2 ? 'grid-cols-2' : 'grid-cols-3';
+              return `grid w-full ${colsClass}`;
+            })()}>
               <TabsTrigger value="acuerdos-aplicaciones">Acuerdos de Pago y Aplicaciones</TabsTrigger>
-              <TabsTrigger value="pagos-aplicados">Pagos Aplicados</TabsTrigger>
+              {!esDacionEnPago && (
+                <TabsTrigger value="pagos-aplicados">Pagos Aplicados</TabsTrigger>
+              )}
               {cuentaDetalle?.tipo_cuenta === 'Propiedad' && (
                 <TabsTrigger value="documentos">Documentos</TabsTrigger>
               )}
@@ -4134,9 +4164,38 @@ export default function DetalleCuentaCobranza() {
                 // Check if has any fines (multas)
                 const tieneMultas = acuerdo.multas && acuerdo.multas.length > 0;
                 
+                // Dación en pago: render non-collapsible row marked PAGADO with distinct (purple) color
+                if (esDacionEnPago) {
+                  return (
+                    <div key={acuerdo.id} className="border rounded-lg bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
+                      <div className="w-full p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs font-semibold">
+                              {acuerdo.orden}
+                            </div>
+                            <span className="text-sm font-medium text-purple-700 dark:text-purple-300">{conceptoDisplay}</span>
+                          </div>
+                          <span className="text-xs text-purple-600 dark:text-purple-400">
+                            {porcentaje}%
+                          </span>
+                          <Badge className="text-xs bg-purple-500 hover:bg-purple-500 text-white">
+                            PAGADO · Dación en pago
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                            {formatCurrency(acuerdo.monto)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // Check if this is a cancellation concept (7 = Pago por cancelación, 9 = Devolución)
                 const esConceptoCancelacion = [7, 9].includes(acuerdo.id_concepto);
-                
+
                 // For cancellation concepts, render non-collapsible row with different style
                 if (esConceptoCancelacion) {
                   // Concepto 7 = Pago por cancelación (rojo), Concepto 9 = Devolución (amarillo)
