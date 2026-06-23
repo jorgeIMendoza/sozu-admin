@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     let portalUrl = 'https://app.sozu.com/auth/login';
     let rolLabel = 'Usuario';
     if (rolId === 3) {
-      portalUrl = 'https://inmobiliarias.sozu.com/auth/login';
+      portalUrl = 'https://agentes.sozu.com/auth/login';
       rolLabel = 'Agente Inmobiliario';
     } else if (rolId === 4) {
       portalUrl = 'https://inmobiliarias.sozu.com/auth/login';

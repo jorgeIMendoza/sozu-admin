@@ -442,12 +442,7 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
     receiptUrl: p.receiptUrl,
   }));
 
-  allRows.sort((a, b) => {
-    if (a.status !== "paid" && b.status === "paid") return -1;
-    if (a.status === "paid" && b.status !== "paid") return 1;
-    if (a.status !== "paid") return a.date.localeCompare(b.date);
-    return b.date.localeCompare(a.date);
-  });
+  allRows.sort((a, b) => b.date.localeCompare(a.date));
 
   const paidCount = allRows.filter((r) => r.status === "paid").length;
   const LIMIT = 5;

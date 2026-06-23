@@ -36,8 +36,11 @@ async function findUserByEmail(supabaseAdmin: any, email: string) {
 }
 
 function getConfirmationPortalUrl(email: string, nombre: string | null, rolId: number | null | undefined) {
-  const host = rolId === 23 ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
-  return `${host}/auth/confirmacion-email?email=${encodeURIComponent(email)}&nombre=${encodeURIComponent(nombre || '')}&portal=${rolId === 23 ? 'clientes' : 'inmobiliarias'}&destination=change-password`;
+  const host = rolId === 23 ? 'https://clientes.sozu.com'
+    : rolId === 3 ? 'https://agentes.sozu.com'
+    : 'https://inmobiliarias.sozu.com';
+  const portal = rolId === 23 ? 'clientes' : rolId === 3 ? 'agentes' : 'inmobiliarias';
+  return `${host}/auth/confirmacion-email?email=${encodeURIComponent(email)}&nombre=${encodeURIComponent(nombre || '')}&portal=${portal}&destination=change-password`;
 }
 
 function buildConfirmationUrl(linkData: any, thankYouUrl: string, supabaseUrl: string) {
