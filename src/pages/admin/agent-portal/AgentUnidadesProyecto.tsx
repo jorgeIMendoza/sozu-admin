@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
@@ -236,16 +238,29 @@ const AgentUnidadesProyecto = () => {
 
   const getSchemesForProperty = (prop: any) => prop.esquemas_pago || [];
 
-  const calcSchemeAmounts = (scheme: any, precioLista: number) => {
-    const descuento = scheme.porcentaje_descuento_aumento || 0;
-    const precioAjustado = precioLista * (1 + descuento / 100);
-    const enganche = precioAjustado * ((scheme.porcentaje_enganche || 0) / 100);
-    const mensualidadesTotal = precioAjustado * ((scheme.porcentaje_mensualidades || 0) / 100);
-    const entrega = precioAjustado * ((scheme.porcentaje_entrega || 0) / 100);
-    const numMensualidades = scheme.numero_mensualidades || 1;
-    const mensualidad = numMensualidades > 0 ? mensualidadesTotal / numMensualidades : 0;
-    return { precioAjustado, enganche, mensualidadesTotal, entrega, mensualidad, numMensualidades };
+  const calcSchemeAmounts = (scheme: any, precioLista: number, mesesEfectivos: number = 0) => {
+    const result = calcDynamicScheme(scheme, precioLista, mesesEfectivos);
+    return {
+      precioAjustado: result.precioFinal,
+      enganche: result.enganche,
+      mensualidadesTotal: result.mensualidadesTotal,
+      entrega: result.entrega,
+      mensualidad: result.mensualidad,
+      numMensualidades: result.meses,
+      porcentajeMensualidades: result.porcentajeMensualidades,
+      porcentajeEntrega: result.porcentajeEntrega,
+    };
   };
+
+  const { data: selectedProjectData } = useQuery({
+    queryKey: ["proyecto-fecha-entrega", selectedProperty?.proyecto_id],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("proyectos").select("id, fecha_entrega").eq("id", selectedProperty.proyecto_id).maybeSingle();
+      return data;
+    },
+    enabled: !!selectedProperty?.proyecto_id,
+  });
+  const efectivaMesesAgente = selectedProjectData?.fecha_entrega ? mesesEntreFechas(new Date(), selectedProjectData.fecha_entrega) : 0;
 
   useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange, normalizedSearchQuery]);
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
@@ -627,7 +642,9 @@ const AgentUnidadesProyecto = () => {
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-2 pt-1">
                       {getSchemesForProperty(selectedProperty).map((scheme: any) => {
-                        const amounts = calcSchemeAmounts(scheme, selectedProperty.precio_lista);
+                        const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
+                        const mesesParaScheme = (!isSchemeEscalonado && scheme.porcentaje_mensualidades > 0 && efectivaMesesAgente > 0) ? efectivaMesesAgente : 0;
+                        const amounts = calcSchemeAmounts(scheme, selectedProperty.precio_lista, mesesParaScheme);
                         const isSelected = selectedSchemeId === scheme.id;
                         return (
                           <button
@@ -653,9 +670,9 @@ const AgentUnidadesProyecto = () => {
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                               {scheme.porcentaje_enganche > 0 && <span><span className="font-medium text-foreground">{scheme.porcentaje_enganche}%</span> Enganche</span>}
-                              {scheme.porcentaje_mensualidades > 0 && <span><span className="font-medium text-foreground">{scheme.porcentaje_mensualidades}%</span> Mensualidades</span>}
-                              {scheme.porcentaje_entrega > 0 && <span><span className="font-medium text-foreground">{scheme.porcentaje_entrega}%</span> Entrega</span>}
-                              {scheme.numero_mensualidades > 0 && <span><span className="font-medium text-foreground">{scheme.numero_mensualidades}</span> meses</span>}
+                              {scheme.porcentaje_mensualidades > 0 && <span><span className="font-medium text-foreground">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades</span>}
+                              {scheme.porcentaje_entrega > 0 && <span><span className="font-medium text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega</span>}
+                              {scheme.numero_mensualidades > 0 && <span><span className="font-medium text-foreground">{amounts.numMensualidades}</span> meses</span>}
                             </div>
                             {selectedProperty.precio_lista > 0 && (
                               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/40 mt-1">

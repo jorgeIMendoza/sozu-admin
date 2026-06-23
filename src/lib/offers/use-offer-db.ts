@@ -2,7 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
-import { expandirTramos } from "@/utils/escalonadoUtils";
+import { expandirTramos, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const COUNTRY_DIAL: Record<string, string> = { MX: "52", US: "1", IN: "91" };
+
+function toDialCode(clave: string | null | undefined): string {
+  if (!clave) return "52";
+  if (/^\+?\d+$/.test(clave)) return clave.replace("+", "");
+  return COUNTRY_DIAL[clave.toUpperCase()] ?? "52";
+}
+
+function buildWhatsapp(clave: string | null | undefined, telefono: string): string {
+  return `${toDialCode(clave)}${telefono.replace(/\D/g, "")}`;
+}
 
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
@@ -56,7 +70,17 @@ function toOptimizedUrl(url: string, _width: number, quality = 80): string {
 
 // ── Payment plan calculator ──────────────────────────────────────────────────
 
-function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
+function calcPaymentPlans(
+  esquemas: any[],
+  listPrice: number,
+  fechaGeneracion?: string,
+  fechaEntrega?: string | null,
+): PaymentPlan[] {
+  const mesesEfectivos =
+    fechaGeneracion && fechaEntrega
+      ? mesesEntreFechas(fechaGeneracion, fechaEntrega)
+      : 0;
+
   return esquemas.map((e) => {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
     const finalPrice  = listPrice * (1 + pctDesc / 100);
@@ -85,6 +109,14 @@ function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
       finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
       pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
       pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
+    } else if (mesesEfectivos > 0 && Number(e.porcentaje_mensualidades ?? 0) > 0) {
+      const dyn = calcDynamicScheme(e, listPrice, mesesEfectivos);
+      nMensual           = dyn.meses;
+      monthlyAmount      = dyn.mensualidad;
+      installmentsTotal  = dyn.mensualidadesTotal;
+      finalPaymentAmount = dyn.entrega;
+      pctMensual         = dyn.porcentajeMensualidades;
+      pctEntrega         = dyn.porcentajeEntrega;
     } else {
       pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
       pctEntrega  = Number(e.porcentaje_entrega ?? 0);
@@ -357,16 +389,16 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
         ].slice(0, 6)
       : allEsqs.slice(0, 6);
   }
-  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice);
+  const entregaFecha = (proyecto as any).fecha_entrega_proyecto
+    ?? (proyecto as any).fecha_entrega
+    ?? null;
+
+  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
 
   // 10. Expiración (7 días desde generación)
   // Vigencia siempre 7 días — calculado en código, sin campo en DB
   const validUntilDate = new Date(oferta.fecha_generacion);
   validUntilDate.setDate(validUntilDate.getDate() + 7);
-
-  const entregaFecha = (proyecto as any).fecha_entrega_proyecto
-    ?? (proyecto as any).fecha_entrega
-    ?? null;
 
   const area = Number(propiedad.m2_interiores ?? 0) + Number(propiedad.m2_exteriores ?? 0);
 
@@ -478,7 +510,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           ? `${agentPersona.clave_pais_telefono ?? "+52"} ${agentPersona.telefono}`
           : "";
         const whatsapp = agentPersona.telefono
-          ? `${(agentPersona.clave_pais_telefono ?? "+52").replace("+", "")}${agentPersona.telefono.replace(/\s/g, "")}`
+          ? buildWhatsapp(agentPersona.clave_pais_telefono, agentPersona.telefono)
           : "";
         return {
           id: agentId,
@@ -486,7 +518,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           firstName,
           title: "Asesor SOZU",
           photoUrl: (agentUser as any)?.foto_perfil_url ?? "",
-          bio: (agentUser as any)?.frase_perfil ?? undefined,
+          bio: (agentUser as any)?.frase_perfil ?? "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!",
           phone,
           email: agentPersona.email ?? "",
           whatsapp,
@@ -519,7 +551,7 @@ async function fetchAgentFromDB(agentId: string): Promise<Agent | null> {
     ? `${persona.clave_pais_telefono ?? "+52"} ${persona.telefono}`
     : "";
   const whatsapp = persona.telefono
-    ? `${(persona.clave_pais_telefono ?? "+52").replace("+", "")}${persona.telefono.replace(/\s/g, "")}`
+    ? buildWhatsapp(persona.clave_pais_telefono, persona.telefono)
     : "";
 
   return {
