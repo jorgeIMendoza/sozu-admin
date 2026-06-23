@@ -23,7 +23,9 @@ function getRolLabel(rolId: number | null | undefined): string {
 }
 
 function getPortalConfig(rolId: number | null | undefined) {
-  const host = rolId === CLIENTE_ROLE_ID ? 'https://clientes.sozu.com' : 'https://inmobiliarias.sozu.com';
+  const host = rolId === CLIENTE_ROLE_ID ? 'https://clientes.sozu.com'
+    : rolId === 3 ? 'https://agentes.sozu.com'
+    : 'https://inmobiliarias.sozu.com';
   return {
     portalHost: host,
     ctaUrl: `${host}/auth/change-password`,

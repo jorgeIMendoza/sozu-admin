@@ -13,7 +13,7 @@ interface RequestBody {
   proyecto_ids?: number[];
 }
 
-const AGENTE_PORTAL_URL = 'https://inmobiliarias.sozu.com';
+const AGENTE_PORTAL_URL = 'https://agentes.sozu.com';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
