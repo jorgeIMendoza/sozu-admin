@@ -234,7 +234,9 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
   const availableDatesByProject = useMemo(() => {
     if (!availabilityData?.configs?.length || !availabilityData?.horarios?.length) return new Map<number, any[]>();
 
-    const today = startOfDay(new Date());
+    const now = new Date();
+    const today = startOfDay(now);
+    const currentHour = now.getHours();
     // Map: projectId -> dateStr -> slots
     const projectDateMap = new Map<number, Map<string, { hour: number; configId: number; responsable: string; nombre: string }[]>>();
 
@@ -248,9 +250,13 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
       const endDate = config.fecha_fin_recurrencia ? new Date(config.fecha_fin_recurrencia + "T23:59:59") : addDays(today, 60);
       const configHorarios = availabilityData.horarios.filter((h: any) => h.id_configuracion_cita === config.id);
 
-      for (let d = addDays(today, 1); isBefore(d, endDate) && isBefore(d, addDays(today, 61)); d = addDays(d, 1)) {
+      for (let d = today; isBefore(d, endDate) && isBefore(d, addDays(today, 61)); d = addDays(d, 1)) {
         const dayOfWeek = d.getDay();
-        const matchingHorarios = configHorarios.filter((h: any) => h.dia_semana === dayOfWeek);
+        const isToday = d.getTime() === today.getTime();
+        // For today: only show slots that haven't passed yet (last slot is 17:00 / 5pm)
+        const matchingHorarios = configHorarios.filter((h: any) =>
+          h.dia_semana === dayOfWeek && (!isToday || h.hora > currentHour)
+        );
 
         if (matchingHorarios.length > 0) {
           const dateStr = format(d, "yyyy-MM-dd");
