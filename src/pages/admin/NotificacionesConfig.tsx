@@ -27,11 +27,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { NotificacionDestinatariosSection, type DestinatarioManual } from "@/components/admin/NotificacionDestinatariosSection";
 
 interface DestinatariosExtra {
-  correos_adicionales?: string[];
-  venta_externa?: string[];
-  venta_sozu?: string[];
+  /** Correos manuales (se suman a los usuarios por rol). */
+  correos_manuales?: DestinatarioManual[];
+  /** Correos de usuarios por rol que se excluyen del envío. */
+  excluidos?: string[];
+  /** Solo evento de contrato: incluir al vendedor externo dinámico. */
   incluir_vendedor_externo?: boolean;
 }
 
@@ -79,19 +82,7 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
 
 const SYSTEM_PLACEHOLDERS = ['{nombre_desarrollo}', '{nombre_esquema}', '{id_proyecto}'];
 
-// Convierte un textarea (un correo por línea, o separados por coma/;) a un array
-// de correos normalizado (trim, minúsculas, sin duplicados, solo con "@").
-const parseEmails = (text: string): string[] => {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of (text || '').split(/[\n,;]+/)) {
-    const v = raw.trim().toLowerCase();
-    if (v.includes('@') && !seen.has(v)) { seen.add(v); out.push(v); }
-  }
-  return out;
-};
-
-const emailsToText = (arr?: string[]) => (arr ?? []).join('\n');
+const CONTRATO_EVENTO = 'contrato_firmado_ambas_partes';
 
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
@@ -107,11 +98,6 @@ const NotificacionesConfig = () => {
   const [loadingVars, setLoadingVars] = useState(false);
   const [mapeoJsonText, setMapeoJsonText] = useState<string>('{}');
   const [mapeoJsonError, setMapeoJsonError] = useState<string | null>(null);
-  // Editores de destinatarios por correo (texto, un correo por línea)
-  const [correosAdicionalesText, setCorreosAdicionalesText] = useState('');
-  const [ventaExternaText, setVentaExternaText] = useState('');
-  const [ventaSozuText, setVentaSozuText] = useState('');
-  const [incluirVendedorExterno, setIncluirVendedorExterno] = useState(false);
   const mapeoTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({
@@ -167,10 +153,6 @@ const NotificacionesConfig = () => {
     setMapeoJsonText('{}');
     setMapeoJsonError(null);
     setTemplateVars([]);
-    setCorreosAdicionalesText('');
-    setVentaExternaText('');
-    setVentaSozuText('');
-    setIncluirVendedorExterno(false);
   };
 
   const handleOpenEdit = (item: NotificacionConfig) => {
@@ -180,12 +162,16 @@ const NotificacionesConfig = () => {
     setMapeoJsonText(JSON.stringify(mapeo, null, 2));
     setMapeoJsonError(null);
     setTemplateVars([]);
-    const de = item.destinatarios_extra || {};
-    setCorreosAdicionalesText(emailsToText(de.correos_adicionales));
-    setVentaExternaText(emailsToText(de.venta_externa));
-    setVentaSozuText(emailsToText(de.venta_sozu));
-    setIncluirVendedorExterno(!!de.incluir_vendedor_externo);
     if (item.postmark_template_id) loadTemplateVariables(item.postmark_template_id);
+  };
+
+  // Helpers para leer/actualizar destinatarios_extra del editItem en curso.
+  const getDestExtra = (): DestinatariosExtra => editItem?.destinatarios_extra || {};
+  const patchDestExtra = (patch: Partial<DestinatariosExtra>) => {
+    setEditItem(prev => prev ? {
+      ...prev,
+      destinatarios_extra: { ...(prev.destinatarios_extra || {}), ...patch },
+    } : prev);
   };
 
   const loadTemplateVariables = async (templateId: number) => {
@@ -269,17 +255,16 @@ const NotificacionesConfig = () => {
       return;
     }
 
-    // Armar destinatarios_extra desde los editores de correos.
-    const deActual = editItem.destinatarios_extra;
-    const esCorreosFijos = !!(deActual && (deActual.venta_externa || deActual.venta_sozu));
+    // Normalizar destinatarios_extra (correos manuales + exclusiones + vendedor externo).
     const destExtraFinal: DestinatariosExtra | null = (() => {
+      const de = editItem.destinatarios_extra || {};
       const obj: DestinatariosExtra = {};
-      const corr = parseEmails(correosAdicionalesText);
-      if (corr.length) obj.correos_adicionales = corr;
-      if (esCorreosFijos) {
-        obj.venta_externa = parseEmails(ventaExternaText);
-        obj.venta_sozu = parseEmails(ventaSozuText);
-        obj.incluir_vendedor_externo = incluirVendedorExterno;
+      const manuales = (de.correos_manuales || []).filter(m => m.email && m.email.includes('@'));
+      if (manuales.length) obj.correos_manuales = manuales;
+      const excluidos = (de.excluidos || []).filter(Boolean);
+      if (excluidos.length) obj.excluidos = excluidos;
+      if (editItem.tipo_evento === CONTRATO_EVENTO) {
+        obj.incluir_vendedor_externo = !!de.incluir_vendedor_externo;
       }
       return Object.keys(obj).length ? obj : null;
     })();
@@ -502,19 +487,19 @@ const NotificacionesConfig = () => {
                   <span className="text-muted-foreground">Canal: </span>
                   <Badge variant="secondary">{canalLabel(item.canal)}</Badge>
                 </div>
-                {(item.destinatarios_extra?.venta_externa || item.destinatarios_extra?.venta_sozu) ? (
-                  <div>
-                    <span className="text-muted-foreground">Destinatarios: </span>
-                    <Badge variant="outline">Correos específicos</Badge>
-                  </div>
-                ) : (
-                  <div>
-                    <span className="text-muted-foreground">Roles: </span>
-                    {item.roles_destino.map(r => (
-                      <Badge key={r} variant="outline" className="mr-1">{getRolName(r)}</Badge>
-                    ))}
-                  </div>
-                )}
+                <div>
+                  <span className="text-muted-foreground">Roles: </span>
+                  {item.roles_destino.length > 0
+                    ? item.roles_destino.map(r => (
+                        <Badge key={r} variant="outline" className="mr-1">{getRolName(r)}</Badge>
+                      ))
+                    : <span className="text-xs text-muted-foreground">—</span>}
+                  {(item.destinatarios_extra?.correos_manuales?.length ?? 0) > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      +{item.destinatarios_extra!.correos_manuales!.length} correo(s)
+                    </Badge>
+                  )}
+                </div>
                 <div>
                   <span className="text-muted-foreground">Filtro proyecto: </span>
                   <Badge variant={item.requiere_acceso_proyecto ? "default" : "secondary"}>
@@ -588,86 +573,23 @@ const NotificacionesConfig = () => {
                 </Select>
               </div>
 
-              {!(editItem.destinatarios_extra?.venta_externa || editItem.destinatarios_extra?.venta_sozu) ? (
-                <div>
-                  <Label>Roles destinatarios</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    {roles.map(rol => (
-                      <div key={rol.id} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={editItem.roles_destino.includes(rol.id)}
-                          onCheckedChange={(checked) => {
-                            setEditItem({
-                              ...editItem,
-                              roles_destino: checked
-                                ? [...editItem.roles_destino, rol.id]
-                                : editItem.roles_destino.filter(r => r !== rol.id),
-                            });
-                          }}
-                        />
-                        <span className="text-sm">{rol.nombre}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="border rounded-lg p-3 bg-muted/30 space-y-3">
-                  <div>
-                    <Label className="text-sm font-semibold">Destinatarios (correos específicos)</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Este evento <strong>no usa roles</strong>: envía a estos correos según el tipo de venta.
-                      Un correo por línea.
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Venta de inmobiliaria / agente externo</Label>
-                    <Textarea
-                      value={ventaExternaText}
-                      onChange={e => setVentaExternaText(e.target.value)}
-                      rows={5}
-                      className="text-xs font-mono"
-                      placeholder={"correo1@sozu.com\ncorreo2@sozu.com"}
-                    />
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id="incluir_vendedor_externo"
-                      checked={incluirVendedorExterno}
-                      onCheckedChange={(checked) => setIncluirVendedorExterno(!!checked)}
-                      className="mt-0.5"
-                    />
-                    <Label htmlFor="incluir_vendedor_externo" className="text-xs cursor-pointer">
-                      Incluir al <strong>vendedor externo</strong> (quien generó la oferta) en ventas externas.
-                      Su correo se resuelve automáticamente, no hace falta agregarlo arriba.
-                    </Label>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Venta SOZU directo</Label>
-                    <Textarea
-                      value={ventaSozuText}
-                      onChange={e => setVentaSozuText(e.target.value)}
-                      rows={5}
-                      className="text-xs font-mono"
-                      placeholder={"correo1@sozu.com\ncorreo2@sozu.com"}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <Label>Correos adicionales</Label>
-                <Textarea
-                  value={correosAdicionalesText}
-                  onChange={e => setCorreosAdicionalesText(e.target.value)}
-                  rows={3}
-                  className="text-xs font-mono"
-                  placeholder={"extra1@sozu.com\nextra2@ejemplo.com"}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Correos que reciben este evento <strong>además</strong> de los destinatarios por rol.
-                  Un correo por línea.
-                </p>
-              </div>
+              <NotificacionDestinatariosSection
+                roles={roles}
+                selectedRoles={editItem.roles_destino}
+                onToggleRole={(rolId) => setEditItem({
+                  ...editItem,
+                  roles_destino: editItem.roles_destino.includes(rolId)
+                    ? editItem.roles_destino.filter(r => r !== rolId)
+                    : [...editItem.roles_destino, rolId],
+                })}
+                manuales={getDestExtra().correos_manuales || []}
+                onManualesChange={(list: DestinatarioManual[]) => patchDestExtra({ correos_manuales: list })}
+                excluidos={getDestExtra().excluidos || []}
+                onExcluidosChange={(list) => patchDestExtra({ excluidos: list })}
+                mostrarVendedorExterno={editItem.tipo_evento === CONTRATO_EVENTO}
+                incluirVendedorExterno={!!getDestExtra().incluir_vendedor_externo}
+                onIncluirVendedorExternoChange={(v) => patchDestExtra({ incluir_vendedor_externo: v })}
+              />
 
               <div className="border-t pt-4 mt-2">
                 <Label className="text-sm font-semibold mb-1 block">Filtro de proyecto</Label>
