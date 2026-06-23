@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileText, Loader2, Pencil, XCircle, Receipt,
+  Clock, Eye, FileSearch, FileText, Loader2, Pencil, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
@@ -822,11 +822,21 @@ export default function ValidacionPagos() {
   const page = Math.min(currentPage, totalPages);
   const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
+  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)
+    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+    .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+      if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("...");
+      acc.push(p);
+      return acc;
+    }, []);
+
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="p-6 space-y-6">
+
+      {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold">Validación de Pagos</h1>
-        <p className="text-[13px] text-muted-foreground mt-0.5">
+        <h1 className="text-2xl font-bold tracking-tight">Validación de Pagos</h1>
+        <p className="text-muted-foreground mt-1">
           Revisión y validación documental de todos los pagos registrados.
         </p>
       </div>
@@ -844,192 +854,234 @@ export default function ValidacionPagos() {
       )}
 
       {/* Stats */}
-      <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex flex-wrap divide-x">
-            <StatCell label="Total pagos" value={String(stats.total)} />
-            <StatCell label="Validados" value={String(stats.validados)} valueClass="text-emerald-600" />
-            <StatCell label="Pendientes" value={String(stats.pendientes)} valueClass="text-amber-600" />
-            <StatCell label="Con obs." value={String(stats.conObservaciones)} valueClass="text-red-600" />
-            <StatCell label="Sin validar" value={String(stats.sinValidar)} valueClass="text-zinc-500" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <FileSearch className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">{isLoading ? "-" : stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card className={cn(!isLoading && stats.validados > 0 ? "border-emerald-200 bg-emerald-50/40" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.validados > 0 ? "text-emerald-700" : "text-muted-foreground")}>Validados</CardTitle>
+            <CheckCircle2 className={cn("h-4 w-4", !isLoading && stats.validados > 0 ? "text-emerald-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.validados > 0 ? "text-emerald-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.validados}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn(!isLoading && stats.conObservaciones > 0 ? "border-red-200 bg-red-50/40" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.conObservaciones > 0 ? "text-red-700" : "text-muted-foreground")}>Con observaciones</CardTitle>
+            <AlertCircle className={cn("h-4 w-4", !isLoading && stats.conObservaciones > 0 ? "text-red-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.conObservaciones > 0 ? "text-red-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.conObservaciones}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn(!isLoading && stats.sinValidar > 0 ? "border-amber-200 bg-amber-50/40" : "")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.sinValidar > 0 ? "text-amber-700" : "text-muted-foreground")}>Sin validar</CardTitle>
+            <Clock className={cn("h-4 w-4", !isLoading && stats.sinValidar > 0 ? "text-amber-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.sinValidar > 0 ? "text-amber-700" : "text-muted-foreground")}>
+              {isLoading ? "-" : stats.sinValidar}
+            </div>
+            {!isLoading && stats.pendientes > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">{stats.pendientes} pendientes</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <Input
           placeholder="ID pago / cuenta / clave rastreo..."
           value={searchCuenta}
           onChange={e => { setSearchCuenta(e.target.value); resetPage(); }}
-          className="h-8 text-[12px] w-56"
+          className="h-9 text-sm w-[220px] sm:w-[260px]"
         />
         <Input
-          placeholder="Buscar por cliente..."
+          placeholder="Cliente / Comprador"
           value={searchCliente}
           onChange={e => { setSearchCliente(e.target.value); resetPage(); }}
-          className="h-8 text-[12px] w-48"
+          className="h-9 text-sm w-[160px] sm:w-[200px]"
         />
         <Select value={filtroProyecto} onValueChange={v => { setFiltroProyecto(v); resetPage(); }}>
-          <SelectTrigger className="h-8 text-[12px] w-44">
+          <SelectTrigger className="h-9 w-[160px] sm:w-[180px] text-sm">
             <SelectValue placeholder="Proyecto" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos" className="text-[12px]">Todos los proyectos</SelectItem>
+            <SelectItem value="todos">Todos los proyectos</SelectItem>
             {proyectosUnicos.map(p => (
-              <SelectItem key={p} value={p} className="text-[12px]">{p}</SelectItem>
+              <SelectItem key={p} value={p}>{p}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={filtroEstado} onValueChange={v => { setFiltroEstado(v); resetPage(); }}>
-          <SelectTrigger className="h-8 text-[12px] w-44">
+          <SelectTrigger className="h-9 w-[150px] text-sm">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos" className="text-[12px]">Todos los estados</SelectItem>
-            <SelectItem value="validado" className="text-[12px]">Validado</SelectItem>
-            <SelectItem value="pendiente" className="text-[12px]">Pendiente</SelectItem>
-            <SelectItem value="con_observaciones" className="text-[12px]">Con observaciones</SelectItem>
-            <SelectItem value="sin_validar" className="text-[12px]">Sin validar</SelectItem>
+            <SelectItem value="todos">Todos los estados</SelectItem>
+            <SelectItem value="validado">Validado</SelectItem>
+            <SelectItem value="pendiente">Pendiente</SelectItem>
+            <SelectItem value="con_observaciones">Con observaciones</SelectItem>
+            <SelectItem value="sin_validar">Sin validar</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroMetodo} onValueChange={v => { setFiltroMetodo(v); resetPage(); }}>
-          <SelectTrigger className="h-8 text-[12px] w-44">
+          <SelectTrigger className="h-9 w-[150px] text-sm">
             <SelectValue placeholder="Método de pago" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos" className="text-[12px]">Todos los métodos</SelectItem>
+            <SelectItem value="todos">Todos los métodos</SelectItem>
             {metodosUnicos.map(([id, nombre]) => (
-              <SelectItem key={id} value={String(id)} className="text-[12px]">{nombre}</SelectItem>
+              <SelectItem key={id} value={String(id)}>{nombre}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
+          {isLoading ? "Cargando..." : `${filtered.length} de ${stats.total} - Pág. ${page}/${totalPages}`}
+        </p>
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-            <span className="text-[13px]">Cargando pagos...</span>
-          </div>
-        ) : isError ? (
-          <div className="flex items-center justify-center py-16 gap-3 text-red-600">
-            <XCircle className="size-5" />
-            <span className="text-[13px]">Error al cargar los datos.</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="text-[11px] whitespace-nowrap">Cuenta</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Proyecto</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Unidad</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Cliente</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap text-right">Monto</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Fecha</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Método</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap">Clave rastreo</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap text-center">Estado</TableHead>
-                  <TableHead className="text-[11px] whitespace-nowrap text-right">Acciones</TableHead>
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Cuenta</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Proyecto</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Unidad</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Cliente</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Método</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Clave rastreo</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Estado</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[90px]">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center">
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="text-sm">Cargando pagos...</span>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-[13px] text-muted-foreground">
-                      {filtered.length === 0 && rows.length > 0
-                        ? "No hay pagos que coincidan con los filtros."
-                        : "No se encontraron pagos."}
-                    </TableCell>
-                  </TableRow>
-                ) : paginated.map(row => (
-                  <TableRow key={row.pago_id} className="text-[12px]">
-                    <TableCell className="py-2 font-mono text-[11px] whitespace-nowrap">
-                      {formatCuentaCobranzaId(row.cuenta_id)}
-                    </TableCell>
-                    <TableCell className="py-2 max-w-[140px] truncate" title={row.proyecto}>
-                      {row.proyecto}
-                    </TableCell>
-                    <TableCell className="py-2 whitespace-nowrap">
-                      {row.numero_propiedad ?? "-"}
-                    </TableCell>
-                    <TableCell className="py-2 max-w-[160px] truncate" title={row.cliente}>
-                      {row.cliente}
-                    </TableCell>
-                    <TableCell className="py-2 text-right tabular-nums whitespace-nowrap font-medium">
-                      {fmtCurrency(row.monto)}
-                    </TableCell>
-                    <TableCell className="py-2 whitespace-nowrap">
-                      {fmtDate(row.fecha_pago)}
-                    </TableCell>
-                    <TableCell className="py-2 whitespace-nowrap">
-                      {row.metodo_nombre}
-                    </TableCell>
-                    <TableCell className="py-2 max-w-[140px] truncate font-mono text-[10px]" title={row.clave_rastreo ?? undefined}>
-                      {row.clave_rastreo ?? <span className="text-muted-foreground/40">-</span>}
-                    </TableCell>
-                    <TableCell className="py-2 text-center">
-                      <EstadoBadge estado={row.estado_validacion} />
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex items-center gap-1 justify-end">
-                        {row.url_cep || row.url_recibo ? (
-                          <button
-                            onClick={() => setCepUrl(row.url_cep ?? row.url_recibo)}
-                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Ver comprobante (CEP / recibo)"
-                          >
-                            <FileText className="size-3.5" />
-                          </button>
-                        ) : (
-                          <span className="p-1 text-muted-foreground/20" title="Sin comprobante">
-                            <FileText className="size-3.5" />
-                          </span>
-                        )}
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center text-sm text-destructive">
+                    Error al cargar datos.
+                  </TableCell>
+                </TableRow>
+              ) : paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center text-sm text-muted-foreground">
+                    {filtered.length === 0 && rows.length > 0
+                      ? "No hay pagos que coincidan con los filtros."
+                      : "No se encontraron pagos."}
+                  </TableCell>
+                </TableRow>
+              ) : paginated.map(row => (
+                <TableRow key={row.pago_id} className="hover:bg-muted/30 text-sm">
+                  <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                    {formatCuentaCobranzaId(row.cuenta_id)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium text-foreground">{row.proyecto}</div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
+                    {row.numero_propiedad ?? "-"}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell max-w-[180px] truncate text-foreground">
+                    {row.cliente}
+                  </TableCell>
+                  <TableCell className="hidden xl:table-cell whitespace-nowrap text-muted-foreground">
+                    {row.metodo_nombre}
+                  </TableCell>
+                  <TableCell className="hidden xl:table-cell max-w-[140px] truncate font-mono text-[10px] text-muted-foreground" title={row.clave_rastreo ?? undefined}>
+                    {row.clave_rastreo ?? <span className="text-muted-foreground/30">-</span>}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-center">
+                    <EstadoBadge estado={row.estado_validacion} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {row.url_cep || row.url_recibo ? (
                         <button
-                          onClick={() => { setDetallePagoId(row.pago_id); setDetallePagoRow(row); }}
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                          title="Ver detalle"
+                          onClick={() => setCepUrl(row.url_cep ?? row.url_recibo)}
+                          title="Ver comprobante (CEP / recibo)"
+                          className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         >
-                          <Eye className="size-3.5" />
+                          <FileText className="size-4" />
                         </button>
-                        {isSuperAdmin && (
-                          <button
-                            onClick={() => setEditRow(row)}
-                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Editar validación"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                      ) : (
+                        <span
+                          title="Sin comprobante"
+                          className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-default"
+                        >
+                          <FileText className="size-4" />
+                        </span>
+                      )}
+                      <button
+                        onClick={() => { setDetallePagoId(row.pago_id); setDetallePagoRow(row); }}
+                        title="Ver detalle del pago"
+                        className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      >
+                        <Eye className="size-4" />
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => setEditRow(row)}
+                          title="Editar validación"
+                          className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-          <span>
-            {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} · página {page} de {totalPages}
-          </span>
+      {!isLoading && filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground tabular-nums shrink-0">
+            {(page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
+          </p>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-7 w-7"
-              disabled={page <= 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
-              <ChevronLeft className="size-3.5" />
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 w-8 p-0">
+              <ChevronLeft className="size-4" />
             </Button>
-            <Button variant="outline" size="icon" className="h-7 w-7"
-              disabled={page >= totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
-              <ChevronRight className="size-3.5" />
+            {pageNumbers.map((p, idx) =>
+              p === "..." ? (
+                <span key={`e${idx}`} className="px-1 text-sm text-muted-foreground">...</span>
+              ) : (
+                <Button key={p} variant={p === page ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(p as number)} className="h-8 w-8 p-0 text-sm">
+                  {p}
+                </Button>
+              )
+            )}
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-8 w-8 p-0">
+              <ChevronRight className="size-4" />
             </Button>
           </div>
         </div>
