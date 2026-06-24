@@ -136,7 +136,7 @@ async function fetchDocsYHistorial(cuentaId: number): Promise<{ docs: DocItem[];
   return { docs, historial };
 }
 
-export function ExpedienteDocumentos({ cuentaId }: { cuentaId: number }) {
+export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: number; propiedadId?: number | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -322,6 +322,7 @@ export function ExpedienteDocumentos({ cuentaId }: { cuentaId: number }) {
       {/* ── Diálogo de subida / actualización ── */}
       <SubirDocumentoDialog
         cuentaId={cuentaId}
+        propiedadId={propiedadId ?? null}
         tipo={uploadType}
         existente={uploadType ? existentePorTipo.get(uploadType.id) ?? null : null}
         emailUsuario={user?.email || null}
@@ -362,14 +363,18 @@ export function ExpedienteDocumentos({ cuentaId }: { cuentaId: number }) {
 
 /**
  * Diálogo de subida/actualización de un documento (PDF).
- * Si ya existe un documento de ese tipo, actualiza la fila (url/número) y lo
- * regresa a Pendiente; si no, inserta uno nuevo. En ambos casos registra una
- * entrada en el historial de verificaciones.
+ * - Documento NUEVO (no existe ese tipo): se inserta en estatus Pendiente.
+ * - Actualizar (ya existe): solo se reemplaza el archivo (url/número),
+ *   CONSERVANDO su estatus de verificación actual — no se degrada a Pendiente.
+ * Se fija `id_propiedad` para que la notificación por correo resuelva el
+ * número de departamento y el proyecto. En ambos casos se registra una entrada
+ * en el historial de verificaciones.
  */
 function SubirDocumentoDialog({
-  cuentaId, tipo, existente, emailUsuario, onOpenChange, onUploaded,
+  cuentaId, propiedadId, tipo, existente, emailUsuario, onOpenChange, onUploaded,
 }: {
   cuentaId: number;
+  propiedadId: number | null;
   tipo: typeof UPLOAD_DOC_TYPES[number] | null;
   existente: DocItem | null;
   emailUsuario: string | null;
@@ -408,18 +413,26 @@ function SubirDocumentoDialog({
       const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(fileName);
 
       let docId: number;
+      let estatusFinal: EstatusId;
       if (existente) {
+        // Actualizar: reemplaza el archivo CONSERVANDO el estatus actual.
+        const updatePayload: Record<string, unknown> = { url: publicUrl, numero: numero.trim() || null };
+        if (propiedadId != null) updatePayload.id_propiedad = propiedadId;
         const { error: upErr } = await (supabase as any)
           .from('documentos')
-          .update({ url: publicUrl, numero: numero.trim() || null, id_estatus_verificacion: 1 })
+          .update(updatePayload)
           .eq('id', existente.id);
         if (upErr) throw upErr;
         docId = existente.id;
+        estatusFinal = existente.estatus;
       } else {
+        // Nuevo: nace en Pendiente. id_propiedad permite resolver depto/proyecto
+        // en la notificación por correo (trigger after_documento_legal_subido).
         const { data: ins, error: insErr } = await (supabase as any)
           .from('documentos')
           .insert({
             id_cuenta_cobranza: cuentaId,
+            id_propiedad: propiedadId ?? null,
             id_tipo_documento: tipo.id,
             url: publicUrl,
             numero: numero.trim() || null,
@@ -431,18 +444,22 @@ function SubirDocumentoDialog({
           .single();
         if (insErr) throw insErr;
         docId = ins.id;
+        estatusFinal = 1;
       }
 
-      // Registrar en el historial de verificaciones.
+      // Registrar en el historial de verificaciones (refleja el estatus final).
       await (supabase as any).from('comentarios_verificacion_documento').insert({
         id_documento: docId,
-        id_estatus_verificacion: 1,
-        comentario: esActualizar ? 'Documento actualizado (pendiente de verificación)' : 'Documento subido (pendiente de verificación)',
+        id_estatus_verificacion: estatusFinal,
+        comentario: esActualizar ? 'Archivo del documento reemplazado' : 'Documento subido (pendiente de verificación)',
         email_usuario: emailUsuario,
         activo: true,
       });
 
-      toast({ title: esActualizar ? 'Documento actualizado' : 'Documento subido', description: `${tipo.label} quedó como Pendiente de verificación.` });
+      toast({
+        title: esActualizar ? 'Documento actualizado' : 'Documento subido',
+        description: esActualizar ? `Se reemplazó el archivo de ${tipo.label}.` : `${tipo.label} quedó como Pendiente de verificación.`,
+      });
       reset();
       onUploaded();
     } catch (err) {
@@ -461,7 +478,7 @@ function SubirDocumentoDialog({
           </DialogTitle>
           <DialogDescription className="text-[13px]">
             {esActualizar
-              ? 'Reemplaza el documento actual. Volverá a quedar en Pendiente de verificación.'
+              ? 'Reemplaza el archivo del documento actual. Conserva su estatus de verificación.'
               : 'Sube el documento en formato PDF (máx. 10MB) para esta cuenta de cobranza.'}
           </DialogDescription>
         </DialogHeader>
