@@ -3,12 +3,17 @@ import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/Simulato
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { validateCommissionRules, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProyectosFiltro } from '@/hooks/usePortalAltaDireccion/useProyectosFiltro';
+import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
 interface SyncHistoryEntry {
   id: string;
@@ -34,6 +39,13 @@ export default function CommissionsTab() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SyncHistoryEntry[]>(loadHistory);
+
+  // Enviar a validar (Portal Alta Dirección) — por proyecto + escenario actual.
+  const { profile, user } = useAuth();
+  const { data: proyectos = [] } = useProyectosFiltro();
+  const enviarPropuesta = useEnviarPropuesta();
+  const [validarOpen, setValidarOpen] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<Set<number>>(new Set());
 
   const commRoles = roles.filter(r => r.participatesInCommission);
 
@@ -134,6 +146,55 @@ export default function CommissionsTab() {
     setSyncOpen(false);
   };
 
+  const toggleProject = (id: number) =>
+    setSelectedProjects((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const buildSnapshot = (): MotorSnapshot | null => {
+    if (!scenario) return null;
+    return {
+      scenario: {
+        id: scenario.id,
+        name: scenario.name,
+        commissionMode: scenario.commissionMode,
+        totalCommissionPct: scenario.totalCommissionPct,
+        channelMix: scenario.channelMix,
+        channelExternalPcts: scenario.channelExternalPcts,
+      },
+      channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
+      roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
+      roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
+      commissionRules: scenario.commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
+    };
+  };
+
+  const handleEnviarValidar = async () => {
+    if (!scenario || selectedProjects.size === 0) return;
+    const snapshot = buildSnapshot();
+    if (!snapshot) return;
+    const propuestaPor = profile?.email || user?.email || null;
+    try {
+      for (const id_proyecto of selectedProjects) {
+        await enviarPropuesta.mutateAsync({
+          id_proyecto,
+          escenario_id: scenario.id,
+          escenario_nombre: scenario.name,
+          modo: scenario.commissionMode,
+          snapshot,
+          propuesta_por: propuestaPor,
+        });
+      }
+      toast.success(`Enviado a validar a ${selectedProjects.size} proyecto(s).`);
+      setValidarOpen(false);
+      setSelectedProjects(new Set());
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo enviar a validar.');
+    }
+  };
+
   if (!scenario) return <p className="text-muted-foreground p-6">Crea un escenario primero</p>;
 
   const getRoleInfo = (roleId: string) => {
@@ -213,6 +274,9 @@ export default function CommissionsTab() {
           </Tooltip>
           <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
             <History className="h-3.5 w-3.5" /> Histórico
+          </Button>
+          <Button variant="default" size="sm" onClick={() => setValidarOpen(true)} className="gap-1.5">
+            <Send className="h-3.5 w-3.5" /> Enviar a validar
           </Button>
           <Select value={selectedScenarioId} onValueChange={setSelectedScenarioId}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Escenario" /></SelectTrigger>
@@ -455,6 +519,38 @@ export default function CommissionsTab() {
           onConfirm={handleConfirmSync}
         />
       )}
+
+      {/* Enviar a validar — Portal Alta Dirección */}
+      <Dialog open={validarOpen} onOpenChange={setValidarOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar a validar</DialogTitle>
+            <DialogDescription>
+              Se enviará el escenario <strong>{scenario.name}</strong> al Portal Alta Dirección
+              para que lo validen en los proyectos seleccionados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-72 space-y-1 overflow-auto rounded-lg border p-2">
+            {proyectos.length === 0 ? (
+              <p className="px-2 py-4 text-center text-sm text-muted-foreground">Sin proyectos disponibles.</p>
+            ) : (
+              proyectos.map((p) => (
+                <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60">
+                  <Checkbox checked={selectedProjects.has(p.id)} onCheckedChange={() => toggleProject(p.id)} />
+                  <span className="text-sm">{p.nombre}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setValidarOpen(false)} disabled={enviarPropuesta.isPending}>Cancelar</Button>
+            <Button onClick={handleEnviarValidar} disabled={enviarPropuesta.isPending || selectedProjects.size === 0} className="gap-1.5">
+              {enviarPropuesta.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar ({selectedProjects.size})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
