@@ -117,6 +117,10 @@ type ExpedienteRow = {
   contratoUrl: string | null;
   ofertaId: number | null;
   documentosCount: number;
+  /** Documentos obligatorios validados (mín. entre compradores) / total. */
+  docsObligatorios: { completos: number; total: number };
+  /** Completitud de datos del comprador por sección (Básica/Dirección/Fiscal). */
+  compradorFaltante: { incompleto: boolean; secciones: string[] };
   relatedAccounts: RelatedAccount[];
 };
 
@@ -146,6 +150,80 @@ const fmtFechaHora = (value: string) =>
   new Date(value).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const ccLabel = (id: number) => `CC-${String(id).padStart(6, '0')}`;
+
+// ── Documentos obligatorios ───────────────────────────────────────────────
+// Misma definición que el Dashboard de Expedientes del Portal Escrituración:
+// 5 grupos fijos; un grupo cuenta como cumplido si el documento más reciente
+// de la persona en ese grupo está Validado (id_estatus_verificacion = 2).
+const OBLIGATORIO_GRUPOS = [
+  { key: 'csf', ids: [6] },
+  { key: 'domicilio', ids: [8] },
+  { key: 'ine', ids: [2, 59] },
+  { key: 'curp', ids: [5] },
+  { key: 'acta', ids: [1] },
+] as const;
+const ALL_OBLIGATORIO_IDS = OBLIGATORIO_GRUPOS.flatMap((g) => g.ids);
+const ID_TO_GROUP_KEY: Record<number, string> = {};
+OBLIGATORIO_GRUPOS.forEach((g) => g.ids.forEach((id) => { ID_TO_GROUP_KEY[id] = g.key; }));
+const DOC_VALIDADO = 2;
+
+type LatestDoc = { id: number; estatusId: number; fecha: string };
+function buildLatestDocByPersona(
+  docs: Array<{ id: number; id_persona: number | null; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>,
+): Record<string, LatestDoc> {
+  const map: Record<string, LatestDoc> = {};
+  for (const d of docs) {
+    if (!d.id_persona) continue;
+    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+    if (!groupKey) continue;
+    const key = `${d.id_persona}__${groupKey}`;
+    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
+    const ex = map[key];
+    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+    }
+  }
+  return map;
+}
+function countValidatedGroups(personaId: number, latest: Record<string, LatestDoc>): number {
+  let count = 0;
+  for (const g of OBLIGATORIO_GRUPOS) {
+    const l = latest[`${personaId}__${g.key}`];
+    if (l && l.estatusId === DOC_VALIDADO) count++;
+  }
+  return count;
+}
+function calcDocStats(personaIds: number[], latest: Record<string, LatestDoc>): { completos: number; total: number } {
+  const total = OBLIGATORIO_GRUPOS.length;
+  if (!personaIds.length) return { completos: 0, total };
+  return { completos: Math.min(...personaIds.map((pid) => countValidatedGroups(pid, latest))), total };
+}
+
+// ── Completitud del comprador (Básica / Dirección / Fiscal) ────────────────
+// Marca una sección como incompleta si falta cualquiera de sus campos clave.
+// La dirección usa la fiscal si existe (igual que el Detalle del comprador).
+type CompradorDetalle = {
+  id: number;
+  nombre_legal: string | null; rfc: string | null; curp: string | null;
+  email: string | null; telefono: string | null;
+  direccion_calle: string | null; direccion_num_ext: string | null; direccion_codigo_postal: string | null;
+  direccion_colonia: string | null; direccion_id_estado: any; direccion_id_municipio: any;
+  direccion_fiscal_calle: string | null; direccion_fiscal_num_ext: string | null; direccion_fiscal_codigo_postal: string | null;
+  direccion_fiscal_colonia: string | null; direccion_fiscal_id_pais: any; direccion_fiscal_id_estado: any; direccion_fiscal_id_municipio: any;
+  regimen: any; uso_cfdi: string | null; fecha_nacimiento: string | null; id_pais_nacimiento: any;
+};
+const campoVacio = (v: any) => v == null || String(v).trim() === '' || String(v).trim() === '0';
+function seccionesIncompletas(p: CompradorDetalle): string[] {
+  const out: string[] = [];
+  if ([p.nombre_legal, p.rfc, p.curp, p.email, p.telefono].some(campoVacio)) out.push('Básica');
+  const useFiscal = !!(p.direccion_fiscal_calle || p.direccion_fiscal_codigo_postal || p.direccion_fiscal_id_pais);
+  const dir = useFiscal
+    ? [p.direccion_fiscal_calle, p.direccion_fiscal_num_ext, p.direccion_fiscal_codigo_postal, p.direccion_fiscal_colonia, p.direccion_fiscal_id_estado, p.direccion_fiscal_id_municipio]
+    : [p.direccion_calle, p.direccion_num_ext, p.direccion_codigo_postal, p.direccion_colonia, p.direccion_id_estado, p.direccion_id_municipio];
+  if (dir.some(campoVacio)) out.push('Dirección');
+  if ([p.regimen, p.uso_cfdi, p.fecha_nacimiento, p.id_pais_nacimiento].some(campoVacio)) out.push('Fiscal');
+  return out;
+}
 
 /**
  * Tipos de nota de bitácora (mismas categorías que el composer de Casos).
@@ -1009,6 +1087,8 @@ export default function LegalFlowEscrituracionExpedientes() {
   const [modelFilter, setModelFilter] = useState(ALL_VALUE);
   const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
   const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
+  const [compradorFilter, setCompradorFilter] = useState(ALL_VALUE);
+  const [docsFilter, setDocsFilter] = useState(ALL_VALUE);
   const [selected, setSelected] = useState<ExpedienteRow | null>(null);
   const { exportToExcel, isExporting } = useExportToExcel();
 
@@ -1039,6 +1119,9 @@ export default function LegalFlowEscrituracionExpedientes() {
       if (paqueteFilter === 'without' && row.paquetes.length > 0) return false;
       if (condensadoraFilter === 'with' && !row.tieneCondensadora) return false;
       if (condensadoraFilter === 'without' && row.tieneCondensadora) return false;
+      if (compradorFilter === 'completo' && (row.compradores.length === 0 || row.compradorFaltante.incompleto)) return false;
+      if (compradorFilter === 'incompleto' && !row.compradorFaltante.incompleto) return false;
+      if (docsFilter !== ALL_VALUE && row.docsObligatorios.completos !== Number(docsFilter)) return false;
       if (!q) return true;
       return [
         row.cuentaLabel,
@@ -1051,7 +1134,7 @@ export default function LegalFlowEscrituracionExpedientes() {
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter]);
+  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter, compradorFilter, docsFilter]);
 
   // Exporta a Excel (CSV) los expedientes según los filtros activos.
   const handleExport = () => {
@@ -1076,6 +1159,10 @@ export default function LegalFlowEscrituracionExpedientes() {
         'Bodegas': row.bodegas.map((b) => b.nombre).join(', '),
         'Muebles': row.paquetes.length ? 'Sí' : 'No',
         'Condensadora': row.tieneCondensadora ? 'Sí' : 'No',
+        'Docs obligatorios': `${row.docsObligatorios.completos}/${row.docsObligatorios.total}`,
+        'Datos comprador': row.compradores.length === 0
+          ? '—'
+          : (row.compradorFaltante.incompleto ? `Incompleto (${row.compradorFaltante.secciones.join(', ')})` : 'Completo'),
         'Precio final propiedad': row.precioFinal,
         'Valor de escrituración': valorEscrituracion,
       };
@@ -1135,6 +1222,26 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[150px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Piso" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los pisos</SelectItem>{options.floors.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
         </Select>
+        <Select value={compradorFilter} onValueChange={setCompradorFilter}>
+          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Datos comprador" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_VALUE}>Datos comprador: todos</SelectItem>
+            <SelectItem value="completo">Comprador completo</SelectItem>
+            <SelectItem value="incompleto">Comprador incompleto</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={docsFilter} onValueChange={setDocsFilter}>
+          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Docs obligatorios" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_VALUE}>Docs obligatorios: todos</SelectItem>
+            <SelectItem value="0">0 / 5 obligatorios</SelectItem>
+            <SelectItem value="1">1 / 5 obligatorios</SelectItem>
+            <SelectItem value="2">2 / 5 obligatorios</SelectItem>
+            <SelectItem value="3">3 / 5 obligatorios</SelectItem>
+            <SelectItem value="4">4 / 5 obligatorios</SelectItem>
+            <SelectItem value="5">5 / 5 (completos)</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           variant="outline"
           className="ml-auto h-[38px] gap-2 text-[13px]"
@@ -1148,32 +1255,34 @@ export default function LegalFlowEscrituracionExpedientes() {
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px]">
+          <table className="w-full min-w-[1560px]">
             <thead>
               <tr className="border-b text-left">
-                <th className="table-head">ID Cuenta</th>
-                <th className="table-head">Compradores</th>
-                <th className="table-head">Propietario</th>
-                <th className="table-head">Tipo</th>
-                <th className="table-head">Estatus</th>
-                <th className="table-head">Unidad</th>
-                <th className="table-head">Proyecto</th>
-                <th className="table-head">Modelo</th>
-                <th className="table-head">Fecha venta</th>
-                <th className="table-head">Estacionamientos</th>
-                <th className="table-head">Bodegas</th>
-                <th className="table-head">Muebles</th>
-                <th className="table-head">Condensadora</th>
-                <th className="table-head text-right">Acción</th>
+                <th className="table-head whitespace-nowrap">ID Cuenta</th>
+                <th className="table-head whitespace-nowrap">Compradores</th>
+                <th className="table-head whitespace-nowrap">Propietario</th>
+                <th className="table-head whitespace-nowrap">Tipo</th>
+                <th className="table-head whitespace-nowrap">Estatus</th>
+                <th className="table-head whitespace-nowrap">Unidad</th>
+                <th className="table-head whitespace-nowrap">Proyecto</th>
+                <th className="table-head whitespace-nowrap">Modelo</th>
+                <th className="table-head whitespace-nowrap">Fecha venta</th>
+                <th className="table-head whitespace-nowrap">Estacionamientos</th>
+                <th className="table-head whitespace-nowrap">Bodegas</th>
+                <th className="table-head whitespace-nowrap">Muebles</th>
+                <th className="table-head whitespace-nowrap">Condensadora</th>
+                <th className="table-head whitespace-nowrap">Docs obligatorios</th>
+                <th className="table-head whitespace-nowrap">Datos comprador</th>
+                <th className="table-head whitespace-nowrap text-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={14} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
@@ -1199,6 +1308,42 @@ export default function LegalFlowEscrituracionExpedientes() {
                       <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
                     ) : (
                       <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
+                    )}
+                  </td>
+                  <td className="table-cell text-[13px]">
+                    {(() => {
+                      const { completos, total } = row.docsObligatorios;
+                      const done = completos >= total;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1.5"
+                          title={`${completos} de ${total} documentos obligatorios validados`}
+                        >
+                          <span className={cn('h-2.5 w-2.5 rounded-full', done ? 'bg-emerald-500' : completos > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40')} />
+                          <span className="tabular-nums text-muted-foreground">{completos}/{total}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="table-cell text-[13px]">
+                    {row.compradores.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : row.compradorFaltante.incompleto ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400"
+                        title={`Faltan datos en: ${row.compradorFaltante.secciones.join(', ')}`}
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                        <span className="text-[12px] font-medium">Incompleto</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+                        title="Datos básicos, dirección y fiscal completos"
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                        <span className="text-[12px] font-medium">Completo</span>
+                      </span>
                     )}
                   </td>
                   <td className="table-cell text-right">
@@ -1423,6 +1568,24 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const buyerPersonIds = [...new Set(compradores.map((c: any) => c.id_persona).filter(Boolean))] as number[];
   const buyerPeople = await fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select('id, nombre_legal, rfc').in('id', b as number[]));
 
+  // Detalle fiscal/dirección de los compradores (para completitud) + documentos
+  // obligatorios por persona (para el semáforo de docs).
+  const [buyerDetailRows, docsObligatoriosRows] = await Promise.all([
+    fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select(
+      'id, nombre_legal, rfc, curp, email, telefono, ' +
+      'direccion_calle, direccion_num_ext, direccion_codigo_postal, direccion_colonia, direccion_id_estado, direccion_id_municipio, ' +
+      'direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_codigo_postal, direccion_fiscal_colonia, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio, ' +
+      'regimen, uso_cfdi, fecha_nacimiento, id_pais_nacimiento',
+    ).in('id', b as number[])),
+    fetchInBatchesPaged<any>(buyerPersonIds, (b, from, to) => (supabase as any).from('documentos')
+      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+      .eq('activo', true).eq('es_draft', false)
+      .in('id_persona', b as number[]).in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+      .order('id').range(from, to)),
+  ]);
+  const buyerDetailById = new Map<number, CompradorDetalle>(buyerDetailRows.map((r: any) => [r.id, r as CompradorDetalle]));
+  const latestObligatorioByKey = buildLatestDocByPersona(docsObligatoriosRows);
+
   // Mapas de apoyo.
   const linkById = new Map<number, any>(linkRows.map((row: any) => [row.id, row]));
   const buildingById = new Map<number, any>(edificios.map((row: any) => [row.id, row]));
@@ -1563,6 +1726,13 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
 
       const m2Interiores = Number(property.m2_interiores || 0);
       const m2Exteriores = Number(property.m2_exteriores || 0);
+      // Documentos obligatorios + completitud de datos de los compradores.
+      const buyerPids = (buyersByAccount.get(account.id) || []).map((bp) => bp.id);
+      const docsObligatorios = calcDocStats(buyerPids, latestObligatorioByKey);
+      const seccionesFaltantes = [...new Set(buyerPids.flatMap((pid) => {
+        const det = buyerDetailById.get(pid);
+        return det ? seccionesIncompletas(det) : [];
+      }))];
       return {
         cuentaId: account.id,
         cuentaLabel: ccLabel(account.id),
@@ -1598,6 +1768,8 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
         )?.url ?? null,
         ofertaId: account.id_oferta ?? null,
         documentosCount: docsForAccount.length,
+        docsObligatorios,
+        compradorFaltante: { incompleto: seccionesFaltantes.length > 0, secciones: seccionesFaltantes },
         relatedAccounts: productCuentas.map((c: any) => ({
           id: c.id,
           label: ccLabel(c.id),
