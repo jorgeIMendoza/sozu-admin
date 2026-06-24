@@ -569,6 +569,9 @@ export default function DetalleCuentaCobranza() {
   // Estado para edición de clave_rastreo
   const [editingClaveRastreo, setEditingClaveRastreo] = useState<{ [pagoId: number]: string }>({});
   const [savingClaveRastreo, setSavingClaveRastreo] = useState<number | null>(null);
+  // Estado para edición de método de pago: pagoId actualmente en edición
+  const [editingMetodoPago, setEditingMetodoPago] = useState<number | null>(null);
+  const [savingMetodoPago, setSavingMetodoPago] = useState<number | null>(null);
   // Estado para ajuste de montos de pagos
   const [montoAdjustments, setMontoAdjustments] = useState<{ 
     pagoId: number; 
@@ -2497,6 +2500,64 @@ export default function DetalleCuentaCobranza() {
       });
     } finally {
       setSavingClaveRastreo(null);
+    }
+  };
+
+  // Función para guardar el método de pago de un pago existente.
+  // Solo actualiza pagos.id_metodos_pago; no toca monto, fecha ni aplicaciones_pago.
+  const handleSaveMetodoPago = async (pagoId: number, nuevoMetodoId: number) => {
+    const pagoActual = pagos?.find(p => p.id === pagoId);
+    const oldMetodoId = pagoActual?.id_metodos_pago ?? null;
+
+    if (oldMetodoId === nuevoMetodoId) {
+      setEditingMetodoPago(null);
+      return;
+    }
+
+    setSavingMetodoPago(pagoId);
+    try {
+      const { error } = await supabase
+        .from('pagos')
+        .update({ id_metodos_pago: nuevoMetodoId })
+        .eq('id', pagoId);
+
+      if (error) throw error;
+
+      await registrarActualizacion(
+        'pago',
+        { id: pagoId, id_metodos_pago: oldMetodoId },
+        { id: pagoId, id_metodos_pago: nuevoMetodoId, id_cuenta_cobranza: cuentaId },
+        'editar_metodo_pago'
+      );
+
+      toast({
+        title: "Método actualizado",
+        description: "El método de pago se actualizó correctamente",
+      });
+
+      setEditingMetodoPago(null);
+
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+    } catch (error) {
+      console.error("Error saving metodo_pago:", error);
+
+      await registrarActualizacion(
+        'pago',
+        { id: pagoId, id_metodos_pago: oldMetodoId },
+        { id: pagoId, id_metodos_pago: nuevoMetodoId },
+        'editar_metodo_pago',
+        'error',
+        error instanceof Error ? error.message : 'Error desconocido'
+      );
+
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el método de pago",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingMetodoPago(null);
     }
   };
 
@@ -4811,8 +4872,54 @@ export default function DetalleCuentaCobranza() {
                                             )
                                           ) : formatCurrency(pago.monto)}
                                         </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {pago.metodos_pago?.nombre} - {formatDate(pago.fecha_pago)}
+                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                          {(canUpdate || isSuperAdmin) && !esCuentaCancelada && !isReadOnly && !isEnDemanda ? (
+                                            editingMetodoPago === pago.id ? (
+                                              <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                <Select
+                                                  value={pago.id_metodos_pago?.toString()}
+                                                  onValueChange={(value) => handleSaveMetodoPago(pago.id, parseInt(value))}
+                                                  disabled={savingMetodoPago === pago.id}
+                                                >
+                                                  <SelectTrigger className="h-6 w-40 text-xs">
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    <SelectItem value="1">Efectivo</SelectItem>
+                                                    <SelectItem value="2">Cheque</SelectItem>
+                                                    <SelectItem value="3">Tarjeta de débito</SelectItem>
+                                                    <SelectItem value="4">Tarjeta de crédito</SelectItem>
+                                                    <SelectItem value="5">Transferencia bancaria</SelectItem>
+                                                    <SelectItem value="6">STP</SelectItem>
+                                                    <SelectItem value="7">STP-manual</SelectItem>
+                                                    <SelectItem value="8">Cesión de derechos</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
+                                                {savingMetodoPago === pago.id && (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-6 w-6 p-0"
+                                                  onClick={(e) => { e.stopPropagation(); setEditingMetodoPago(null); }}
+                                                >
+                                                  <X className="h-3 w-3" />
+                                                </Button>
+                                              </span>
+                                            ) : (
+                                              <span
+                                                className="flex items-center gap-1 cursor-pointer hover:underline"
+                                                onClick={(e) => { e.stopPropagation(); setEditingMetodoPago(pago.id); }}
+                                              >
+                                                {pago.metodos_pago?.nombre}
+                                                <Edit className="h-3 w-3" />
+                                              </span>
+                                            )
+                                          ) : (
+                                            pago.metodos_pago?.nombre
+                                          )}
+                                          {' - '}{formatDate(pago.fecha_pago)}
                                         </span>
                                       </div>
                                     </div>
