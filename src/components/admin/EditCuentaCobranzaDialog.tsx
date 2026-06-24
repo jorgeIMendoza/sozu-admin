@@ -2327,13 +2327,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     // Calculate difference against the actual sum of active acuerdos (not the stored precio_final which may be stale/zero)
     const sumaAcuerdosActivos = acuerdosPago?.reduce((sum: number, a: any) => sum + (a.monto || 0), 0) || 0;
     const difference = newPrecio - sumaAcuerdosActivos;
-    
-    // Use a small epsilon to handle floating point precision issues
-    // This allows changes as small as 0.01 (1 cent)
-    if (Math.abs(difference) < 0.001) {
-      // No change (essentially zero difference accounting for floating point)
+
+    // "Sin cambios" debe medirse contra el precio_final ALMACENADO, no contra la suma de
+    // acuerdos. De lo contrario, cuando precio_final está obsoleto (ej. 0) y el usuario teclea
+    // el valor que coincide con la suma de acuerdos, difference≈0 y no se guardaba nada.
+    const currentPrecioFinal = Number(cuentaDetalle.precio_final || 0);
+    if (Math.abs(newPrecio - currentPrecioFinal) < 0.001) {
+      // Genuinamente no hay cambio respecto a lo almacenado
       setIsEditingPrecioFinal(false);
       setEditingPrecioFinal('');
+      return;
+    }
+
+    // Los acuerdos activos ya suman el nuevo precio (difference≈0) pero el precio_final
+    // almacenado está desfasado: persistir solo precio_final sin tocar los acuerdos.
+    if (Math.abs(difference) < 0.001) {
+      updatePrecioFinalMutation.mutate({ newPrecio, lastAcuerdoId: lastAcuerdo.id, difference: 0 });
       return;
     }
 

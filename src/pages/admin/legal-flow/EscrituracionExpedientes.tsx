@@ -88,6 +88,7 @@ type CondensadoraDetalle = {
 type ExpedienteRow = {
   cuentaId: number;
   cuentaLabel: string;
+  propiedadId: number | null;
   compradores: Person[];
   propietario: string;
   propietarioRfc: string | null;
@@ -525,7 +526,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
               </div>
             )}
 
-            <ExpedienteDocumentos cuentaId={row.cuentaId} />
+            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} />
           </section>
 
           <BitacoraSection cuentaId={row.cuentaId} />
@@ -1565,6 +1566,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
       return {
         cuentaId: account.id,
         cuentaLabel: ccLabel(account.id),
+        propiedadId: property.id ?? null,
         compradores: buyersByAccount.get(account.id) || [],
         propietario: owner?.nombre_legal || '—',
         propietarioRfc: owner?.rfc || null,

@@ -2944,9 +2944,11 @@ export default function DetalleCuentaCobranza() {
                 Transferir
               </Button>
               
+              {!esDacionEnPago && (
+              <>
               <div className="h-5 w-px bg-border" />
-              
-              <Button 
+
+              <Button
                 onClick={() => setManualPaymentDialog(true)}
                 disabled={totalPagado >= (cuentaDetalle?.precio_final || 0) || isReadOnly || isEnDemanda}
                 size="sm"
@@ -2955,6 +2957,8 @@ export default function DetalleCuentaCobranza() {
                 <CreditCard className="h-4 w-4 mr-2" />
                 Agregar Pago
               </Button>
+              </>
+              )}
             </div>
             )}
 
