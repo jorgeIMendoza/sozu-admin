@@ -90,6 +90,8 @@ export function AppNotariaUsuarios() {
   }, [rolesNotaria, formRol]);
 
   // ── Notarios list ──────────────────────────────────────────────────────────
+  // Fetches all active notarios (needed to resolve notaria_nombre for existing users).
+  // For the new-user form, use notariosSelector (trabaja_con_sozu=true only).
   const { data: notariosList = [] } = useQuery({
     queryKey: ['notaria-usuarios-notarios'],
     enabled: isAdmin,
@@ -97,12 +99,14 @@ export function AppNotariaUsuarios() {
     queryFn: async () => {
       const { data } = await supabase
         .from('notarios')
-        .select('id, nombre, notaria')
+        .select('id, nombre, notaria, trabaja_con_sozu')
         .eq('activo', true)
         .order('notaria');
-      return (data ?? []) as { id: number; nombre: string; notaria: string }[];
+      return (data ?? []) as { id: number; nombre: string; notaria: string; trabaja_con_sozu: boolean }[];
     },
   });
+
+  const notariosSelector = notariosList.filter(n => n.trabaja_con_sozu);
 
   // ── Usuarios notaría list ──────────────────────────────────────────────────
   // Only runs once DDL probe confirms the column exists
@@ -355,7 +359,7 @@ export function AppNotariaUsuarios() {
                   <SelectValue placeholder="Seleccionar notaría" />
                 </SelectTrigger>
                 <SelectContent>
-                  {notariosList.map(n => (
+                  {notariosSelector.map(n => (
                     <SelectItem key={n.id} value={String(n.id)}>
                       {n.notaria} — {n.nombre}
                     </SelectItem>

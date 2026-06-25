@@ -1000,19 +1000,44 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
   });
 
-  // Get notarios
-  const { data: notarios } = useQuery({
-    queryKey: ["notarios"],
+  // Get notarios — only those enabled for SOZU operational assignments
+  const { data: notariosBase } = useQuery({
+    queryKey: ["notarios-sozu"],
     queryFn: async () => {
       const { data } = await supabase
         .from('notarios')
         .select('id, nombre, notaria, direccion, email, telefono')
         .eq('activo', true)
+        .eq('trabaja_con_sozu', true)
         .order('nombre', { ascending: true });
 
       return data || [];
     }
   });
+
+  // If the cuenta already has an assigned notario not in the SOZU list, fetch it to preserve historical display
+  const currentNotarioId = selectedNotario ? parseInt(selectedNotario) : null;
+  const { data: historicoNotario } = useQuery({
+    queryKey: ['notario-historico', currentNotarioId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('notarios')
+        .select('id, nombre, notaria, direccion, email, telefono')
+        .eq('id', currentNotarioId!)
+        .single();
+      return data ?? null;
+    },
+    enabled: !!currentNotarioId,
+    staleTime: 60_000,
+  });
+
+  // Merge: trabaja_con_sozu list + historical notario if not already present
+  const notarios = useMemo(() => {
+    const list = notariosBase ?? [];
+    if (!historicoNotario) return list;
+    if (list.some((n: any) => n.id === historicoNotario.id)) return list;
+    return [historicoNotario, ...list];
+  }, [notariosBase, historicoNotario]);
 
   // Check if there are any facturas for this cuenta
   const { data: hasFacturas } = useQuery({
