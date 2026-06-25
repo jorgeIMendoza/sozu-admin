@@ -140,8 +140,10 @@ jobs:
       - name: Deploy to Firebase
         run: |
           PROJECT_ID=${{ github.ref == 'refs/heads/main' && 'sozu-admin-prd' || 'sozu-admin-dev' }}
-          npx firebase-tools@latest deploy --only hosting --project $PROJECT_ID
+          echo "$FIREBASE_SA_KEY" > /tmp/firebase-sa.json
+          GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json npx firebase-tools@latest deploy --only hosting --project $PROJECT_ID
         env:
+          FIREBASE_SA_KEY: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_GCP_PRD || secrets.FIREBASE_GCP_DEV }}
           FIREBASE_CLI_PREVIEWS: hostingchannels
 
       - name: Autenticar a Google Cloud (Firestore dev)
