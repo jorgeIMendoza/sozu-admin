@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   Search, Plus, Loader2, X, ChevronDown, Edit2, Power,
   Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock,
-  Download, FileText, User, Users,
+  Download, FileText, User, Users, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ interface Notario {
   telefono: string | null;
   direccion: string | null;
   activo: boolean;
+  trabaja_con_sozu: boolean;
   fecha_creacion: string;
   fecha_actualizacion: string;
 }
@@ -350,9 +351,12 @@ function DetailPanel({
               className="w-full appearance-none bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 pr-8"
             >
               <option value="">Sin asignar</option>
-              {notarios.filter(n => n.activo).map(n => (
-                <option key={n.id} value={n.id}>{n.notaria} — {n.nombre}</option>
-              ))}
+              {notarios
+                .filter(n => n.trabaja_con_sozu || n.id === row.notarioId)
+                .map(n => (
+                  <option key={n.id} value={n.id}>{n.notaria} — {n.nombre}</option>
+                ))
+              }
             </select>
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -484,7 +488,8 @@ export function NotariasDashboard() {
   const [selected, setSelected]         = useState<CuentaRow | null>(null);
   const [showCatalog, setShowCatalog]   = useState(false);
   const [formModal, setFormModal]       = useState<'create' | Notario | null>(null);
-  const [confirmToggle, setConfirmToggle] = useState<Notario | null>(null);
+  const [confirmToggle, setConfirmToggle]         = useState<Notario | null>(null);
+  const [confirmSozuToggle, setConfirmSozuToggle] = useState<Notario | null>(null);
 
   useEffect(() => { setPage(0); }, [proyectoId, search, filtroNotaria, filtroEstatus]);
 
@@ -519,7 +524,7 @@ export function NotariasDashboard() {
     queryFn: async () => {
       const { data } = await supabase
         .from('notarios')
-        .select('id, notaria, nombre, email, telefono, direccion, activo, fecha_creacion, fecha_actualizacion')
+        .select('id, notaria, nombre, email, telefono, direccion, activo, trabaja_con_sozu, fecha_creacion, fecha_actualizacion')
         .order('notaria');
       return (data || []) as Notario[];
     },
@@ -724,6 +729,20 @@ export function NotariasDashboard() {
     onError: () => toast.error('Error al actualizar el estado'),
   });
 
+  const toggleSozuMutation = useMutation({
+    mutationFn: async ({ id, trabaja_con_sozu }: { id: number; trabaja_con_sozu: boolean }) => {
+      const { error } = await supabase.from('notarios').update({ trabaja_con_sozu }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { trabaja_con_sozu }) => {
+      qc.invalidateQueries({ queryKey: ['notarios-catalogo'] });
+      qc.invalidateQueries({ queryKey: ['app-notaria-notarios-list'] });
+      toast.success(trabaja_con_sozu ? 'Notaría habilitada en SOZU' : 'Notaría deshabilitada de SOZU');
+      setConfirmSozuToggle(null);
+    },
+    onError: () => toast.error('Error al actualizar estado SOZU'),
+  });
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSaveForm = (data: NotariaFormData) => {
     if (formModal === 'create') {
@@ -738,8 +757,9 @@ export function NotariasDashboard() {
     if (p) { setProyectoId(p.id); setProyectoNombre(p.nombre); setSelected(null); }
   };
 
-  const activeNotarios = notarios.filter(n => n.activo);
+  const activeNotarios   = notarios.filter(n => n.activo);
   const inactiveNotarios = notarios.filter(n => !n.activo);
+  const sozuNotarios     = notarios.filter(n => n.trabaja_con_sozu);
   const savingForm = createMutation.isPending || updateMutation.isPending;
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -839,7 +859,7 @@ export function NotariasDashboard() {
             </div>
             <div className="text-left">
               <p className="text-sm font-semibold text-slate-900">Catálogo de notarías</p>
-              <p className="text-xs text-slate-500">{activeNotarios.length} activas · {inactiveNotarios.length} inactivas</p>
+              <p className="text-xs text-slate-500">{activeNotarios.length} activas · {inactiveNotarios.length} inactivas · {sozuNotarios.length} habilitadas SOZU</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -880,12 +900,23 @@ export function NotariasDashboard() {
                           {statsByNotario[n.id].total} asignadas
                         </span>
                       )}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${n.trabaja_con_sozu ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                        <Zap className="w-2.5 h-2.5" />
+                        SOZU
+                      </span>
                       <button
                         onClick={() => setFormModal(n)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
                         title="Editar"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setConfirmSozuToggle(n)}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${n.trabaja_con_sozu ? 'text-emerald-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                        title={n.trabaja_con_sozu ? 'Deshabilitar SOZU' : 'Habilitar SOZU'}
+                      >
+                        <Zap className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => setConfirmToggle(n)}
@@ -1005,9 +1036,12 @@ export function NotariasDashboard() {
                               className="w-full appearance-none bg-white border border-slate-200 text-xs text-slate-700 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 pr-6 cursor-pointer"
                             >
                               <option value="">Sin asignar</option>
-                              {activeNotarios.map(n => (
-                                <option key={n.id} value={n.id}>{n.notaria}</option>
-                              ))}
+                              {notarios
+                                .filter(n => n.trabaja_con_sozu || n.id === row.notarioId)
+                                .map(n => (
+                                  <option key={n.id} value={n.id}>{n.notaria}</option>
+                                ))
+                              }
                             </select>
                             <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
@@ -1091,6 +1125,21 @@ export function NotariasDashboard() {
           onCancel={() => setConfirmToggle(null)}
           onConfirm={() => toggleActivoMutation.mutate({ id: confirmToggle.id, activo: !confirmToggle.activo })}
           loading={toggleActivoMutation.isPending}
+        />
+      )}
+
+      {confirmSozuToggle && (
+        <ConfirmModal
+          title={confirmSozuToggle.trabaja_con_sozu ? 'Deshabilitar de SOZU' : 'Habilitar en SOZU'}
+          body={confirmSozuToggle.trabaja_con_sozu
+            ? `¿Deseas deshabilitar "${confirmSozuToggle.notaria}" de los selectores operativos SOZU?`
+            : `¿Deseas habilitar "${confirmSozuToggle.notaria}" para nuevas asignaciones en SOZU?`
+          }
+          confirmLabel={confirmSozuToggle.trabaja_con_sozu ? 'Deshabilitar' : 'Habilitar'}
+          confirmCls={confirmSozuToggle.trabaja_con_sozu ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}
+          onCancel={() => setConfirmSozuToggle(null)}
+          onConfirm={() => toggleSozuMutation.mutate({ id: confirmSozuToggle.id, trabaja_con_sozu: !confirmSozuToggle.trabaja_con_sozu })}
+          loading={toggleSozuMutation.isPending}
         />
       )}
     </div>
