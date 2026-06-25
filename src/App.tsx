@@ -202,6 +202,7 @@ const PECInventoryAdvanced = lazyRetry(() => import("./components/admin/portal-e
 const PECAgentPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/AgentPortalTab"));
 const PECAmbassadorsAdmin = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsAdminTab"));
 const PECAmbassadorsPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsPortalTab"));
+const PPComingSoon = lazyRetry(() => import("./pages/admin/portal-productos/ComingSoon"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
