@@ -976,6 +976,94 @@ export type Database = {
         }
         Relationships: []
       }
+      bancos_agentes: {
+        Row: {
+          activo: boolean
+          email: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_banco: number
+          nombre: string
+          rol: string
+          telefono: string | null
+        }
+        Insert: {
+          activo?: boolean
+          email?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco: number
+          nombre: string
+          rol?: string
+          telefono?: string | null
+        }
+        Update: {
+          activo?: boolean
+          email?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco?: number
+          nombre?: string
+          rol?: string
+          telefono?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bancos_agentes_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bancos_convenio: {
+        Row: {
+          activo: boolean
+          color_marca: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_banco: number
+          orden: number
+          producto_nombre: string | null
+          tasa_desde: number | null
+        }
+        Insert: {
+          activo?: boolean
+          color_marca?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco: number
+          orden?: number
+          producto_nombre?: string | null
+          tasa_desde?: number | null
+        }
+        Update: {
+          activo?: boolean
+          color_marca?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco?: number
+          orden?: number
+          producto_nombre?: string | null
+          tasa_desde?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bancos_convenio_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: true
+            referencedRelation: "bancos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       beneficiarios: {
         Row: {
           activo: boolean
@@ -1052,7 +1140,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_producto: number
-          id_propiedad: number
+          id_propiedad: number | null
           m2: number
           nombre: string
           ubicacion: string | null
@@ -1064,7 +1152,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_producto: number
-          id_propiedad: number
+          id_propiedad?: number | null
           m2?: number
           nombre: string
           ubicacion?: string | null
@@ -1076,7 +1164,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           id_producto?: number
-          id_propiedad?: number
+          id_propiedad?: number | null
           m2?: number
           nombre?: string
           ubicacion?: string | null
@@ -3404,6 +3492,139 @@ export type Database = {
           },
         ]
       }
+      checklist_plantilla_categorias: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_plantilla: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_plantilla: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_plantilla?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_plantilla_categorias_id_plantilla_fkey"
+            columns: ["id_plantilla"]
+            isOneToOne: false
+            referencedRelation: "checklist_plantillas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_plantilla_items: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_plantilla_categoria: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_plantilla_categoria: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_plantilla_categoria?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_plantilla_items_id_plantilla_categoria_fkey"
+            columns: ["id_plantilla_categoria"]
+            isOneToOne: false
+            referencedRelation: "checklist_plantilla_categorias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_plantillas: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_modelo: number | null
+          id_proyecto: number | null
+          nombre: string
+          tipo_checklist: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_modelo?: number | null
+          id_proyecto?: number | null
+          nombre: string
+          tipo_checklist?: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_modelo?: number | null
+          id_proyecto?: number | null
+          nombre?: string
+          tipo_checklist?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_plantillas_id_modelo_fkey"
+            columns: ["id_modelo"]
+            isOneToOne: false
+            referencedRelation: "modelos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_plantillas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       citas_calendar_events: {
         Row: {
           activo: boolean
@@ -3549,6 +3770,103 @@ export type Database = {
             columns: ["id_documento"]
             isOneToOne: false
             referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comisiones_propuestas: {
+        Row: {
+          activo: boolean
+          escenario_id: string
+          escenario_nombre: string | null
+          estado: string
+          fecha_actualizacion: string
+          fecha_propuesta: string
+          id: number
+          id_proyecto: number
+          modo: string | null
+          propuesta_por: string | null
+          snapshot: Json
+        }
+        Insert: {
+          activo?: boolean
+          escenario_id: string
+          escenario_nombre?: string | null
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_propuesta?: string
+          id?: number
+          id_proyecto: number
+          modo?: string | null
+          propuesta_por?: string | null
+          snapshot: Json
+        }
+        Update: {
+          activo?: boolean
+          escenario_id?: string
+          escenario_nombre?: string | null
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_propuesta?: string
+          id?: number
+          id_proyecto?: number
+          modo?: string | null
+          propuesta_por?: string | null
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_propuestas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comisiones_validaciones: {
+        Row: {
+          escenario_id: string
+          escenario_nombre: string | null
+          estado: string
+          fecha_validacion: string
+          id: number
+          id_proyecto: number
+          modo: string | null
+          notas: string | null
+          snapshot: Json | null
+          validado_por: string | null
+        }
+        Insert: {
+          escenario_id: string
+          escenario_nombre?: string | null
+          estado: string
+          fecha_validacion?: string
+          id?: number
+          id_proyecto: number
+          modo?: string | null
+          notas?: string | null
+          snapshot?: Json | null
+          validado_por?: string | null
+        }
+        Update: {
+          escenario_id?: string
+          escenario_nombre?: string | null
+          estado?: string
+          fecha_validacion?: string
+          id?: number
+          id_proyecto?: number
+          modo?: string | null
+          notas?: string | null
+          snapshot?: Json | null
+          validado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_validaciones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
         ]
@@ -3869,6 +4187,50 @@ export type Database = {
             columns: ["id_tipo_cita"]
             isOneToOne: false
             referencedRelation: "tipos_cita"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contrato_validaciones: {
+        Row: {
+          estado: string
+          estado_fecha: string | null
+          fecha_contrato_pdf: string | null
+          fecha_creacion: string
+          id: number
+          id_documento: number
+          monto_esperado: number | null
+          monto_real: number | null
+          motivo: string | null
+        }
+        Insert: {
+          estado: string
+          estado_fecha?: string | null
+          fecha_contrato_pdf?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_documento: number
+          monto_esperado?: number | null
+          monto_real?: number | null
+          motivo?: string | null
+        }
+        Update: {
+          estado?: string
+          estado_fecha?: string | null
+          fecha_contrato_pdf?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_documento?: number
+          monto_esperado?: number | null
+          monto_real?: number | null
+          motivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contrato_validaciones_id_documento_fkey"
+            columns: ["id_documento"]
+            isOneToOne: false
+            referencedRelation: "documentos"
             referencedColumns: ["id"]
           },
         ]
@@ -4257,6 +4619,47 @@ export type Database = {
             columns: ["id_oferta"]
             isOneToOne: false
             referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuentas_sozu: {
+        Row: {
+          activo: boolean
+          alias: string
+          clabe: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_banco: number
+          numero_cuenta: string | null
+        }
+        Insert: {
+          activo?: boolean
+          alias: string
+          clabe?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco: number
+          numero_cuenta?: string | null
+        }
+        Update: {
+          activo?: boolean
+          alias?: string
+          clabe?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_banco?: number
+          numero_cuenta?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuentas_sozu_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
             referencedColumns: ["id"]
           },
         ]
@@ -4738,6 +5141,7 @@ export type Database = {
         Row: {
           activo: boolean
           audit_trail: Json
+          canal: string | null
           comentarios: string | null
           comentarios_publicos: string | null
           consentimiento: boolean
@@ -4772,6 +5176,7 @@ export type Database = {
         Insert: {
           activo?: boolean
           audit_trail?: Json
+          canal?: string | null
           comentarios?: string | null
           comentarios_publicos?: string | null
           consentimiento?: boolean
@@ -4806,6 +5211,7 @@ export type Database = {
         Update: {
           activo?: boolean
           audit_trail?: Json
+          canal?: string | null
           comentarios?: string | null
           comentarios_publicos?: string | null
           consentimiento?: boolean
@@ -5064,6 +5470,7 @@ export type Database = {
           fecha_vobo: string | null
           id: number
           id_entrega: number
+          id_plantilla_categoria: number | null
           items_completos: number
           nombre: string
           responsable: string | null
@@ -5078,6 +5485,7 @@ export type Database = {
           fecha_vobo?: string | null
           id?: never
           id_entrega: number
+          id_plantilla_categoria?: number | null
           items_completos?: number
           nombre: string
           responsable?: string | null
@@ -5092,6 +5500,7 @@ export type Database = {
           fecha_vobo?: string | null
           id?: never
           id_entrega?: number
+          id_plantilla_categoria?: number | null
           items_completos?: number
           nombre?: string
           responsable?: string | null
@@ -5106,6 +5515,13 @@ export type Database = {
             referencedRelation: "entregas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "entregas_checklist_categorias_id_plantilla_categoria_fkey"
+            columns: ["id_plantilla_categoria"]
+            isOneToOne: false
+            referencedRelation: "checklist_plantilla_categorias"
+            referencedColumns: ["id"]
+          },
         ]
       }
       entregas_checklist_items: {
@@ -5117,6 +5533,7 @@ export type Database = {
           id: number
           id_categoria: number
           id_estatus_checklist: number
+          id_plantilla_item: number | null
           nombre: string
           observacion: string | null
           responsable: string | null
@@ -5129,6 +5546,7 @@ export type Database = {
           id?: never
           id_categoria: number
           id_estatus_checklist?: number
+          id_plantilla_item?: number | null
           nombre: string
           observacion?: string | null
           responsable?: string | null
@@ -5141,6 +5559,7 @@ export type Database = {
           id?: never
           id_categoria?: number
           id_estatus_checklist?: number
+          id_plantilla_item?: number | null
           nombre?: string
           observacion?: string | null
           responsable?: string | null
@@ -5151,6 +5570,13 @@ export type Database = {
             columns: ["id_categoria"]
             isOneToOne: false
             referencedRelation: "entregas_checklist_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_checklist_items_id_plantilla_item_fkey"
+            columns: ["id_plantilla_item"]
+            isOneToOne: false
+            referencedRelation: "checklist_plantilla_items"
             referencedColumns: ["id"]
           },
           {
@@ -5606,6 +6032,63 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      estados_cuenta: {
+        Row: {
+          activo: boolean
+          anio: number
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_cuenta_sozu: number
+          id_proyecto: number
+          mes: number
+          nombre_archivo: string | null
+          subido_por: string | null
+          url_estado_cuenta: string
+        }
+        Insert: {
+          activo?: boolean
+          anio: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_sozu: number
+          id_proyecto: number
+          mes: number
+          nombre_archivo?: string | null
+          subido_por?: string | null
+          url_estado_cuenta: string
+        }
+        Update: {
+          activo?: boolean
+          anio?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_sozu?: number
+          id_proyecto?: number
+          mes?: number
+          nombre_archivo?: string | null
+          subido_por?: string | null
+          url_estado_cuenta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estados_cuenta_id_cuenta_sozu_fkey"
+            columns: ["id_cuenta_sozu"]
+            isOneToOne: false
+            referencedRelation: "cuentas_sozu"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estados_cuenta_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       estados_mx: {
         Row: {
@@ -6775,6 +7258,7 @@ export type Database = {
           nombre: string
           notaria: string
           telefono: string | null
+          trabaja_con_sozu: boolean
           url_template_proyecto_contrato: string | null
         }
         Insert: {
@@ -6788,6 +7272,7 @@ export type Database = {
           nombre: string
           notaria: string
           telefono?: string | null
+          trabaja_con_sozu?: boolean
           url_template_proyecto_contrato?: string | null
         }
         Update: {
@@ -6801,6 +7286,7 @@ export type Database = {
           nombre?: string
           notaria?: string
           telefono?: string | null
+          trabaja_con_sozu?: boolean
           url_template_proyecto_contrato?: string | null
         }
         Relationships: []
@@ -6812,6 +7298,7 @@ export type Database = {
           canal: string
           created_at: string
           descripcion: string | null
+          destinatarios_extra: Json | null
           id: number
           mapeo_variables_postmark: Json
           plantilla_email_detalles: string
@@ -6828,6 +7315,7 @@ export type Database = {
           canal?: string
           created_at?: string
           descripcion?: string | null
+          destinatarios_extra?: Json | null
           id?: number
           mapeo_variables_postmark?: Json
           plantilla_email_detalles?: string
@@ -6844,6 +7332,7 @@ export type Database = {
           canal?: string
           created_at?: string
           descripcion?: string | null
+          destinatarios_extra?: Json | null
           id?: number
           mapeo_variables_postmark?: Json
           plantilla_email_detalles?: string
@@ -7034,6 +7523,54 @@ export type Database = {
           },
         ]
       }
+      pago_validaciones: {
+        Row: {
+          estado: string
+          fecha_creacion: string
+          fuente_pdf: string | null
+          id: number
+          id_pago: number
+          monto_esperado: number | null
+          monto_real: number | null
+          motivo: string | null
+        }
+        Insert: {
+          estado: string
+          fecha_creacion?: string
+          fuente_pdf?: string | null
+          id?: number
+          id_pago: number
+          monto_esperado?: number | null
+          monto_real?: number | null
+          motivo?: string | null
+        }
+        Update: {
+          estado?: string
+          fecha_creacion?: string
+          fuente_pdf?: string | null
+          id?: number
+          id_pago?: number
+          monto_esperado?: number | null
+          monto_real?: number | null
+          motivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pago_validaciones_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "pagos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pago_validaciones_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_pago"]
+          },
+        ]
+      }
       pagos: {
         Row: {
           activo: boolean
@@ -7048,6 +7585,7 @@ export type Database = {
           monto: number
           url_cep: string | null
           url_recibo: string | null
+          validacion_documental_efectivo: boolean
         }
         Insert: {
           activo?: boolean
@@ -7062,6 +7600,7 @@ export type Database = {
           monto: number
           url_cep?: string | null
           url_recibo?: string | null
+          validacion_documental_efectivo?: boolean
         }
         Update: {
           activo?: boolean
@@ -7076,6 +7615,7 @@ export type Database = {
           monto?: number
           url_cep?: string | null
           url_recibo?: string | null
+          validacion_documental_efectivo?: boolean
         }
         Relationships: [
           {
@@ -8082,7 +8622,9 @@ export type Database = {
           id_entrega: number | null
           id_postventa_categoria_garantia: number
           id_propiedad: number
+          id_proveedor_externo: number | null
           id_proyecto: number | null
+          id_responsable_interno: number | null
           id_ticket_entrega: number | null
           piezas_reemplazadas: string | null
           prioridad: string
@@ -8114,7 +8656,9 @@ export type Database = {
           id_entrega?: number | null
           id_postventa_categoria_garantia: number
           id_propiedad: number
+          id_proveedor_externo?: number | null
           id_proyecto?: number | null
+          id_responsable_interno?: number | null
           id_ticket_entrega?: number | null
           piezas_reemplazadas?: string | null
           prioridad?: string
@@ -8146,7 +8690,9 @@ export type Database = {
           id_entrega?: number | null
           id_postventa_categoria_garantia?: number
           id_propiedad?: number
+          id_proveedor_externo?: number | null
           id_proyecto?: number | null
+          id_responsable_interno?: number | null
           id_ticket_entrega?: number | null
           piezas_reemplazadas?: string | null
           prioridad?: string
@@ -8192,10 +8738,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "postventa_tickets_id_proveedor_externo_fkey"
+            columns: ["id_proveedor_externo"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "postventa_tickets_id_proyecto_fkey"
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_responsable_interno_fkey"
+            columns: ["id_responsable_interno"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
             referencedColumns: ["id"]
           },
         ]
@@ -10932,6 +11492,14 @@ export type Database = {
         }
         Returns: Json
       }
+      get_kpi_payment_report: {
+        Args: {
+          p_limit?: number
+          p_metodos_excluir?: string[]
+          p_proyecto: string
+        }
+        Returns: Json
+      }
       get_kpis_alta_direccion: {
         Args: {
           p_fecha_fin?: string
@@ -10986,6 +11554,14 @@ export type Database = {
         }
         Returns: Json
       }
+      get_payments_for_pago_validation: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
       get_payments_recibo_for_validation: {
         Args: {
           p_excluir_proyectos?: string[]
@@ -10995,8 +11571,25 @@ export type Database = {
         }
         Returns: Json
       }
+      get_payments_sin_evidencia: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_metodo?: string
+          p_proyecto?: string
+        }
+        Returns: Json
+      }
       get_pending_cep_chains: {
         Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      get_pending_contracts: {
+        Args: {
+          p_excluir_proyectos?: string[]
+          p_limit?: number
+          p_proyecto?: string
+        }
         Returns: Json
       }
       get_pending_payments: {
@@ -11098,6 +11691,23 @@ export type Database = {
           total_count: number
           total_pagado: number
           vista: string
+        }[]
+      }
+      get_proyecto_financials: {
+        Args: { p_proyecto_id: number }
+        Returns: {
+          efectivo_aun_permitido: number
+          efectivo_pagado: number
+          limite_efectivo: number
+          precio_final: number
+          saldo_pendiente: number
+          total_con_comprobante: number
+          total_cuentas: number
+          total_pagado: number
+          total_pagado_todas_cuentas: number
+          total_pagos: number
+          total_unidades: number
+          valor_escrituracion: number
         }[]
       }
       get_proyectos_publicados: { Args: never; Returns: Json }
@@ -11246,7 +11856,13 @@ export type Database = {
         }
         Returns: number
       }
+      rescue_recibo_to_cep: { Args: { p_ids: string[] }; Returns: Json }
       save_cep_audit_results: { Args: { p_results: Json }; Returns: Json }
+      save_contract_validation_results: {
+        Args: { p_results: Json }
+        Returns: Json
+      }
+      save_pago_validation_results: { Args: { p_results: Json }; Returns: Json }
       scan_legacy_urls: {
         Args: never
         Returns: {
