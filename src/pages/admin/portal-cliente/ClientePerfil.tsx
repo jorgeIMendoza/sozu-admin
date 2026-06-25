@@ -598,13 +598,29 @@ const ClientePerfil = () => {
       if (uploadErr) { toast.error("Error al subir archivo: " + uploadErr.message); return; }
       const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
 
-      // Deactivate previous docs of same type (mark as expired)
-      await (supabase as any)
+      // Oldest active doc of this type → keep active but mark expired (audit reference)
+      // All other active docs → deactivate + expired
+      const { data: activeDocs } = await (supabase as any)
         .from("documentos")
-        .update({ activo: false, id_estatus_verificacion: 4 })
+        .select("id")
         .eq("id_persona", effectivePersonaId)
         .eq("id_tipo_documento", primaryTipoId)
-        .eq("activo", true);
+        .eq("activo", true)
+        .order("id", { ascending: true });
+
+      if (activeDocs && activeDocs.length > 0) {
+        await (supabase as any)
+          .from("documentos")
+          .update({ id_estatus_verificacion: 4 })
+          .eq("id", activeDocs[0].id);
+        const otherIds = activeDocs.slice(1).map((d: any) => d.id);
+        if (otherIds.length > 0) {
+          await (supabase as any)
+            .from("documentos")
+            .update({ activo: false, id_estatus_verificacion: 4 })
+            .in("id", otherIds);
+        }
+      }
 
       // PDF types validated locally → estatus=2 (verified). Others → estatus=1 (pending review).
       const newEstatus = isPdfType ? 2 : 1;
