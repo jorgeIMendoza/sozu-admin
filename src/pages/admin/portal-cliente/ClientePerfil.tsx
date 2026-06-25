@@ -782,7 +782,7 @@ const ClientePerfil = () => {
           const status = best?.status ?? "missing";
           const isLast = i === SLOTS.length - 1;
           const isUploading = uploadingSlot === slot.key;
-          const canUpload = !isImpersonating && (status === "missing" || status === "rejected" || status === "expired" || status === "review");
+          const canUpload = false; // TEMP: upload desactivado mientras se valida flujo
 
           const DOC_STYLE = {
             verified: { dot: "bg-emerald",           badge: "text-emerald bg-emerald-pale",                                                                 label: "Aprobado"    },
