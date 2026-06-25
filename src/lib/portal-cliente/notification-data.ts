@@ -102,6 +102,8 @@ export function useNotifications(): Notification[] {
         .eq("activo", true)
         .order("fecha_creacion", { ascending: false })
         .limit(50);
+      // Table not yet created in DB — return empty silently
+      if (error?.code === "42P01" || error?.message?.includes("does not exist")) return [];
       if (error) throw error;
 
       const PRIORITY: Record<NotificationType, number> = {

@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileSearch, FileText, Loader2, Pencil, XCircle, Receipt,
+  Clock, Eye, FileSearch, FileText, FileUp, Loader2, Pencil, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
@@ -38,12 +38,14 @@ interface PagoRow {
   metodo_nombre: string;
   clave_rastreo: string | null;
   url_cep: string | null;
+  url_recibo: string | null;
   descripcion: string | null;
   validacion_documental_efectivo: boolean;
   estado_validacion: "coincide" | "error" | "no_coincide" | null;
   motivo: string | null;
   monto_esperado: number | null;
   monto_real: number | null;
+  tipo_nombre: string;
 }
 
 interface AplicacionDetalle {
@@ -62,6 +64,7 @@ interface PagoDetalleData {
   id_metodos_pago: number;
   clave_rastreo: string | null;
   url_cep: string | null;
+  url_recibo: string | null;
   descripcion: string | null;
   validacion_documental_efectivo: boolean;
   precio_final: number;
@@ -71,6 +74,7 @@ interface PagoDetalleData {
   numero_propiedad: string | null;
   cliente: string;
   aplicaciones: AplicacionDetalle[];
+  tipo_nombre: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -94,6 +98,30 @@ function fmtDate(s: string | null | undefined) {
   return new Date(y, m - 1, d).toLocaleDateString("es-MX", {
     day: "2-digit", month: "short", year: "numeric",
   });
+}
+
+function tipoCategoria(tipoNombre: string): string {
+  if (tipoNombre === "Propiedad") return "Propiedades";
+  if (tipoNombre === "Adicional") return "Adicional";
+  const t = tipoNombre.toLowerCase();
+  if (t.includes("bodega")) return "Bodegas";
+  if (t.includes("estacionamiento") || t.includes("cajón") || t.includes("cajon")) return "Estacionamientos";
+  if (t.includes("paquete")) return "Paquetes amueblados";
+  if (t.includes("condensadora")) return "Condensadoras";
+  if (t.includes("persiana") || t.includes("cortina")) return "Persianas/Cortinas";
+  return "Otros";
+}
+
+function tipoBadgeClass(tipo: string): string {
+  const cat = tipoCategoria(tipo);
+  if (cat === "Propiedades") return "border-sky-200 bg-sky-50 text-sky-700";
+  if (cat === "Adicional") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (cat === "Bodegas") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (cat === "Estacionamientos") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (cat === "Paquetes amueblados") return "border-purple-200 bg-purple-50 text-purple-700";
+  if (cat === "Condensadoras") return "border-zinc-200 bg-zinc-100 text-zinc-600";
+  if (cat === "Persianas/Cortinas") return "border-orange-200 bg-orange-50 text-orange-700";
+  return "border-teal-200 bg-teal-50 text-teal-700";
 }
 
 /** Chunked .in() query — avoids PostgREST URL length limit with large ID sets. */
@@ -142,9 +170,11 @@ function EstadoBadge({ estado }: { estado: PagoRow["estado_validacion"] }) {
   );
 }
 
-// ── CEP viewer ─────────────────────────────────────────────────────────────────
+// ── Comprobante viewer ─────────────────────────────────────────────────────────
 
-function CepViewerModal({ url, onClose }: { url: string | null; onClose: () => void }) {
+function ComprobanteViewerModal({
+  url, title, onClose,
+}: { url: string | null; title: string; onClose: () => void }) {
   const [loaded, setLoaded] = useState(false);
   const handleOpenChange = (o: boolean) => { if (!o) { setLoaded(false); onClose(); } };
   return (
@@ -153,7 +183,7 @@ function CepViewerModal({ url, onClose }: { url: string | null; onClose: () => v
         <DialogHeader className="px-5 py-3 border-b shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-[14px]">
-              <Receipt className="size-4 text-muted-foreground" />Comprobante de pago
+              <Receipt className="size-4 text-muted-foreground" />{title}
             </DialogTitle>
             {url && (
               <a href={url} target="_blank" rel="noreferrer"
@@ -172,7 +202,7 @@ function CepViewerModal({ url, onClose }: { url: string | null; onClose: () => v
           )}
           {url && (
             <iframe key={url} src={url} className="w-full h-full border-0"
-              title="Comprobante de pago" onLoad={() => setLoaded(true)} />
+              title={title} onLoad={() => setLoaded(true)} />
           )}
         </div>
       </DialogContent>
@@ -230,16 +260,19 @@ function PagoDetalleModal({ pagoId, pagoRow, onClose }: {
       return {
         pago_id: pagoId, cuenta_id: pagoRow.cuenta_id, monto: pagoRow.monto, fecha_pago: pagoRow.fecha_pago,
         metodo_nombre: pagoRow.metodo_nombre, id_metodos_pago: pagoRow.id_metodos_pago,
-        clave_rastreo: pagoRow.clave_rastreo, url_cep: pagoRow.url_cep,
+        clave_rastreo: pagoRow.clave_rastreo, url_cep: pagoRow.url_cep, url_recibo: pagoRow.url_recibo,
         descripcion: pagoRow.descripcion, validacion_documental_efectivo: pagoRow.validacion_documental_efectivo,
         precio_final: safeNum(cc?.precio_final), clabe_stp: cc?.clabe_stp ?? null,
         fecha_compra: cc?.fecha_compra ?? null, proyecto: pagoRow.proyecto,
         numero_propiedad: pagoRow.numero_propiedad, cliente: pagoRow.cliente, aplicaciones,
+        tipo_nombre: pagoRow.tipo_nombre,
       };
     },
   });
 
-  const cepUrl = data?.url_cep ?? null;
+  const primaryUrl = data?.url_cep ?? data?.url_recibo ?? null;
+  const primaryIsRecibo = !data?.url_cep && !!data?.url_recibo;
+
   return (
     <Dialog open={pagoId !== null} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent className="max-w-6xl w-[98vw] h-[92vh] flex flex-col p-0 gap-0">
@@ -247,11 +280,16 @@ function PagoDetalleModal({ pagoId, pagoRow, onClose }: {
           <DialogTitle className="flex items-center gap-2 text-[14px]">
             <Receipt className="size-4 text-muted-foreground" />Detalle de pago
             {pagoRow && <span className="text-muted-foreground font-normal ml-1">— {formatCuentaCobranzaId(pagoRow.cuenta_id)}</span>}
+            {pagoRow && (
+              <Badge variant="outline" className={cn("text-[10px] ml-1", tipoBadgeClass(pagoRow.tipo_nombre))}>
+                {pagoRow.tipo_nombre}
+              </Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
           <div className="md:w-[55%] shrink-0 border-b md:border-b-0 md:border-r bg-muted/10 relative flex flex-col h-48 md:h-auto">
-            {cepUrl ? (
+            {primaryUrl ? (
               <>
                 {!cepLoaded && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-muted/10">
@@ -259,10 +297,15 @@ function PagoDetalleModal({ pagoId, pagoRow, onClose }: {
                     <p className="text-[12px] text-muted-foreground">Cargando comprobante...</p>
                   </div>
                 )}
-                <iframe key={cepUrl} src={cepUrl} className="w-full h-full border-0 flex-1"
+                <iframe key={primaryUrl} src={primaryUrl} className="w-full h-full border-0 flex-1"
                   title="Comprobante" onLoad={() => setCepLoaded(true)} />
-                <div className="absolute bottom-3 right-3">
-                  <a href={cepUrl} target="_blank" rel="noreferrer"
+                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                  {primaryIsRecibo && (
+                    <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                      Recibo (sin CEP)
+                    </span>
+                  )}
+                  <a href={primaryUrl} target="_blank" rel="noreferrer"
                     className="text-[10px] text-muted-foreground hover:text-foreground bg-background/80 px-2 py-1 rounded border">
                     Abrir en pestaña →
                   </a>
@@ -331,12 +374,32 @@ function PagoDetalleModal({ pagoId, pagoRow, onClose }: {
                     )}
                   </div>
                 </div>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Evidencia</p>
+                  <div className="space-y-1.5 text-[12px]">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-muted-foreground shrink-0">CEP</p>
+                      {data.url_cep
+                        ? <a href={data.url_cep} target="_blank" rel="noreferrer" className="text-primary hover:underline text-[11px]">Ver CEP →</a>
+                        : <span className="text-muted-foreground/50 text-[11px]">Sin CEP</span>
+                      }
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-muted-foreground shrink-0">Recibo</p>
+                      {data.url_recibo
+                        ? <a href={data.url_recibo} target="_blank" rel="noreferrer" className="text-primary hover:underline text-[11px]">Ver recibo →</a>
+                        : <span className="text-muted-foreground/50 text-[11px]">Sin recibo</span>
+                      }
+                    </div>
+                  </div>
+                </div>
                 <Separator />
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Cuenta de cobranza</p>
                   <div className="space-y-1.5 text-[12px]">
                     {([
                       ["Cuenta", formatCuentaCobranzaId(data.cuenta_id)],
+                      ["Tipo", data.tipo_nombre],
                       ["Proyecto", data.proyecto],
                       ["Unidad", data.numero_propiedad ?? "-"],
                       ["Cliente", data.cliente],
@@ -424,7 +487,6 @@ function EditPagoValidacionModal({ row, onClose }: {
       if (error) throw error;
     },
     onSuccess: () => {
-      // Patch cached row directly — avoids full refetch of 8000 pagos
       queryClient.setQueryData(["validacion-pagos-all"], (old: PagoRow[] | undefined) => {
         if (!old || !row) return old;
         return old.map(r =>
@@ -519,10 +581,13 @@ export default function ValidacionPagos() {
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroMetodo, setFiltroMetodo] = useState("todos");
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroComprobante, setFiltroComprobante] = useState("todos");
   const [currentPage, setCurrentPage] = useState(1);
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
   const [detallePagoRow, setDetallePagoRow] = useState<PagoRow | null>(null);
-  const [cepUrl, setCepUrl] = useState<string | null>(null);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerTitle, setViewerTitle] = useState("Comprobante de pago");
   const [editRow, setEditRow] = useState<PagoRow | null>(null);
 
   useEffect(() => {
@@ -537,13 +602,12 @@ export default function ValidacionPagos() {
 
   const setFiltro = (setter: (v: string) => void) => (v: string) => { setter(v); setCurrentPage(1); };
 
-  // ── Main query: load ALL pagos + joins eagerly, client-side filter/paginate ──
+  // ── Main query ────────────────────────────────────────────────────────────────
 
   const { data: allRows = [], isLoading, isError } = useQuery({
     queryKey: ["validacion-pagos-all"],
     staleTime: 1000 * 60 * 5,
     queryFn: async (): Promise<PagoRow[]> => {
-      // Step 1: count + fetch all pagos in parallel chunks
       const { count: totalPagos } = await (supabase as any)
         .from("pagos").select("*", { count: "exact", head: true }).eq("activo", true);
 
@@ -553,7 +617,7 @@ export default function ValidacionPagos() {
         Promise.all(
           Array.from({ length: numChunks }, (_, i) =>
             (supabase as any).from("pagos")
-              .select("id, id_cuenta_cobranza, monto, fecha_pago, id_metodos_pago, clave_rastreo, url_cep, descripcion, validacion_documental_efectivo")
+              .select("id, id_cuenta_cobranza, monto, fecha_pago, id_metodos_pago, clave_rastreo, url_cep, url_recibo, descripcion, validacion_documental_efectivo")
               .eq("activo", true)
               .order("fecha_pago", { ascending: false })
               .range(i * CHUNK, (i + 1) * CHUNK - 1)
@@ -570,14 +634,13 @@ export default function ValidacionPagos() {
       const pagoIds = allPagos.map(p => p.id as number);
       const cuentaIds = [...new Set(allPagos.map(p => p.id_cuenta_cobranza as number).filter(Boolean))];
 
-      // Step 2: fetch validaciones + cuentas_cobranza in parallel
       const [validacionesRaw, cuentas] = await Promise.all([
         inQuery("pago_validaciones", "id_pago", pagoIds,
           "id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion"),
-        inQuery("cuentas_cobranza", "id", cuentaIds, "id, id_oferta", { activo: true }),
+        inQuery("cuentas_cobranza", "id", cuentaIds,
+          "id, id_oferta, id_cuenta_cobranza_padre", { activo: true }),
       ]);
 
-      // Keep only latest validacion per pago_id
       validacionesRaw.sort((a: any, b: any) =>
         new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime()
       );
@@ -588,18 +651,30 @@ export default function ValidacionPagos() {
       }
 
       const cuentaOfertaMap = new Map<number, number>(cuentas.map((c: any) => [c.id, c.id_oferta]));
+      const cuentaEsHijaMap = new Map<number, boolean>(
+        cuentas.map((c: any) => [c.id, c.id_cuenta_cobranza_padre != null])
+      );
       const ofertaIds = [...new Set(cuentas.map((c: any) => c.id_oferta as number).filter(Boolean))];
 
-      // Step 3: fetch ofertas + compradores in parallel
+      // Fetch ofertas with id_producto to determine type name
       const [ofertas, compradoresRaw] = await Promise.all([
-        inQuery("ofertas", "id", ofertaIds, "id, id_propiedad", { activo: true }),
+        inQuery("ofertas", "id", ofertaIds, "id, id_propiedad, id_producto", { activo: true }),
         inQuery("compradores", "id_cuenta_cobranza", cuentaIds,
           "id_cuenta_cobranza, id_persona, porcentaje_copropiedad", { activo: true }),
       ]);
 
       const ofertaPropMap = new Map<number, number>(ofertas.map((o: any) => [o.id, o.id_propiedad]));
+      const ofertaProductoMap = new Map<number, number>(
+        ofertas.filter((o: any) => o.id_producto != null).map((o: any) => [o.id, o.id_producto])
+      );
 
-      // Pick top comprador (highest porcentaje_copropiedad) per cuenta
+      // Fetch product names
+      const productoIds = [...new Set([...ofertaProductoMap.values()])];
+      const productos = productoIds.length
+        ? await inQuery("productos_servicios", "id", productoIds, "id, nombre")
+        : [];
+      const productoNombreMap = new Map<number, string>(productos.map((p: any) => [p.id, p.nombre]));
+
       compradoresRaw.sort((a: any, b: any) => (b.porcentaje_copropiedad ?? 0) - (a.porcentaje_copropiedad ?? 0));
       const compradorMap = new Map<number, number>();
       for (const c of compradoresRaw) {
@@ -609,7 +684,6 @@ export default function ValidacionPagos() {
       const propIds = [...new Set(ofertas.map((o: any) => o.id_propiedad as number).filter(Boolean))];
       const personaIds = [...new Set([...compradorMap.values()])];
 
-      // Step 4: fetch propiedades + personas in parallel
       const [props, personas] = await Promise.all([
         inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad", { activo: true }),
         inQuery("personas", "id", personaIds, "id, nombre_legal"),
@@ -631,7 +705,6 @@ export default function ValidacionPagos() {
       const proyectos = await inQuery("proyectos", "id", proyectoIds, "id, nombre");
       const proyectoMap = new Map<number, string>(proyectos.map((p: any) => [p.id, p.nombre]));
 
-      // Step 5: build rows
       return allPagos.map(p => {
         const v = validacionMap.get(p.id);
         const cId = p.id_cuenta_cobranza as number;
@@ -641,6 +714,15 @@ export default function ValidacionPagos() {
         const edificioId = emId ? emEdifMap.get(emId) : undefined;
         const proyectoId = edificioId ? edificioProjMap.get(edificioId) : undefined;
         const personaId = compradorMap.get(cId);
+        const esHija = cuentaEsHijaMap.get(cId) ?? false;
+
+        // Resolve tipo_nombre: product name > "Propiedad" > "Adicional"
+        let tipo_nombre = "Adicional";
+        if (!esHija && ofertaId) {
+          const prodId = ofertaProductoMap.get(ofertaId);
+          if (prodId) tipo_nombre = productoNombreMap.get(prodId) ?? "Producto";
+          else tipo_nombre = "Propiedad";
+        }
 
         return {
           pago_id: p.id as number,
@@ -654,18 +736,20 @@ export default function ValidacionPagos() {
           metodo_nombre: metodoMap.get(p.id_metodos_pago) ?? "-",
           clave_rastreo: p.clave_rastreo ?? null,
           url_cep: p.url_cep ?? null,
+          url_recibo: p.url_recibo ?? null,
           descripcion: p.descripcion ?? null,
           validacion_documental_efectivo: p.validacion_documental_efectivo ?? false,
           estado_validacion: (v?.estado ?? null) as PagoRow["estado_validacion"],
           motivo: v?.motivo ?? null,
           monto_esperado: v?.monto_esperado != null ? safeNum(v.monto_esperado) : null,
           monto_real: v?.monto_real != null ? safeNum(v.monto_real) : null,
+          tipo_nombre,
         };
       });
     },
   });
 
-  // ── Client-side derived state ──────────────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => ({
     total: allRows.length,
@@ -684,6 +768,16 @@ export default function ValidacionPagos() {
     const map = new Map<number, string>();
     for (const r of allRows) map.set(r.id_metodos_pago, r.metodo_nombre);
     return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([id, nombre]) => ({ id, nombre }));
+  }, [allRows]);
+
+  // Categories derived from product names — project filter narrows which appear
+  const tiposOptions = useMemo(() => {
+    const cats = [...new Set(allRows.map(r => tipoCategoria(r.tipo_nombre)))];
+    return cats.sort((a, b) => {
+      if (a === "Propiedades") return -1; if (b === "Propiedades") return 1;
+      if (a === "Adicional") return 1; if (b === "Adicional") return -1;
+      return a.localeCompare(b, "es");
+    });
   }, [allRows]);
 
   const filteredRows = useMemo(() => {
@@ -706,8 +800,12 @@ export default function ValidacionPagos() {
       else rows = rows.filter(r => r.estado_validacion === filtroEstado);
     }
     if (filtroMetodo !== "todos") rows = rows.filter(r => r.id_metodos_pago === Number(filtroMetodo));
+    if (filtroTipo !== "todos") rows = rows.filter(r => tipoCategoria(r.tipo_nombre) === filtroTipo);
+    if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
+    if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
+    if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
     return rows;
-  }, [allRows, debouncedSearch, debouncedCliente, filtroProyecto, filtroEstado, filtroMetodo]);
+  }, [allRows, debouncedSearch, debouncedCliente, filtroProyecto, filtroEstado, filtroMetodo, filtroTipo, filtroComprobante]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -795,19 +893,19 @@ export default function ValidacionPagos() {
       <div className="flex flex-wrap gap-2 items-center">
         <Input placeholder="ID pago / cuenta / clave rastreo..."
           value={searchCuenta} onChange={e => setSearchCuenta(e.target.value)}
-          className="h-9 text-sm w-[220px] sm:w-[260px]" />
+          className="h-9 text-sm w-[220px] sm:w-[240px]" />
         <Input placeholder="Cliente / Comprador"
           value={searchCliente} onChange={e => setSearchCliente(e.target.value)}
-          className="h-9 text-sm w-[160px] sm:w-[200px]" />
+          className="h-9 text-sm w-[160px] sm:w-[190px]" />
         <Select value={filtroProyecto} onValueChange={setFiltro(setFiltroProyecto)}>
-          <SelectTrigger className="h-9 w-[160px] sm:w-[180px] text-sm"><SelectValue placeholder="Proyecto" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[150px] sm:w-[170px] text-sm"><SelectValue placeholder="Proyecto" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos los proyectos</SelectItem>
             {proyectosOptions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtroEstado} onValueChange={setFiltro(setFiltroEstado)}>
-          <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Estado" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Estado" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos los estados</SelectItem>
             <SelectItem value="coincide">Coincide</SelectItem>
@@ -817,20 +915,38 @@ export default function ValidacionPagos() {
           </SelectContent>
         </Select>
         <Select value={filtroMetodo} onValueChange={setFiltro(setFiltroMetodo)}>
-          <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Método" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Método" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos los métodos</SelectItem>
             {metodosOptions.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>)}
           </SelectContent>
         </Select>
-        <p className="text-sm text-muted-foreground tabular-nums ml-auto hidden sm:block">
-          {isLoading
-            ? "Cargando pagos..."
-            : filteredRows.length !== stats.total
-              ? `${filteredRows.length.toLocaleString("es-MX")} de ${stats.total.toLocaleString("es-MX")} — Pág. ${page}/${totalPages}`
-              : `${stats.total.toLocaleString("es-MX")} pagos — Pág. ${page}/${totalPages}`
-          }
-        </p>
+        <Select value={filtroTipo} onValueChange={setFiltro(setFiltroTipo)}>
+          <SelectTrigger className="h-9 w-[180px] text-sm"><SelectValue placeholder="Tipo de pago" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los tipos</SelectItem>
+            {tiposOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroComprobante} onValueChange={setFiltro(setFiltroComprobante)}>
+          <SelectTrigger className="h-9 w-[170px] text-sm"><SelectValue placeholder="Comprobante" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los comprobantes</SelectItem>
+            <SelectItem value="con_cep">Con CEP</SelectItem>
+            <SelectItem value="sin_cep">Sin CEP</SelectItem>
+            <SelectItem value="sin_cep_con_recibo">Sin CEP + con recibo</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="ml-auto hidden sm:flex items-center gap-3">
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {isLoading
+              ? "Cargando pagos..."
+              : filteredRows.length !== stats.total
+                ? `${filteredRows.length.toLocaleString("es-MX")} de ${stats.total.toLocaleString("es-MX")} — Pág. ${page}/${totalPages}`
+                : `${stats.total.toLocaleString("es-MX")} pagos — Pág. ${page}/${totalPages}`
+            }
+          </p>
+        </div>
       </div>
 
       {/* Table */}
@@ -841,19 +957,20 @@ export default function ValidacionPagos() {
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Cuenta</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Proyecto</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Unidad</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Cliente</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Método</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Tipo</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Método</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Unidad</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Cliente</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Clave rastreo</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Monto</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Estado</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[90px]">Acciones</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[100px]">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center">
+                  <TableCell colSpan={10} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="size-5 animate-spin" />
                       <span className="text-sm">Cargando pagos y validaciones...</span>
@@ -862,58 +979,80 @@ export default function ValidacionPagos() {
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center text-sm text-destructive">Error al cargar datos.</TableCell>
+                  <TableCell colSpan={10} className="h-32 text-center text-sm text-destructive">Error al cargar datos.</TableCell>
                 </TableRow>
               ) : paginatedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={10} className="h-32 text-center text-sm text-muted-foreground">
                     {allRows.length === 0 ? "No hay pagos registrados." : "Sin resultados con los filtros actuales."}
                   </TableCell>
                 </TableRow>
-              ) : paginatedRows.map(row => (
-                <TableRow key={row.pago_id} className="hover:bg-muted/30 text-sm">
-                  <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                    {formatCuentaCobranzaId(row.cuenta_id)}
-                  </TableCell>
-                  <TableCell><div className="font-medium text-foreground">{row.proyecto}</div></TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">{row.numero_propiedad ?? "-"}</TableCell>
-                  <TableCell className="hidden lg:table-cell max-w-[180px] truncate text-foreground">{row.cliente}</TableCell>
-                  <TableCell className="hidden xl:table-cell whitespace-nowrap text-muted-foreground">{row.metodo_nombre}</TableCell>
-                  <TableCell className="hidden xl:table-cell max-w-[140px] truncate font-mono text-[10px] text-muted-foreground" title={row.clave_rastreo ?? undefined}>
-                    {row.clave_rastreo ?? <span className="text-muted-foreground/30">-</span>}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-right tabular-nums text-[12px] font-medium whitespace-nowrap">
-                    {fmtCurrency(row.monto)}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-center">
-                    <EstadoBadge estado={row.estado_validacion} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {row.url_cep ? (
-                        <button onClick={() => setCepUrl(row.url_cep)} title="Ver comprobante"
+              ) : paginatedRows.map(row => {
+                const hasCep = row.url_cep !== null;
+                const hasRecibo = row.url_recibo !== null;
+                return (
+                  <TableRow key={row.pago_id} className="hover:bg-muted/30 text-sm">
+                    <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                      {formatCuentaCobranzaId(row.cuenta_id)}
+                    </TableCell>
+                    <TableCell><div className="font-medium text-foreground">{row.proyecto}</div></TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Badge variant="outline" className={cn("text-[10px] whitespace-nowrap", tipoBadgeClass(row.tipo_nombre))}>
+                        {row.tipo_nombre}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell whitespace-nowrap text-muted-foreground text-[12px]">
+                      {row.metodo_nombre}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap">{row.numero_propiedad ?? "-"}</TableCell>
+                    <TableCell className="hidden xl:table-cell max-w-[180px] truncate text-foreground">{row.cliente}</TableCell>
+                    <TableCell className="hidden xl:table-cell max-w-[140px] truncate font-mono text-[10px] text-muted-foreground" title={row.clave_rastreo ?? undefined}>
+                      {row.clave_rastreo ?? <span className="text-muted-foreground/30">-</span>}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-right tabular-nums text-[12px] font-medium whitespace-nowrap">
+                      {fmtCurrency(row.monto)}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-center">
+                      <EstadoBadge estado={row.estado_validacion} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {hasCep ? (
+                          <button
+                            onClick={() => { setViewerUrl(row.url_cep); setViewerTitle("CEP — Comprobante electrónico de pago"); }}
+                            title="Ver CEP"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          >
+                            <FileText className="size-4" />
+                          </button>
+                        ) : hasRecibo ? (
+                          <button
+                            onClick={() => { setViewerUrl(row.url_recibo); setViewerTitle("Recibo de pago"); }}
+                            title="Ver recibo (sin CEP)"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-amber-500 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                          >
+                            <FileUp className="size-4" />
+                          </button>
+                        ) : (
+                          <span title="Sin comprobante" className="inline-flex items-center justify-center size-8 text-muted-foreground/25 cursor-default">
+                            <FileText className="size-4" />
+                          </span>
+                        )}
+                        <button onClick={() => { setDetallePagoId(row.pago_id); setDetallePagoRow(row); }} title="Ver detalle"
                           className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                          <FileText className="size-4" />
+                          <Eye className="size-4" />
                         </button>
-                      ) : (
-                        <span title="Sin comprobante" className="inline-flex items-center justify-center size-8 text-muted-foreground/25 cursor-default">
-                          <FileText className="size-4" />
-                        </span>
-                      )}
-                      <button onClick={() => { setDetallePagoId(row.pago_id); setDetallePagoRow(row); }} title="Ver detalle"
-                        className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                        <Eye className="size-4" />
-                      </button>
-                      {isSuperAdmin && (
-                        <button onClick={() => setEditRow(row)} title="Editar validación"
-                          className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                          <Pencil className="size-4" />
-                        </button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {isSuperAdmin && (
+                          <button onClick={() => setEditRow(row)} title="Editar validación"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                            <Pencil className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -947,7 +1086,7 @@ export default function ValidacionPagos() {
       )}
 
       {/* Modals */}
-      <CepViewerModal url={cepUrl} onClose={() => setCepUrl(null)} />
+      <ComprobanteViewerModal url={viewerUrl} title={viewerTitle} onClose={() => setViewerUrl(null)} />
       <PagoDetalleModal
         pagoId={detallePagoId}
         pagoRow={detallePagoRow}
