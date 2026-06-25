@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCrmSubmenus } from "@/hooks/useCrmSubmenus";
 import {
   LayoutDashboard,
   Bell,
@@ -77,91 +78,103 @@ const sozuLogo = SOZU_LOGO_URL;
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
 
-const navGroups: NavGroup[] = [
-  {
-    label: "Resumen",
-    items: [
-      { label: "Panel principal", path: "/admin/portal-crm/dashboard", icon: LayoutDashboard },
-      { label: "Alertas",         path: "/admin/portal-crm/alertas",   icon: Bell },
-    ],
-  },
-  {
-    label: "Dirección",
-    items: [
-      { label: "Panel ejecutivo",    path: "/admin/portal-crm/direccion/dashboard",     icon: LayoutDashboard },
-      { label: "Cola de decisiones", path: "/admin/portal-crm/direccion/cola-decisiones", icon: Activity },
-      { label: "Resumen semanal",    path: "/admin/portal-crm/direccion/resumen-semanal",  icon: Sparkles },
-    ],
-  },
-  {
-    label: "CRM",
-    items: [
-      { label: "Contactos",               path: "/admin/portal-crm/ventas/contactos",          icon: Users },
-      { label: "Pipeline",                path: "/admin/portal-crm/ventas/negocios",             icon: Briefcase },
-      { label: "Tareas",                  path: "/admin/portal-crm/ventas/tareas",             icon: ListTodo },
-      { label: "Citas",                   path: "/admin/portal-crm/ventas/citas",      icon: Calendar },
-      { label: "Desempeño de asesores",   path: "/admin/portal-crm/ventas/rendimiento-asesores", icon: UserCheck },
-      { label: "Inteligencia de leads",   path: "/admin/portal-crm/ventas/inteligencia-prospectos", icon: Sparkles },
-      { label: "Asignación de leads",     path: "/admin/portal-crm/ventas/asignacion",           icon: RouteIcon },
-      { label: "Operación comercial",     path: "/admin/portal-crm/ventas/operacion-comercial",  icon: BarChart3 },
-      { label: "Reglas de automatización", path: "/admin/portal-crm/ventas/reglas-automatizacion", icon: Cog },
-      { label: "Secuencias",              path: "/admin/portal-crm/ventas/secuencias",         icon: Workflow },
-      { label: "Escalaciones",            path: "/admin/portal-crm/ventas/escalamientos",       icon: AlertTriangle },
-    ],
-  },
-  {
-    label: "Inteligencia de marketing",
-    items: [
-      { label: "Resumen de desempeño", path: "/admin/portal-crm/marketing/rendimiento",      icon: Activity },
-      { label: "Atribución",           path: "/admin/portal-crm/marketing/atribucion",      icon: GitBranch },
-      { label: "Explorador de campañas", path: "/admin/portal-crm/marketing/campanas",      icon: Megaphone },
-      { label: "Creativos",            path: "/admin/portal-crm/marketing/creativos",        icon: ImageIcon },
-      { label: "Meta Ads",             path: "/admin/portal-crm/marketing/meta",             icon: Facebook },
-      { label: "Google Ads",           path: "/admin/portal-crm/marketing/google",           icon: SearchIcon },
-      { label: "Por desarrollo",       path: "/admin/portal-crm/marketing/desarrollos",     icon: Building2 },
-      { label: "Embudo Mkt → CRM",     path: "/admin/portal-crm/marketing/embudo",           icon: Activity },
-      { label: "Mapeo de campañas",    path: "/admin/portal-crm/marketing/mapeo-campanas", icon: Megaphone },
-      { label: "Sincronizaciones",     path: "/admin/portal-crm/marketing/sincronizaciones",        icon: RefreshCw },
-    ],
-  },
-  {
-    label: "Tracking y conversiones",
-    items: [
-      { label: "Salud de tracking",     path: "/admin/portal-crm/salud-tracking",   icon: ShieldCheck },
-      { label: "Eventos de conversión", path: "/admin/portal-crm/eventos-conversion", icon: Zap },
-    ],
-  },
-  {
-    label: "Inteligencia de ingresos",
-    items: [
-      { label: "Pronóstico",            path: "/admin/portal-crm/ingresos/pronostico",    icon: LineChartIcon },
-      { label: "Atribución de ingresos", path: "/admin/portal-crm/ingresos/atribucion", icon: GitBranch },
-      { label: "Velocidad",             path: "/admin/portal-crm/ingresos/velocidad",    icon: Zap },
-      { label: "Metas y cuotas",        path: "/admin/portal-crm/ingresos/metas",       icon: Target },
-    ],
-  },
-  {
-    label: "Operación",
-    items: [
-      { label: "Constructor de campañas", path: "/admin/portal-crm/operacion/constructor",      icon: Wand2 },
-      { label: "Copiloto IA",             path: "/admin/portal-crm/operacion/copiloto",      icon: Bot },
-      { label: "Desarrollos",             path: "/admin/portal-crm/operacion/desarrollos", icon: Building2 },
-    ],
-  },
-  {
-    label: "Configuración",
-    items: [
-      { label: "Preparación de integraciones", path: "/admin/portal-crm/configuracion/conexiones",           icon: Plug },
-      { label: "Preparación para despliegue",  path: "/admin/portal-crm/configuracion/preparacion-despliegue",  icon: ShieldCheck },
-      { label: "Registros de API",             path: "/admin/portal-crm/configuracion/registros-api",              icon: FileClock },
-      { label: "Checklist de integración",     path: "/admin/portal-crm/configuracion/checklist-integracion", icon: ListChecks },
-      { label: "Organización",                 path: "/admin/portal-crm/configuracion/organizacion",          icon: Settings },
-      { label: "Usuarios y roles",             path: "/admin/portal-crm/configuracion/usuarios",                 icon: UserCog },
-      { label: "Administración de desarrollos", path: "/admin/portal-crm/configuracion/desarrollos",        icon: Building2 },
-      { label: "Administración de pipelines",  path: "/admin/portal-crm/configuracion/pipelines",            icon: Briefcase },
-    ],
-  },
+// Icons por ruta — única fuente hardcodeada (los icons no pueden venir de DB)
+const PATH_ICONS: Record<string, LucideIcon> = {
+  "/admin/portal-crm/dashboard":                              LayoutDashboard,
+  "/admin/portal-crm/alertas":                                Bell,
+  "/admin/portal-crm/salud-tracking":                         ShieldCheck,
+  "/admin/portal-crm/eventos-conversion":                     Zap,
+  "/admin/portal-crm/direccion/dashboard":                    LayoutDashboard,
+  "/admin/portal-crm/direccion/cola-decisiones":              Activity,
+  "/admin/portal-crm/direccion/resumen-semanal":              Sparkles,
+  "/admin/portal-crm/ventas/contactos":                       Users,
+  "/admin/portal-crm/ventas/negocios":                        Briefcase,
+  "/admin/portal-crm/ventas/tareas":                          ListTodo,
+  "/admin/portal-crm/ventas/citas":                           Calendar,
+  "/admin/portal-crm/ventas/rendimiento-asesores":            UserCheck,
+  "/admin/portal-crm/ventas/inteligencia-prospectos":         Sparkles,
+  "/admin/portal-crm/ventas/asignacion":                      RouteIcon,
+  "/admin/portal-crm/ventas/operacion-comercial":             BarChart3,
+  "/admin/portal-crm/ventas/reglas-automatizacion":           Cog,
+  "/admin/portal-crm/ventas/secuencias":                      Workflow,
+  "/admin/portal-crm/ventas/escalamientos":                   AlertTriangle,
+  "/admin/portal-crm/marketing/rendimiento":                  Activity,
+  "/admin/portal-crm/marketing/atribucion":                   GitBranch,
+  "/admin/portal-crm/marketing/campanas":                     Megaphone,
+  "/admin/portal-crm/marketing/creativos":                    ImageIcon,
+  "/admin/portal-crm/marketing/meta":                         Facebook,
+  "/admin/portal-crm/marketing/google":                       SearchIcon,
+  "/admin/portal-crm/marketing/desarrollos":                  Building2,
+  "/admin/portal-crm/marketing/embudo":                       Activity,
+  "/admin/portal-crm/marketing/mapeo-campanas":               Megaphone,
+  "/admin/portal-crm/marketing/sincronizaciones":             RefreshCw,
+  "/admin/portal-crm/marketing/audiencias":                   Users2,
+  "/admin/portal-crm/marketing/utms":                         Link2,
+  "/admin/portal-crm/marketing/pruebas-ab":                   FlaskConical,
+  "/admin/portal-crm/marketing/paginas-aterrizaje":           LayoutTemplate,
+  "/admin/portal-crm/marketing/formularios":                  FileInput,
+  "/admin/portal-crm/marketing/integraciones":                Plug,
+  "/admin/portal-crm/marketing/presupuesto":                  Wallet,
+  "/admin/portal-crm/ingresos/pronostico":                    LineChartIcon,
+  "/admin/portal-crm/ingresos/atribucion":                    GitBranch,
+  "/admin/portal-crm/ingresos/velocidad":                     Zap,
+  "/admin/portal-crm/ingresos/metas":                         Target,
+  "/admin/portal-crm/ingresos/kpis-ejecutivos":               BarChart3,
+  "/admin/portal-crm/ingresos/revision-pipeline":             Layers,
+  "/admin/portal-crm/ingresos/operaciones":                   BriefcaseIcon,
+  "/admin/portal-crm/ingresos/cohortes":                      Users2,
+  "/admin/portal-crm/ingresos/desercion":                     TrendingDown,
+  "/admin/portal-crm/ingresos/reportes":                      FileText,
+  "/admin/portal-crm/operacion/constructor":                  Wand2,
+  "/admin/portal-crm/operacion/copiloto":                     Bot,
+  "/admin/portal-crm/operacion/desarrollos":                  Building2,
+  "/admin/portal-crm/operacion/bandeja":                      InboxIcon,
+  "/admin/portal-crm/operacion/colas":                        ListChecks,
+  "/admin/portal-crm/operacion/sla":                          Timer,
+  "/admin/portal-crm/configuracion/conexiones":               Plug,
+  "/admin/portal-crm/configuracion/preparacion-despliegue":   ShieldCheck,
+  "/admin/portal-crm/configuracion/registros-api":            FileClock,
+  "/admin/portal-crm/configuracion/checklist-integracion":    ListChecks,
+  "/admin/portal-crm/configuracion/organizacion":             Settings,
+  "/admin/portal-crm/configuracion/usuarios":                 UserCog,
+  "/admin/portal-crm/configuracion/desarrollos":              Building2,
+  "/admin/portal-crm/configuracion/pipelines":                Briefcase,
+  "/admin/portal-crm/configuracion/roles":                    KeyRound,
+  "/admin/portal-crm/configuracion/etapas-pipeline":          ListTree,
+  "/admin/portal-crm/configuracion/campos-personalizados":    SlidersHorizontal,
+  "/admin/portal-crm/configuracion/webhooks":                 Webhook,
+  "/admin/portal-crm/configuracion/auditoria":                FileClock,
+};
+
+// Segmento de ruta → etiqueta de sección en el sidebar
+const SEGMENT_LABEL: Record<string, string> = {
+  dashboard:         "Resumen",
+  alertas:           "Resumen",
+  "salud-tracking":  "Tracking y conversiones",
+  "eventos-conversion": "Tracking y conversiones",
+  direccion:         "Dirección",
+  ventas:            "CRM",
+  marketing:         "Inteligencia de marketing",
+  ingresos:          "Inteligencia de ingresos",
+  operacion:         "Operación",
+  configuracion:     "Configuración",
+};
+
+const GROUP_ORDER = [
+  "Resumen",
+  "Dirección",
+  "CRM",
+  "Inteligencia de marketing",
+  "Tracking y conversiones",
+  "Inteligencia de ingresos",
+  "Operación",
+  "Configuración",
 ];
+
+function getGroupLabel(path: string): string {
+  const segment = path.replace("/admin/portal-crm/", "").split("/")[0];
+  return SEGMENT_LABEL[segment] ?? "Resumen";
+}
 
 function truncateName(full: string, max = 22): string {
   const parts = full.trim().split(/\s+/);
@@ -176,9 +189,8 @@ export const PortalCRMLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
-  const { isPathAllowed, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
-
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const { isPathAllowed, allowedPaths, isSuperAdmin, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
+  const { data: crmSubmenus, isLoading: isLoadingSubmenus } = useCrmSubmenus();
 
   const { data: myPersonaData } = useQuery({
     queryKey: ["crm-my-persona", profile?.id_persona],
@@ -208,11 +220,23 @@ export const PortalCRMLayout = () => {
     .map((p) => p.charAt(0).toUpperCase())
     .join("") || "U";
 
-  const visibleGroups = isLoadingPerms
-    ? []
-    : navGroups
-        .map((g) => ({ ...g, items: g.items.filter((i) => isPathAllowed(i.path)) }))
-        .filter((g) => g.items.length > 0);
+  const visibleGroups = useMemo<NavGroup[]>(() => {
+    if (isLoadingPerms || isLoadingSubmenus || !crmSubmenus) return [];
+
+    const grouped = new Map<string, NavItem[]>();
+    for (const s of crmSubmenus) {
+      const icon = PATH_ICONS[s.vista_front_end];
+      if (!icon) continue;
+      if (!isPathAllowed(s.vista_front_end)) continue;
+      const groupLabel = getGroupLabel(s.vista_front_end);
+      if (!grouped.has(groupLabel)) grouped.set(groupLabel, []);
+      grouped.get(groupLabel)!.push({ label: s.nombre, path: s.vista_front_end, icon });
+    }
+
+    return GROUP_ORDER
+      .filter((g) => grouped.has(g))
+      .map((g) => ({ label: g, items: grouped.get(g)! }));
+  }, [crmSubmenus, isLoadingPerms, isLoadingSubmenus, allowedPaths, isSuperAdmin]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -277,7 +301,7 @@ export const PortalCRMLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {isLoadingPerms && (
+        {(isLoadingPerms || isLoadingSubmenus) && (
           <div className="space-y-4 px-1 pt-1">
             {[0, 1, 2].map((g) => (
               <div key={g} className="space-y-1.5">
@@ -290,7 +314,7 @@ export const PortalCRMLayout = () => {
           </div>
         )}
 
-        {!isLoadingPerms && permsError && (
+        {!isLoadingPerms && !isLoadingSubmenus && permsError && (
           <div className="mx-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
             <div className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -303,7 +327,7 @@ export const PortalCRMLayout = () => {
           </div>
         )}
 
-        {!isLoadingPerms && !permsError && visibleGroups.length === 0 && (
+        {!isLoadingPerms && !isLoadingSubmenus && !permsError && visibleGroups.length === 0 && (
           <div className="mx-1 rounded-lg border border-border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">
               Tu rol no tiene submenús habilitados en este portal. Contacta a un administrador.
@@ -311,7 +335,7 @@ export const PortalCRMLayout = () => {
           </div>
         )}
 
-        {!isLoadingPerms && !permsError && visibleGroups.map((group) => (
+        {!isLoadingPerms && !isLoadingSubmenus && !permsError && visibleGroups.map((group) => (
           <div key={group.label} className="space-y-0.5">
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
               {group.label}
