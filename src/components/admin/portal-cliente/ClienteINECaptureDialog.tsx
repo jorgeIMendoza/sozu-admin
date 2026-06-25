@@ -205,7 +205,7 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
       if (data?.error) throw new Error(data.error);
       return data as VerificationResult;
     } catch (err: any) {
-      toast.error("Error verificando documento", { duration: 8000, description: err.message });
+      console.error("verifyDocument error:", err);
       return null;
     } finally {
       setVerifying(false);
@@ -304,7 +304,7 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
           setUploading(false);
 
           if (!frontRes || !backRes || !selfieRes) {
-            toast.error("Error al subir imagenes. Intenta de nuevo.", { duration: 6000 });
+            toast.error("Error al subir imagenes. Intenta de nuevo.", { duration: 10000 });
             autoCaptureLockRef.current = false;
             return;
           }
@@ -314,23 +314,34 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
           const strongMatch = aiResult?.face_match === true && (aiResult?.face_match_confidence ?? 0) >= 70;
 
           if (!aiResult || !aiResult.is_valid_document || !strongMatch) {
-            // AI failed — delete uploaded storage files, do not insert DB records
+            // Always delete storage files — no DB record was inserted
             await supabase.storage.from("documentos").remove([frontRes.path, backRes.path, selfieRes.path]);
-            blobRefs.current = {};
             autoCaptureLockRef.current = false;
 
             if (!aiResult) {
-              toast.error("No se pudo verificar. Intenta de nuevo.", { duration: 6000 });
-            } else if (!aiResult.is_valid_document) {
-              toast.error("Documento invalido. Intenta de nuevo.", {
-                description: aiResult.rejection_reason ?? undefined,
-                duration: 5000,
-              });
-            } else {
-              toast.error("La selfie no coincide con el INE. Intenta de nuevo.", { duration: 5000 });
+              // Edge function internal error — blobs still valid, retry selfie only
+              toast.error("Servicio no disponible. Intenta de nuevo en unos minutos.", { duration: 12000 });
+              setTimeout(() => startCamera("selfie"), 500);
+              return;
             }
 
-            setPhase("prepare");
+            if (!aiResult.is_valid_document) {
+              // Document itself invalid — must redo from beginning
+              blobRefs.current = {};
+              toast.error("Documento no valido.", {
+                description: aiResult.rejection_reason ?? "Asegurate de mostrar tu INE claramente y sin reflejos.",
+                duration: 12000,
+              });
+              setPhase("prepare");
+              return;
+            }
+
+            // Face doesn't match selfie — blobs still valid, retry selfie only
+            toast.error("Tu selfie no coincide con la foto del INE.", {
+              description: "Asegurate de tener buena iluminacion y mirar directo a la camara.",
+              duration: 12000,
+            });
+            setTimeout(() => startCamera("selfie"), 500);
             return;
           }
 
@@ -349,7 +360,7 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
         }
       } catch (err: any) {
         console.error("capturePhoto unexpected error:", err);
-        toast.error("Error inesperado. Intenta de nuevo.", { duration: 6000 });
+        toast.error("Error inesperado. Intenta de nuevo.", { duration: 10000 });
         setUploading(false);
         setVerifying(false);
         autoCaptureLockRef.current = false;
