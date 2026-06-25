@@ -202,6 +202,7 @@ const PECInventoryAdvanced = lazyRetry(() => import("./components/admin/portal-e
 const PECAgentPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/AgentPortalTab"));
 const PECAmbassadorsAdmin = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsAdminTab"));
 const PECAmbassadorsPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsPortalTab"));
+const PPComingSoon = lazyRetry(() => import("./pages/admin/portal-productos/ComingSoon"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
@@ -855,6 +856,13 @@ const App = () => (
                   <Route path="portal-estructura-comisiones/agent-portal" element={<PECAgentPortal />} />
                   <Route path="portal-estructura-comisiones/ambassadors-admin" element={<PECAmbassadorsAdmin />} />
                   <Route path="portal-estructura-comisiones/ambassadors-portal" element={<PECAmbassadorsPortal />} />
+                  {/* Portal de Productos */}
+                  <Route path="portal-productos" element={<Navigate to="/admin/portal-productos/resumen" replace />} />
+                  <Route path="portal-productos/resumen" element={<PPComingSoon title="Resumen Ejecutivo" description="Indicadores generales del Portal de Productos." />} />
+                  <Route path="portal-productos/cartera" element={<PPComingSoon title="Cartera de Productos" description="Listado de cuentas con estado de cobranza." />} />
+                  <Route path="portal-productos/cartera/:cuentaId" element={<PPComingSoon title="Detalle de cuenta" description="Detalle de la cuenta seleccionada." />} />
+                  <Route path="portal-productos/analisis" element={<PPComingSoon title="Análisis de Cobranza" description="Aging, brechas y segmentación." />} />
+                  <Route path="portal-productos/historico" element={<PPComingSoon title="Histórico de Ventas" description="Histórico por proyecto y categoría." />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
