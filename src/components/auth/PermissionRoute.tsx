@@ -62,6 +62,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Allow portal-productos para Super Admin (1) y Administrador de Proyectos (2),
+  // o cualquier rol con permiso explícito en la BD.
+  if (location.pathname.startsWith('/admin/portal-productos')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    let tieneAccesoPP = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-productos')) {
+        tieneAccesoPP = true;
+        break;
+      }
+    }
+    return tieneAccesoPP
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
