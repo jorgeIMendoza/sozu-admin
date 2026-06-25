@@ -63,16 +63,17 @@ export default function RevisionDocumentacion() {
   const [showUpdateTemplateDialog, setShowUpdateTemplateDialog] = useState(false);
   const [generatingCuentaId, setGeneratingCuentaId] = useState<number | null>(null);
 
-  // Query para obtener notarios activos
+  // Query para obtener notarios operativos SOZU
   const { data: notarios = [] } = useQuery({
-    queryKey: ['notarios-activos'],
+    queryKey: ['notarios-activos-sozu'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notarios')
         .select('*')
         .eq('activo', true)
+        .eq('trabaja_con_sozu', true)
         .order('nombre');
-      
+
       if (error) throw error;
       return data || [];
     },

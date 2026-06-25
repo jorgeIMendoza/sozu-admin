@@ -263,6 +263,7 @@ export function AppNotariaDashboard() {
         .from('notarios')
         .select('id, nombre, notaria')
         .eq('activo', true)
+        .eq('trabaja_con_sozu', true)
         .order('notaria');
       return (data ?? []) as { id: number; nombre: string; notaria: string }[];
     },
