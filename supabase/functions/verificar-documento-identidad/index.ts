@@ -205,7 +205,7 @@ Si NO es un documento de identidad válido o es una foto de pantalla/fotocopia, 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.0-flash",
           messages: [
             {
               role: "system",
