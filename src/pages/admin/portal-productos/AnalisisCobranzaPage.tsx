@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { GlobalFiltersBar } from '@/components/admin/portal-productos/GlobalFiltersBar';
 import { usePortalProductosStore } from '@/lib/portal-productos/store';
 import { aplicarFiltrosCobranza, deriveTodas, type CuentaDerivada } from '@/lib/portal-productos/derive';
@@ -6,6 +7,7 @@ import { formatMXN, formatPct } from '@/lib/portal-productos/format';
 import { CATEGORIAS, PROPIETARIOS, type Categoria } from '@/lib/portal-productos/types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { X } from 'lucide-react';
 
 export default function AnalisisCobranzaPage() {
   const cuentas = usePortalProductosStore(s => s.cuentas);
@@ -40,6 +42,15 @@ export default function AnalisisCobranzaPage() {
   }, [filtradas]);
 
   const COLORS_AGING = ['#16A34A', '#F59E0B', '#EA580C', '#DC2626'];
+
+  // Selección de bucket de aging → muestra las cuentas de ese rango.
+  const [bucketSel, setBucketSel] = useState<string | null>(null);
+  const cuentasBucket = useMemo(
+    () => bucketSel
+      ? filtradas.filter(c => c.agingBucket === bucketSel).sort((a, b) => b.saldoVencido - a.saldoVencido)
+      : [],
+    [filtradas, bucketSel],
+  );
 
   const porConcepto = useMemo(() => {
     const cs = filtradas.filter(c => c.producto.categoria === catConcepto);
@@ -115,7 +126,10 @@ export default function AnalisisCobranzaPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h3 className="text-sm font-semibold text-slate-900">Aging de cartera</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900">Aging de cartera</h3>
+            <span className="text-[11px] text-slate-400">Haz clic en un rango para ver sus cuentas</span>
+          </div>
           <div className="mt-4 h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={aging.data}>
@@ -123,8 +137,24 @@ export default function AnalisisCobranzaPage() {
                 <XAxis dataKey="bucket" tick={{ fill: '#64748B', fontSize: 12 }} />
                 <YAxis tick={{ fill: '#64748B', fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v: number) => formatMXN(v)} />
-                <Bar dataKey="monto" radius={[4, 4, 0, 0]}>
-                  {aging.data.map((_, i) => <Cell key={i} fill={COLORS_AGING[i]} />)}
+                <Bar
+                  dataKey="monto"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(d: any) => {
+                    const b = d?.bucket ?? d?.payload?.bucket;
+                    if (b) setBucketSel(prev => (prev === b ? null : b));
+                  }}
+                >
+                  {aging.data.map((d, i) => (
+                    <Cell
+                      key={i}
+                      fill={COLORS_AGING[i]}
+                      fillOpacity={!bucketSel || bucketSel === d.bucket ? 1 : 0.35}
+                      stroke={bucketSel === d.bucket ? '#0F172A' : undefined}
+                      strokeWidth={bucketSel === d.bucket ? 2 : 0}
+                    />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -135,6 +165,51 @@ export default function AnalisisCobranzaPage() {
           <div className="mt-2 text-4xl font-bold text-red-600">{aging.promedio}<span className="ml-1 text-lg font-normal text-slate-500">días</span></div>
         </div>
       </div>
+
+      {/* Cuentas del rango de aging seleccionado */}
+      {bucketSel && (
+        <Bloque
+          titulo={`Cuentas con antigüedad ${bucketSel} días (${cuentasBucket.length})`}
+          extra={
+            <button onClick={() => setBucketSel(null)} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-700">
+              <X className="h-3.5 w-3.5" /> Limpiar selección
+            </button>
+          }
+        >
+          {cuentasBucket.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-slate-400">No hay cuentas en este rango.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-[#F9FAFB] text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left">ID Cuenta</th>
+                  <th className="px-4 py-3 text-left">Producto</th>
+                  <th className="px-4 py-3 text-left">Categoría</th>
+                  <th className="px-4 py-3 text-left">Comprador</th>
+                  <th className="px-4 py-3 text-left">Propietario</th>
+                  <th className="px-4 py-3 text-right">Saldo vencido</th>
+                  <th className="px-4 py-3 text-right">Días atraso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentasBucket.map(c => (
+                  <tr key={c.id} className="border-b border-gray-100 hover:bg-slate-50">
+                    <td className="px-4 py-2.5">
+                      <Link to={`/admin/portal-productos/cartera/${c.id}`} className="font-mono text-xs font-semibold text-emerald-700 hover:underline">{c.id}</Link>
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-700">{c.producto.nombre}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{c.producto.categoria}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{c.compradores[0]?.persona.nombreLegal ?? '—'}{c.compradores.length > 1 ? ` (+${c.compradores.length - 1})` : ''}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{c.producto.propietario}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatMXN(c.saldoVencido)}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-700">{c.diasAtraso}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Bloque>
+      )}
 
       <Bloque titulo="Cobranza por Concepto" extra={
         <Select value={catConcepto} onValueChange={v => setCatConcepto(v as Categoria)}>

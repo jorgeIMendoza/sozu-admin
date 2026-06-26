@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, ShoppingCart, BadgeDollarSign, Package, Layers } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { RefreshCw, ShoppingCart, BadgeDollarSign, Package, Layers, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GlobalFiltersBar } from '@/components/admin/portal-productos/GlobalFiltersBar';
 import { KpiCard } from './KpiCard';
 import { usePortalProductosStore } from '@/lib/portal-productos/store';
 import { aplicarFiltrosVentas, aplicarFiltrosCobranza } from '@/lib/portal-productos/derive';
-import { formatMXN, formatNumber, mesEtiqueta } from '@/lib/portal-productos/format';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { formatMXN, formatNumber, formatFecha, mesEtiqueta } from '@/lib/portal-productos/format';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell } from 'recharts';
 
 export default function HistoricoVentasPage() {
   const cuentas = usePortalProductosStore(s => s.cuentas);
@@ -16,6 +17,7 @@ export default function HistoricoVentasPage() {
   const filtradas = useMemo(() => aplicarFiltrosVentas(cuentas, filtros, rangoMeses), [cuentas, filtros, rangoMeses]);
   const cobranzaScope = useMemo(() => aplicarFiltrosCobranza(cuentas, filtros), [cuentas, filtros]);
   const [modo, setModo] = useState<'monto' | 'unidades'>('monto');
+  const [mesSel, setMesSel] = useState<string | null>(null);
 
   const serie = useMemo(() => {
     const map = new Map<string, { mes: string; unidades: number; valor: number; cobrado: number; key: string }>();
@@ -51,6 +53,16 @@ export default function HistoricoVentasPage() {
     const aplicado = c.aplicaciones.reduce((x, a) => x + a.montoAplicado, 0);
     return s + Math.max(c.precioFinal - aplicado, 0);
   }, 0);
+
+  // Cuentas del mes seleccionado en el gráfico (por fecha de compra).
+  const cuentasMes = useMemo(() => {
+    if (!mesSel) return [];
+    return filtradas
+      .filter(c => { const d = new Date(c.fechaCompra); return `${d.getFullYear()}-${d.getMonth()}` === mesSel; })
+      .sort((a, b) => b.precioFinal - a.precioFinal);
+  }, [filtradas, mesSel]);
+  const mesSelLabel = serie.find(s => s.key === mesSel)?.mes ?? '';
+  const mesSelMonto = cuentasMes.reduce((s, c) => s + c.precioFinal, 0);
 
   return (
     <div className="space-y-6">
@@ -95,11 +107,80 @@ export default function HistoricoVentasPage() {
               <YAxis tick={{ fill: '#64748B', fontSize: 12 }} tickFormatter={(v) => modo === 'monto' ? `$${(v / 1000).toFixed(0)}k` : `${v}`} />
               <Tooltip formatter={(v: number) => modo === 'monto' ? formatMXN(v) : `${v} u.`} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey={modo === 'monto' ? 'valor' : 'unidades'} fill="#16A34A" radius={[4, 4, 0, 0]} name={modo === 'monto' ? 'Valor vendido' : 'Unidades'} />
+              <Bar
+                dataKey={modo === 'monto' ? 'valor' : 'unidades'}
+                radius={[4, 4, 0, 0]}
+                name={modo === 'monto' ? 'Valor vendido' : 'Unidades'}
+                cursor="pointer"
+                onClick={(d: any) => {
+                  const k = d?.key ?? d?.payload?.key;
+                  if (k) setMesSel(prev => (prev === k ? null : k));
+                }}
+              >
+                {serie.map((d, i) => (
+                  <Cell
+                    key={i}
+                    fill="#16A34A"
+                    fillOpacity={!mesSel || mesSel === d.key ? 1 : 0.4}
+                    stroke={mesSel === d.key ? '#0F172A' : undefined}
+                    strokeWidth={mesSel === d.key ? 2 : 0}
+                  />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
+        <p className="mt-1 text-center text-[11px] text-slate-400">Haz clic en un mes para ver sus cuentas</p>
       </div>
+
+      {/* Cuentas del mes seleccionado */}
+      {mesSel && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Cuentas vendidas en {mesSelLabel}
+              <span className="ml-2 font-normal text-slate-500">{cuentasMes.length} u. · {formatMXN(mesSelMonto)}</span>
+            </h3>
+            <button onClick={() => setMesSel(null)} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-700">
+              <X className="h-3.5 w-3.5" /> Limpiar selección
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            {cuentasMes.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-slate-400">No hay cuentas vendidas en este mes.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-[#F9FAFB] text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left">ID Cuenta</th>
+                    <th className="px-4 py-3 text-left">Producto</th>
+                    <th className="px-4 py-3 text-left">Categoría</th>
+                    <th className="px-4 py-3 text-left">Comprador</th>
+                    <th className="px-4 py-3 text-left">Propietario</th>
+                    <th className="px-4 py-3 text-left">Fecha compra</th>
+                    <th className="px-4 py-3 text-right">Precio final</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cuentasMes.map(c => (
+                    <tr key={c.id} className="border-b border-gray-100 hover:bg-slate-50">
+                      <td className="px-4 py-2.5">
+                        <Link to={`/admin/portal-productos/cartera/${c.id}`} className="font-mono text-xs font-semibold text-emerald-700 hover:underline">{c.id}</Link>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">{c.producto.nombre}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{c.producto.categoria}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{c.compradores[0]?.persona.nombreLegal ?? '—'}{c.compradores.length > 1 ? ` (+${c.compradores.length - 1})` : ''}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{c.producto.propietario}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{c.fechaCompra ? formatFecha(c.fechaCompra, 'card') : '—'}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatMXN(c.precioFinal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-5 py-4">

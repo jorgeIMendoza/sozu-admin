@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Boxes, CheckCircle2, Clock, AlertOctagon, RefreshCw } from 'lucide-react';
+import { PaginationBar } from '@/components/admin/PaginationBar';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { KpiCard, StatusBadge } from './KpiCard';
@@ -54,8 +55,17 @@ export default function ResumenEjecutivoPage() {
 
   const atencion = useMemo(() => [...filtradas]
     .filter(c => c.estatusPago === 'vencido')
-    .sort((a, b) => b.saldoVencido - a.saldoVencido)
-    .slice(0, 8), [filtradas]);
+    .sort((a, b) => b.saldoVencido - a.saldoVencido), [filtradas]);
+
+  // Paginación: 20 por vista.
+  const PAGE_SIZE = 20;
+  const [pageAt, setPageAt] = useState(0);
+  useEffect(() => setPageAt(0), [atencion.length]);
+  const totalPagesAt = Math.max(1, Math.ceil(atencion.length / PAGE_SIZE));
+  const atencionPage = useMemo(
+    () => atencion.slice(pageAt * PAGE_SIZE, (pageAt + 1) * PAGE_SIZE),
+    [atencion, pageAt],
+  );
 
   const conteoLabel = filtradas.length === totalSinFiltro
     ? `${filtradas.length} cuentas`
@@ -126,7 +136,7 @@ export default function ResumenEjecutivoPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-5 py-4">
           <h3 className="text-sm font-semibold text-slate-900">Cuentas que requieren atención</h3>
-          <p className="text-xs text-slate-500">Top 8 cuentas con mayor saldo vencido</p>
+          <p className="text-xs text-slate-500">{atencion.length} cuentas con saldo vencido (mayor a menor)</p>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-[#F9FAFB] text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -143,7 +153,7 @@ export default function ResumenEjecutivoPage() {
             {atencion.length === 0 && (
               <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-400">No hay cuentas vencidas en el rango actual.</td></tr>
             )}
-            {atencion.map((c) => (
+            {atencionPage.map((c) => (
               <tr key={c.id} className="cursor-pointer border-b border-gray-100 hover:bg-slate-50">
                 <td className="px-5 py-4">
                   <Link to={`/admin/portal-productos/cartera/${c.id}`} className="font-mono text-xs font-semibold text-emerald-700">{c.id}</Link>
@@ -157,6 +167,15 @@ export default function ResumenEjecutivoPage() {
             ))}
           </tbody>
         </table>
+        <div className="px-5 pb-3">
+          <PaginationBar
+            page={pageAt}
+            totalPages={totalPagesAt}
+            totalCount={atencion.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPageAt}
+          />
+        </div>
       </div>
     </div>
   );

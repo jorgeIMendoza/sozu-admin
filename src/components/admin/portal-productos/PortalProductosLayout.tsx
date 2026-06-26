@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useProductosReales } from "@/hooks/usePortalProductos/useProductosReales";
+import { usePortalProductosStore } from "@/lib/portal-productos/store";
 import {
   LayoutDashboard, Package, BarChart3, History,
   ArrowLeft, LogOut, Menu, LucideIcon,
@@ -54,6 +56,13 @@ const PortalProductosLayoutInner = () => {
   const { impersonatedUser, isImpersonating } = usePortalProductosImpersonation();
   const isSuperAdmin = profile?.rol_id === 1;
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Carga de datos REALES de productos → store (reemplaza el mock).
+  const { data: productosReales } = useProductosReales();
+  const setCuentas = usePortalProductosStore((s) => s.setCuentas);
+  useEffect(() => {
+    if (productosReales) setCuentas(productosReales);
+  }, [productosReales, setCuentas]);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const currentSection = Object.entries(SECTION_LABELS).find(([p]) => isActive(p))?.[1] || "Portal de Productos";
