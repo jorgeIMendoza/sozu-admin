@@ -10,10 +10,9 @@ import {
   ChevronDown, FileText, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { type TipoComprador, deriveTipoComprador } from '@/utils/tipo-persona';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type TipoComprador = 'PERSONA_FISICA' | 'PERSONA_MORAL' | 'COPROPIEDAD' | 'EXTRANJERO';
 type EstatusExpediente = 'LISTO' | 'PENDIENTE' | 'EN_REVISION' | 'CON_OBSERVACIONES' | 'VENCIDO';
 
 interface CompradoresData {
@@ -194,12 +193,7 @@ function deriveEstatusExpediente(docsCompletos: number): EstatusExpediente {
 }
 
 function deriveTipo(compradores: CompradoresData[]): TipoComprador {
-  if (compradores.length > 1) return 'COPROPIEDAD';
-  const p = compradores[0];
-  if (!p) return 'PERSONA_FISICA';
-  if (p.id_pais_nacimiento && p.id_pais_nacimiento !== 'MX') return 'EXTRANJERO';
-  if (p.tipo_persona?.toLowerCase().includes('moral')) return 'PERSONA_MORAL';
-  return 'PERSONA_FISICA';
+  return deriveTipoComprador(compradores);
 }
 
 const fmtMxn = (n: number) =>

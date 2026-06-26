@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTipoPersonaLabel, normalizeTipoPersona } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
 import {
@@ -228,7 +229,8 @@ const ClientePerfil = () => {
   };
 
   const displayName = persona?.nombre_legal || profile?.nombre || "Cliente";
-  const tipoPersona = persona?.tipo_persona === "Moral" ? "Moral" : "Física";
+  const tipoPersonaLabel = persona ? getTipoPersonaLabel(persona.tipo_persona) : 'Persona física';
+  const esMoral = normalizeTipoPersona(persona?.tipo_persona) === 'pm';
 
   // Fiscal display values with name
   const regimenDisplay = persona?.regimen
@@ -268,7 +270,7 @@ const ClientePerfil = () => {
           <User className="w-8 h-8 text-[hsl(var(--inmob-green))]" />
         </div>
         <h2 className="font-bold text-lg text-foreground">{displayName}</h2>
-        <p className="text-xs text-muted-foreground mb-2">{tipoPersona === "Moral" ? "Persona Moral" : "Inversionista"}</p>
+        <p className="text-xs text-muted-foreground mb-2">{esMoral ? "Persona Moral" : "Inversionista"}</p>
 
         <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full ${status.className}`}>
           <StatusIcon className="w-3.5 h-3.5" />
@@ -286,7 +288,7 @@ const ClientePerfil = () => {
 
       {/* Personal Info */}
       <Section title="Información personal" icon={User}>
-        <InfoRow label="Tipo de persona" value={tipoPersona} />
+        <InfoRow label="Tipo de persona" value={tipoPersonaLabel} />
         <InfoRow label="RFC" value={maskValue(persona?.rfc)} />
         <InfoRow label="CURP" value={maskValue(persona?.curp, 4, 4)} />
         <InfoRow label="Email" value={persona?.email || profile?.email || "—"} icon={Mail} />
