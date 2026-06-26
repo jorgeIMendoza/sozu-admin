@@ -137,13 +137,15 @@ jobs:
           echo "firebase.json configurado:"
           cat firebase.json | jq '.hosting | {site, public}'
 
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Use Node 20 for Firebase deploy
+        uses: actions/setup-node@v4
         with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: ${{ github.ref == 'refs/heads/main' && secrets.FIREBASE_GCP_PRD || secrets.FIREBASE_GCP_DEV }}
-          channelId: live
-          projectId: ${{ github.ref == 'refs/heads/main' && 'sozu-admin-prd' || 'sozu-admin-dev' }}
+          node-version: '20'
+
+      - name: Deploy to Firebase
+        run: |
+          PROJECT_ID=${{ github.ref == 'refs/heads/main' && 'sozu-admin-prd' || 'sozu-admin-dev' }}
+          npx firebase-tools@latest deploy --only hosting --project $PROJECT_ID --debug
         env:
           FIREBASE_CLI_PREVIEWS: hostingchannels
 

@@ -40,7 +40,7 @@ function getActiveDescription(stageId: TransactionStage): string {
   }
 }
 
-function buildStages(estatusId: number, pendingBalance: number, deliveryDate: string): StageInfo[] {
+function buildStages(estatusId: number, pendingBalance: number, deliveryDate: string, hasPendingParcialidades: boolean): StageInfo[] {
   const ALL: { id: TransactionStage; label: string }[] = [
     { id: "preventa", label: "Preventa" },
     { id: "pago_final", label: "Pago Final" },
@@ -53,7 +53,12 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
   let activeIdx: number;
   switch (estatusId) {
     case 4: activeIdx = 0; break;  // Apartado → preventa
-    case 5: activeIdx = pendingBalance > 0 ? 1 : 2; break;  // Vendido
+    case 5:
+      // Vendida: if parcialidades still pending → stay in preventa; else pago_final or escrituracion
+      if (hasPendingParcialidades) activeIdx = 0;
+      else if (pendingBalance > 0) activeIdx = 1;
+      else activeIdx = 2;
+      break;
     case 7: activeIdx = 2; break;  // Escrituración
     case 9: activeIdx = 3; break;  // Pagada completamente → entrega
     case 8: activeIdx = 4; break;  // Entregado → post_entrega
@@ -307,9 +312,44 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     (metodosData ?? []).map((m) => [m.id as number, String(m.nombre)]),
   );
 
+  // 3.6 Fetch maintenance child cuentas and their acuerdos (patrimony properties)
+  const mantoAcuerdosByParentId: Record<number, { fecha_pago: string; monto: number; pago_completado: boolean }[]> = {};
+  {
+    const { data: childCuentas } = await supabase
+      .from("cuentas_cobranza")
+      .select("id, id_cuenta_cobranza_padre")
+      .in("id_cuenta_cobranza_padre", cuentaIds)
+      .eq("activo", true);
+
+    if (childCuentas?.length) {
+      const childIds = childCuentas.map((c) => c.id as number);
+      const { data: childAcuerdos } = await supabase
+        .from("acuerdos_pago")
+        .select("id_cuenta_cobranza, fecha_pago, monto, pago_completado")
+        .in("id_cuenta_cobranza", childIds)
+        .eq("activo", true)
+        .order("fecha_pago", { ascending: true });
+
+      const childToParent: Record<number, number> = {};
+      for (const cc of childCuentas) {
+        childToParent[cc.id as number] = cc.id_cuenta_cobranza_padre as number;
+      }
+      for (const a of (childAcuerdos ?? [])) {
+        const parentId = childToParent[a.id_cuenta_cobranza as number];
+        if (!parentId) continue;
+        if (!mantoAcuerdosByParentId[parentId]) mantoAcuerdosByParentId[parentId] = [];
+        mantoAcuerdosByParentId[parentId].push({
+          fecha_pago: String(a.fecha_pago).slice(0, 10),
+          monto: Number(a.monto),
+          pago_completado: Boolean(a.pago_completado),
+        });
+      }
+    }
+  }
+
   // 4. Get edificios_modelos for project chain
   const edificioModeloIds = [...new Set(propiedades.map((p) => p.id_edificio_modelo as number).filter(Boolean))];
-  if (!edificioModeloIds.length) return buildFromData(enrichedCuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap);
+  if (!edificioModeloIds.length) return buildFromData(enrichedCuentas, propiedades, [], [], [], [], [], pagos, acuerdos, pagoInfoPorAcuerdo, metodosMap, persona, productsByPropId, notariosMap, mantoAcuerdosByParentId);
 
   const { data: edificiosModelos } = await supabase
     .from("edificios_modelos")
@@ -358,6 +398,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     persona,
     productsByPropId,
     notariosMap,
+    mantoAcuerdosByParentId,
   );
 }
 
@@ -384,6 +425,7 @@ function buildFromData(
   persona: { nombre_legal: string | null; rfc: string | null } | null = null,
   productsByPropId: Record<number, AdditionalProduct[]> = {},
   notariosMap: Record<number, NotaryData> = {},
+  mantoAcuerdosByParentId: Record<number, { fecha_pago: string; monto: number; pago_completado: boolean }[]> = {},
 ): InvestmentProperty[] {
   const propMap = Object.fromEntries(propiedades.map((p) => [p.id as number, p]));
   const emMap = Object.fromEntries(edificiosModelos.map((em) => [em.id as number, em]));
@@ -424,6 +466,11 @@ function buildFromData(
     const cuentaAcuerdos = acuerdos
       .filter(a => a.id_cuenta_cobranza === cc.id)
       .sort((a, b) => Number(a.orden) - Number(b.orden));
+
+    // Conceptos 4 (Mensualidad) y 5 (Parcialidad) son parcialidades durante obra
+    const hasPendingParcialidades = cuentaAcuerdos.some(
+      a => !a.pago_completado && [4, 5].includes(Number(a.id_concepto))
+    );
 
     let parcialidadCount = 0;
     const paymentRecords: PaymentRecord[] = cuentaAcuerdos.map(a => {
@@ -481,17 +528,23 @@ function buildFromData(
         currency: String(cc.moneda ?? "MXN"),
         clabe: cc.clabe_stp ? String(cc.clabe_stp) : undefined,
       },
-      stages: buildStages(estatusId, pendingBalance, deliveryDate),
+      stages: buildStages(estatusId, pendingBalance, deliveryDate, hasPendingParcialidades),
       payments: paymentRecords,
-      maintenance:
-        maintenanceFee > 0
-          ? {
-              monthlyFee: maintenanceFee,
-              nextDueDate: "—",
-              status: "pendiente",
-              history: [],
-            }
-          : undefined,
+      maintenance: (() => {
+        if (estatusId !== 8) return undefined;
+        const mantoAcuerdos = mantoAcuerdosByParentId[cc.id as number] ?? [];
+        const pendingManto = mantoAcuerdos
+          .filter((a) => !a.pago_completado)
+          .sort((a, b) => a.fecha_pago.localeCompare(b.fecha_pago));
+        const nextManto = pendingManto[0];
+        if (!mantoAcuerdos.length && maintenanceFee <= 0) return undefined;
+        return {
+          monthlyFee: nextManto ? nextManto.monto : maintenanceFee,
+          nextDueDate: nextManto ? nextManto.fecha_pago : "",
+          status: (pendingManto.length > 0 ? "pendiente" : "pagado") as "pagado" | "pendiente",
+          history: [],
+        };
+      })(),
       additionalProducts: productsByPropId[cc.id_propiedad as number] ?? [],
     };
   });

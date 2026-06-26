@@ -87,9 +87,8 @@ export interface PropiedadDetalle {
   numeroDepa: string;
 }
 
-// Transforms Supabase Cloud Storage URLs to WebP via Pro image render API.
-// Only applies to *.supabase.co (cloud Pro feature — self-hosted VPS doesn't support it).
-// Blocks api.sozu.com. Passes other URLs unchanged.
+// Transforms Supabase Cloud Storage URLs to WebP via the image render API.
+// Only applies to cloud URLs (*.supabase.co) — self-hosted doesn't have imgproxy.
 function toWebP(url: string | null, quality = 80): string | null {
   if (!url || url.includes("api.sozu.com")) return null;
   if (!url.includes(".supabase.co/storage/v1/object/public/")) return url;

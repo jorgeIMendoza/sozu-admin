@@ -10,7 +10,9 @@ import {
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
-  Calendar, ChevronRight,
+  Calendar, ChevronRight, Check, ChevronDown, Download, Settings2, Upload, Loader2,
+  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
+  Image as ImageIcon, Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +39,10 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { isToday, isPast, isFuture, parseISO, format as fmtDateFns } from "date-fns";
 import {
   leadStatusLabel, lifecycleLabel, leadScoreColor, relTime, fmtDate,
   fmtDateTime, fmtMXN, stageColor, DEAL_STAGES, apptStatusLabel,
@@ -51,8 +57,65 @@ import {
   calculateSlaStatus, getFollowUpPriority, SLA_TONE,
   generateMessage, SEQUENCES, DEFAULT_AUTOMATION_RULES,
 } from "@/lib/crm-sales-ops";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineExt from "@tiptap/extension-underline";
+import ImageExt from "@tiptap/extension-image";
+import LinkExt from "@tiptap/extension-link";
+import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 
 // ─── Contacts list ────────────────────────────────────────────────────────────
+
+type ColumnId = "name" | "email" | "phone" | "lead_status" | "lifecycle" | "owner" | "created" | "updated" | "source";
+type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
+
+const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
+  { id: "name", label: "Nombre", visible: true },
+  { id: "email", label: "Correo", visible: true },
+  { id: "phone", label: "Número teléfono", visible: true },
+  { id: "lead_status", label: "Estado lead", visible: true },
+  { id: "lifecycle", label: "Etapa ciclo de vida", visible: true },
+  { id: "owner", label: "Propietario del contacto", visible: true },
+  { id: "created", label: "Fecha creación", visible: true },
+  { id: "updated", label: "Última actualización", visible: true },
+  { id: "source", label: "Fuente del registro", visible: true },
+];
+
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v2";
+
+const META_LEAD_STATUSES: { value: string; label: string }[] = [
+  { value: "nuevo", label: "Nuevo" },
+  { value: "en_curso", label: "En curso" },
+  { value: "negocio_abierto", label: "Negocio abierto" },
+  { value: "sin_calificar", label: "Sin calificar" },
+  { value: "intento_contacto", label: "Intento de contacto" },
+  { value: "conectado", label: "Conectado" },
+  { value: "fuera_presupuesto", label: "Fuera de presupuesto" },
+  { value: "compra_futura", label: "Compra futura" },
+  { value: "sin_respuesta_7", label: "Sin respuesta 7+" },
+  { value: "tiempo_entrega", label: "Tiempo de entrega" },
+  { value: "asesor_inmobiliario", label: "Asesor inmobiliario" },
+  { value: "registro_error", label: "Registro por error" },
+  { value: "proveedor", label: "Proveedor" },
+  { value: "fuera_area", label: "Fuera del área" },
+];
+
+function loadContactColumns(): ColumnConfig[] {
+  if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
+  try {
+    const raw = window.localStorage.getItem(CONTACT_COLUMNS_KEY);
+    if (!raw) return DEFAULT_CONTACT_COLUMNS;
+    const parsed = JSON.parse(raw) as ColumnConfig[];
+    const byId = new Map(parsed.map((c) => [c.id, c]));
+    const merged = DEFAULT_CONTACT_COLUMNS.map((d) => byId.get(d.id) ?? d);
+    return [
+      ...parsed.filter((c) => merged.find((m) => m.id === c.id)).map((c) => merged.find((m) => m.id === c.id)!),
+      ...merged.filter((m) => !parsed.find((c) => c.id === m.id)),
+    ];
+  } catch {
+    return DEFAULT_CONTACT_COLUMNS;
+  }
+}
 
 type ContactRow = {
   id: string; full_name: string; email: string | null; phone: string | null;
@@ -64,7 +127,7 @@ type ContactRow = {
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
 
-type StageTab = "all" | "lead" | "customer";
+type StageTab = "all" | "mine" | "unassigned";
 
 function DateChip({ date }: { date: string | null }) {
   if (!date) return <span className="text-muted-foreground text-xs">—</span>;
@@ -82,6 +145,7 @@ export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [stageTab, setStageTab] = useState<StageTab>("all");
   const [search, setSearch] = useState("");
@@ -90,6 +154,23 @@ export function CrmContacts() {
   const [filterLifecycle, setFilterLifecycle] = useState("all");
   const [page, setPage] = useState(0);
   const pageSize = 25;
+  const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
+  const [editColumnsOpen, setEditColumnsOpen] = useState(false);
+
+  const persistColumns = (next: ColumnConfig[]) => {
+    setColumns(next);
+    try { window.localStorage.setItem(CONTACT_COLUMNS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const toggleColumn = (id: ColumnId) => persistColumns(columns.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
+  const moveColumn = (id: ColumnId, dir: -1 | 1) => {
+    const idx = columns.findIndex((c) => c.id === id);
+    const target = idx + dir;
+    if (idx < 0 || target < 0 || target >= columns.length) return;
+    const next = [...columns];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    persistColumns(next);
+  };
+  const visibleColumns = columns.filter((c) => c.visible);
 
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
@@ -104,7 +185,7 @@ export function CrmContacts() {
     queryFn: async () => {
       const tipoFilter = filterLifecycle !== "all"
         ? filterLifecycle === "customer" ? [2] : [7]
-        : stageTab === "lead" ? [7] : stageTab === "customer" ? [2] : [2, 7];
+        : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
 
       let searchPersonaIds: number[] | null = null;
@@ -171,6 +252,8 @@ export function CrmContacts() {
   const allRows = contacts?.rows ?? [];
   const rows = allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
+    if (stageTab === "mine" && c.contact_owner !== user?.id) return false;
+    if (stageTab === "unassigned" && c.contact_owner !== null) return false;
     return true;
   });
   const totalCount = contacts?.count ?? 0;
@@ -179,113 +262,233 @@ export function CrmContacts() {
   const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
   const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
 
+  const CONTACT_TABS = [
+    { id: "all" as StageTab, label: "Todos contactos" },
+    { id: "mine" as StageTab, label: "Mis contactos" },
+    { id: "unassigned" as StageTab, label: "Contactos no asignados" },
+  ];
+
   return (
     <div className="space-y-4">
-      <PageHeader title="Contactos" description="Leads y compradores · SOZU"
-        actions={<CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />}
-      />
-
-      {/* Fila 1: tabs + búsqueda */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={stageTab} onValueChange={(v) => { setStageTab(v as StageTab); setPage(0); }}>
-          <TabsList>
-            <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="lead">Prospectos</TabsTrigger>
-            <TabsTrigger value="customer">Compradores</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="relative flex-1 min-w-[180px] max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            placeholder="Nombre, email o teléfono…" className="pl-8 h-9" />
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            Contactos{" "}
+            <span className="text-base text-muted-foreground font-normal">({totalCount.toLocaleString()})</span>
+          </h1>
+        </div>
+        <div className="flex gap-2">
+          <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
         </div>
       </div>
 
-      {/* Fila 2: selects */}
-      <div className="flex flex-wrap gap-2">
+      {/* Border-bottom tabs */}
+      <div className="border-b border-border flex gap-1">
+        {CONTACT_TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => { setStageTab(t.id); setPage(0); }}
+            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${stageTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center gap-2">
         <CFilter value={filterDev} onChange={(v) => { setFilterDev(v); setPage(0); }} placeholder="Proyecto"
           options={[{ v: "all", l: "Todos los proyectos" }, ...(developments ?? []).map((d: any) => ({ v: d.id, l: d.name }))]} />
-        <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado"
-          options={[{ v: "all", l: "Todos los estados" }, ...Object.entries(leadStatusLabel).map(([v, l]) => ({ v, l }))]} />
-        <CFilter value={filterLifecycle} onChange={(v) => { setFilterLifecycle(v); setPage(0); }} placeholder="Lifecycle"
-          options={[{ v: "all", l: "Todo el lifecycle" }, ...Object.entries(lifecycleLabel).map(([v, l]) => ({ v, l }))]} />
+        <Button variant="outline" size="sm" className="h-8 text-xs font-normal text-muted-foreground">
+          <ChevronDown className="size-3 mr-1" /> Fecha de creación
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs font-normal text-muted-foreground">
+          <ChevronDown className="size-3 mr-1" /> Última actividad
+        </Button>
+        <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
+          options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
+        <Button variant="outline" size="sm" className="h-8 text-xs">
+          <Plus className="size-3 mr-1" /> Filtros avanzados
+        </Button>
       </div>
 
-      {/* Info bar */}
+      {/* Table card */}
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        {/* Table toolbar */}
+        <div className="p-3 flex items-center gap-2 border-b border-border">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              placeholder="Buscar nombre, email o teléfono" className="pl-8 h-8 text-sm focus-visible:ring-primary/50 focus-visible:border-primary/50" />
+          </div>
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => setEditColumnsOpen(true)}>
+            <Settings2 className="size-3 mr-1" /> Editar columnas
+          </Button>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          {isLoading ? (
+            <div className="p-6 space-y-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : !rows.length ? (
+            <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs text-slate-500 border-b border-border">
+                <tr>
+                  <th className="p-3 text-left w-8"><Checkbox /></th>
+                  {visibleColumns.map((col) => (
+                    <th key={col.id} className="p-3 text-left font-medium whitespace-nowrap">{col.label}</th>
+                  ))}
+                  <th className="p-3 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id} role="button" tabIndex={0}
+                    onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
+                    className="border-t border-border hover:bg-primary/5/40 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 transition-colors duration-150 group"
+                  >
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
+                    {visibleColumns.map((col) => {
+                      switch (col.id) {
+                        case "name":
+                          return (
+                            <td key={col.id} className="p-3 font-medium whitespace-nowrap"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
+                              <span className="inline-flex items-center gap-2 text-primary group-hover:text-primary font-medium">
+                                <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/20">
+                                  {c.full_name.charAt(0).toUpperCase()}
+                                </span>
+                                {c.full_name}
+                              </span>
+                            </td>
+                          );
+                        case "email":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.email || "—"}</td>;
+                        case "phone":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.phone || "—"}</td>;
+                        case "lead_status": {
+                          const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
+                          const statusColor: Record<string, string> = {
+                            nuevo: "bg-sky-50 text-sky-700 border-sky-200",
+                            en_curso: "bg-amber-50 text-amber-700 border-amber-200",
+                            negocio_abierto: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                            conectado: "bg-primary/5 text-primary border-primary/20",
+                            sin_calificar: "bg-slate-50 text-slate-500 border-slate-200",
+                            intento_contacto: "bg-orange-50 text-orange-700 border-orange-200",
+                            fuera_presupuesto: "bg-red-50 text-red-600 border-red-200",
+                            compra_futura: "bg-violet-50 text-violet-700 border-violet-200",
+                            sin_respuesta_7: "bg-rose-50 text-rose-600 border-rose-200",
+                            tiempo_entrega: "bg-blue-50 text-blue-700 border-blue-200",
+                            asesor_inmobiliario: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                            registro_error: "bg-red-50 text-red-500 border-red-200",
+                            proveedor: "bg-purple-50 text-purple-700 border-purple-200",
+                            fuera_area: "bg-orange-50 text-orange-600 border-orange-200",
+                            new: "bg-sky-50 text-sky-700 border-sky-200",
+                            contacted: "bg-amber-50 text-amber-700 border-amber-200",
+                            engaged: "bg-primary/5 text-primary border-primary/20",
+                            qualified: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                            unqualified: "bg-slate-50 text-slate-500 border-slate-200",
+                            lost: "bg-red-50 text-red-600 border-red-200",
+                          };
+                          const cls = statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200";
+                          return (
+                            <td key={col.id} className="p-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>{metaLabel}</span>
+                            </td>
+                          );
+                        }
+                        case "lifecycle": {
+                          const lcColor: Record<string, string> = {
+                            lead: "bg-sky-50 text-sky-700 border-sky-200",
+                            mql: "bg-amber-50 text-amber-700 border-amber-200",
+                            sql: "bg-orange-50 text-orange-700 border-orange-200",
+                            opportunity: "bg-violet-50 text-violet-700 border-violet-200",
+                            customer: "bg-primary/5 text-primary border-primary/20",
+                            evangelist: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                          };
+                          const lcCls = lcColor[c.lifecycle_stage] ?? "bg-slate-50 text-slate-500 border-slate-200";
+                          return (
+                            <td key={col.id} className="p-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${lcCls}`}>
+                                {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                              </span>
+                            </td>
+                          );
+                        }
+                        case "owner":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.contact_owner ?? "Sin asignar"}</td>;
+                        case "created":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
+                        case "updated":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
+                        case "source":
+                          return (
+                            <td key={col.id} className="p-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${c.source_platform ? "bg-primary/5 text-primary border-primary/20" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                                {c.source_platform ? "Por form" : "Manual"}
+                              </span>
+                            </td>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100 transition-all duration-150" asChild>
+                        <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} aria-label="Ver detalle">
+                          <ChevronRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Pagination */}
       <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
         <span>
-          {totalCount === 0
-            ? "Sin resultados"
-            : <>{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} de {totalCount.toLocaleString()} contactos</>}
+          {totalCount === 0 ? "Sin resultados" : <>{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} de {totalCount.toLocaleString()} contactos</>}
         </span>
-        <span>Pág. {page + 1} / {totalPages}</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>Anterior</Button>
+          <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</Button>
+        </div>
       </div>
 
-      <div className="rounded-md border bg-card overflow-x-auto">
-        {isLoading ? (
-          <div className="p-6 space-y-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-        ) : !rows.length ? (
-          <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
-        ) : (
-          <Table className="min-w-[860px]">
-            <TableHeader>
-              <TableRow className="whitespace-nowrap text-xs">
-                <TableHead className="w-[200px]">Nombre</TableHead>
-                <TableHead>Lifecycle</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Proyecto</TableHead>
-                <TableHead>Alta</TableHead>
-                <TableHead>Últ. actividad</TableHead>
-                <TableHead className="w-10 sticky right-0 z-10 bg-card shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.25)]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap text-sm"
-                  onClick={(e) => {
-                    const t = e.target as HTMLElement;
-                    if (t.closest('a,button,input,select,textarea,[role="combobox"]')) return;
-                    navigate(`/admin/portal-crm/ventas/contactos/${c.id}`);
-                  }}
-                >
-                  <TableCell className="font-medium w-[200px] max-w-[200px] truncate">
-                    <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} onClick={(e) => e.stopPropagation()}
-                      className="text-primary hover:underline underline-offset-2">{c.full_name}</Link>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={c.lifecycle_stage === "customer" ? "default" : "secondary"} className="text-xs font-medium">
-                      {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{c.phone ?? <NoReg />}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.email ?? <NoReg />}</TableCell>
-                  <TableCell className="text-muted-foreground">{devName(c.development_id) ?? <NoReg />}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.created_at ? fmtDate(c.created_at) : <NoReg />}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.last_activity_at ? fmtDate(c.last_activity_at) : <NoReg />}</TableCell>
-                  <TableCell className="sticky right-0 z-10 bg-card shadow-[-8px_0_12px_-12px_hsl(var(--foreground)/0.25)] text-right pr-3">
-                    <Button size="icon" variant="outline" className="h-7 w-7 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground transition-colors" asChild>
-                      <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} onClick={(e) => e.stopPropagation()}
-                        aria-label="Ver detalle">
-                        <ChevronRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="outline" className="hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors" disabled={page === 0} onClick={() => setPage(page - 1)}>Anterior</Button>
-        <Button size="sm" variant="outline" className="hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</Button>
-      </div>
+      {/* Column management sheet */}
+      <Sheet open={editColumnsOpen} onOpenChange={setEditColumnsOpen}>
+        <SheetContent side="right" className="w-[360px] sm:w-[400px]">
+          <SheetHeader>
+            <SheetTitle>Editar columnas</SheetTitle>
+            <SheetDescription>Activa, desactiva y reordena las columnas visibles. Tu preferencia se guarda en este navegador.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-1">
+            {columns.map((col, idx) => (
+              <div key={col.id} className="flex items-center gap-3 p-2 rounded-md border border-border bg-card">
+                <Checkbox checked={col.visible} onCheckedChange={() => toggleColumn(col.id)} id={`col-${col.id}`} />
+                <label htmlFor={`col-${col.id}`} className="flex-1 text-sm cursor-pointer">{col.label}</label>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={idx === 0} onClick={() => moveColumn(col.id, -1)} aria-label="Subir">↑</Button>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={idx === columns.length - 1} onClick={() => moveColumn(col.id, 1)} aria-label="Bajar">↓</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex justify-between">
+            <Button variant="ghost" size="sm" onClick={() => persistColumns(DEFAULT_CONTACT_COLUMNS)}>Restablecer</Button>
+            <Button size="sm" onClick={() => setEditColumnsOpen(false)}>Listo</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -337,7 +540,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" />Nuevo contacto</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="h-4 w-4 mr-1" />Nuevo contacto</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Crear contacto</DialogTitle></DialogHeader>
         <div className="grid gap-3">
@@ -369,7 +572,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button onClick={submit} disabled={busy || !form.full_name}>Crear</Button>
+          <Button onClick={submit} disabled={busy || !form.full_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear contacto</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -381,6 +584,128 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 }
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
+
+// ─── Rich Note Editor ─────────────────────────────────────────────────────────
+
+function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
+  if (!editor) return null;
+
+  const addImage = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const ext = file.name.split(".").pop();
+      const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
+      const { data, error } = await supabase.storage.from("public").upload(path, file, { contentType: file.type, upsert: false });
+      if (error) { toast.error("Error al subir imagen"); return; }
+      const { data: url } = supabase.storage.from("public").getPublicUrl(data.path);
+      editor.chain().focus().setImage({ src: url.publicUrl }).run();
+    };
+    input.click();
+  };
+
+  const setLink = () => {
+    const url = window.prompt("URL del enlace:");
+    if (!url) return;
+    editor.chain().focus().setLink({ href: url, target: "_blank" }).run();
+  };
+
+  const btnClass = (active?: boolean) =>
+    `h-7 w-7 flex items-center justify-center rounded transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
+
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30 flex-wrap">
+      <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={btnClass(editor.isActive("bold"))} title="Negrita">
+        <Bold className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={btnClass(editor.isActive("italic"))} title="Cursiva">
+        <Italic className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={btnClass(editor.isActive("underline"))} title="Subrayado">
+        <UnderlineIcon className="h-3.5 w-3.5" />
+      </button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnClass(editor.isActive("bulletList"))} title="Lista">
+        <List className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnClass(editor.isActive("orderedList"))} title="Lista numerada">
+        <ListOrdered className="h-3.5 w-3.5" />
+      </button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <button type="button" onClick={setLink} className={btnClass(editor.isActive("link"))} title="Enlace">
+        <LinkIcon className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={addImage} className={btnClass()} title="Imagen">
+        <ImageIcon className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
+  const [activityDate, setActivityDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [saving, setSaving] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      UnderlineExt,
+      ImageExt.configure({ inline: false, allowBase64: false }),
+      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
+      TextStyleExt,
+    ],
+    editorProps: {
+      attributes: { class: "prose prose-sm max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none" },
+    },
+  });
+
+  const save = async () => {
+    if (!userId || !editor || editor.isEmpty) return;
+    setSaving(true);
+    const html = editor.getHTML();
+    const { error } = await (supabase as any).from("notes").insert({
+      contact_id: contactId,
+      user_id: userId,
+      content: html,
+      activity_date: activityDate,
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Nota guardada");
+    editor.commands.clearContent();
+    onSaved();
+  };
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
+      <RichNoteToolbar editor={editor} />
+      <EditorContent editor={editor} />
+      <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/20 gap-2">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+          <span>Fecha</span>
+          <Input
+            type="date"
+            value={activityDate}
+            onChange={(e) => setActivityDate(e.target.value)}
+            className="h-6 text-xs w-auto px-2 py-0 border border-border rounded shadow-none focus-visible:ring-0"
+          />
+        </div>
+        <Button
+          size="sm"
+          onClick={save}
+          disabled={saving || !editor || editor.isEmpty}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
+        >
+          {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
@@ -517,41 +842,17 @@ export function CrmContactDetail() {
   const initials = contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("").toUpperCase() || "?";
 
   return (
-    <div className="space-y-6">
-      {/* Back */}
-      <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground" asChild>
-        <Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
-      </Button>
-
-      {/* Hero */}
-      <div className="flex items-start gap-5 flex-wrap rounded-xl border bg-card p-5 shadow-sm">
-        <div className="h-14 w-14 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold select-none ring-2 ring-primary/20">
-          {initials}
+    <div className="space-y-0 -mx-4 -mt-4 -mb-4 lg:-mx-8 lg:-mt-6 lg:-mb-6">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
+            <Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
+          </Button>
+          <span className="text-muted-foreground/40 text-sm">/</span>
+          <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{contact.full_name}</span>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold tracking-tight">{contact.full_name}</h1>
-            <Badge variant={contact.lifecycle_stage === "customer" ? "default" : "secondary"} className="shrink-0 text-xs">
-              {contact.lifecycle_stage === "customer" ? "Comprador" : "Prospecto"}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4 mt-1.5 flex-wrap">
-            {contact.email && (
-              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Mail className="h-3.5 w-3.5 shrink-0" />{contact.email}
-              </span>
-            )}
-            {contact.phone && (
-              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Phone className="h-3.5 w-3.5 shrink-0" />{contact.phone}
-              </span>
-            )}
-            {!contact.email && !contact.phone && (
-              <span className="text-sm text-muted-foreground">Sin datos de contacto</span>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap shrink-0">
+        <div className="flex gap-2">
           <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
           <TaskDialog contactId={contactId!} orgId={orgId} owners={owners ?? []} onSaved={invalidateAll} />
           <AppointmentDialog contactId={contactId!} orgId={orgId} developmentId={contact.development_id} owners={owners ?? []} onSaved={invalidateAll} />
@@ -559,150 +860,234 @@ export function CrmContactDetail() {
         </div>
       </div>
 
-      {/* Body: 2 columns */}
-      <div className="grid gap-6 lg:grid-cols-5">
-        {/* Left: info panel */}
-        <div className="lg:col-span-2">
-          <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} />
-        </div>
+      {/* 3-column body */}
+      <div className="grid grid-cols-12 min-h-[calc(100vh-112px)]">
+        {/* Left: profile + info */}
+        <aside className="col-span-3 border-r border-border p-5 space-y-5 bg-white overflow-y-auto">
+          {/* Avatar + name */}
+          <div className="flex flex-col items-center gap-3 pt-2">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold select-none ring-4 ring-primary/5 shadow-sm">
+              {initials}
+            </div>
+            <div className="text-center">
+              <h2 className="font-semibold text-sm leading-tight">{contact.full_name}</h2>
+              {contact.email && (
+                <div className="flex items-center justify-center gap-1 mt-1 text-xs text-primary">
+                  <span className="truncate max-w-[130px]">{contact.email}</span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(contact.email!); toast.success("Correo copiado"); }}
+                    className="shrink-0 hover:text-primary/80 transition-colors"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {contact.phone && (
+                <p className="text-xs text-muted-foreground mt-0.5">{contact.phone}</p>
+              )}
+            </div>
+          </div>
 
-        {/* Right: activity + attribution tabs */}
-        <div className="lg:col-span-3">
-          <Tabs defaultValue="actividad">
-            <TabsList className="w-full justify-start mb-4">
-              <TabsTrigger value="actividad">Actividad</TabsTrigger>
-              <TabsTrigger value="atribucion">Atribución</TabsTrigger>
-            </TabsList>
-            <TabsContent value="actividad">
-              <Timeline
-                notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
-                deals={deals ?? []} pipelineEvents={pipelineEvents ?? []} conversionEvents={conversionEvents ?? []}
-                contact={contact}
-              />
+          {/* Quick action icons */}
+          <div className="grid grid-cols-5 gap-1">
+            {[
+              { Icon: StickyNote, label: "Nota" },
+              { Icon: Mail, label: "Correo" },
+              { Icon: Phone, label: "Llamada" },
+              { Icon: ClipboardList, label: "Tarea" },
+              { Icon: CalendarClock, label: "Reunión" },
+            ].map(({ Icon, label }) => (
+              <button key={label} className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <Icon className="h-3.5 w-3.5" />
+                </div>
+                <span className="text-[9px] text-muted-foreground leading-none">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Accordion: Acerca de este contacto */}
+          <Accordion type="single" collapsible defaultValue="info">
+            <AccordionItem value="info" className="border-0">
+              <AccordionTrigger className="text-xs font-semibold uppercase tracking-widest text-slate-500 hover:no-underline py-2 hover:text-primary transition-colors">
+                Acerca de este contacto
+              </AccordionTrigger>
+              <AccordionContent className="pt-1 pb-0">
+                <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
+
+        {/* Center: activity tabs */}
+        <section className="col-span-6 border-r border-border">
+          <Tabs defaultValue="actividades" className="flex flex-col">
+            <div className="border-b border-border">
+              <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
+                <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
+                <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
+                <TabsTrigger value="avanzado" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Información avanzada</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="descripcion" className="p-4 mt-0">
+              <p className="text-sm text-muted-foreground">Sin descripción para este contacto.</p>
             </TabsContent>
-            <TabsContent value="atribucion">
-              <Card>
-                <CardContent className="pt-5 space-y-2 text-sm">
-                  {!attribution ? (
-                    <p className="text-muted-foreground">Sin datos de atribución para este contacto.</p>
-                  ) : (
-                    <>
-                      <ARow label="UTM source" v={attribution.first_touch_source ?? contact.source_platform} />
-                      <ARow label="UTM medium" v={attribution.first_touch_medium} />
-                      <ARow label="UTM campaign" v={attribution.first_touch_campaign ?? contact.source_name} />
-                      <ARow label="fbclid" v={attribution.fbclid} mono />
-                      <ARow label="gclid" v={attribution.gclid} mono />
-                      <ARow label="Landing" v={attribution.landing_page} mono />
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+            <TabsContent value="actividades" className="p-4 space-y-4 mt-0">
+              <InlineNoteForm contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
+              {/* Tarea inline section */}
+              <div className="border border-border rounded-lg p-3 bg-card">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarea</span>
+                  <button
+                    className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors"
+                    onClick={() => {/* TaskDialog trigger */}}
+                  >
+                    <Plus className="h-3.5 w-3.5" />Crear tarea
+                  </button>
+                </div>
+              </div>
+              {/* Línea de tiempo */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Línea de tiempo</p>
+                <Timeline
+                  notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
+                  deals={deals ?? []} pipelineEvents={pipelineEvents ?? []} conversionEvents={conversionEvents ?? []}
+                  contact={contact}
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="avanzado" className="p-4 mt-0">
+              <div className="space-y-2 text-sm">
+                {!attribution ? (
+                  <p className="text-muted-foreground">Sin datos de atribución para este contacto.</p>
+                ) : (
+                  <>
+                    <ARow label="UTM source" v={attribution.first_touch_source ?? contact.source_platform} />
+                    <ARow label="UTM medium" v={attribution.first_touch_medium} />
+                    <ARow label="UTM campaign" v={attribution.first_touch_campaign ?? contact.source_name} />
+                    <ARow label="fbclid" v={attribution.fbclid} mono />
+                    <ARow label="gclid" v={attribution.gclid} mono />
+                    <ARow label="Landing" v={attribution.landing_page} mono />
+                  </>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
-        </div>
+        </section>
+
+        {/* Right: related entities */}
+        <aside className="col-span-3 p-4 bg-slate-50/40">
+          <Accordion type="multiple" defaultValue={["empresas", "deals", "tickets"]}>
+            <AccordionItem value="empresas">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Empresas <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <p className="text-xs text-muted-foreground py-2">Sin empresas asociadas</p>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="deals">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Negocios <span className="text-xs text-muted-foreground font-normal">{(deals ?? []).length}</span></span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-2">
+                  <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors mb-1">
+                    <Plus className="h-3.5 w-3.5" />Agregar
+                  </button>
+                  {!(deals ?? []).length ? (
+                    <p className="text-xs text-muted-foreground py-1">Sin negocios</p>
+                  ) : (
+                    (deals ?? []).map((d: any) => (
+                      <div key={d.id} className="p-2.5 rounded-md border border-primary/20 bg-primary/5 text-xs">
+                        <div className="font-medium truncate text-primary">{d.deal_name}</div>
+                        <div className="text-primary mt-0.5 flex items-center justify-between">
+                          <span>{DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}</span>
+                          {d.value && <span className="font-semibold">{fmtMXN(Number(d.value))}</span>}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="tickets" className="border-b-0">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Tickets <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <p className="text-xs text-muted-foreground py-2">Sin tickets asociados</p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
       </div>
     </div>
   );
 }
 
 function LeftPanel({ contact, developments, owners, onSaved }: any) {
-  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
-    full_name: contact.full_name, email: contact.email ?? "", phone: contact.phone ?? "",
-    lead_status: contact.lead_status, lifecycle_stage: contact.lifecycle_stage,
+    email: contact.email ?? "", phone: contact.phone ?? "",
+    lead_status: contact.lead_status ?? "new", lifecycle_stage: contact.lifecycle_stage ?? "lead",
     development_id: contact.development_id ?? "", contact_owner: contact.contact_owner ?? "",
   });
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
+    setSaving(true);
     const { error } = await (supabase as any).from("contacts").update({
-      full_name: form.full_name, email: form.email || null, phone: form.phone || null,
+      email: form.email || null, phone: form.phone || null,
       lead_status: form.lead_status, lifecycle_stage: form.lifecycle_stage,
       development_id: form.development_id || null, contact_owner: form.contact_owner || null,
       last_activity_at: new Date().toISOString(),
     }).eq("id", contact.id);
+    setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Contacto actualizado"); setEditing(false); onSaved();
+    toast.success("Contacto actualizado"); onSaved();
   };
 
-  const devName = (developments as any[]).find((d: any) => d.id === contact.development_id)?.name ?? "—";
-  const ownerName = (owners as any[]).find((o: any) => o.id === contact.contact_owner)?.full_name ?? "Sin asignar";
-
   return (
-    <Card className="sticky top-4">
-      <CardHeader className="pb-2 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm font-semibold">Información</CardTitle>
-        {editing
-          ? <Button size="sm" onClick={save}><Save className="h-3.5 w-3.5 mr-1.5" />Guardar</Button>
-          : <Button size="sm" variant="ghost" className="h-8 px-3 text-xs" onClick={() => setEditing(true)}>Editar</Button>}
-      </CardHeader>
-      <CardContent className="pt-2 space-y-5 text-sm">
-        {/* Contacto */}
-        <section className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Contacto</p>
-          <DField label="Nombre">
-            {editing
-              ? <Input className="h-8 text-sm" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-              : <span className="font-medium">{contact.full_name}</span>}
-          </DField>
-          <DField label="Email">
-            {editing
-              ? <Input className="h-8 text-sm" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} type="email" />
-              : <span className="flex items-center gap-1.5 text-muted-foreground"><Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />{contact.email ?? "—"}</span>}
-          </DField>
-          <DField label="Teléfono">
-            {editing
-              ? <Input className="h-8 text-sm" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} type="tel" />
-              : <span className="flex items-center gap-1.5 text-muted-foreground"><Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />{contact.phone ?? "—"}</span>}
-          </DField>
-        </section>
-
-        <Separator />
-
-        {/* Asignación */}
-        <section className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Asignación</p>
-          <DField label="Proyecto">
-            {editing
-              ? <Select value={form.development_id} onValueChange={(v) => setForm({ ...form, development_id: v })}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger><SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select>
-              : <span>{devName}</span>}
-          </DField>
-          <DField label="Asesor">
-            {editing
-              ? <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger><SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent></Select>
-              : <span>{ownerName}</span>}
-          </DField>
-        </section>
-
-        <Separator />
-
-        {/* Clasificación */}
-        <section className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Clasificación</p>
-          <DField label="Tipo">
-            {editing
-              ? <Select value={form.lifecycle_stage} onValueChange={(v) => setForm({ ...form, lifecycle_stage: v })}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-              : <Badge variant={contact.lifecycle_stage === "customer" ? "default" : "secondary"} className="text-xs font-medium">{lifecycleLabel[contact.lifecycle_stage] ?? contact.lifecycle_stage}</Badge>}
-          </DField>
-          <DField label="Estado">
-            {editing
-              ? <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-              : <Badge variant="outline" className="text-xs">{leadStatusLabel[contact.lead_status] ?? contact.lead_status}</Badge>}
-          </DField>
-          <DField label="Lead score">
-            <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${leadScoreColor(contact.lead_score)}`}>{contact.lead_score} pts</span>
-          </DField>
-        </section>
-
-        <Separator />
-
-        {/* Registro */}
-        <section className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Registro</p>
-          <DField label="Alta"><DateChip date={contact.created_at} /></DField>
-          <DField label="Últ. actividad"><DateChip date={contact.last_activity_at} /></DField>
-        </section>
-      </CardContent>
-    </Card>
+    <div className="space-y-3 text-sm">
+      <CField label="Correo electrónico">
+        <Input className="h-8 text-sm" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="correo@ejemplo.com" />
+      </CField>
+      <CField label="Número de móvil">
+        <Input className="h-8 text-sm" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+52 55 0000 0000" />
+      </CField>
+      <CField label="Proyecto">
+        <Select value={form.development_id} onValueChange={(v) => setForm({ ...form, development_id: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin proyecto" /></SelectTrigger>
+          <SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+        </Select>
+      </CField>
+      <CField label="Estado del lead">
+        <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            {Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </CField>
+      <CField label="Etapa del ciclo de vida">
+        <Select value={form.lifecycle_stage} onValueChange={(v) => setForm({ ...form, lifecycle_stage: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
+        </Select>
+      </CField>
+      <CField label="Propietario del contacto">
+        <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+          <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+        </Select>
+      </CField>
+      <Button size="sm" onClick={save} disabled={saving} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground mt-1">
+        {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : <><Save className="h-3.5 w-3.5 mr-1.5" />Guardar cambios</>}
+      </Button>
+    </div>
   );
 }
 
@@ -715,7 +1100,11 @@ function DField({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; icon: any; tone?: string };
+type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string };
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact }: any) {
   const synthetic: TLItem = {
@@ -728,7 +1117,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   };
 
   const items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, ts: n.created_at, kind: "Nota", title: n.content.slice(0, 120), icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
+    ...notes.map((n: any) => ({ id: `n-${n.id}`, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
     ...tasks.map((t: any) => ({ id: `t-${t.id}`, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
     ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
@@ -740,43 +1129,49 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   const hasRealActivity = items.length > 1;
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-sm font-semibold">Actividad</CardTitle>
-      </CardHeader>
-      <CardContent className="pb-6">
-        <div className="space-y-0">
-          {items.map((it, i) => {
-            const Icon = it.icon;
-            return (
-              <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0">
-                {i < items.length - 1 && (
-                  <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border" />
-                )}
-                <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background ${it.tone ?? "bg-muted"}`}>
-                  <Icon className="h-3.5 w-3.5" />
-                </div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="flex justify-between items-baseline gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{it.kind}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{relTime(it.ts)}</span>
-                  </div>
-                  <div className="text-sm mt-0.5">{it.title}</div>
-                  {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
-                </div>
+    <div>
+      <div className="space-y-0">
+        {items.map((it, i) => {
+          const Icon = it.icon;
+          return (
+            <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0 group/item">
+              {i < items.length - 1 && (
+                <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border/60" />
+              )}
+              <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background shadow-sm ${it.tone ?? "bg-muted"}`}>
+                <Icon className="h-3.5 w-3.5" />
               </div>
-            );
-          })}
-        </div>
-        {!hasRealActivity && (
-          <div className="mt-6 text-center py-6 border border-dashed rounded-lg">
-            <MessageSquare className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">Sin actividad registrada aún.</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Agrega una nota, tarea o cita para comenzar.</p>
+              <div className="flex-1 min-w-0 pt-0.5 rounded-lg p-2 -ml-0.5 group-hover/item:bg-slate-50/80 transition-colors duration-100">
+                <div className="flex justify-between items-baseline gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{it.kind}</span>
+                  <span className="text-xs text-muted-foreground/70 shrink-0 tabular-nums">{relTime(it.ts)}</span>
+                </div>
+                {it.html ? (
+                  <div
+                    className="mt-1 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
+                    dangerouslySetInnerHTML={{ __html: it.html }}
+                  />
+                ) : (
+                  <>
+                    <div className="text-sm mt-0.5 font-medium text-foreground">{it.title}</div>
+                    {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {!hasRealActivity && (
+        <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+            <MessageSquare className="h-5 w-5 text-primary" />
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <p className="text-sm font-medium text-primary/80">Sin actividad registrada aún</p>
+          <p className="text-xs text-primary/60 mt-1">Agrega una nota para comenzar el historial</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -791,21 +1186,53 @@ function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boo
 
 function NoteDialog({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      UnderlineExt,
+      ImageExt.configure({ inline: false, allowBase64: false }),
+      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
+      TextStyleExt,
+    ],
+    editorProps: {
+      attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" },
+    },
+  });
+
   const save = async () => {
-    if (!userId || !content.trim()) return;
-    const { error } = await (supabase as any).from("notes").insert({ contact_id: contactId, user_id: userId, content });
+    if (!userId || !editor || editor.isEmpty) return;
+    setSaving(true);
+    const html = editor.getHTML();
+    const { error } = await (supabase as any).from("notes").insert({ contact_id: contactId, user_id: userId, content: html });
+    setSaving(false);
     if (error) { toast.error(error.message); return; }
     await (supabase as any).from("contacts").update({ last_activity_at: new Date().toISOString() }).eq("id", contactId);
-    toast.success("Nota guardada"); setOpen(false); setContent(""); onSaved();
+    toast.success("Nota guardada");
+    setOpen(false);
+    editor.commands.clearContent();
+    onSaved();
   };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline"><StickyNote className="h-4 w-4 mr-1" />Nota</Button></DialogTrigger>
-      <DialogContent>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
+          <StickyNote className="h-4 w-4 mr-1.5" />Nota
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Nueva nota</DialogTitle></DialogHeader>
-        <Textarea rows={5} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Escribe la nota…" />
-        <DialogFooter><Button onClick={save} disabled={!content.trim()}>Guardar</Button></DialogFooter>
+        <div className="border border-border rounded-lg overflow-hidden">
+          <RichNoteToolbar editor={editor} />
+          <EditorContent editor={editor} />
+        </div>
+        <DialogFooter>
+          <Button onClick={save} disabled={saving || !editor || editor.isEmpty} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -828,7 +1255,7 @@ function TaskDialog({ contactId, orgId, owners, onSaved }: any) {
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline"><ClipboardList className="h-4 w-4 mr-1" />Tarea</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
         <div className="grid gap-3">
@@ -868,7 +1295,7 @@ function TaskDialog({ contactId, orgId, owners, onSaved }: any) {
             </DField>
           </div>
         </div>
-        <DialogFooter><Button onClick={save} disabled={!form.title}>Crear</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={!form.title} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -890,7 +1317,7 @@ function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }:
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline"><CalendarClock className="h-4 w-4 mr-1" />Cita</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><CalendarClock className="h-4 w-4 mr-1.5" />Cita</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
         <div className="grid gap-3">
@@ -913,7 +1340,7 @@ function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }:
             </Select>
           </DField>
         </div>
-        <DialogFooter><Button onClick={save} disabled={!form.scheduled_at}>Crear</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={!form.scheduled_at} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -936,7 +1363,7 @@ function DealDialog({ contactId, orgId, developmentId, onSaved }: any) {
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Briefcase className="h-4 w-4 mr-1" />Deal</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Deal</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nuevo deal</DialogTitle></DialogHeader>
         <div className="grid gap-3">
@@ -951,7 +1378,7 @@ function DealDialog({ contactId, orgId, developmentId, onSaved }: any) {
             </DField>
           </div>
         </div>
-        <DialogFooter><Button onClick={save} disabled={!form.deal_name}>Crear</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={!form.deal_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear deal</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1164,7 +1591,7 @@ export function CrmAppointments() {
       <PageHeader title="Citas" subtitle="Gestión de citas con prospectos">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
+            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
@@ -1176,7 +1603,7 @@ export function CrmAppointments() {
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending}>Crear</Button>
+              <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1228,26 +1655,35 @@ export function CrmTasks() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [tab, setTab] = useState<"mine" | "all" | "overdue">("mine");
+  const [tab, setTab] = useState<"all" | "today" | "overdue" | "upcoming">("today");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ contact_id: "", title: "", due_date: "", assigned_to: user?.id ?? "", priority: "normal" });
 
   const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["crm-tasks", orgId, tab],
+    queryKey: ["crm-tasks", orgId],
     queryFn: async () => {
       if (!orgId) return [];
-      const now = new Date().toISOString();
-      let q = (supabase as any).from("crm_tasks").select("id,title,status,priority,due_date,assigned_to,contacts(full_name)").eq("organization_id", orgId).order("due_date", { ascending: true });
-      if (tab === "mine") q = q.eq("assigned_to", user?.id ?? "");
-      if (tab === "overdue") q = q.lt("due_date", now).neq("status", "completed");
-      const { data } = await q.limit(100);
+      const { data } = await (supabase as any).from("crm_tasks").select("id,title,status,priority,due_date,assigned_to,contacts(full_name)").eq("organization_id", orgId).order("due_date", { ascending: true }).limit(500);
       return data ?? [];
     },
     enabled: !!orgId,
   });
 
+  const filtered = tasks.filter((tk: any) => {
+    if (tk.status === "completed" && tab !== "all") return false;
+    if (!tk.due_date) return tab === "all";
+    const d = parseISO(tk.due_date);
+    if (tab === "today") return isToday(d);
+    if (tab === "overdue") return isPast(d) && !isToday(d);
+    if (tab === "upcoming") return isFuture(d);
+    return true;
+  });
+
   const complete = useMutation({
-    mutationFn: async (id: string) => { await (supabase as any).from("crm_tasks").update({ status: "completed" }).eq("id", id); },
+    mutationFn: async (tk: any) => {
+      const newStatus = tk.status === "completed" ? "pending" : "completed";
+      await (supabase as any).from("crm_tasks").update({ status: newStatus }).eq("id", tk.id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks", orgId] }),
   });
 
@@ -1256,19 +1692,21 @@ export function CrmTasks() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-tasks", orgId] }); setOpen(false); toast.success("Tarea creada"); },
   });
 
-  const PRIORITY_TONE: Record<string, string> = {
-    urgent: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    normal: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-    low: "bg-muted text-muted-foreground",
-  };
+  const TASK_TABS = [
+    { id: "all" as const, label: "Todo" },
+    { id: "today" as const, label: "Vencen hoy" },
+    { id: "overdue" as const, label: "Atrasado" },
+    { id: "upcoming" as const, label: "Próximamente" },
+  ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Tareas" subtitle="Bandeja de tareas del equipo">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <h1 className="text-2xl font-semibold">Tareas</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
+            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
@@ -1285,55 +1723,80 @@ export function CrmTasks() {
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending}>Crear</Button>
+              <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </PageHeader>
+      </div>
 
-      <Tabs value={tab} onValueChange={v => setTab(v as typeof tab)}>
-        <TabsList>
-          <TabsTrigger value="mine">Mis tareas</TabsTrigger>
-          <TabsTrigger value="all">Todas</TabsTrigger>
-          <TabsTrigger value="overdue">Vencidas</TabsTrigger>
-        </TabsList>
-        {(["mine","all","overdue"] as const).map(t => (
-          <TabsContent key={t} value={t}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : tasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin tareas</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Tarea</TableHead>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Vencimiento</TableHead>
-                    <TableHead>Prioridad</TableHead>
-                    <TableHead>Estatus</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {tasks.map((tk: any) => (
-                      <TableRow key={tk.id} className={tk.status === "completed" ? "opacity-50" : ""}>
-                        <TableCell>
-                          <button onClick={() => complete.mutate(tk.id)} disabled={tk.status === "completed"} className="rounded-full p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors">
-                            <CheckCircle2 className={`w-4 h-4 ${tk.status === "completed" ? "text-emerald-500" : "text-muted-foreground"}`} />
-                          </button>
-                        </TableCell>
-                        <TableCell className="font-medium max-w-[200px] truncate">{tk.title}</TableCell>
-                        <TableCell className="text-sm">{tk.contacts?.full_name ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{fmtDate(tk.due_date)}</TableCell>
-                        <TableCell><Badge className={`text-xs ${PRIORITY_TONE[tk.priority ?? "normal"]}`}>{tk.priority ?? "normal"}</Badge></TableCell>
-                        <TableCell><Badge variant="outline" className="text-xs">{taskStatusLabel[tk.status] ?? tk.status}</Badge></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
+      {/* Border-bottom tabs */}
+      <div className="border-b border-border flex gap-1">
+        {TASK_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors duration-150 ${tab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+          >
+            {t.label}
+          </button>
         ))}
-      </Tabs>
+      </div>
+
+      {/* Table */}
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-x-auto">
+        {isLoading ? (
+          <div className="p-6 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="p-3 w-10"></th>
+                <th className="p-3 text-left font-medium">Título</th>
+                <th className="p-3 text-left font-medium">Vencimiento</th>
+                <th className="p-3 text-left font-medium">Contacto asociado</th>
+                <th className="p-3 text-left font-medium">Asignado a</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-muted-foreground">Sin tareas.</td>
+                </tr>
+              )}
+              {filtered.map((tk: any) => {
+                const isOverdue = tk.due_date && isPast(parseISO(tk.due_date)) && !isToday(parseISO(tk.due_date)) && tk.status !== "completed";
+                const dueLabel = tk.due_date
+                  ? isToday(parseISO(tk.due_date))
+                    ? "Hoy"
+                    : fmtDateFns(parseISO(tk.due_date), "dd MMM yyyy")
+                  : "—";
+                return (
+                  <tr key={tk.id} className="border-t border-border hover:bg-muted/30">
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        onClick={() => complete.mutate(tk)}
+                        className={`size-5 rounded-full border-2 flex items-center justify-center transition-colors ${tk.status === "completed" ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 hover:border-info"}`}
+                      >
+                        {tk.status === "completed" && <Check className="size-3" />}
+                      </button>
+                    </td>
+                    <td className="p-3">
+                      <div className={tk.status === "completed" ? "line-through text-muted-foreground" : ""}>{tk.title}</div>
+                    </td>
+                    <td className={`p-3 whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>{dueLabel}</td>
+                    <td className="p-3">{tk.contacts?.full_name ? (
+                      <Badge variant="outline" className="bg-info/10 text-info border-info/30">{tk.contacts.full_name}</Badge>
+                    ) : "—"}</td>
+                    <td className="p-3 text-muted-foreground">{tk.assigned_to ?? "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

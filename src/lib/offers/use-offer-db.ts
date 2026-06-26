@@ -2,14 +2,31 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
+import { expandirTramos, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const COUNTRY_DIAL: Record<string, string> = { MX: "52", US: "1", IN: "91" };
+
+function toDialCode(clave: string | null | undefined): string {
+  if (!clave) return "52";
+  if (/^\+?\d+$/.test(clave)) return clave.replace("+", "");
+  return COUNTRY_DIAL[clave.toUpperCase()] ?? "52";
+}
+
+function buildWhatsapp(clave: string | null | undefined, telefono: string): string {
+  return `${toDialCode(clave)}${telefono.replace(/\D/g, "")}`;
+}
 
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
 function toEmbedUrl(url: string): string {
   if (!url) return url;
   if (url.includes("/embed/")) return url;
-  const match = url.match(/[?&]v=([^&#]+)/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  const watchMatch = url.match(/[?&]v=([^&#]+)/);
+  if (watchMatch) return `https://www.youtube.com/embed/${watchMatch[1]}`;
+  const shortMatch = url.match(/youtu\.be\/([^?&#]+)/);
+  if (shortMatch) return `https://www.youtube.com/embed/${shortMatch[1]}`;
   return url;
 }
 
@@ -53,24 +70,67 @@ function toOptimizedUrl(url: string, _width: number, quality = 80): string {
 
 // ── Payment plan calculator ──────────────────────────────────────────────────
 
-function calcPaymentPlans(esquemas: any[], listPrice: number): PaymentPlan[] {
+function calcPaymentPlans(
+  esquemas: any[],
+  listPrice: number,
+  fechaGeneracion?: string,
+  fechaEntrega?: string | null,
+): PaymentPlan[] {
+  const mesesEfectivos =
+    fechaGeneracion && fechaEntrega
+      ? mesesEntreFechas(fechaGeneracion, fechaEntrega)
+      : 0;
+
   return esquemas.map((e) => {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
     const finalPrice  = listPrice * (1 + pctDesc / 100);
     const pctEnganche = Number(e.porcentaje_enganche ?? 0);
-    const pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
-    const pctEntrega  = Number(e.porcentaje_entrega ?? 0);
-    const nMensual    = Number(e.numero_mensualidades ?? 0);
+    const downPaymentAmount = finalPrice * (pctEnganche / 100);
 
-    const downPaymentAmount   = finalPrice * (pctEnganche / 100);
-    const installmentsTotal   = finalPrice * (pctMensual / 100);
-    const monthlyAmount       = nMensual > 0 ? installmentsTotal / nMensual : 0;
-    const finalPaymentAmount  = finalPrice * (pctEntrega / 100);
+    // Escalonado: tramos with fixed monthly amounts (stored in centavos)
+    const tramos = e.tramos_mensualidad;
+    const isEscalonado = Array.isArray(tramos) && tramos.length > 0
+      && tramos.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
+
+    let nMensual: number;
+    let monthlyAmount: number;
+    let installmentsTotal: number;
+    let finalPaymentAmount: number;
+    let pctMensual: number;
+    let pctEntrega: number;
+
+    if (isEscalonado) {
+      const tramosExpanded = expandirTramos(tramos);
+      nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+      installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
+        return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
+      }, 0);
+      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
+      pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
+      pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
+    } else if (mesesEfectivos > 0 && Number(e.porcentaje_mensualidades ?? 0) > 0) {
+      const dyn = calcDynamicScheme(e, listPrice, mesesEfectivos);
+      nMensual           = dyn.meses;
+      monthlyAmount      = dyn.mensualidad;
+      installmentsTotal  = dyn.mensualidadesTotal;
+      finalPaymentAmount = dyn.entrega;
+      pctMensual         = dyn.porcentajeMensualidades;
+      pctEntrega         = dyn.porcentajeEntrega;
+    } else {
+      pctMensual  = Number(e.porcentaje_mensualidades ?? 0);
+      pctEntrega  = Number(e.porcentaje_entrega ?? 0);
+      nMensual    = Number(e.numero_mensualidades ?? 0);
+      installmentsTotal  = finalPrice * (pctMensual / 100);
+      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      finalPaymentAmount = finalPrice * (pctEntrega / 100);
+    }
 
     return {
       id: String(e.id),
       name: e.nombre ?? `Plan ${e.orden ?? e.id}`,
       type: nMensual > 0 ? "escalonado" : "standard",
+      isPersonalized: e.es_manual === true,
       finalPrice,
       discountPct:    pctDesc < 0 ? Math.abs(pctDesc) : undefined,
       discountAmount: pctDesc < 0 ? Math.abs(listPrice - finalPrice) : undefined,
@@ -171,7 +231,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     // Esquemas filtrados por proyecto (no todos los esquemas de la BD)
     supabase
       .from("esquemas_pago")
-      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden")
+      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden, tramos_mensualidad")
       .eq("id_proyecto", proyectoId)
       .eq("activo", true)
       .order("orden", { ascending: true }),
@@ -300,19 +360,45 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
-  const filteredEsqs = oferta.id_esquema_pago_seleccionado
-    ? (esquemas ?? []).filter((e: any) => e.id === oferta.id_esquema_pago_seleccionado)
-    : (esquemas ?? []).filter((e: any) => !e.es_manual).slice(0, 6);
-  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice);
+  const selectedId   = oferta.id_esquema_pago_seleccionado;
+  const allEsqs      = (esquemas ?? []).filter((e: any) => !e.es_manual);
+  const selectedIsManual = selectedId
+    ? (esquemas ?? []).some((e: any) => e.id === selectedId && e.es_manual)
+    : false;
+
+  // Strip internal naming pattern (manual_NNNN_*) and show clean label
+  const normalizeManualName = (e: any): any => {
+    if (!e.es_manual) return e;
+    const cleaned = e.nombre.replace(/^manual_\d+_/i, '').replace(/_/g, ' ').trim();
+    return { ...e, nombre: cleaned || 'Plan personalizado' };
+  };
+
+  let filteredEsqs: any[];
+  if (selectedIsManual && selectedId) {
+    // Manual selected: show it first (clean name) + all non-manual for comparison
+    const manualEsq = (esquemas ?? []).find((e: any) => e.id === selectedId);
+    filteredEsqs = [
+      ...(manualEsq ? [normalizeManualName(manualEsq)] : []),
+      ...allEsqs,
+    ].slice(0, 6);
+  } else {
+    filteredEsqs = selectedId
+      ? [
+          ...allEsqs.filter((e: any) => e.id === selectedId),
+          ...allEsqs.filter((e: any) => e.id !== selectedId),
+        ].slice(0, 6)
+      : allEsqs.slice(0, 6);
+  }
+  const entregaFecha = (proyecto as any).fecha_entrega_proyecto
+    ?? (proyecto as any).fecha_entrega
+    ?? null;
+
+  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
 
   // 10. Expiración (7 días desde generación)
   // Vigencia siempre 7 días — calculado en código, sin campo en DB
   const validUntilDate = new Date(oferta.fecha_generacion);
   validUntilDate.setDate(validUntilDate.getDate() + 7);
-
-  const entregaFecha = (proyecto as any).fecha_entrega_proyecto
-    ?? (proyecto as any).fecha_entrega
-    ?? null;
 
   const area = Number(propiedad.m2_interiores ?? 0) + Number(propiedad.m2_exteriores ?? 0);
 
@@ -424,7 +510,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           ? `${agentPersona.clave_pais_telefono ?? "+52"} ${agentPersona.telefono}`
           : "";
         const whatsapp = agentPersona.telefono
-          ? `${(agentPersona.clave_pais_telefono ?? "+52").replace("+", "")}${agentPersona.telefono.replace(/\s/g, "")}`
+          ? buildWhatsapp(agentPersona.clave_pais_telefono, agentPersona.telefono)
           : "";
         return {
           id: agentId,
@@ -432,7 +518,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           firstName,
           title: "Asesor SOZU",
           photoUrl: (agentUser as any)?.foto_perfil_url ?? "",
-          bio: (agentUser as any)?.frase_perfil ?? undefined,
+          bio: (agentUser as any)?.frase_perfil ?? "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!",
           phone,
           email: agentPersona.email ?? "",
           whatsapp,
@@ -465,7 +551,7 @@ async function fetchAgentFromDB(agentId: string): Promise<Agent | null> {
     ? `${persona.clave_pais_telefono ?? "+52"} ${persona.telefono}`
     : "";
   const whatsapp = persona.telefono
-    ? `${(persona.clave_pais_telefono ?? "+52").replace("+", "")}${persona.telefono.replace(/\s/g, "")}`
+    ? buildWhatsapp(persona.clave_pais_telefono, persona.telefono)
     : "";
 
   return {
@@ -498,6 +584,6 @@ export function useOfferFromDB(ofertaId: string) {
     queryKey: ["oferta-db", ofertaId],
     queryFn:  () => fetchOfertaFromDB(ofertaId),
     enabled:  !!ofertaId && !isNaN(parseInt(ofertaId.replace(/^[A-Z]+-/, ""), 10)),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 }

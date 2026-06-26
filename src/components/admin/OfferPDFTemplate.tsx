@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { mesesEntreFechas, calcDynamicScheme } from '@/utils/escalonadoUtils';
 
 interface OfferData {
   id: number;
@@ -42,6 +43,7 @@ interface PropertyDetails {
     mostrar_piso_en_oferta?: boolean;
     mostrar_seccion_efectivo_en_oferta?: boolean;
     precio_m2_actual?: number;
+    fecha_entrega?: string | null;
   };
   ownerData?: {
     id: number;
@@ -125,17 +127,17 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
     // - Valor positivo: incremento (aumenta el precio)
     // - Valor negativo: descuento (reduce el precio)
     // Ejemplo: +10 = 10% más caro, -8 = 8% más barato
-    const calculatePaymentAmounts = (scheme: PaymentScheme) => {
-      const basePrice = propertyDetails.precio_lista;
-      const adjustment = basePrice * (scheme.porcentaje_descuento_aumento / 100);
-      const finalPrice = basePrice + adjustment; // Cambio crítico: ahora suma el ajuste
-      
+    const calculatePaymentAmounts = (scheme: PaymentScheme, mesesEfectivos: number = 0) => {
+      const result = calcDynamicScheme(scheme, propertyDetails.precio_lista, mesesEfectivos);
       return {
-        enganche: finalPrice * (scheme.porcentaje_enganche / 100),
-        mensualidad: (finalPrice * (scheme.porcentaje_mensualidades / 100)) / scheme.numero_mensualidades,
-        entrega: finalPrice * (scheme.porcentaje_entrega / 100),
-        finalPrice,
-        adjustment
+        enganche: result.enganche,
+        mensualidad: result.mensualidad,
+        entrega: result.entrega,
+        finalPrice: result.precioFinal,
+        adjustment: result.adjustment,
+        porcentajeMensualidades: result.porcentajeMensualidades,
+        porcentajeEntrega: result.porcentajeEntrega,
+        meses: result.meses,
       };
     };
 
@@ -310,7 +312,12 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
           
           <div className="grid grid-cols-2 gap-4">
             {filteredPaymentSchemes.map((scheme) => {
-              const calculation = calculatePaymentAmounts(scheme);
+              const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
+              const fechaEntregaProyecto = propertyDetails.projectData?.fecha_entrega;
+              const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
+                ? mesesEntreFechas(offerData.fecha_generacion, fechaEntregaProyecto)
+                : 0;
+              const calculation = calculatePaymentAmounts(scheme, mesesEfectivos);
               return (
                 <div key={scheme.id} className="bg-white rounded-xl p-4 shadow-lg border border-border">
                   {!scheme.es_manual && (
@@ -361,13 +368,15 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                               const tramos = scheme.tramos_mensualidad!;
                               const lastTramo = tramos[tramos.length - 1];
                               let fechaFinalStr = '';
+                              let totalMesesEscalonado = 0;
                               if (lastTramo.fecha_limite) {
                                 const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
                                 fechaFinalStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                totalMesesEscalonado = mesesEntreFechas(offerData.fecha_generacion, lastTramo.fecha_limite);
                               } else {
-                                const totalMeses = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
+                                totalMesesEscalonado = tramos.reduce((sum, t) => sum + (t.numero_mensualidades || 0), 0);
                                 const startDate = new Date(offerData.fecha_generacion);
-                                startDate.setMonth(startDate.getMonth() + totalMeses);
+                                startDate.setMonth(startDate.getMonth() + totalMesesEscalonado);
                                 fechaFinalStr = startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
                               }
 
@@ -376,6 +385,9 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Monto mensual</p>
                                     <p className="font-bold text-xs">{montoMensualTexto}</p>
+                                    {totalMesesEscalonado > 0 && (
+                                      <p className="text-xs text-muted-foreground">{totalMesesEscalonado} mensualidades</p>
+                                    )}
                                     <p className="text-xs text-muted-foreground">hasta {fechaFinalStr}</p>
                                   </div>
                                   <div className="text-center">
@@ -392,7 +404,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Mensualidades</p>
                                     <p className="font-bold text-xs">{formatCurrency(calculation.mensualidad)}</p>
-                                    <p className="text-xs text-muted-foreground">{scheme.numero_mensualidades} meses</p>
+                                    <p className="text-xs text-muted-foreground">{calculation.meses} meses ({calculation.porcentajeMensualidades.toFixed(1)}%)</p>
                                   </div>
                                 )}
 
@@ -400,7 +412,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                   <div className="text-center">
                                     <p className="text-xs text-muted-foreground">Contra Entrega</p>
                                     <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
-                                    <p className="text-xs text-muted-foreground">({scheme.porcentaje_entrega}%)</p>
+                                    <p className="text-xs text-muted-foreground">({calculation.porcentajeEntrega.toFixed(1)}%)</p>
                                   </div>
                                 )}
                               </>

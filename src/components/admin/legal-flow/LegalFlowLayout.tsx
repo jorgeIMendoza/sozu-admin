@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import {
   LayoutDashboard, Inbox, FileText, Bell, Archive, Stamp,
-  ArrowLeft, LogOut, Menu, LucideIcon,
+  ArrowLeft, LogOut, Menu, LucideIcon, FileSearch,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,8 @@ const navGroups: NavGroup[] = [
   {
     label: "Escrituración",
     items: [
-      { label: "Expedientes", path: `${BASE}/escrituracion/expedientes`, icon: Stamp },
+      { label: "Expedientes",           path: `${BASE}/escrituracion/expedientes`,   icon: Stamp },
+      { label: "Validación Contratos",  path: `${BASE}/validacion-contratos`,        icon: FileSearch },
     ],
   },
   {
@@ -63,6 +64,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/admin/legal-flow/archived":                     "Expedientes Archivados",
   "/admin/legal-flow/notifications":                "Notificaciones",
   "/admin/legal-flow/settings":                     "Configuración",
+  "/admin/legal-flow/validacion-contratos":          "Validación Contratos PDF",
 };
 
 export function LegalFlowLayout() {

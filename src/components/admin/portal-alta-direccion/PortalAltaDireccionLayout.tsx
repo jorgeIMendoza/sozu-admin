@@ -19,6 +19,7 @@ import {
   Activity,
   BarChart3,
   MousePointerClick,
+  SlidersHorizontal,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -43,6 +44,7 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/analisis-cobranza",
   "/admin/portal-alta-direccion/ingresos-egresos",
   "/admin/portal-alta-direccion/forecast-ingresos",
+  "/admin/portal-alta-direccion/estructura-comisiones",
   "/admin/portal-alta-direccion/mediciones/portales",
   "/admin/portal-alta-direccion/mediciones/menus",
   "/admin/portal-alta-direccion/mediciones/ctas",
@@ -87,6 +89,7 @@ const navGroups: NavGroup[] = [
           { label: "Internas", path: "/admin/portal-alta-direccion/comisiones-internas" },
         ],
       },
+      { label: "Estructura de Comisiones", path: "/admin/portal-alta-direccion/estructura-comisiones", icon: SlidersHorizontal },
     ],
   },
   {

@@ -81,6 +81,8 @@ const FichaTecnicaSection = ({ propDetalle }: Props) => {
                       src={planoUbicacionUrl}
                       alt="Planta del nivel con la unidad resaltada"
                       className="w-full h-full object-contain bg-background"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <span className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/45 backdrop-blur text-white flex items-center justify-center opacity-90 group-hover:opacity-100">
                       <Maximize2 className="w-3.5 h-3.5" />
@@ -134,9 +136,11 @@ const FichaTecnicaSection = ({ propDetalle }: Props) => {
               onClick={() => setZoomUrl(planoArquitectonico)}
             >
               <img
-                src={planoArquitectonico!}
+                src={planoArquitectonico}
                 alt="Plano arquitectónico de la unidad"
                 className="w-full h-full object-contain bg-background"
+                loading="lazy"
+                decoding="async"
               />
               <span className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/45 backdrop-blur text-white flex items-center justify-center opacity-90 group-hover:opacity-100">
                 <Maximize2 className="w-3.5 h-3.5" />

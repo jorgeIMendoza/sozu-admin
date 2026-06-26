@@ -61,6 +61,7 @@ const Inmobiliarias = lazyRetry(() => import("./pages/admin/Inmobiliarias"));
 const Administradoras = lazyRetry(() => import("./pages/admin/Administradoras"));
 const Notarias = lazyRetry(() => import("./pages/admin/Notarias"));
 const Bancos = lazyRetry(() => import("./pages/admin/Bancos"));
+const CuentasSozu = lazyRetry(() => import("./pages/admin/CuentasSozu"));
 const Prospectos = lazyRetry(() => import("./pages/admin/Prospectos"));
 const Compradores = lazyRetry(() => import("./pages/admin/Compradores"));
 const DetalleCuentaMantenimiento = lazyRetry(() => import("./pages/admin/DetalleCuentaMantenimiento"));
@@ -97,6 +98,9 @@ const ConfiguracionReportes = lazyRetry(() => import("./pages/admin/Configuracio
 const VersionProduccion = lazyRetry(() => import("./pages/admin/VersionProduccion"));
 const ReportesInventarios = lazyRetry(() => import("./pages/admin/reportes/Inventarios"));
 const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas"));
+const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
+const ValidacionPagos = lazyRetry(() => import("./pages/admin/ValidacionPagos"));
+const EstadosCuenta = lazyRetry(() => import("./pages/admin/finanzas/EstadosCuenta"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -198,6 +202,12 @@ const PECInventoryAdvanced = lazyRetry(() => import("./components/admin/portal-e
 const PECAgentPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/AgentPortalTab"));
 const PECAmbassadorsAdmin = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsAdminTab"));
 const PECAmbassadorsPortal = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/ambassadors/AmbassadorsPortalTab"));
+const PPComingSoon = lazyRetry(() => import("./pages/admin/portal-productos/ComingSoon"));
+const PPResumenPage = lazyRetry(() => import("./pages/admin/portal-productos/ResumenEjecutivoPage"));
+const PPCarteraPage = lazyRetry(() => import("./pages/admin/portal-productos/CarteraPage"));
+const PPDetalleCuentaPage = lazyRetry(() => import("./pages/admin/portal-productos/DetalleCuentaPage"));
+const PPAnalisisPage = lazyRetry(() => import("./pages/admin/portal-productos/AnalisisCobranzaPage"));
+const PPHistoricoPage = lazyRetry(() => import("./pages/admin/portal-productos/HistoricoVentasPage"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
@@ -253,6 +263,7 @@ const AltaDireccionHistoricoComercial = lazyRetry(() => import("./pages/admin/po
 const AltaDireccionAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionAnalisisCobranzaPage"));
 const AltaDireccionIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionIngresosEgresosPage"));
 const AltaDireccionForecastIngresos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionForecastIngresosPage"));
+const AltaDireccionEstructuraComisiones = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionEstructuraComisionesPage"));
 const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesPortalesPage"));
 const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
 const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
@@ -399,6 +410,7 @@ const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index
 const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosPipeline })));
 const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
 const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
+const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBancos })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -694,6 +706,7 @@ const App = () => (
                   <Route path="administradoras" element={<Administradoras />} />
                   <Route path="notarias" element={<Notarias />} />
                   <Route path="bancos" element={<Bancos />} />
+                  <Route path="cuentas-sozu" element={<CuentasSozu />} />
                   <Route path="prospectos" element={<Prospectos />} />
                   <Route path="compradores" element={<Compradores />} />
                   <Route path="vendedores" element={<Vendedores />} />
@@ -737,6 +750,9 @@ const App = () => (
                  <Route path="version-produccion" element={<VersionProduccion />} />
                   <Route path="reportes/inventarios" element={<ReportesInventarios />} />
                   <Route path="reportes/finanzas" element={<ReportesFinanzas />} />
+                  <Route path="validacion-contratos" element={<ValidacionContratosPDF />} />
+                  <Route path="validacion-pagos" element={<ValidacionPagos />} />
+                  <Route path="estados-cuenta" element={<EstadosCuenta />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
@@ -845,6 +861,13 @@ const App = () => (
                   <Route path="portal-estructura-comisiones/agent-portal" element={<PECAgentPortal />} />
                   <Route path="portal-estructura-comisiones/ambassadors-admin" element={<PECAmbassadorsAdmin />} />
                   <Route path="portal-estructura-comisiones/ambassadors-portal" element={<PECAmbassadorsPortal />} />
+                  {/* Portal de Productos */}
+                  <Route path="portal-productos" element={<Navigate to="/admin/portal-productos/resumen" replace />} />
+                  <Route path="portal-productos/resumen" element={<PPResumenPage />} />
+                  <Route path="portal-productos/cartera" element={<PPCarteraPage />} />
+                  <Route path="portal-productos/cartera/:cuentaId" element={<PPDetalleCuentaPage />} />
+                  <Route path="portal-productos/analisis" element={<PPAnalisisPage />} />
+                  <Route path="portal-productos/historico" element={<PPHistoricoPage />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
@@ -873,6 +896,7 @@ const App = () => (
                   <Route path="portal-escrituracion/app-notaria" element={<EscAppNotaria />} />
                   <Route path="portal-escrituracion/notarias/usuarios" element={<EscAppNotariaUsuarios />} />
                   <Route path="portal-escrituracion/app-juridico" element={<EscAppJuridico />} />
+                  <Route path="portal-escrituracion/validacion-contratos" element={<ValidacionContratosPDF />} />
                   {/* Portal Notaría — independiente del Portal Escrituración */}
                   <Route path="portal-notaria/inicio" element={<EscAppNotaria />} />
                   {/* Portal Jurídico — independiente del Portal Escrituración */}
@@ -972,6 +996,7 @@ const App = () => (
                   <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
                   <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
                   <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+                  <Route path="portal-bancos/bancos"   element={<BancosBancos />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
@@ -997,6 +1022,7 @@ const App = () => (
                   <Route path="portal-alta-direccion/analisis-cobranza" element={<AltaDireccionAnalisisCobranza />} />
                   <Route path="portal-alta-direccion/ingresos-egresos" element={<AltaDireccionIngresosEgresos />} />
                   <Route path="portal-alta-direccion/forecast-ingresos" element={<AltaDireccionForecastIngresos />} />
+                  <Route path="portal-alta-direccion/estructura-comisiones" element={<AltaDireccionEstructuraComisiones />} />
                   <Route path="portal-alta-direccion/mediciones/portales" element={<MedicionesPortales />} />
                   <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
                   <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
@@ -1059,6 +1085,7 @@ const App = () => (
                  <Route path="legal-flow/notifications"         element={<LegalFlowNotifications />} />
                  <Route path="legal-flow/settings"              element={<LegalFlowSettings />} />
                  <Route path="legal-flow/escrituracion/expedientes" element={<LegalFlowEscExpedientes />} />
+                 <Route path="legal-flow/validacion-contratos" element={<ValidacionContratosPDF />} />
                 </Route>
                 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

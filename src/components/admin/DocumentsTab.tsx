@@ -989,6 +989,35 @@ export function DocumentsTab({
 
       if (commentError) throw commentError;
 
+      // Notify client if document was rejected
+      if (newStatus === 3) {
+        const personaId = documento.id_persona ?? (entityType === 'persona' ? entityId : undefined);
+        if (personaId) {
+          supabase
+            .from('usuarios')
+            .select('email')
+            .eq('id_persona', personaId)
+            .eq('rol_id', 23)
+            .maybeSingle()
+            .then(({ data: u }) => {
+              if (!u?.email) return;
+              (supabase as any).from('notificaciones_cliente').insert({
+                email_cliente: u.email,
+                tipo: 'accionable',
+                categoria: 'documentos',
+                titulo: `${documento.tipo_documento_nombre ?? 'Documento'} rechazado`,
+                descripcion: comment || 'Tu documento fue rechazado. Sube uno nuevo para continuar.',
+                url_accion: '/admin/portal-cliente/perfil',
+                etiqueta_accion: 'Actualizar documento',
+                leida: false,
+                descartada: false,
+                activo: true,
+              });
+            })
+            .catch(() => {});
+        }
+      }
+
       await loadDocumentos();
 
       toast({

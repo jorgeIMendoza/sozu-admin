@@ -20,6 +20,7 @@ import { PortalCondominioLayout } from "./portal-condominio/PortalCondominioLayo
 import { PortalCRMLayout } from "./portal-crm/PortalCRMLayout";
 import { PortalBancosLayout } from "./portal-bancos/PortalBancosLayout";
 import { PortalEstructuraComisionesLayout } from "./portal-estructura-comisiones/PortalEstructuraComisionesLayout";
+import { PortalProductosLayout } from "./portal-productos/PortalProductosLayout";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
 
@@ -99,6 +100,10 @@ export const AdminLayout = () => {
 
   if (location.pathname.startsWith("/admin/portal-estructura-comisiones")) {
     return <PortalEstructuraComisionesLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-productos")) {
+    return <PortalProductosLayout />;
   }
 
   return (

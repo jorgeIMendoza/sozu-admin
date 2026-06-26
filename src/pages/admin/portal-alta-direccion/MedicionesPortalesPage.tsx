@@ -10,7 +10,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, BarChart3, Activity, RefreshCw, ChevronRight, X, Mail, Loader2 } from "lucide-react";
+import { Users, BarChart3, Activity, RefreshCw, ChevronRight, X, Mail, Loader2, Monitor, Smartphone, Tablet, HelpCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,27 @@ const PORTAL_LABEL: Record<string, string> = {
   crm: "CRM",
   condominio: "Condominio",
 };
+
+/** Tipos de dispositivo (clasificados desde user_agent en el RPC dispositivos_uso_por_portal). */
+const DEVICE_ORDER = ["desktop", "iphone", "android_phone", "ipad", "android_tablet", "desconocido"] as const;
+type DeviceKey = (typeof DEVICE_ORDER)[number];
+const DEVICE_LABEL: Record<DeviceKey, string> = {
+  desktop: "Escritorio",
+  iphone: "iPhone (iOS)",
+  android_phone: "Android (teléfono)",
+  ipad: "iPad (tablet iOS)",
+  android_tablet: "Android (tablet)",
+  desconocido: "Desconocido",
+};
+const DEVICE_ICON: Record<DeviceKey, LucideIcon> = {
+  desktop: Monitor,
+  iphone: Smartphone,
+  android_phone: Smartphone,
+  ipad: Tablet,
+  android_tablet: Tablet,
+  desconocido: HelpCircle,
+};
+type DispositivoRow = { portal: string; tipo_dispositivo: string; usuarios_unicos: number; total_sesiones: number };
 
 type RangoPreset = "24h" | "semana" | "mes" | "trimestre" | "todo";
 const RANGO_HORAS: Record<RangoPreset, number | null> = {
@@ -122,11 +143,51 @@ export default function MedicionesPortalesPage() {
     },
   });
 
+  // Uso por tipo de dispositivo (clasificado en BD desde user_agent).
+  const dispositivosQ = useQuery<DispositivoRow[]>({
+    queryKey: ["mediciones", "dispositivos", rango],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc(
+        "dispositivos_uso_por_portal",
+        { p_desde: desde, p_hasta: null },
+      );
+      // Probe graceful: si la función aún no existe, no romper la página.
+      if (error) return [];
+      return (data ?? []) as DispositivoRow[];
+    },
+  });
+
   const onlineMap = useMemo(() => {
     const m = new Map<string, OnlineRow>();
     (onlineQ.data ?? []).forEach((r) => m.set(r.portal, r));
     return m;
   }, [onlineQ.data]);
+
+  // Sesiones por dispositivo: por portal + totales globales + tipos presentes.
+  const dispositivos = useMemo(() => {
+    const rows = dispositivosQ.data ?? [];
+    const porPortal = new Map<string, Record<string, number>>();
+    const global: Record<string, number> = {};
+    for (const r of rows) {
+      const tipo = (DEVICE_ORDER as readonly string[]).includes(r.tipo_dispositivo)
+        ? r.tipo_dispositivo
+        : "desconocido";
+      const bucket = porPortal.get(r.portal) ?? {};
+      bucket[tipo] = (bucket[tipo] ?? 0) + r.total_sesiones;
+      porPortal.set(r.portal, bucket);
+      global[tipo] = (global[tipo] ?? 0) + r.total_sesiones;
+    }
+    // Columnas a mostrar: las 5 principales siempre; "desconocido" solo si hay.
+    const cols = DEVICE_ORDER.filter((k) => k !== "desconocido" || (global.desconocido ?? 0) > 0);
+    const totalGlobal = Object.values(global).reduce((s, n) => s + n, 0);
+    const portales = [...porPortal.keys()].sort(
+      (a, b) =>
+        Object.values(porPortal.get(b)!).reduce((s, n) => s + n, 0) -
+        Object.values(porPortal.get(a)!).reduce((s, n) => s + n, 0),
+    );
+    return { porPortal, global, cols, totalGlobal, portales };
+  }, [dispositivosQ.data]);
 
   const portalesOrdenados = useMemo(() => {
     // Union de portales que aparecen en cualquiera de los dos datasets +
@@ -323,6 +384,82 @@ export default function MedicionesPortalesPage() {
                 </TableBody>
               </Table>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Uso por tipo de dispositivo ─── */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Uso por tipo de dispositivo</h3>
+            <Badge variant="outline" className="ml-1 text-[10px]">{RANGO_LABEL[rango]}</Badge>
+          </div>
+
+          {dispositivosQ.isLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Cargando…
+            </div>
+          ) : dispositivos.totalGlobal === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Sin sesiones con dispositivo identificado en este período.
+            </p>
+          ) : (
+            <>
+              {/* Resumen global por dispositivo */}
+              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {dispositivos.cols.map((k) => {
+                  const Icon = DEVICE_ICON[k];
+                  const val = dispositivos.global[k] ?? 0;
+                  const pct = dispositivos.totalGlobal > 0 ? Math.round((val / dispositivos.totalGlobal) * 100) : 0;
+                  return (
+                    <div key={k} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Icon className="h-3.5 w-3.5" /> {DEVICE_LABEL[k]}
+                      </div>
+                      <p className="mt-1 text-xl font-bold tabular-nums">{val.toLocaleString("es-MX")}</p>
+                      <p className="text-[11px] text-muted-foreground">{pct}% de sesiones</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desglose por portal */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Portal</TableHead>
+                      {dispositivos.cols.map((k) => (
+                        <TableHead key={k} className="text-right text-xs whitespace-nowrap">{DEVICE_LABEL[k]}</TableHead>
+                      ))}
+                      <TableHead className="text-right text-xs">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dispositivos.portales.map((p) => {
+                      const bucket = dispositivos.porPortal.get(p) ?? {};
+                      const total = Object.values(bucket).reduce((s, n) => s + n, 0);
+                      return (
+                        <TableRow key={p}>
+                          <TableCell className="text-sm font-medium">{PORTAL_LABEL[p] ?? p}</TableCell>
+                          {dispositivos.cols.map((k) => (
+                            <TableCell key={k} className="text-right text-sm tabular-nums text-muted-foreground">
+                              {(bucket[k] ?? 0) || "—"}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right text-sm font-semibold tabular-nums">{total}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Conteo de sesiones por dispositivo, clasificado desde el navegador del usuario.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>

@@ -199,17 +199,13 @@ const PublicShell = ({
             {agent && (
               <div className="shrink-0 border-t border-border p-3">
                 <div className="flex items-center gap-3 px-2 py-2">
-                  {agent.photoUrl ? (
+                  <div className="w-9 h-9 rounded-full bg-white border border-border shrink-0 overflow-hidden flex items-center justify-center">
                     <img
-                      src={agent.photoUrl}
+                      src={agent.photoUrl || sozuLogo}
                       alt={agent.firstName}
-                      className="w-9 h-9 rounded-full object-cover shrink-0 border border-border"
+                      className="w-full h-full object-contain"
                     />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <Phone className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                  )}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] text-muted-foreground/60 leading-none mb-0.5">Tu asesor</p>
                     <p className="text-[13px] font-semibold text-foreground truncate">

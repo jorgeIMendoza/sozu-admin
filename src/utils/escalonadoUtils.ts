@@ -57,6 +57,73 @@ export function calcEntregaEscalonado(
 }
 
 /**
+ * Calculates dynamic payment scheme amounts and percentages.
+ *
+ * The monthly payment AMOUNT stays fixed (original % / original months).
+ * As fewer months remain, the mensualidades % decreases and entrega % absorbs the difference.
+ *
+ * When mesesEfectivos >= scheme.numero_mensualidades (or no fecha_entrega available),
+ * pass 0 for mesesEfectivos and the function falls back to DB values unchanged.
+ */
+export interface DynamicSchemeResult {
+  enganche: number;
+  mensualidad: number;
+  mensualidadesTotal: number;
+  entrega: number;
+  precioFinal: number;
+  adjustment: number;
+  meses: number;
+  porcentajeMensualidades: number;
+  porcentajeEntrega: number;
+}
+
+export function calcDynamicScheme(
+  scheme: {
+    porcentaje_enganche: number;
+    porcentaje_mensualidades: number;
+    porcentaje_entrega: number;
+    porcentaje_descuento_aumento: number;
+    numero_mensualidades: number;
+  },
+  precioLista: number,
+  mesesEfectivos: number
+): DynamicSchemeResult {
+  const adjustment = precioLista * (scheme.porcentaje_descuento_aumento / 100);
+  const precioFinal = precioLista + adjustment;
+
+  const mesesOriginales = scheme.numero_mensualidades || 0;
+  // Cap at original months; if no effective months passed, use original
+  const meses = mesesEfectivos > 0 ? Math.min(mesesEfectivos, mesesOriginales) : mesesOriginales;
+
+  // Monthly payment stays fixed (original rate / original months)
+  const mensualidad =
+    mesesOriginales > 0
+      ? (precioFinal * (scheme.porcentaje_mensualidades / 100)) / mesesOriginales
+      : 0;
+
+  // Dynamic percentages
+  const porcentajeMensualidades =
+    mesesOriginales > 0
+      ? scheme.porcentaje_mensualidades * (meses / mesesOriginales)
+      : scheme.porcentaje_mensualidades;
+
+  const porcentajeEntrega =
+    scheme.porcentaje_entrega + (scheme.porcentaje_mensualidades - porcentajeMensualidades);
+
+  return {
+    enganche: precioFinal * (scheme.porcentaje_enganche / 100),
+    mensualidad,
+    mensualidadesTotal: mensualidad * meses,
+    entrega: precioFinal * (porcentajeEntrega / 100),
+    precioFinal,
+    adjustment,
+    meses,
+    porcentajeMensualidades,
+    porcentajeEntrega,
+  };
+}
+
+/**
  * Formats a number as MXN currency string (e.g. "$1,234.56")
  */
 export function formatMXN(amount: number): string {

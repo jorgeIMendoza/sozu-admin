@@ -1,6 +1,5 @@
 import sozuLogo from "@/assets/sozu-logo.png";
 import AmenitiesGridSection from "@/components/offer/AmenitiesGridSection";
-import LifestyleCountryClubSection from "@/components/offer/LifestyleCountryClubSection";
 import PaymentPlansComparatorSection from "@/components/offer/PaymentPlansComparatorSection";
 import Tour360Section from "@/components/offer/Tour360Section";
 import AgentCard from "@/components/offer/AgentCard";
@@ -105,7 +104,7 @@ const OfferPage = () => {
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
   const mockOffer = useOfferById(offerId ?? "");
-  const offer = dbOffer ?? mockOffer;
+  const offer = dbOffer ?? (import.meta.env.DEV ? mockOffer : null);
   const injectOffer = useInjectOffer();
 
   useEffect(() => {
@@ -399,7 +398,15 @@ const OfferPage = () => {
                 <span className="text-[11px] text-muted-foreground/55">
                   Expedida {expeditionLabel}
                 </span>
-                {!isExpired && daysToExpiry >= 0 && (
+                {isExpired ? (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-destructive/10 text-destructive border border-destructive/25 font-semibold">
+                      <AlertCircle className="w-3 h-3" />
+                      Oferta vencida
+                    </span>
+                  </>
+                ) : daysToExpiry >= 0 ? (
                   <>
                     <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] ${urgencyClass}`}>
@@ -411,9 +418,22 @@ const OfferPage = () => {
                       {expiryLabel}
                     </span>
                   </>
-                )}
+                ) : null}
               </div>
             </header>
+
+            {/* Expired banner */}
+            {isExpired && (
+              <div className="rounded-xl bg-destructive/8 border border-destructive/20 px-4 py-3 flex items-start gap-3">
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-destructive">Esta oferta ya venció</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    La información del desarrollo sigue disponible. Contacta a tu asesor para una oferta actualizada.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* GALLERY */}
             <div id="gallery" ref={galleryRef} className={sectionClass("gallery")}>
@@ -604,8 +624,6 @@ const OfferPage = () => {
               <OfferLocation location={offer.location} />
             </div>
 
-            <LifestyleCountryClubSection zoneName="Country Club" />
-
             {/* DEVELOPMENT */}
             <div id="development" className={sectionClass("development")}>
               {offer.development ? (
@@ -770,7 +788,12 @@ const OfferPage = () => {
                       </span>
                     </div>
                   )}
-                  {!isExpired && daysToExpiry >= 0 && (
+                  {isExpired ? (
+                    <div className="flex items-center gap-2 text-[11px] text-destructive font-semibold">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Oferta vencida
+                    </div>
+                  ) : daysToExpiry >= 0 ? (
                     <div className={`flex items-center gap-2 text-[11px] ${
                       urgencyLevel === "imminent"
                         ? "text-destructive font-semibold"
@@ -787,28 +810,39 @@ const OfferPage = () => {
                       }`} />
                       {expiryLabel}
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
                 {!reservationId && (
                   <div className="pt-4">
-                    <button
-                      onClick={ctaDisabled ? undefined : handleCtaClick}
-                      disabled={ctaDisabled}
-                      className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                        ctaDisabled
-                          ? "bg-muted text-muted-foreground cursor-not-allowed"
-                          : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
-                      }`}
-                    >
-                      {ctaLabel}
-                      {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
-                    </button>
-                    {!ctaDisabled && (
-                      <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-                        Apartado reembolsable · Sin compromiso
-                      </p>
+                    {isExpired ? (
+                      <div className="rounded-xl bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">
+                        <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Contacta a tu asesor para recibir una oferta actualizada.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={ctaDisabled ? undefined : handleCtaClick}
+                          disabled={ctaDisabled}
+                          className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                            ctaDisabled
+                              ? "bg-muted text-muted-foreground cursor-not-allowed"
+                              : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
+                          }`}
+                        >
+                          {ctaLabel}
+                          {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
+                        </button>
+                        {!ctaDisabled && (
+                          <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
+                            Apartado reembolsable · Sin compromiso
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -832,18 +866,28 @@ const OfferPage = () => {
       {!reservationId && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
-            <button
-              onClick={ctaDisabled ? undefined : handleCtaClick}
-              disabled={ctaDisabled}
-              className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                ctaDisabled
-                  ? "bg-muted text-muted-foreground cursor-not-allowed"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-              }`}
-            >
-              {ctaLabel}
-              {!ctaDisabled && !isExpired && !isReserved && <ChevronRight className="w-4 h-4" />}
-            </button>
+            {isExpired ? (
+              <div className="flex items-center gap-2.5 py-0.5">
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
+                  <p className="text-[10px] text-muted-foreground">Contacta a tu asesor para una nueva oferta</p>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={ctaDisabled ? undefined : handleCtaClick}
+                disabled={ctaDisabled}
+                className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  ctaDisabled
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+              >
+                {ctaLabel}
+                {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
+              </button>
+            )}
           </div>
         </div>
       )}

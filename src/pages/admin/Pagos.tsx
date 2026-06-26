@@ -1493,11 +1493,13 @@ export default function Pagos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-{paginatedCuentas.map(cuenta => <TableRow key={cuenta.id} className={
+{paginatedCuentas.map(cuenta => {
+                      const esDacionEnPago = cuenta.id_estatus_disponibilidad === 12;
+                      return <TableRow key={cuenta.id} className={
                       cuenta.id_estatus_disponibilidad === 11
                         ? "bg-amber-50 dark:bg-amber-950/30"
                         : cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && !cuenta.tiene_multas_pendientes && (cuenta.tiene_acuerdos || cuenta.precio_final === 0)
-                          ? "bg-green-50 dark:bg-green-950/20" 
+                          ? "bg-green-50 dark:bg-green-950/20"
                           : ""
                     }>
                         <TableCell className="font-semibold">
@@ -1726,10 +1728,10 @@ export default function Pagos() {
                            </div>
                          </TableCell>
                         <TableCell className="font-semibold text-blue-600">
-                          {formatCurrency(cuenta.pagado)}
+                          {esDacionEnPago ? <span className="text-muted-foreground text-xs font-normal">N/A</span> : formatCurrency(cuenta.pagado)}
                         </TableCell>
                          <TableCell className={`font-semibold ${cuenta.restante <= 0 ? 'text-green-600' : 'text-orange-600'}`}>
-                           <div className="flex items-center gap-2">
+                           {esDacionEnPago ? <span className="text-muted-foreground text-xs font-normal">N/A</span> : <div className="flex items-center gap-2">
                              {formatCurrency(cuenta.restante)}
                               {cuenta.restante <= 0.01 && !cuenta.motivo_cancelacion && !cuenta.tiene_multas_pendientes && (cuenta.tiene_acuerdos || cuenta.precio_final === 0) && (
                                <TooltipProvider>
@@ -1747,10 +1749,10 @@ export default function Pagos() {
                                  </Tooltip>
                                </TooltipProvider>
                              )}
-                           </div>
+                           </div>}
                          </TableCell>
                          <TableCell>
-                           {cuenta.tipo === 'Propiedad' ? <TooltipProvider>
+                           {esDacionEnPago ? <span className="text-muted-foreground text-xs">N/A</span> : cuenta.tipo === 'Propiedad' ? <TooltipProvider>
                                <Tooltip>
                                  <TooltipTrigger asChild>
                                    <Button variant="ghost" size="icon" onClick={() => setCashDialog({
@@ -1770,9 +1772,9 @@ export default function Pagos() {
                          </TableCell>
                          {/* Progress column - only for Propiedad */}
                          <TableCell>
-                            {cuenta.tipo === 'Propiedad' && cuenta.id_estatus_disponibilidad ? (
-                              <PropertyProgressBadge 
-                                cuentaId={cuenta.id} 
+                            {!esDacionEnPago && cuenta.tipo === 'Propiedad' && cuenta.id_estatus_disponibilidad ? (
+                              <PropertyProgressBadge
+                                cuentaId={cuenta.id}
                                 estatusActual={cuenta.id_estatus_disponibilidad}
                                 restante={cuenta.restante}
                               />
@@ -1795,6 +1797,7 @@ export default function Pagos() {
                                      <p>Ver Detalle</p>
                                    </TooltipContent>
                                  </Tooltip>
+                                  {!esDacionEnPago && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button variant="outline" size="icon" onClick={() => handleDownloadEstadoCuenta(cuenta.id)} disabled={isGeneratingEstadoCuenta !== null}>
@@ -1805,6 +1808,7 @@ export default function Pagos() {
                                       <p>Descargar Estado de Cuenta</p>
                                     </TooltipContent>
                                   </Tooltip>
+                                  )}
                                  {(canUpdate || isSuperAdmin) && (
                                   <Tooltip>
                                    <TooltipTrigger asChild>
@@ -1872,7 +1876,8 @@ export default function Pagos() {
                                </div>
                              </TooltipProvider>
                           </TableCell>
-                      </TableRow>)}
+                      </TableRow>;
+                    })}
                   </TableBody>
                 </Table>}
               {renderPagination(currentPage, totalPages, setCurrentPage)}

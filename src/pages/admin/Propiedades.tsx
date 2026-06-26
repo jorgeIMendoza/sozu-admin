@@ -48,7 +48,7 @@ import { ReventaDialog } from "@/components/admin/ReventaDialog";
 import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
-import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -345,7 +345,7 @@ const Propiedades = () => {
   } = useProjectAccess();
   
   // Page permissions
-  const { canCreate, canUpdate, canDelete, canGenerateOffer, isLoading: isLoadingPermissions, isSuperAdmin } = usePagePermissions('/admin/propiedades');
+  const { canCreate, canUpdate, canDelete, canGenerateOffer, canGenerateDigitalOffer, isLoading: isLoadingPermissions, isSuperAdmin } = usePagePermissions('/admin/propiedades');
   
   // Activity logger
   const { registrarAprobacion, registrarEliminacion, registrarCreacion } = useActivityLogger();
@@ -353,16 +353,24 @@ const Propiedades = () => {
   // Auth context for prospect ownership check
   const { profile } = useAuth();
   
-  // Check if user can see all prospects or only their own
+  // Check if user can see all prospects or only their own.
+  // profile.ver_todos_prospectos_compradores ahora refleja el flag EFECTIVO (usuario OR rol),
+  // espejo de la función backend can_view_all_prospects() — ver get_current_user_profile().
   const canSeeAllProspects = profile?.ver_todos_prospectos_compradores || isSuperAdmin;
+  // Mirror de is_admin_user(): roles internos admin (Super Admin = 1, Administrador de Proyecto = 2).
+  const isAdminRole = profile?.rol_id === 1 || profile?.rol_id === 2;
   const currentUserPersonaId = profile?.id_persona;
-  
+
   // Check if user can see advanced filters and deleted tab
   const canSeeAdvancedFilters = isSuperAdmin || (profile?.ver_filtros_avanzados_eliminados ?? true);
-  
-  // Helper function to check if user can access an offer
+
+  // Helper function to check if user can access an offer.
+  // Espeja el OR de la función backend can_access_agent_owned_lead:
+  //   is_admin_user() OR can_view_all_prospects() OR dueño del lead.
+  // (Las ramas de agente-lead tipo 19 y acceso por proyecto viven solo en backend;
+  //  exponerlas como RPC evitaría desincronización front/back para esos casos.)
   const canAccessOffer = (offer: any) => {
-    if (canSeeAllProspects) return true;
+    if (isAdminRole || canSeeAllProspects) return true;
     if (!currentUserPersonaId) return false;
     // User can access if they are the owner of the lead
     return offer.id_persona_duena_lead === currentUserPersonaId;
@@ -867,7 +875,7 @@ const Propiedades = () => {
     queryFn: async () => {
       let query = supabase
         .from('proyectos')
-        .select('id, nombre')
+        .select('id, nombre, fecha_entrega')
         .eq('activo', true)
         .not("id_tipo_uso", "in", "(9,10,11)")
         .order('nombre', { ascending: true });
@@ -4946,10 +4954,11 @@ const Propiedades = () => {
                           )}
                           {/* Generar oferta para propiedades Disponible - si es Reventa, forzar modo manual */}
                           {(canGenerateOffer || isSuperAdmin) && property.disponibilidad === "Disponible" && property.tiene_sozu_como_inmobiliaria && (
-                            <NewOfferDialog 
-                              propertyId={property.id} 
+                            <NewOfferDialog
+                              propertyId={property.id}
                               propertyNumber={property.numero_propiedad}
                               forceManualMode={property.tipo_transaccion === "Re-venta"}
+                              enableDigitalOffer={canGenerateDigitalOffer || isSuperAdmin}
                             />
                           )}
                           {/* No mostrar botón de generar oferta de productos para propiedades en Reventa */}
@@ -6025,7 +6034,16 @@ const Propiedades = () => {
                                            <span className="text-xs text-muted-foreground">
                                              {isEscalonado
                                                ? formatEscalonadoLabel(scheme, tramos, selectedPropertyForOffers?.precio_lista)
-                                               : `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${scheme.porcentaje_mensualidades || 0}% (${scheme.numero_mensualidades || 0} pagos) | Ent: ${scheme.porcentaje_entrega || 0}%${scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}`
+                                               : (() => {
+                                                   const proyFechaEntrega = (proyectos as any[])?.find((p: any) => p.id === selectedPropertyForOffers?.proyecto_id)?.fecha_entrega as string | null | undefined;
+                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesEntreFechas(new Date(), proyFechaEntrega) : 0;
+                                                   const precioLista = selectedPropertyForOffers?.precio_lista || 0;
+                                                   const dyn = precioLista > 0 ? calcDynamicScheme(scheme, precioLista, dynMeses) : null;
+                                                   const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
+                                                   const pctEnt = dyn ? dyn.porcentajeEntrega.toFixed(1) : (scheme.porcentaje_entrega || 0);
+                                                   const mesesLabel = dyn ? dyn.meses : (scheme.numero_mensualidades || 0);
+                                                   return `Eng: ${scheme.porcentaje_enganche || 0}% | Mens: ${pctMens}% (${mesesLabel} pagos) | Ent: ${pctEnt}%${scheme.porcentaje_descuento_aumento ? ` | ${scheme.porcentaje_descuento_aumento > 0 ? '+' : ''}${scheme.porcentaje_descuento_aumento}%` : ''}`;
+                                                 })()
                                              }
                                            </span>
                                         </div>

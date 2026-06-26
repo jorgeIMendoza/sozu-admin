@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet } from 'lucide-react';
+import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows, fetchInBatches, fetchInBatchesPaged } from '@/utils/supabasePagination';
 import { useToast } from '@/hooks/use-toast';
 import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
+import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
+import { ExpedienteDocumentos } from '@/components/admin/legal-flow/ExpedienteDocumentos';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +37,7 @@ type BodegaDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   ubicacion: string | null;
+  fechaCompra: string | null;
   cuentaId: number | null;
   cuentaLabel: string | null;
   tieneCuenta: boolean;
@@ -50,6 +53,7 @@ type EstacionamientoDetalle = {
   precioFinal: number;
   ubicacion: string | null;
   esIncluido: boolean;
+  fechaCompra: string | null;
   cuentaId: number | null;
   cuentaLabel: string | null;
   tieneCuenta: boolean;
@@ -63,6 +67,7 @@ type PaqueteDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   compradores: Person[];
+  fechaCompra: string | null;
   cuentaId: number;
   cuentaLabel: string;
 };
@@ -75,6 +80,7 @@ type CondensadoraDetalle = {
   totalPagado: number;
   saldoPendiente: number;
   compradores: Person[];
+  fechaCompra: string | null;
   cuentaId: number;
   cuentaLabel: string;
 };
@@ -82,6 +88,7 @@ type CondensadoraDetalle = {
 type ExpedienteRow = {
   cuentaId: number;
   cuentaLabel: string;
+  propiedadId: number | null;
   compradores: Person[];
   propietario: string;
   propietarioRfc: string | null;
@@ -108,7 +115,12 @@ type ExpedienteRow = {
   precioM2: number | null;
   contratoFirmado: boolean;
   contratoUrl: string | null;
+  ofertaId: number | null;
   documentosCount: number;
+  /** Documentos obligatorios validados (mín. entre compradores) / total. */
+  docsObligatorios: { completos: number; total: number };
+  /** Completitud de datos del comprador por sección (Básica/Dirección/Fiscal). */
+  compradorFaltante: { incompleto: boolean; secciones: string[] };
   relatedAccounts: RelatedAccount[];
 };
 
@@ -122,13 +134,96 @@ const fmtMxn2 = (value: number) =>
 
 const fmtM2 = (value: number) => `${(value || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })} m²`;
 
-const fmtDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtDate = (value: string | null) => {
+  if (!value) return '—';
+  // Mostrar la fecha tal como viene en BD (YYYY-MM-DD), sin desfase por zona
+  // horaria: `new Date('2022-08-26')` se interpreta como UTC y en MX (UTC-6)
+  // retrocede un día. Construimos la fecha con los componentes locales.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(value);
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const fmtFechaHora = (value: string) =>
   new Date(value).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const ccLabel = (id: number) => `CC-${String(id).padStart(6, '0')}`;
+
+// ── Documentos obligatorios ───────────────────────────────────────────────
+// Misma definición que el Dashboard de Expedientes del Portal Escrituración:
+// 5 grupos fijos; un grupo cuenta como cumplido si el documento más reciente
+// de la persona en ese grupo está Validado (id_estatus_verificacion = 2).
+const OBLIGATORIO_GRUPOS = [
+  { key: 'csf', ids: [6] },
+  { key: 'domicilio', ids: [8] },
+  { key: 'ine', ids: [2, 59] },
+  { key: 'curp', ids: [5] },
+  { key: 'acta', ids: [1] },
+] as const;
+const ALL_OBLIGATORIO_IDS = OBLIGATORIO_GRUPOS.flatMap((g) => g.ids);
+const ID_TO_GROUP_KEY: Record<number, string> = {};
+OBLIGATORIO_GRUPOS.forEach((g) => g.ids.forEach((id) => { ID_TO_GROUP_KEY[id] = g.key; }));
+const DOC_VALIDADO = 2;
+
+type LatestDoc = { id: number; estatusId: number; fecha: string };
+function buildLatestDocByPersona(
+  docs: Array<{ id: number; id_persona: number | null; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>,
+): Record<string, LatestDoc> {
+  const map: Record<string, LatestDoc> = {};
+  for (const d of docs) {
+    if (!d.id_persona) continue;
+    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
+    if (!groupKey) continue;
+    const key = `${d.id_persona}__${groupKey}`;
+    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
+    const ex = map[key];
+    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
+      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
+    }
+  }
+  return map;
+}
+function countValidatedGroups(personaId: number, latest: Record<string, LatestDoc>): number {
+  let count = 0;
+  for (const g of OBLIGATORIO_GRUPOS) {
+    const l = latest[`${personaId}__${g.key}`];
+    if (l && l.estatusId === DOC_VALIDADO) count++;
+  }
+  return count;
+}
+function calcDocStats(personaIds: number[], latest: Record<string, LatestDoc>): { completos: number; total: number } {
+  const total = OBLIGATORIO_GRUPOS.length;
+  if (!personaIds.length) return { completos: 0, total };
+  return { completos: Math.min(...personaIds.map((pid) => countValidatedGroups(pid, latest))), total };
+}
+
+// ── Completitud del comprador (Básica / Dirección / Fiscal) ────────────────
+// Marca una sección como incompleta si falta cualquiera de sus campos clave.
+// La dirección usa la fiscal si existe (igual que el Detalle del comprador).
+type CompradorDetalle = {
+  id: number;
+  nombre_legal: string | null; rfc: string | null; curp: string | null;
+  email: string | null; telefono: string | null;
+  direccion_calle: string | null; direccion_num_ext: string | null; direccion_codigo_postal: string | null;
+  direccion_colonia: string | null; direccion_id_estado: any; direccion_id_municipio: any;
+  direccion_fiscal_calle: string | null; direccion_fiscal_num_ext: string | null; direccion_fiscal_codigo_postal: string | null;
+  direccion_fiscal_colonia: string | null; direccion_fiscal_id_pais: any; direccion_fiscal_id_estado: any; direccion_fiscal_id_municipio: any;
+  regimen: any; uso_cfdi: string | null; fecha_nacimiento: string | null; id_pais_nacimiento: any;
+};
+const campoVacio = (v: any) => v == null || String(v).trim() === '' || String(v).trim() === '0';
+function seccionesIncompletas(p: CompradorDetalle): string[] {
+  const out: string[] = [];
+  if ([p.nombre_legal, p.rfc, p.curp, p.email, p.telefono].some(campoVacio)) out.push('Básica');
+  const useFiscal = !!(p.direccion_fiscal_calle || p.direccion_fiscal_codigo_postal || p.direccion_fiscal_id_pais);
+  const dir = useFiscal
+    ? [p.direccion_fiscal_calle, p.direccion_fiscal_num_ext, p.direccion_fiscal_codigo_postal, p.direccion_fiscal_colonia, p.direccion_fiscal_id_estado, p.direccion_fiscal_id_municipio]
+    : [p.direccion_calle, p.direccion_num_ext, p.direccion_codigo_postal, p.direccion_colonia, p.direccion_id_estado, p.direccion_id_municipio];
+  if (dir.some(campoVacio)) out.push('Dirección');
+  if ([p.regimen, p.uso_cfdi, p.fecha_nacimiento, p.id_pais_nacimiento].some(campoVacio)) out.push('Fiscal');
+  return out;
+}
 
 /**
  * Tipos de nota de bitácora (mismas categorías que el composer de Casos).
@@ -177,11 +272,13 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
   const [compradorSel, setCompradorSel] = useState<number | null>(null);
   if (!row) return null;
 
-  // Adquisiciones adicionales con precio final (las que suman al valor de
-  // escrituración): bodegas con cuenta y estacionamientos NO incluidos.
+  // Adquisiciones con precio final que suman al valor de escrituración.
+  // Estacionamiento: cualquiera ligado con precio final > 0, sin importar el
+  // flag "incluido con el depa" — un cajón puede venir "incluido" pero tener
+  // su propia cuenta con precio (p.ej. tándem cobrado aparte).
   const bodegasAdquiridas = row.bodegas.filter((b) => b.tieneCuenta);
   const estacionamientosAdicionales = row.estacionamientos.filter(
-    (e) => !e.esIncluido && e.tieneCuenta,
+    (e) => e.tieneCuenta && e.precioFinal > 0,
   );
   const totalBodegas = bodegasAdquiridas.reduce((s, b) => s + b.precioFinal, 0);
   const totalEstacionamientos = estacionamientosAdicionales.reduce(
@@ -189,6 +286,17 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
     0,
   );
   const valorEscrituracion = row.precioFinal + totalBodegas + totalEstacionamientos;
+
+  // Fecha de compra por concepto: si los ítems comparten fecha se muestra esa;
+  // si hay varias distintas, "Varias"; si no hay, "—".
+  const fechaConcepto = (fechas: Array<string | null>) => {
+    const dias = [...new Set(fechas.filter(Boolean).map((f) => (f as string).slice(0, 10)))];
+    if (dias.length === 0) return '—';
+    if (dias.length === 1) return fmtDate(dias[0]);
+    return 'Varias';
+  };
+  const fechaBodegas = fechaConcepto(bodegasAdquiridas.map((b) => b.fechaCompra));
+  const fechaEstacionamientos = fechaConcepto(estacionamientosAdicionales.map((e) => e.fechaCompra));
 
   return (
     <>
@@ -232,6 +340,20 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                     <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
                 ) : (row.contratoFirmado ? 'Validado' : 'Pendiente')}
+              />
+              <DetailItem
+                label="Oferta comercial"
+                value={row.ofertaId ? (
+                  <a
+                    href={`/oferta/${row.ofertaId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-mono text-primary underline-offset-2 hover:underline"
+                  >
+                    OF-{String(row.ofertaId).padStart(6, '0')}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : '—'}
               />
             </div>
           </section>
@@ -382,28 +504,33 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 <thead className="bg-muted/40 text-left text-[12px] text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2 font-medium">Concepto</th>
+                    <th className="px-4 py-2 font-medium">Fecha de compra</th>
                     <th className="px-4 py-2 font-medium text-right">Precio final</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">Propiedad · Unidad {row.unidad}</td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(row.fechaVenta)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(row.precioFinal)}</td>
                   </tr>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">
                       Bodegas{bodegasAdquiridas.length > 0 ? ` (${bodegasAdquiridas.length})` : ''}
                     </td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fechaBodegas}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalBodegas)}</td>
                   </tr>
                   <tr className="border-t border-border/60 text-[13px]">
                     <td className="px-4 py-2">
                       Estacionamiento adicional{estacionamientosAdicionales.length > 0 ? ` (${estacionamientosAdicionales.length})` : ''}
                     </td>
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">{fechaEstacionamientos}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtMxn2(totalEstacionamientos)}</td>
                   </tr>
                   <tr className="border-t-2 border-border bg-primary/5 text-[13px] font-bold">
                     <td className="px-4 py-2.5">Valor de escrituración</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">—</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-primary">{fmtMxn2(valorEscrituracion)}</td>
                   </tr>
                 </tbody>
@@ -476,6 +603,8 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 </table>
               </div>
             )}
+
+            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} />
           </section>
 
           <BitacoraSection cuentaId={row.cuentaId} />
@@ -770,6 +899,7 @@ function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null;
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Compradores</th>
               </tr>
             </thead>
@@ -783,10 +913,11 @@ function PaquetesModal({ row, open, onOpenChange }: { row: ExpedienteRow | null;
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(paq.precioFinal)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(paq.totalPagado)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(paq.saldoPendiente)}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(paq.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{paq.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin paquetes amueblados ligados</td></tr>
               )}
             </tbody>
           </table>
@@ -815,6 +946,7 @@ function CondensadorasModal({ row, open, onOpenChange }: { row: ExpedienteRow | 
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Compradores</th>
               </tr>
             </thead>
@@ -825,10 +957,11 @@ function CondensadorasModal({ row, open, onOpenChange }: { row: ExpedienteRow | 
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtMxn2(cond.precioFinal)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{fmtMxn2(cond.totalPagado)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{fmtMxn2(cond.saldoPendiente)}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(cond.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{cond.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin condensadora ligada</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin condensadora ligada</td></tr>
               )}
             </tbody>
           </table>
@@ -913,6 +1046,7 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
                 <th className="px-4 py-2 font-medium text-right">Precio Final</th>
                 <th className="px-4 py-2 font-medium text-right">Total Pagado</th>
                 <th className="px-4 py-2 font-medium text-right">Saldo Pendiente</th>
+                <th className="px-4 py-2 font-medium">Fecha compra</th>
                 <th className="px-4 py-2 font-medium">Ubicación</th>
               </tr>
             </thead>
@@ -930,10 +1064,11 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{bodega.tieneCuenta ? fmtMxn2(bodega.precioFinal) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600">{bodega.tieneCuenta ? fmtMxn2(bodega.totalPagado) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-600">{bodega.tieneCuenta ? fmtMxn2(bodega.saldoPendiente) : '—'}</td>
+                  <td className="px-4 py-2 tabular-nums text-muted-foreground">{fmtDate(bodega.fechaCompra)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{bodega.ubicacion || 'N/A'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin bodegas ligadas</td></tr>
+                <tr><td colSpan={8} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin bodegas ligadas</td></tr>
               )}
             </tbody>
           </table>
@@ -952,7 +1087,10 @@ export default function LegalFlowEscrituracionExpedientes() {
   const [modelFilter, setModelFilter] = useState(ALL_VALUE);
   const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
   const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
+  const [compradorFilter, setCompradorFilter] = useState(ALL_VALUE);
+  const [docsFilter, setDocsFilter] = useState(ALL_VALUE);
   const [selected, setSelected] = useState<ExpedienteRow | null>(null);
+  const { exportToExcel, isExporting } = useExportToExcel();
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['legal-flow-escrituracion-expedientes'],
@@ -981,6 +1119,9 @@ export default function LegalFlowEscrituracionExpedientes() {
       if (paqueteFilter === 'without' && row.paquetes.length > 0) return false;
       if (condensadoraFilter === 'with' && !row.tieneCondensadora) return false;
       if (condensadoraFilter === 'without' && row.tieneCondensadora) return false;
+      if (compradorFilter === 'completo' && (row.compradores.length === 0 || row.compradorFaltante.incompleto)) return false;
+      if (compradorFilter === 'incompleto' && !row.compradorFaltante.incompleto) return false;
+      if (docsFilter !== ALL_VALUE && row.docsObligatorios.completos !== Number(docsFilter)) return false;
       if (!q) return true;
       return [
         row.cuentaLabel,
@@ -993,7 +1134,41 @@ export default function LegalFlowEscrituracionExpedientes() {
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter]);
+  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter, compradorFilter, docsFilter]);
+
+  // Exporta a Excel (CSV) los expedientes según los filtros activos.
+  const handleExport = () => {
+    const exportData = filtered.map((row) => {
+      const totalBodegas = row.bodegas.filter((b) => b.tieneCuenta).reduce((s, b) => s + b.precioFinal, 0);
+      const totalEstac = row.estacionamientos
+        .filter((e) => !e.esIncluido && e.tieneCuenta)
+        .reduce((s, e) => s + e.precioFinal, 0);
+      const valorEscrituracion = row.precioFinal + totalBodegas + totalEstac;
+      return {
+        'ID Cuenta': row.cuentaLabel,
+        'Compradores': row.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', '),
+        'Propietario': row.propietario,
+        'Tipo': row.tipo,
+        'Estatus': row.estatus,
+        'Unidad': row.unidad,
+        'Proyecto': row.proyecto,
+        'Edificio': row.edificio,
+        'Modelo': row.modelo,
+        'Fecha venta': fmtDate(row.fechaVenta),
+        'Estacionamientos': row.estacionamientos.map((e) => e.nombre).join(', '),
+        'Bodegas': row.bodegas.map((b) => b.nombre).join(', '),
+        'Muebles': row.paquetes.length ? 'Sí' : 'No',
+        'Condensadora': row.tieneCondensadora ? 'Sí' : 'No',
+        'Docs obligatorios': `${row.docsObligatorios.completos}/${row.docsObligatorios.total}`,
+        'Datos comprador': row.compradores.length === 0
+          ? '—'
+          : (row.compradorFaltante.incompleto ? `Incompleto (${row.compradorFaltante.secciones.join(', ')})` : 'Completo'),
+        'Precio final propiedad': row.precioFinal,
+        'Valor de escrituración': valorEscrituracion,
+      };
+    });
+    exportToExcel({ data: exportData, filename: 'escrituracion_expedientes' });
+  };
 
   return (
     <div className="max-w-[1600px] space-y-6 px-10 py-8">
@@ -1047,35 +1222,67 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[150px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Piso" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los pisos</SelectItem>{options.floors.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
         </Select>
+        <Select value={compradorFilter} onValueChange={setCompradorFilter}>
+          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Datos comprador" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_VALUE}>Datos comprador: todos</SelectItem>
+            <SelectItem value="completo">Comprador completo</SelectItem>
+            <SelectItem value="incompleto">Comprador incompleto</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={docsFilter} onValueChange={setDocsFilter}>
+          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Docs obligatorios" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_VALUE}>Docs obligatorios: todos</SelectItem>
+            <SelectItem value="0">0 / 5 obligatorios</SelectItem>
+            <SelectItem value="1">1 / 5 obligatorios</SelectItem>
+            <SelectItem value="2">2 / 5 obligatorios</SelectItem>
+            <SelectItem value="3">3 / 5 obligatorios</SelectItem>
+            <SelectItem value="4">4 / 5 obligatorios</SelectItem>
+            <SelectItem value="5">5 / 5 (completos)</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          className="ml-auto h-[38px] gap-2 text-[13px]"
+          onClick={handleExport}
+          disabled={isExporting || filtered.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {isExporting ? 'Exportando…' : 'Exportar a Excel'}
+        </Button>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px]">
+          <table className="w-full min-w-[1560px]">
             <thead>
               <tr className="border-b text-left">
-                <th className="table-head">ID Cuenta</th>
-                <th className="table-head">Compradores</th>
-                <th className="table-head">Propietario</th>
-                <th className="table-head">Tipo</th>
-                <th className="table-head">Estatus</th>
-                <th className="table-head">Unidad</th>
-                <th className="table-head">Proyecto</th>
-                <th className="table-head">Modelo</th>
-                <th className="table-head">Estacionamientos</th>
-                <th className="table-head">Bodegas</th>
-                <th className="table-head">Muebles</th>
-                <th className="table-head">Condensadora</th>
-                <th className="table-head text-right">Acción</th>
+                <th className="table-head whitespace-nowrap">ID Cuenta</th>
+                <th className="table-head whitespace-nowrap">Compradores</th>
+                <th className="table-head whitespace-nowrap">Propietario</th>
+                <th className="table-head whitespace-nowrap">Tipo</th>
+                <th className="table-head whitespace-nowrap">Estatus</th>
+                <th className="table-head whitespace-nowrap">Unidad</th>
+                <th className="table-head whitespace-nowrap">Proyecto</th>
+                <th className="table-head whitespace-nowrap">Modelo</th>
+                <th className="table-head whitespace-nowrap">Fecha venta</th>
+                <th className="table-head whitespace-nowrap">Estacionamientos</th>
+                <th className="table-head whitespace-nowrap">Bodegas</th>
+                <th className="table-head whitespace-nowrap">Muebles</th>
+                <th className="table-head whitespace-nowrap">Condensadora</th>
+                <th className="table-head whitespace-nowrap">Docs obligatorios</th>
+                <th className="table-head whitespace-nowrap">Datos comprador</th>
+                <th className="table-head whitespace-nowrap text-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={13} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
                   <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
@@ -1086,6 +1293,7 @@ export default function LegalFlowEscrituracionExpedientes() {
                   <td className="table-cell text-[13px] font-medium">{row.unidad}</td>
                   <td className="table-cell text-[13px]">{row.proyecto}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.modelo}</td>
+                  <td className="table-cell text-[13px] tabular-nums text-muted-foreground">{fmtDate(row.fechaVenta)}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.estacionamientos.length ? row.estacionamientos.map((e) => e.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.bodegas.length ? row.bodegas.map((b) => b.nombre).join(', ') : '—'}</td>
                   <td className="table-cell text-[13px]">
@@ -1100,6 +1308,42 @@ export default function LegalFlowEscrituracionExpedientes() {
                       <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
                     ) : (
                       <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
+                    )}
+                  </td>
+                  <td className="table-cell text-[13px]">
+                    {(() => {
+                      const { completos, total } = row.docsObligatorios;
+                      const done = completos >= total;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1.5"
+                          title={`${completos} de ${total} documentos obligatorios validados`}
+                        >
+                          <span className={cn('h-2.5 w-2.5 rounded-full', done ? 'bg-emerald-500' : completos > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40')} />
+                          <span className="tabular-nums text-muted-foreground">{completos}/{total}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="table-cell text-[13px]">
+                    {row.compradores.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : row.compradorFaltante.incompleto ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400"
+                        title={`Faltan datos en: ${row.compradorFaltante.secciones.join(', ')}`}
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                        <span className="text-[12px] font-medium">Incompleto</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+                        title="Datos básicos, dirección y fiscal completos"
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                        <span className="text-[12px] font-medium">Completo</span>
+                      </span>
                     )}
                   </td>
                   <td className="table-cell text-right">
@@ -1324,6 +1568,24 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const buyerPersonIds = [...new Set(compradores.map((c: any) => c.id_persona).filter(Boolean))] as number[];
   const buyerPeople = await fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select('id, nombre_legal, rfc').in('id', b as number[]));
 
+  // Detalle fiscal/dirección de los compradores (para completitud) + documentos
+  // obligatorios por persona (para el semáforo de docs).
+  const [buyerDetailRows, docsObligatoriosRows] = await Promise.all([
+    fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select(
+      'id, nombre_legal, rfc, curp, email, telefono, ' +
+      'direccion_calle, direccion_num_ext, direccion_codigo_postal, direccion_colonia, direccion_id_estado, direccion_id_municipio, ' +
+      'direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_codigo_postal, direccion_fiscal_colonia, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio, ' +
+      'regimen, uso_cfdi, fecha_nacimiento, id_pais_nacimiento',
+    ).in('id', b as number[])),
+    fetchInBatchesPaged<any>(buyerPersonIds, (b, from, to) => (supabase as any).from('documentos')
+      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+      .eq('activo', true).eq('es_draft', false)
+      .in('id_persona', b as number[]).in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+      .order('id').range(from, to)),
+  ]);
+  const buyerDetailById = new Map<number, CompradorDetalle>(buyerDetailRows.map((r: any) => [r.id, r as CompradorDetalle]));
+  const latestObligatorioByKey = buildLatestDocByPersona(docsObligatoriosRows);
+
   // Mapas de apoyo.
   const linkById = new Map<number, any>(linkRows.map((row: any) => [row.id, row]));
   const buildingById = new Map<number, any>(edificios.map((row: any) => [row.id, row]));
@@ -1384,6 +1646,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           ubicacion: fila?.ubicacion || null,
+          fechaCompra: cuenta?.fecha_compra ?? null,
           cuentaId: cuenta?.id ?? null,
           cuentaLabel: cuenta ? ccLabel(cuenta.id) : null,
           tieneCuenta: !!cuenta,
@@ -1409,6 +1672,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           precioFinal,
           ubicacion: fila?.ubicacion || null,
           esIncluido: !!fila?.es_incluido,
+          fechaCompra: cuenta?.fecha_compra ?? null,
           cuentaId: cuenta?.id ?? null,
           cuentaLabel: cuenta ? ccLabel(cuenta.id) : null,
           tieneCuenta: !!cuenta,
@@ -1427,6 +1691,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           compradores: buyersByAccount.get(c.id) || [],
+          fechaCompra: c.fecha_compra ?? null,
           cuentaId: c.id,
           cuentaLabel: ccLabel(c.id),
         };
@@ -1443,6 +1708,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           totalPagado,
           saldoPendiente: precioFinal - totalPagado,
           compradores: buyersByAccount.get(c.id) || [],
+          fechaCompra: c.fecha_compra ?? null,
           cuentaId: c.id,
           cuentaLabel: ccLabel(c.id),
         };
@@ -1460,9 +1726,17 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
 
       const m2Interiores = Number(property.m2_interiores || 0);
       const m2Exteriores = Number(property.m2_exteriores || 0);
+      // Documentos obligatorios + completitud de datos de los compradores.
+      const buyerPids = (buyersByAccount.get(account.id) || []).map((bp) => bp.id);
+      const docsObligatorios = calcDocStats(buyerPids, latestObligatorioByKey);
+      const seccionesFaltantes = [...new Set(buyerPids.flatMap((pid) => {
+        const det = buyerDetailById.get(pid);
+        return det ? seccionesIncompletas(det) : [];
+      }))];
       return {
         cuentaId: account.id,
         cuentaLabel: ccLabel(account.id),
+        propiedadId: property.id ?? null,
         compradores: buyersByAccount.get(account.id) || [],
         propietario: owner?.nombre_legal || '—',
         propietarioRfc: owner?.rfc || null,
@@ -1492,7 +1766,10 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
           docsForAccount.find((doc: any) => doc.id_tipo_documento === 18 && doc.id_estatus_verificacion === 2) ||
           docsForAccount.find((doc: any) => doc.id_tipo_documento === 18)
         )?.url ?? null,
+        ofertaId: account.id_oferta ?? null,
         documentosCount: docsForAccount.length,
+        docsObligatorios,
+        compradorFaltante: { incompleto: seccionesFaltantes.length > 0, secciones: seccionesFaltantes },
         relatedAccounts: productCuentas.map((c: any) => ({
           id: c.id,
           label: ccLabel(c.id),

@@ -27,9 +27,10 @@ export interface Agent {
   bio?: string;
 }
 
-// Imagen fallback para foto de agente — logo SOZU desde Storage prod con transform WebP
+// Imagen fallback para foto de agente — logo SOZU desde Storage prod
+// resize=contain evita que Supabase recorte el logo horizontal al cuadrar
 export const AGENT_PHOTO_FALLBACK =
-  "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/render/image/public/imagenes_generales/Sozu_logo_n.png?width=120&height=120&quality=80&format=webp";
+  "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/render/image/public/imagenes_generales/Sozu_logo_n.png?width=300&height=150&quality=80&format=webp&resize=contain";
 
 const initialAgents: Agent[] = [];
 

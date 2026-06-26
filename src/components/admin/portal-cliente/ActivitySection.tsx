@@ -4,6 +4,12 @@ import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { getPropertyCategory } from "@/lib/portal-cliente/mock-data";
 import { fmtMXN as fmt } from "@/lib/utils";
 
+function fmtDate(dateStr: string): string {
+  if (!dateStr || dateStr === "Próximamente") return dateStr;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+}
+
 interface PendingItem {
   propertyId: string;
   projectName: string;
@@ -22,6 +28,7 @@ interface ActivitySectionProps {
 
 function getPendingItems(portfolio: InvestmentProperty[]): PendingItem[] {
   const items: PendingItem[] = [];
+  const today = new Date().toISOString().slice(0, 10);
 
   portfolio.forEach((inv) => {
     const category = getPropertyCategory(inv);
@@ -42,13 +49,20 @@ function getPendingItems(portfolio: InvestmentProperty[]): PendingItem[] {
           urgency: "urgent",
         });
       } else if (activeStage.id === "preventa" && inv.financials.pendingBalance > 0) {
-        items.push({
-          ...base,
-          type: "Parcialidad",
-          amount: inv.financials.pendingBalance,
-          dueDate: activeStage.contextMessage || "Próximamente",
-          urgency: "upcoming",
-        });
+        // Show the next specific pending installment, not the full balance
+        const nextPayment = inv.payments
+          .filter(p => p.status === "pendiente")
+          .sort((a, b) => a.date.localeCompare(b.date))[0];
+        if (nextPayment) {
+          const isOverdue = nextPayment.date < today;
+          items.push({
+            ...base,
+            type: "Parcialidad",
+            amount: nextPayment.amount,
+            dueDate: nextPayment.date,
+            urgency: isOverdue ? "urgent" : "upcoming",
+          });
+        }
       } else if (activeStage.id === "escrituracion") {
         items.push({
           ...base,
@@ -69,12 +83,13 @@ function getPendingItems(portfolio: InvestmentProperty[]): PendingItem[] {
     }
 
     if (inv.maintenance && inv.maintenance.status === "pendiente") {
+      const isOverdueM = inv.maintenance.nextDueDate && inv.maintenance.nextDueDate < today;
       items.push({
         ...base,
         type: "Mantenimiento",
         amount: inv.maintenance.monthlyFee,
-        dueDate: inv.maintenance.nextDueDate,
-        urgency: "future",
+        dueDate: inv.maintenance.nextDueDate || "Próximamente",
+        urgency: isOverdueM ? "urgent" : "upcoming",
       });
     }
   });
@@ -170,7 +185,7 @@ const ActivitySection = ({ portfolio, onPayNow }: ActivitySectionProps) => {
                         {item.category === "active_patrimony" ? "Patrimonio" : "En adquisición"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{item.dueDate}</p>
+                    {item.dueDate && <p className="text-xs text-muted-foreground leading-relaxed">{fmtDate(item.dueDate)}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
                     {hasAmount ? (

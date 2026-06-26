@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Wallet, TrendingDown, CalendarClock, KeyRound, BadgePercent } from "lucide-react";
+import { Wallet, TrendingDown, CalendarClock, KeyRound, BadgePercent, Star } from "lucide-react";
 import { formatMXN, useOfferStore, useSelectedPlanId, type PaymentPlan } from "@/lib/offers/offer-data";
 import RollingNumber from "@/components/common/RollingNumber";
 
@@ -64,6 +64,8 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? plans[0];
   if (!selectedPlan) return null;
 
+  const hasPersonalized = plans.some((p) => p.isPersonalized);
+
   const installmentsSublabel = selectedPlan.installments?.endDate
     ? `Hasta ${new Date(selectedPlan.installments.endDate).toLocaleDateString("es-MX", {
         month: "long",
@@ -80,7 +82,9 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
         <h3 className="text-sm font-semibold">Esquemas de financiamiento</h3>
       </div>
       <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-        Explora cómo se distribuye el pago en cada esquema. A mayor enganche, mayor descuento.
+        {hasPersonalized
+          ? "Tu asesor preparó un plan especial para ti. También puedes explorar otros esquemas disponibles — si alguno te interesa, coméntaselo."
+          : "Explora cómo se distribuye el pago en cada esquema. A mayor enganche, mayor descuento."}
       </p>
 
       {/* Pills */}
@@ -92,20 +96,36 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
               key={plan.id}
               onClick={() => setSelectedPlan(offerId, plan.id)}
               aria-pressed={isActive}
-              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-4 h-11 rounded-full text-sm font-medium transition-all border ${
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                  : "bg-card text-foreground border-border hover:border-foreground/30"
+              className={`flex-shrink-0 inline-flex flex-col items-center justify-center gap-0.5 px-4 rounded-2xl text-sm font-medium transition-all border ${
+                plan.isPersonalized
+                  ? isActive
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm py-2"
+                    : "bg-primary/8 text-primary border-primary/40 hover:border-primary/60 py-2"
+                  : isActive
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm h-11"
+                  : "bg-card text-foreground border-border hover:border-foreground/30 h-11"
               }`}
             >
-              <span>{plan.name}</span>
-              {plan.discountPct > 0 && (
-                <span
-                  className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full ${
-                    isActive ? "bg-primary-foreground/20" : "bg-success/15 text-success"
-                  }`}
-                >
-                  −{plan.discountPct}%
+              <span className="inline-flex items-center gap-1.5">
+                {plan.isPersonalized && (
+                  <Star className="w-3 h-3 flex-shrink-0 fill-current" />
+                )}
+                <span>{plan.name}</span>
+                {plan.discountPct > 0 && (
+                  <span
+                    className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full ${
+                      isActive ? "bg-primary-foreground/20" : "bg-success/15 text-success"
+                    }`}
+                  >
+                    −{plan.discountPct}%
+                  </span>
+                )}
+              </span>
+              {plan.isPersonalized && (
+                <span className={`text-[9px] font-semibold uppercase tracking-wide leading-none ${
+                  isActive ? "text-primary-foreground/70" : "text-primary/70"
+                }`}>
+                  Tu plan
                 </span>
               )}
             </button>
@@ -117,6 +137,16 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
       <div className="mt-5 rounded-xl border border-border bg-background p-5 md:p-6 space-y-6">
         {/* Header: precio y descuento */}
         <div>
+          {selectedPlan.isPersonalized ? (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold uppercase tracking-wide mb-2">
+              <Star className="w-3 h-3 fill-current" />
+              Plan personalizado para ti
+            </div>
+          ) : hasPersonalized ? (
+            <p className="text-[10px] text-muted-foreground mb-2">
+              Esquema de comparación — consulta a tu asesor si te interesa este plan
+            </p>
+          ) : null}
           <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground mb-1">
             Precio con este esquema
           </p>

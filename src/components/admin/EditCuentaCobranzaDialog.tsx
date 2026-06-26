@@ -473,11 +473,26 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     enabled: !!ofertaProductoData.id_producto && !!ofertaProductoData.id_propiedad && tipoCuenta === 'Producto'
   });
 
+  // Entidad DUEÑA (vendedor) según tipo de cuenta:
+  //   Producto/Servicio -> productos_servicios.id_entidad_relacionada_dueno (vía ofertas.id_producto)
+  //   Propiedad          -> propiedades.id_entidad_relacionada_dueno
+  // Antes siempre usaba el dueño de la propiedad, mostrando al dueño del depto en cuentas de producto.
   const { data: vendedorDetalle } = useQuery({
-    queryKey: ["vendedor_detalle", propiedadDetalle?.id_entidad_relacionada_dueno],
+    queryKey: ["vendedor_detalle", ofertaTipoData?.id_producto, propiedadDetalle?.id_entidad_relacionada_dueno],
     queryFn: async () => {
-      if (!propiedadDetalle?.id_entidad_relacionada_dueno) return null;
-      
+      // Resolver la entidad dueña: producto -> dueño del producto; si no -> dueño de la propiedad
+      let duenoEntidadId: number | null | undefined = propiedadDetalle?.id_entidad_relacionada_dueno;
+      if (ofertaTipoData?.id_producto) {
+        const { data: prod } = await supabase
+          .from('productos_servicios')
+          .select('id_entidad_relacionada_dueno')
+          .eq('id', ofertaTipoData.id_producto)
+          .maybeSingle();
+        if (prod?.id_entidad_relacionada_dueno) duenoEntidadId = prod.id_entidad_relacionada_dueno;
+      }
+
+      if (!duenoEntidadId) return null;
+
       const { data } = await supabase
         .from('entidades_relacionadas')
         .select(`
@@ -485,12 +500,12 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           nombre_api_key_draft,
           personas!entidades_relacionadas_id_persona_fkey(*)
         `)
-        .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
+        .eq('id', duenoEntidadId)
         .single();
 
       return data;
     },
-    enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
+    enabled: !!(ofertaTipoData?.id_producto || propiedadDetalle?.id_entidad_relacionada_dueno)
   });
 
   // Query para obtener estatus de la propiedad
@@ -2338,13 +2353,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     // Calculate difference against the actual sum of active acuerdos (not the stored precio_final which may be stale/zero)
     const sumaAcuerdosActivos = acuerdosPago?.reduce((sum: number, a: any) => sum + (a.monto || 0), 0) || 0;
     const difference = newPrecio - sumaAcuerdosActivos;
-    
-    // Use a small epsilon to handle floating point precision issues
-    // This allows changes as small as 0.01 (1 cent)
-    if (Math.abs(difference) < 0.001) {
-      // No change (essentially zero difference accounting for floating point)
+
+    // "Sin cambios" debe medirse contra el precio_final ALMACENADO, no contra la suma de
+    // acuerdos. De lo contrario, cuando precio_final está obsoleto (ej. 0) y el usuario teclea
+    // el valor que coincide con la suma de acuerdos, difference≈0 y no se guardaba nada.
+    const currentPrecioFinal = Number(cuentaDetalle.precio_final || 0);
+    if (Math.abs(newPrecio - currentPrecioFinal) < 0.001) {
+      // Genuinamente no hay cambio respecto a lo almacenado
       setIsEditingPrecioFinal(false);
       setEditingPrecioFinal('');
+      return;
+    }
+
+    // Los acuerdos activos ya suman el nuevo precio (difference≈0) pero el precio_final
+    // almacenado está desfasado: persistir solo precio_final sin tocar los acuerdos.
+    if (Math.abs(difference) < 0.001) {
+      updatePrecioFinalMutation.mutate({ newPrecio, lastAcuerdoId: lastAcuerdo.id, difference: 0 });
       return;
     }
 

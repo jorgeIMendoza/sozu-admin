@@ -74,8 +74,10 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
 
   const handlePay = () => {
+    const pendingPayments = investment.payments.filter(p => p.status !== "pagado");
+    const isLastPayment = pendingPayments.length === 1;
     const sinForma = investment.property.tipoFinanciamiento == null;
-    if (activeStage?.id === 'pago_final' && sinForma) {
+    if (isLastPayment && sinForma) {
       setShowPagoFinalSheet(true);
     } else {
       setShowPaySheet(true);
@@ -440,12 +442,7 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
     receiptUrl: p.receiptUrl,
   }));
 
-  allRows.sort((a, b) => {
-    if (a.status !== "paid" && b.status === "paid") return -1;
-    if (a.status === "paid" && b.status !== "paid") return 1;
-    if (a.status !== "paid") return a.date.localeCompare(b.date);
-    return b.date.localeCompare(a.date);
-  });
+  allRows.sort((a, b) => b.date.localeCompare(a.date));
 
   const paidCount = allRows.filter((r) => r.status === "paid").length;
   const LIMIT = 5;

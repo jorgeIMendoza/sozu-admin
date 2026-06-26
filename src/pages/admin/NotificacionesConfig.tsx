@@ -27,6 +27,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { NotificacionDestinatariosSection, type DestinatarioManual } from "@/components/admin/NotificacionDestinatariosSection";
+
+interface DestinatariosExtra {
+  /** Correos manuales (se suman a los usuarios por rol). */
+  correos_manuales?: DestinatarioManual[];
+  /** Correos de usuarios por rol que se excluyen del envío. */
+  excluidos?: string[];
+  /** Solo evento de contrato: incluir al vendedor externo dinámico. */
+  incluir_vendedor_externo?: boolean;
+}
 
 interface NotificacionConfig {
   id: number;
@@ -41,6 +51,7 @@ interface NotificacionConfig {
   plantilla_email_detalles: string;
   postmark_template_id: number;
   mapeo_variables_postmark: Record<string, string>;
+  destinatarios_extra: DestinatariosExtra | null;
 }
 
 interface Rol {
@@ -66,9 +77,12 @@ const EMPTY_CONFIG: Omit<NotificacionConfig, 'id'> = {
   plantilla_email_detalles: '',
   postmark_template_id: 41353048,
   mapeo_variables_postmark: {},
+  destinatarios_extra: null,
 };
 
 const SYSTEM_PLACEHOLDERS = ['{nombre_desarrollo}', '{nombre_esquema}', '{id_proyecto}'];
+
+const CONTRATO_EVENTO = 'contrato_firmado_ambas_partes';
 
 const NotificacionesConfig = () => {
   const [configs, setConfigs] = useState<NotificacionConfig[]>([]);
@@ -149,6 +163,15 @@ const NotificacionesConfig = () => {
     setMapeoJsonError(null);
     setTemplateVars([]);
     if (item.postmark_template_id) loadTemplateVariables(item.postmark_template_id);
+  };
+
+  // Helpers para leer/actualizar destinatarios_extra del editItem en curso.
+  const getDestExtra = (): DestinatariosExtra => editItem?.destinatarios_extra || {};
+  const patchDestExtra = (patch: Partial<DestinatariosExtra>) => {
+    setEditItem(prev => prev ? {
+      ...prev,
+      destinatarios_extra: { ...(prev.destinatarios_extra || {}), ...patch },
+    } : prev);
   };
 
   const loadTemplateVariables = async (templateId: number) => {
@@ -232,6 +255,20 @@ const NotificacionesConfig = () => {
       return;
     }
 
+    // Normalizar destinatarios_extra (correos manuales + exclusiones + vendedor externo).
+    const destExtraFinal: DestinatariosExtra | null = (() => {
+      const de = editItem.destinatarios_extra || {};
+      const obj: DestinatariosExtra = {};
+      const manuales = (de.correos_manuales || []).filter(m => m.email && m.email.includes('@'));
+      if (manuales.length) obj.correos_manuales = manuales;
+      const excluidos = (de.excluidos || []).filter(Boolean);
+      if (excluidos.length) obj.excluidos = excluidos;
+      if (editItem.tipo_evento === CONTRATO_EVENTO) {
+        obj.incluir_vendedor_externo = !!de.incluir_vendedor_externo;
+      }
+      return Object.keys(obj).length ? obj : null;
+    })();
+
     setSaving(true);
 
     if (isNew) {
@@ -249,6 +286,7 @@ const NotificacionesConfig = () => {
           plantilla_email_detalles: editItem.plantilla_email_detalles,
           postmark_template_id: editItem.postmark_template_id,
           mapeo_variables_postmark: mapeoFinal,
+          destinatarios_extra: destExtraFinal,
         })
         .select()
         .single();
@@ -275,6 +313,7 @@ const NotificacionesConfig = () => {
           plantilla_email_detalles: editItem.plantilla_email_detalles,
           postmark_template_id: editItem.postmark_template_id,
           mapeo_variables_postmark: mapeoFinal,
+          destinatarios_extra: destExtraFinal,
         })
         .eq('id', editItem.id);
 
@@ -283,7 +322,8 @@ const NotificacionesConfig = () => {
         toast({ title: "Error", description: error.message, variant: "destructive" });
       } else {
         toast({ title: "Guardado", description: "Configuración actualizada." });
-        setConfigs(prev => prev.map(c => c.id === editItem.id ? editItem : c));
+        const updated = { ...editItem, destinatarios_extra: destExtraFinal };
+        setConfigs(prev => prev.map(c => c.id === editItem.id ? updated : c));
         setEditItem(null);
       }
     }
@@ -449,9 +489,16 @@ const NotificacionesConfig = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Roles: </span>
-                  {item.roles_destino.map(r => (
-                    <Badge key={r} variant="outline" className="mr-1">{getRolName(r)}</Badge>
-                  ))}
+                  {item.roles_destino.length > 0
+                    ? item.roles_destino.map(r => (
+                        <Badge key={r} variant="outline" className="mr-1">{getRolName(r)}</Badge>
+                      ))
+                    : <span className="text-xs text-muted-foreground">—</span>}
+                  {(item.destinatarios_extra?.correos_manuales?.length ?? 0) > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      +{item.destinatarios_extra!.correos_manuales!.length} correo(s)
+                    </Badge>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Filtro proyecto: </span>
@@ -526,27 +573,23 @@ const NotificacionesConfig = () => {
                 </Select>
               </div>
 
-              <div>
-                <Label>Roles destinatarios</Label>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {roles.map(rol => (
-                    <div key={rol.id} className="flex items-center gap-2">
-                      <Checkbox
-                        checked={editItem.roles_destino.includes(rol.id)}
-                        onCheckedChange={(checked) => {
-                          setEditItem({
-                            ...editItem,
-                            roles_destino: checked
-                              ? [...editItem.roles_destino, rol.id]
-                              : editItem.roles_destino.filter(r => r !== rol.id),
-                          });
-                        }}
-                      />
-                      <span className="text-sm">{rol.nombre}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <NotificacionDestinatariosSection
+                roles={roles}
+                selectedRoles={editItem.roles_destino}
+                onToggleRole={(rolId) => setEditItem({
+                  ...editItem,
+                  roles_destino: editItem.roles_destino.includes(rolId)
+                    ? editItem.roles_destino.filter(r => r !== rolId)
+                    : [...editItem.roles_destino, rolId],
+                })}
+                manuales={getDestExtra().correos_manuales || []}
+                onManualesChange={(list: DestinatarioManual[]) => patchDestExtra({ correos_manuales: list })}
+                excluidos={getDestExtra().excluidos || []}
+                onExcluidosChange={(list) => patchDestExtra({ excluidos: list })}
+                mostrarVendedorExterno={editItem.tipo_evento === CONTRATO_EVENTO}
+                incluirVendedorExterno={!!getDestExtra().incluir_vendedor_externo}
+                onIncluirVendedorExternoChange={(v) => patchDestExtra({ incluir_vendedor_externo: v })}
+              />
 
               <div className="border-t pt-4 mt-2">
                 <Label className="text-sm font-semibold mb-1 block">Filtro de proyecto</Label>

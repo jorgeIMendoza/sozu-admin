@@ -62,6 +62,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Allow portal-productos para Super Admin (1) y Administrador de Proyectos (2),
+  // o cualquier rol con permiso explícito en la BD.
+  if (location.pathname.startsWith('/admin/portal-productos')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    let tieneAccesoPP = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-productos')) {
+        tieneAccesoPP = true;
+        break;
+      }
+    }
+    return tieneAccesoPP
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
@@ -189,6 +207,15 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // "Banco" entrar directamente (fallback por si los submenús aún no están
   // asignados a su rol en BD para ese ambiente).
   if (location.pathname.startsWith('/admin/portal-bancos')) {
+    // Administración del portal (agentes / bancos con convenio): solo Super Admin.
+    const esAdminPortalBancos =
+      location.pathname.startsWith('/admin/portal-bancos/equipo') ||
+      location.pathname.startsWith('/admin/portal-bancos/bancos');
+    if (esAdminPortalBancos) {
+      return profile?.rol_id === 1
+        ? <>{children}</>
+        : <Navigate to="/admin/access-denied" replace />;
+    }
     if (profile?.rol_nombre === 'Banco') return <>{children}</>;
     let tieneAccesoBancos = false;
     for (const p of allowedPaths) {
