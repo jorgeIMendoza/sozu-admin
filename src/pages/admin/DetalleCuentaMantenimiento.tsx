@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download, RefreshCw } from "lucide-react";
+import { ArrowLeft, DollarSign, CalendarDays, ChevronDown, ChevronUp, Home, ArrowRight, Plus, Calendar, Upload, Loader2, Eye, Download, RefreshCw, FileText } from "lucide-react";
 import { EstadoCuentaMantenimientoEdgeFunctionService } from "@/services/estadoCuentaMantenimientoEdgeFunctionService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaMantenimientoId } from "@/utils/cuentaCobranzaUtils";
@@ -270,6 +270,32 @@ export default function DetalleCuentaMantenimiento() {
       }));
     },
     enabled: !!cuentaId,
+  });
+
+  // Fetch facturas de mantenimiento (tabla nueva: facturas_mantenimientos).
+  // Mapea por id_pago. Misma estrategia que aplicacionesPorPago.
+  const { data: facturasPorPago } = useQuery({
+    queryKey: ["facturas_mantenimiento", cuentaId],
+    queryFn: async () => {
+      const map = new Map<number, { url_factura_pdf: string | null; url_factura_xml: string | null; facturado: boolean }>();
+      if (!pagosData || pagosData.length === 0) return map;
+
+      const pagoIds = pagosData.map(p => p.id);
+      // Tabla sin tipos generados aún: usar cast (ver CLAUDE.md patrón #8).
+      const { data, error } = await (supabase as any)
+        .from('facturas_mantenimientos')
+        .select('id_pago, url_factura_pdf, url_factura_xml, facturado')
+        .in('id_pago', pagoIds);
+
+      // Degradar a vacío si la tabla aún no existe (migración pendiente): no romper la vista.
+      if (error) return map;
+
+      (data || []).forEach((f: { id_pago: number; url_factura_pdf: string | null; url_factura_xml: string | null; facturado: boolean }) => {
+        map.set(f.id_pago, { url_factura_pdf: f.url_factura_pdf, url_factura_xml: f.url_factura_xml, facturado: f.facturado });
+      });
+      return map;
+    },
+    enabled: !!cuentaId && !!pagosData && pagosData.length > 0,
   });
 
   // Fetch aplicaciones for pagos (for the new tab)
@@ -1311,6 +1337,28 @@ export default function DetalleCuentaMantenimiento() {
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>Ver evidencia de pago</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                {facturasPorPago?.get(pago.id)?.url_factura_pdf && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(facturasPorPago.get(pago.id)?.url_factura_pdf || '', '_blank');
+                                          }}
+                                        >
+                                          <FileText className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Ver factura</p>
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
