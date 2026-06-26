@@ -40,6 +40,7 @@ import {
 import type { BitacoraEntry, BitacoraEntryInput, BitacoraScope } from '@/types/bitacora';
 import { Loader2, CheckCircle, ShieldAlert } from 'lucide-react';
 import type { CaseStatus, CompradorDetalle, IntegrationStatus, TipoPersona } from '@/types/legal-flow';
+import { getTipoPersonaLabel } from '@/utils/tipo-persona';
 
 // ── Mock data for clickable detail drawers ──
 
@@ -234,11 +235,6 @@ function RequesterDrawer({
   );
 }
 
-const TIPO_PERSONA_LABEL: Record<TipoPersona, 'Persona física' | 'Persona moral' | 'Persona extranjera'> = {
-  pf: 'Persona física',
-  pm: 'Persona moral',
-  pe: 'Persona extranjera',
-};
 
 function CounterpartyDrawer({
   open,
@@ -504,7 +500,7 @@ function CounterpartyRealDrawer({
                   summary.tipoPersona === 'pm'
                     ? 'bg-[hsl(var(--status-purple)/0.1)] text-[hsl(var(--status-purple))]'
                     : 'bg-muted text-muted-foreground'
-                }`}>{TIPO_PERSONA_LABEL[summary.tipoPersona]}</span>
+                }`}>{getTipoPersonaLabel(summary.tipoPersona)}</span>
               </div>
             </div>
           )}

@@ -39,6 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTipoPersonaLabel } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
 import { ClienteINECaptureDialog } from "@/components/admin/portal-cliente/ClienteINECaptureDialog";
@@ -719,7 +720,7 @@ const ClientePerfil = () => {
         <div>
           <h2 className="font-bold text-xl text-foreground tracking-tight">{displayName}</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {persona?.tipo_persona === "pm" ? "Persona Moral" : "Persona Física"}
+            {getTipoPersonaLabel(persona?.tipo_persona)}
           </p>
         </div>
         <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${STATUS_CFG[verStatus].cls}`}>
@@ -741,7 +742,7 @@ const ClientePerfil = () => {
         icon={User}
         action={!isImpersonating ? <EditChip onClick={openEditPersonal} /> : undefined}
       >
-        <Row label="Tipo de persona"    value={persona?.tipo_persona === "pm" ? "Persona Moral" : "Persona Física"} />
+        <Row label="Tipo de persona"    value={getTipoPersonaLabel(persona?.tipo_persona)} />
         <Row label="Nombre completo"    value={persona?.nombre_legal || null} />
         <Row label="RFC"                value={persona?.rfc || null} mono />
         <Row label="CURP"               value={persona?.curp || null} mono />
