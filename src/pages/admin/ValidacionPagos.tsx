@@ -4,15 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
+  AlertCircle, Building2, ChevronDown, CheckCircle2, ChevronLeft, ChevronRight,
   Clock, Eye, FileSearch, FileText, FileUp, Loader2, Pencil, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +22,7 @@ import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
 const IN_CHUNK = 500;
 
@@ -576,12 +578,17 @@ export default function ValidacionPagos() {
   const { isSuperAdmin } = useAllowedMenus();
   const [searchCuenta, setSearchCuenta] = useState("");
   const [searchCliente, setSearchCliente] = useState("");
+  const [searchDepto, setSearchDepto] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [debouncedCliente, setDebouncedCliente] = useState("");
+  const [debouncedDepto, setDebouncedDepto] = useState("");
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set());
   const [filtroMetodo, setFiltroMetodo] = useState("todos");
-  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [searchProyecto, setSearchProyecto] = useState("");
+  const [searchMetodo, setSearchMetodo] = useState("");
+  const [searchComprobante, setSearchComprobante] = useState("");
+  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set());
   const [filtroComprobante, setFiltroComprobante] = useState("todos");
   const [currentPage, setCurrentPage] = useState(1);
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
@@ -600,7 +607,12 @@ export default function ValidacionPagos() {
     return () => clearTimeout(t);
   }, [searchCliente]);
 
-  const setFiltro = (setter: (v: string) => void) => (v: string) => { setter(v); setCurrentPage(1); };
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedDepto(searchDepto.trim()); setCurrentPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [searchDepto]);
+
+
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
@@ -638,7 +650,7 @@ export default function ValidacionPagos() {
         inQuery("pago_validaciones", "id_pago", pagoIds,
           "id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion"),
         inQuery("cuentas_cobranza", "id", cuentaIds,
-          "id, id_oferta, id_cuenta_cobranza_padre", { activo: true }),
+          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre", { activo: true }),
       ]);
 
       validacionesRaw.sort((a: any, b: any) =>
@@ -650,11 +662,29 @@ export default function ValidacionPagos() {
         if (!validacionMap.has(pid)) validacionMap.set(pid, v);
       }
 
-      const cuentaOfertaMap = new Map<number, number>(cuentas.map((c: any) => [c.id, c.id_oferta]));
+      // Cuentas hija (bodegas/estac/adicionales) heredan proyecto+unidad de su cuenta padre
+      const cuentaParentMap = new Map<number, number>(
+        cuentas
+          .filter((c: any) => c.id_cuenta_cobranza_padre != null)
+          .map((c: any) => [c.id as number, c.id_cuenta_cobranza_padre as number])
+      );
+      const cuentaIdsSet = new Set(cuentaIds);
+      const missingParentIds = [...new Set([...cuentaParentMap.values()])].filter(id => !cuentaIdsSet.has(id));
+      const parentCuentas = missingParentIds.length
+        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad", { activo: true })
+        : [];
+      const allCuentas = [...cuentas, ...parentCuentas];
+
+      const cuentaOfertaMap = new Map<number, number>(
+        allCuentas.filter((c: any) => c.id_oferta != null).map((c: any) => [c.id, c.id_oferta])
+      );
+      const cuentaPropDirectMap = new Map<number, number>(
+        allCuentas.filter((c: any) => c.id_propiedad != null).map((c: any) => [c.id, c.id_propiedad])
+      );
       const cuentaEsHijaMap = new Map<number, boolean>(
         cuentas.map((c: any) => [c.id, c.id_cuenta_cobranza_padre != null])
       );
-      const ofertaIds = [...new Set(cuentas.map((c: any) => c.id_oferta as number).filter(Boolean))];
+      const ofertaIds = [...new Set(allCuentas.map((c: any) => c.id_oferta as number).filter(Boolean))];
 
       // Fetch ofertas with id_producto to determine type name
       const [ofertas, compradoresRaw] = await Promise.all([
@@ -681,7 +711,10 @@ export default function ValidacionPagos() {
         if (!compradorMap.has(c.id_cuenta_cobranza)) compradorMap.set(c.id_cuenta_cobranza, c.id_persona);
       }
 
-      const propIds = [...new Set(ofertas.map((o: any) => o.id_propiedad as number).filter(Boolean))];
+      const propIds = [...new Set([
+        ...ofertas.map((o: any) => o.id_propiedad as number),
+        ...[...cuentaPropDirectMap.values()],
+      ].filter(Boolean) as number[])];
       const personaIds = [...new Set([...compradorMap.values()])];
 
       const [props, personas] = await Promise.all([
@@ -708,8 +741,11 @@ export default function ValidacionPagos() {
       return allPagos.map(p => {
         const v = validacionMap.get(p.id);
         const cId = p.id_cuenta_cobranza as number;
-        const ofertaId = cuentaOfertaMap.get(cId);
-        const propId = ofertaId ? ofertaPropMap.get(ofertaId) : undefined;
+        const parentId = cuentaParentMap.get(cId);
+        const ofertaId = cuentaOfertaMap.get(cId) ?? (parentId ? cuentaOfertaMap.get(parentId) : undefined);
+        const propId = (ofertaId ? ofertaPropMap.get(ofertaId) : undefined)
+          ?? cuentaPropDirectMap.get(cId)
+          ?? (parentId ? cuentaPropDirectMap.get(parentId) : undefined);
         const emId = propId ? propEMMap.get(propId) : undefined;
         const edificioId = emId ? emEdifMap.get(emId) : undefined;
         const proyectoId = edificioId ? edificioProjMap.get(edificioId) : undefined;
@@ -794,18 +830,24 @@ export default function ValidacionPagos() {
       const s = debouncedCliente.toLowerCase();
       rows = rows.filter(r => r.cliente.toLowerCase().includes(s));
     }
+    if (debouncedDepto) {
+      const s = debouncedDepto.trim().toLowerCase();
+      rows = rows.filter(r => (r.numero_propiedad ?? "").toLowerCase() === s);
+    }
     if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
-    if (filtroEstado !== "todos") {
-      if (filtroEstado === "sin_validar") rows = rows.filter(r => r.estado_validacion === null);
-      else rows = rows.filter(r => r.estado_validacion === filtroEstado);
+    if (filtroEstados.size > 0) {
+      rows = rows.filter(r => {
+        const key = r.estado_validacion ?? "sin_validar";
+        return filtroEstados.has(key);
+      });
     }
     if (filtroMetodo !== "todos") rows = rows.filter(r => r.id_metodos_pago === Number(filtroMetodo));
-    if (filtroTipo !== "todos") rows = rows.filter(r => tipoCategoria(r.tipo_nombre) === filtroTipo);
+    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
     if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
     if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
     if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
     return rows;
-  }, [allRows, debouncedSearch, debouncedCliente, filtroProyecto, filtroEstado, filtroMetodo, filtroTipo, filtroComprobante]);
+  }, [allRows, debouncedSearch, debouncedCliente, debouncedDepto, filtroProyecto, filtroEstados, filtroMetodo, filtroTipos, filtroComprobante]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -890,64 +932,365 @@ export default function ValidacionPagos() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <Input placeholder="ID pago / cuenta / clave rastreo..."
-          value={searchCuenta} onChange={e => setSearchCuenta(e.target.value)}
-          className="h-9 text-sm w-[220px] sm:w-[240px]" />
-        <Input placeholder="Cliente / Comprador"
-          value={searchCliente} onChange={e => setSearchCliente(e.target.value)}
-          className="h-9 text-sm w-[160px] sm:w-[190px]" />
-        <Select value={filtroProyecto} onValueChange={setFiltro(setFiltroProyecto)}>
-          <SelectTrigger className="h-9 w-[150px] sm:w-[170px] text-sm"><SelectValue placeholder="Proyecto" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los proyectos</SelectItem>
-            {proyectosOptions.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filtroEstado} onValueChange={setFiltro(setFiltroEstado)}>
-          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Estado" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los estados</SelectItem>
-            <SelectItem value="coincide">Coincide</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-            <SelectItem value="no_coincide">No coincide</SelectItem>
-            <SelectItem value="sin_validar">Sin validar</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroMetodo} onValueChange={setFiltro(setFiltroMetodo)}>
-          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Método" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los métodos</SelectItem>
-            {metodosOptions.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filtroTipo} onValueChange={setFiltro(setFiltroTipo)}>
-          <SelectTrigger className="h-9 w-[180px] text-sm"><SelectValue placeholder="Tipo de pago" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los tipos</SelectItem>
-            {tiposOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filtroComprobante} onValueChange={setFiltro(setFiltroComprobante)}>
-          <SelectTrigger className="h-9 w-[170px] text-sm"><SelectValue placeholder="Comprobante" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los comprobantes</SelectItem>
-            <SelectItem value="con_cep">Con CEP</SelectItem>
-            <SelectItem value="sin_cep">Sin CEP</SelectItem>
-            <SelectItem value="sin_cep_con_recibo">Sin CEP + con recibo</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="ml-auto hidden sm:flex items-center gap-3">
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {isLoading
-              ? "Cargando pagos..."
-              : filteredRows.length !== stats.total
-                ? `${filteredRows.length.toLocaleString("es-MX")} de ${stats.total.toLocaleString("es-MX")} — Pág. ${page}/${totalPages}`
-                : `${stats.total.toLocaleString("es-MX")} pagos — Pág. ${page}/${totalPages}`
-            }
-          </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-4 items-end">
+
+        {/* Buscar por pago */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Buscar por pago</span>
+          <Input
+            placeholder="CC-123456 o clave rastreo"
+            value={searchCuenta}
+            onChange={e => setSearchCuenta(e.target.value)}
+            className="h-9 text-sm w-[210px] sm:w-[230px]"
+          />
         </div>
+
+        {/* Cliente */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Cliente</span>
+          <Input
+            placeholder="María García"
+            value={searchCliente}
+            onChange={e => setSearchCliente(e.target.value)}
+            className="h-9 text-sm w-[160px] sm:w-[180px]"
+          />
+        </div>
+
+        {/* Departamento */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Departamento</span>
+          <Input
+            placeholder="101"
+            value={searchDepto}
+            onChange={e => setSearchDepto(e.target.value)}
+            className="h-9 text-sm w-[110px] sm:w-[120px]"
+          />
+        </div>
+
+        <div className="w-px h-9 bg-border hidden sm:block self-end" />
+
+        {/* Proyecto — searchable popover */}
+        {(() => {
+          const filtrados = proyectosOptions.filter(p =>
+            p.toLowerCase().includes(searchProyecto.toLowerCase())
+          );
+          const label = filtroProyecto === "todos" ? "Todos" : filtroProyecto;
+          const isActive = filtroProyecto !== "todos";
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground px-0.5">Proyecto</span>
+              <Popover onOpenChange={open => { if (!open) setSearchProyecto(""); }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", isActive && "border-primary/40 bg-primary/5")}
+                  >
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[180px] p-2" align="start">
+                  <Input
+                    placeholder="Buscar proyecto..."
+                    value={searchProyecto}
+                    onChange={e => setSearchProyecto(e.target.value)}
+                    className="h-8 text-sm mb-2 w-full"
+                  />
+                  <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
+                    <button
+                      className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full", filtroProyecto === "todos" && "bg-muted font-medium")}
+                      onClick={() => { setFiltroProyecto("todos"); setCurrentPage(1); }}
+                    >
+                      Todos los proyectos
+                    </button>
+                    {filtrados.map(p => (
+                      <button
+                        key={p}
+                        className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full truncate", filtroProyecto === p && "bg-muted font-medium")}
+                        onClick={() => { setFiltroProyecto(p); setCurrentPage(1); }}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {filtrados.length === 0 && (
+                      <p className="text-xs text-muted-foreground px-2 py-2">Sin resultados</p>
+                    )}
+                  </div></div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          );
+        })()}
+
+        {/* Tipo de unidad — multi-select (sin cambios) */}
+        {(() => {
+          const noneSelected = filtroTipos.size === 0;
+          const label = noneSelected
+            ? "Todos"
+            : filtroTipos.size === 1
+              ? [...filtroTipos][0]
+              : `${filtroTipos.size} tipos`;
+          const toggle = (key: string) => {
+            setFiltroTipos(prev => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key); else next.add(key);
+              return next;
+            });
+            setCurrentPage(1);
+          };
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo de unidad</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[140px] justify-between", !noneSelected && "border-primary/40 bg-primary/5")}
+                  >
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2" align="start">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1.5">Tipo de unidad</p>
+                  <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
+                    {tiposOptions.map(t => (
+                      <label key={t} className="flex items-center gap-2 rounded px-1.5 py-1.5 hover:bg-muted cursor-pointer select-none">
+                        <Checkbox checked={filtroTipos.has(t)} onCheckedChange={() => toggle(t)} className="size-4" />
+                        <span className="text-sm">{t}</span>
+                      </label>
+                    ))}
+                  </div></div>
+                  {!noneSelected && (
+                    <button
+                      className="mt-1.5 w-full text-[11px] text-muted-foreground hover:text-foreground text-left px-1.5 py-0.5"
+                      onClick={() => { setFiltroTipos(new Set()); setCurrentPage(1); }}
+                    >
+                      Limpiar filtro
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+          );
+        })()}
+
+        {/* Estado de validación — multi-select (sin cambios) */}
+        {(() => {
+          const ESTADOS = [
+            { key: "coincide",    label: "Coincide",    cls: "text-emerald-700" },
+            { key: "error",       label: "Error",        cls: "text-red-700" },
+            { key: "no_coincide", label: "No coincide", cls: "text-amber-700" },
+            { key: "sin_validar", label: "Sin validar", cls: "text-muted-foreground" },
+          ];
+          const noneSelected = filtroEstados.size === 0;
+          const label = noneSelected
+            ? "Todos"
+            : filtroEstados.size === 1
+              ? ESTADOS.find(e => filtroEstados.has(e.key))?.label ?? "Estado"
+              : `${filtroEstados.size} estados`;
+          const toggle = (key: string) => {
+            setFiltroEstados(prev => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key); else next.add(key);
+              return next;
+            });
+            setCurrentPage(1);
+          };
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground px-0.5">Estado</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[140px] justify-between", !noneSelected && "border-primary/40 bg-primary/5")}
+                  >
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2" align="start">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1.5">Estado validacion</p>
+                  {ESTADOS.map(e => (
+                    <label key={e.key} className="flex items-center gap-2 rounded px-1.5 py-1.5 hover:bg-muted cursor-pointer select-none">
+                      <Checkbox checked={filtroEstados.has(e.key)} onCheckedChange={() => toggle(e.key)} className="size-4" />
+                      <span className={cn("text-sm", e.cls)}>{e.label}</span>
+                    </label>
+                  ))}
+                  {!noneSelected && (
+                    <button
+                      className="mt-1.5 w-full text-[11px] text-muted-foreground hover:text-foreground text-left px-1.5 py-0.5"
+                      onClick={() => { setFiltroEstados(new Set()); setCurrentPage(1); }}
+                    >
+                      Limpiar filtro
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+          );
+        })()}
+
+        {/* Método de pago — searchable popover */}
+        {(() => {
+          const filtrados = metodosOptions.filter(m =>
+            m.nombre.toLowerCase().includes(searchMetodo.toLowerCase())
+          );
+          const metodoActivo = metodosOptions.find(m => String(m.id) === filtroMetodo);
+          const label = metodoActivo ? metodoActivo.nombre : "Todos";
+          const isActive = filtroMetodo !== "todos";
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground px-0.5">Metodo de pago</span>
+              <Popover onOpenChange={open => { if (!open) setSearchMetodo(""); }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", isActive && "border-primary/40 bg-primary/5")}
+                  >
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[180px] p-2" align="start">
+                  <Input
+                    placeholder="Buscar metodo..."
+                    value={searchMetodo}
+                    onChange={e => setSearchMetodo(e.target.value)}
+                    className="h-8 text-sm mb-2 w-full"
+                  />
+                  <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
+                    <button
+                      className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full", filtroMetodo === "todos" && "bg-muted font-medium")}
+                      onClick={() => { setFiltroMetodo("todos"); setCurrentPage(1); }}
+                    >
+                      Todos los metodos
+                    </button>
+                    {filtrados.map(m => (
+                      <button
+                        key={m.id}
+                        className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full truncate", filtroMetodo === String(m.id) && "bg-muted font-medium")}
+                        onClick={() => { setFiltroMetodo(String(m.id)); setCurrentPage(1); }}
+                      >
+                        {m.nombre}
+                      </button>
+                    ))}
+                    {filtrados.length === 0 && (
+                      <p className="text-xs text-muted-foreground px-2 py-2">Sin resultados</p>
+                    )}
+                  </div></div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          );
+        })()}
+
+        {/* Comprobante — searchable popover */}
+        {(() => {
+          const comprobanteOpts = [
+            { value: "con_cep", label: "Con CEP" },
+            { value: "sin_cep", label: "Sin CEP" },
+            { value: "sin_cep_con_recibo", label: "Sin CEP + con recibo" },
+          ];
+          const filtrados = comprobanteOpts.filter(o =>
+            o.label.toLowerCase().includes(searchComprobante.toLowerCase())
+          );
+          const activo = comprobanteOpts.find(o => o.value === filtroComprobante);
+          const label = activo ? activo.label : "Todos";
+          const isActive = filtroComprobante !== "todos";
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground px-0.5">Comprobante</span>
+              <Popover onOpenChange={open => { if (!open) setSearchComprobante(""); }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", isActive && "border-primary/40 bg-primary/5")}
+                  >
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[180px] p-2" align="start">
+                  <Input
+                    placeholder="Buscar..."
+                    value={searchComprobante}
+                    onChange={e => setSearchComprobante(e.target.value)}
+                    className="h-8 text-sm mb-2 w-full"
+                  />
+                  <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
+                    <button
+                      className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full", filtroComprobante === "todos" && "bg-muted font-medium")}
+                      onClick={() => { setFiltroComprobante("todos"); setCurrentPage(1); }}
+                    >
+                      Todos
+                    </button>
+                    {filtrados.map(o => (
+                      <button
+                        key={o.value}
+                        className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full truncate", filtroComprobante === o.value && "bg-muted font-medium")}
+                        onClick={() => { setFiltroComprobante(o.value); setCurrentPage(1); }}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                    {filtrados.length === 0 && (
+                      <p className="text-xs text-muted-foreground px-2 py-2">Sin resultados</p>
+                    )}
+                  </div></div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          );
+        })()}
+
+        {/* Limpiar filtros */}
+        {(() => {
+          const hayFiltros =
+            searchCuenta !== "" || searchCliente !== "" || searchDepto !== "" ||
+            filtroProyecto !== "todos" || filtroMetodo !== "todos" || filtroComprobante !== "todos" ||
+            filtroEstados.size > 0 || filtroTipos.size > 0;
+          return (
+            <div className="flex flex-col gap-1.5 self-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchCuenta(""); setSearchCliente(""); setSearchDepto("");
+                  setFiltroProyecto("todos"); setFiltroMetodo("todos"); setFiltroComprobante("todos");
+                  setFiltroEstados(new Set()); setFiltroTipos(new Set());
+                  setCurrentPage(1);
+                }}
+                className={cn(
+                  "h-9 text-sm px-3 transition-colors",
+                  hayFiltros
+                    ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
+                    : "border-border text-muted-foreground/40 pointer-events-none"
+                )}
+              >
+                Limpiar filtros
+              </Button>
+            </div>
+          );
+        })()}
+
       </div>
+
+      {/* Counter */}
+      <p className="text-sm text-muted-foreground tabular-nums">
+        {isLoading
+          ? "Cargando pagos..."
+          : filteredRows.length !== stats.total
+            ? `${filteredRows.length.toLocaleString("es-MX")} de ${stats.total.toLocaleString("es-MX")} pagos - Pag. ${page}/${totalPages}`
+            : `${stats.total.toLocaleString("es-MX")} pagos - Pag. ${page}/${totalPages}`
+        }
+      </p>
 
       {/* Table */}
       <div className="rounded-lg border bg-card overflow-hidden">
@@ -962,6 +1305,7 @@ export default function ValidacionPagos() {
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Unidad</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Cliente</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Clave rastreo</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell whitespace-nowrap">Fecha pago</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Monto</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Estado</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[100px]">Acciones</TableHead>
@@ -970,7 +1314,7 @@ export default function ValidacionPagos() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center">
+                  <TableCell colSpan={11} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="size-5 animate-spin" />
                       <span className="text-sm">Cargando pagos y validaciones...</span>
@@ -979,11 +1323,11 @@ export default function ValidacionPagos() {
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center text-sm text-destructive">Error al cargar datos.</TableCell>
+                  <TableCell colSpan={11} className="h-32 text-center text-sm text-destructive">Error al cargar datos.</TableCell>
                 </TableRow>
               ) : paginatedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={11} className="h-32 text-center text-sm text-muted-foreground">
                     {allRows.length === 0 ? "No hay pagos registrados." : "Sin resultados con los filtros actuales."}
                   </TableCell>
                 </TableRow>
@@ -1007,7 +1351,10 @@ export default function ValidacionPagos() {
                     <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap">{row.numero_propiedad ?? "-"}</TableCell>
                     <TableCell className="hidden xl:table-cell max-w-[180px] truncate text-foreground">{row.cliente}</TableCell>
                     <TableCell className="hidden xl:table-cell max-w-[140px] truncate font-mono text-[10px] text-muted-foreground" title={row.clave_rastreo ?? undefined}>
-                      {row.clave_rastreo ?? <span className="text-muted-foreground/30">-</span>}
+                      {row.clave_rastreo ?? <span className="text-muted-foreground/30 not-italic text-[10px]">Sin datos</span>}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
+                      {row.fecha_pago ? new Date(row.fecha_pago).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "-"}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-right tabular-nums text-[12px] font-medium whitespace-nowrap">
                       {fmtCurrency(row.monto)}
@@ -1062,7 +1409,7 @@ export default function ValidacionPagos() {
       {!isLoading && totalPages > 1 && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground tabular-nums shrink-0">
-            {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, filteredRows.length)} de {filteredRows.length.toLocaleString("es-MX")}
+            {(page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filteredRows.length)} de {filteredRows.length.toLocaleString("es-MX")}
           </p>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 w-8 p-0">
