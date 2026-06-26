@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { CuentaProducto, GlobalFilters } from './types';
-import { generarSeed } from './seed';
 
 interface PortalProductosState {
   cuentas: CuentaProducto[];
   filtros: GlobalFilters;
+  setCuentas: (c: CuentaProducto[]) => void;
   setFiltros: (f: Partial<GlobalFilters>) => void;
   resetFiltros: () => void;
   refrescar: () => void;
@@ -16,31 +16,22 @@ const initialFiltros: GlobalFilters = {
   proyecto: 'all', propietario: 'all', categoria: 'all', rangoMeses: 0,
 };
 
-const initialState = {
-  cuentas: [] as CuentaProducto[],
-  filtros: structuredClone(initialFiltros),
-};
-
 export const usePortalProductosStore = create<PortalProductosState>()(
   persist(
     (set, get) => ({
-      ...structuredClone(initialState),
+      // Las cuentas se cargan desde la BD real (useProductosReales) vía setCuentas.
+      cuentas: [],
+      filtros: structuredClone(initialFiltros),
+      setCuentas: (c) => set({ cuentas: c }),
       setFiltros: (f) => set({ filtros: { ...get().filtros, ...f } }),
       resetFiltros: () => set({ filtros: structuredClone(initialFiltros) }),
-      refrescar: () => {
-        set({ cuentas: [...get().cuentas] });
-      },
-      reset: () => {
-        set({ ...structuredClone(initialState), cuentas: generarSeed() });
-      },
+      refrescar: () => set({ cuentas: [...get().cuentas] }),
+      reset: () => set({ cuentas: [], filtros: structuredClone(initialFiltros) }),
     }),
     {
-      name: 'portal_productos_mock_v1',
-      onRehydrateStorage: () => (state) => {
-        if (state && (!state.cuentas || state.cuentas.length === 0)) {
-          state.cuentas = generarSeed();
-        }
-      },
+      name: 'portal_productos_v2',
+      // Solo se persisten los filtros; las cuentas siempre vienen de la BD real.
+      partialize: (s) => ({ filtros: s.filtros }),
     },
   ),
 );

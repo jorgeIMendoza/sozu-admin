@@ -1,14 +1,26 @@
+import { useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { X, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePortalProductosStore } from '@/lib/portal-productos/store';
-import { CATEGORIAS, PROPIETARIOS, PROYECTOS } from '@/lib/portal-productos/types';
+import { CATEGORIAS } from '@/lib/portal-productos/types';
 
 export function GlobalFiltersBar({ showExport = false, showRango = true }: { showExport?: boolean; showRango?: boolean }) {
+  const cuentas = usePortalProductosStore(s => s.cuentas);
   const filtros = usePortalProductosStore(s => s.filtros);
   const setFiltros = usePortalProductosStore(s => s.setFiltros);
   const resetFiltros = usePortalProductosStore(s => s.resetFiltros);
+
+  // Proyectos y propietarios reales presentes en los datos cargados.
+  const PROYECTOS = useMemo(
+    () => [...new Set(cuentas.map(c => c.proyecto).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [cuentas],
+  );
+  const PROPIETARIOS = useMemo(
+    () => [...new Set(cuentas.map(c => c.producto.propietario).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [cuentas],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">

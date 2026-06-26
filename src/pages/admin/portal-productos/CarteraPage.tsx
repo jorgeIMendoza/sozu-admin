@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { useMemo, useState } from 'react';
-import { Search, Download } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Search, Download, Eye } from 'lucide-react';
+import { PaginationBar } from '@/components/admin/PaginationBar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,9 +21,16 @@ export default function CarteraPage() {
   const [categoria, setCategoria] = useState<string>('all');
   const [proyecto, setProyecto] = useState<string>('all');
   const [propietario, setPropietario] = useState<string>('all');
+  const [vendedor, setVendedor] = useState<string>('all');
   const [orden, setOrden] = useState<'precio' | 'pendiente' | 'dias'>('precio');
 
   const enriquecidas = useMemo(() => deriveTodas(cuentas), [cuentas]);
+
+  // Vendedores reales presentes en los datos (para el filtro).
+  const vendedores = useMemo(
+    () => [...new Set(enriquecidas.map(c => c.agenteVendedor).filter(v => v && v !== '—'))].sort((a, b) => a.localeCompare(b)),
+    [enriquecidas],
+  );
 
   const counts = useMemo(() => {
     const r: Record<'todos' | EstatusPago, number> = { todos: enriquecidas.length, pagado: 0, al_corriente: 0, atrasado: 0, vencido: 0 };
@@ -37,8 +45,9 @@ export default function CarteraPage() {
       if (categoria !== 'all' && c.producto.categoria !== categoria) return false;
       if (proyecto !== 'all' && c.proyecto !== proyecto) return false;
       if (propietario !== 'all' && c.producto.propietario !== propietario) return false;
+      if (vendedor !== 'all' && c.agenteVendedor !== vendedor) return false;
       if (q) {
-        const hay = [c.id, c.producto.nombre, c.propiedad.noPropiedad, ...c.compradores.map(x => x.persona.nombreLegal)].join(' ').toLowerCase();
+        const hay = [c.id, c.producto.nombre, c.propiedad.noPropiedad, c.agenteVendedor, ...c.compradores.map(x => x.persona.nombreLegal)].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -49,7 +58,17 @@ export default function CarteraPage() {
       return b.diasAtraso - a.diasAtraso;
     });
     return arr;
-  }, [enriquecidas, busqueda, tab, categoria, proyecto, propietario, orden]);
+  }, [enriquecidas, busqueda, tab, categoria, proyecto, propietario, vendedor, orden]);
+
+  // Paginación: 20 productos por vista.
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [busqueda, tab, categoria, proyecto, propietario, vendedor, orden, enriquecidas.length]);
+  const totalPages = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
+  const pageItems = useMemo(
+    () => filtradas.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtradas, page],
+  );
 
   return (
     <div className="space-y-6">
@@ -91,6 +110,13 @@ export default function CarteraPage() {
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Propietario" /></SelectTrigger>
           <SelectContent><SelectItem value="all">Todos los propietarios</SelectItem>{PROPIETARIOS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
         </Select>
+        <Select value={vendedor} onValueChange={setVendedor}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Vendedor" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los vendedores</SelectItem>
+            {vendedores.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={orden} onValueChange={v => setOrden(v as never)}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Ordenar por" /></SelectTrigger>
           <SelectContent>
@@ -99,7 +125,7 @@ export default function CarteraPage() {
             <SelectItem value="dias">Ordenar: Días atraso</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="sm" onClick={() => { setCategoria('all'); setProyecto('all'); setPropietario('all'); setBusqueda(''); setTab('todos'); }} className="text-slate-600">Limpiar filtros</Button>
+        <Button variant="ghost" size="sm" onClick={() => { setCategoria('all'); setProyecto('all'); setPropietario('all'); setVendedor('all'); setBusqueda(''); setTab('todos'); }} className="text-slate-600">Limpiar filtros</Button>
         <span className="ml-auto text-xs text-slate-500">
           {filtradas.length === enriquecidas.length ? `${filtradas.length} resultados` : `${filtradas.length} en filtro · ${enriquecidas.length} en total`}
         </span>
@@ -116,6 +142,7 @@ export default function CarteraPage() {
                 <th className="px-4 py-3 text-left">Comprador(es)</th>
                 <th className="px-4 py-3 text-left">Propiedad ligada</th>
                 <th className="px-4 py-3 text-left">Propietario</th>
+                <th className="px-4 py-3 text-left">Vendedor</th>
                 <th className="px-4 py-3 text-right">Precio Final</th>
                 <th className="px-4 py-3 text-right">Pagado</th>
                 <th className="px-4 py-3 text-right">Pendiente</th>
@@ -125,10 +152,21 @@ export default function CarteraPage() {
               </tr>
             </thead>
             <tbody>
-              {filtradas.slice(0, 60).map((c) => (
+              {pageItems.map((c) => (
                 <tr key={c.id} className="group border-b border-gray-100 hover:bg-slate-50">
                   <td className="px-4 py-2.5">
-                    <Link to={`/admin/portal-productos/cartera/${c.id}`} className="font-mono text-xs font-semibold text-emerald-700">{c.id}</Link>
+                    {/^(CCP|BOD|EST)-/.test(c.id) ? (
+                      <Link
+                        to={`/admin/portal-productos/cartera/${c.id}`}
+                        title="Ver detalle de la cuenta de cobranza"
+                        className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-emerald-700 hover:underline"
+                      >
+                        {c.id}
+                        <Eye className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : (
+                      <span className="font-mono text-xs text-slate-500">{c.id}</span>
+                    )}
                   </td>
                   <td className="max-w-[260px] px-4 py-2.5">
                     <div className="truncate font-medium text-slate-900" title={c.producto.nombre}>{c.producto.nombre}</div>
@@ -138,6 +176,7 @@ export default function CarteraPage() {
                   <td className="px-4 py-2.5 text-slate-600">{c.compradores[0]?.persona.nombreLegal}{c.compradores.length > 1 ? ` (+${c.compradores.length - 1})` : ''}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{c.propiedad.noPropiedad} · {c.propiedad.modelo} · {c.propiedad.edificio}</td>
                   <td className="px-4 py-2.5 text-slate-600">{c.producto.propietario}</td>
+                  <td className="px-4 py-2.5 text-slate-600">{c.agenteVendedor && c.agenteVendedor !== '—' ? c.agenteVendedor : <span className="text-slate-400">—</span>}</td>
                   <td className="px-4 py-2.5 text-right font-medium text-slate-900">{formatMXN(c.precioFinal)}</td>
                   <td className="px-4 py-2.5 text-right text-emerald-700">{formatMXN(c.totalPagado)}</td>
                   <td className={`px-4 py-2.5 text-right ${c.saldoPendiente === 0 ? 'text-slate-500' : 'text-amber-700'}`}>{formatMXN(c.saldoPendiente)}</td>
@@ -152,10 +191,19 @@ export default function CarteraPage() {
                 </tr>
               ))}
               {filtradas.length === 0 && (
-                <tr><td colSpan={12} className="px-4 py-10 text-center text-sm text-slate-400">Sin resultados.</td></tr>
+                <tr><td colSpan={13} className="px-4 py-10 text-center text-sm text-slate-400">Sin resultados.</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+        <div className="px-4 pb-3">
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            totalCount={filtradas.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         </div>
       </div>
     </div>
