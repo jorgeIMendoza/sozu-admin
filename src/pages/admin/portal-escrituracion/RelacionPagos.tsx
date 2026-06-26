@@ -76,17 +76,36 @@ type ComprobanteType =
   | 'otro';
 
 async function getPdfPageCount(url: string): Promise<number | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.warn('[PLD] getPdfPageCount: respuesta HTTP no OK', res.status, url);
+      return null;
+    }
     const buffer = await res.arrayBuffer();
     const text = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+    if (!text.startsWith('%PDF-')) {
+      console.warn('[PLD] getPdfPageCount: archivo sin header PDF válido', url);
+      return null;
+    }
     const matches = [...text.matchAll(/\/Count\s+(\d+)/g)];
-    if (!matches.length) return null;
-    // El mayor /Count es siempre el nodo root; árboles anidados tienen valores menores
+    if (!matches.length) {
+      // El mayor /Count es siempre el nodo root; árboles anidados tienen valores menores
+      console.warn('[PLD] getPdfPageCount: /Count no encontrado — PDF posiblemente cifrado o no estándar', url);
+      return null;
+    }
     return Math.max(...matches.map(m => parseInt(m[1], 10)));
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      console.warn('[PLD] getPdfPageCount: timeout de 15s al descargar PDF', url);
+    } else {
+      console.warn('[PLD] getPdfPageCount: error de red o CORS', url, err);
+    }
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1205,7 +1224,7 @@ export function RelacionPagos() {
           break;
         }
         case 'pdf_indeterminado':
-          toast.warning('No se pudo determinar el número de páginas; revisar manualmente.');
+          toast.warning('No se pudo leer el PDF automáticamente (timeout, CORS o archivo no estándar) — validar manualmente.');
           break;
         case 'otro':
           toast.error('Formato no reconocido como comprobante válido para PLD.');

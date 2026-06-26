@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTipoPersonaLabel } from "@/utils/tipo-persona";
 
 /**
  * Carga el detalle completo de uno o más compradores (personas) para
@@ -255,12 +256,6 @@ async function fetchCompradoresFullDetail(
   );
 
   // 5) Componer el detalle por persona.
-  const tipoPersonaLabel = (t: string | null): string => {
-    if (t === 'pm') return 'Persona moral';
-    if (t === 'pe') return 'Persona extranjera';
-    return 'Persona física';
-  };
-
   const result: Record<number, CompradorFullDetail> = {};
   for (const p of personas) {
     const personaDocs = docsRows
@@ -304,7 +299,7 @@ async function fetchCompradoresFullDetail(
       idPersona: p.id as number,
       basica: {
         tipoPersona: (p.tipo_persona as any) ?? 'pf',
-        tipoPersonaLabel: tipoPersonaLabel(p.tipo_persona as string | null),
+        tipoPersonaLabel: getTipoPersonaLabel(p.tipo_persona as string | null),
         nombreLegal: p.nombre_legal ?? null,
         nombreComercial: p.nombre_comercial ?? null,
         email: p.email ?? null,

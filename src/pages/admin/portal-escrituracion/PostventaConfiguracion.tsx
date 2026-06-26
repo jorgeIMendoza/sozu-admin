@@ -434,7 +434,7 @@ function TabPersonal() {
         // 2. Si no existe, crear persona nueva
         if (!personaId) {
           const { data: newPersona, error: e1 } = await supabase.from('personas')
-            .insert({ nombre_legal: d.nombre, nombre_comercial: d.especialidad || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'fisica' })
+            .insert({ nombre_legal: d.nombre, nombre_comercial: d.especialidad || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'pf' })
             .select('id').single();
           if (e1) throw e1;
           personaId = newPersona.id;
@@ -618,7 +618,7 @@ function TabProveedores() {
         }
       } else {
         const { data: newPersona, error: e1 } = await supabase.from('personas')
-          .insert({ nombre_comercial: d.nombre, nombre_legal: d.contacto || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'moral' })
+          .insert({ nombre_comercial: d.nombre, nombre_legal: d.contacto || null, email: d.email || null, telefono: d.telefono || null, tipo_persona: 'pm' })
           .select('id').single();
         if (e1) throw e1;
         const { error: e2 } = await supabase.from('entidades_relacionadas')

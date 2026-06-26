@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getTipoPersonaLabel } from '@/utils/tipo-persona';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { PropertyProgressTimeline } from './PropertyProgressTimeline';
@@ -2792,9 +2793,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     }
   };
 
-  const getPersonTypeLabel = (tipo: string) => {
-    return tipo === 'pf' ? 'Persona Física' : tipo === 'pm' ? 'Persona Moral' : tipo;
-  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -3135,7 +3133,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                     </div>
                     <div>
                       <Label>Tipo de Persona</Label>
-                      <Input value={getPersonTypeLabel(vendedorDetalle.personas.tipo_persona || '')} readOnly />
+                      <Input value={getTipoPersonaLabel(vendedorDetalle.personas.tipo_persona || '')} readOnly />
                     </div>
                     
                     {/* Campos adicionales para Persona Moral */}
@@ -3264,7 +3262,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                {comprador.personas?.email || 'N/A'}
                              </TableCell>
                              <TableCell className="text-muted-foreground">
-                               {getPersonTypeLabel(comprador.personas?.tipo_persona || '')}
+                               {getTipoPersonaLabel(comprador.personas?.tipo_persona || '')}
                              </TableCell>
                              <TableCell>
                                <Badge variant={datosFiscalesCompletos ? "default" : "destructive"} className="text-xs">

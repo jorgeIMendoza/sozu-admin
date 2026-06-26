@@ -135,7 +135,7 @@ export default function CapturaDatosReservaPage() {
       } else {
         const { data: newPersona, error: insertError } = await (supabase as any)
           .from("personas")
-          .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, tipo_persona: "fisica", es_draft: true, activo: true })
+          .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, tipo_persona: "pf", es_draft: true, activo: true })
           .select("id")
           .single();
         if (insertError || !newPersona) throw new Error("Error guardando datos");
