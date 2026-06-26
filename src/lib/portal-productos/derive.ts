@@ -25,8 +25,11 @@ export interface CuentaDerivada extends CuentaProducto {
 }
 
 export function deriveCuenta(c: CuentaProducto): CuentaDerivada {
+  // `c.totalPagado` viene del RPC autoritativo del sistema (misma fuente que el
+  // Admin Panel / Pagos). Se respeta; las aplicaciones son solo fallback.
   const aplicado = c.aplicaciones.reduce((s, a) => s + a.montoAplicado, 0);
-  const totalPagado = Math.min(Math.max(aplicado, 0), c.precioFinal);
+  const pagadoBase = c.totalPagado > 0 ? c.totalPagado : aplicado;
+  const totalPagado = Math.min(Math.max(pagadoBase, 0), c.precioFinal);
   const saldoPendiente = Math.max(c.precioFinal - totalPagado, 0);
   const avancePct = c.precioFinal > 0
     ? Math.min(Math.round((totalPagado / c.precioFinal) * 100), 100)

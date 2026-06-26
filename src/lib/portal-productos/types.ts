@@ -1,6 +1,7 @@
 export type Categoria = 'Paquete de muebles' | 'Bodega' | 'Condensadora' | 'Estacionamiento';
-export type Propietario = 'Komakai' | 'Tallwood' | 'Hevi Holding';
-export type Proyecto = 'Daiku' | 'Margot' | 'Monócolo' | 'Bottura';
+// Proyecto y Propietario provienen de la BD real (valores dinámicos) → string.
+export type Propietario = string;
+export type Proyecto = string;
 export type EstatusPago = 'pagado' | 'al_corriente' | 'atrasado' | 'vencido';
 
 export interface Persona { id: string; nombreLegal: string; rfc: string; }
