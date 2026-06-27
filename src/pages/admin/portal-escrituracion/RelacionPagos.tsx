@@ -65,10 +65,10 @@ function normConcepto(
 }
 
 // ─── Conteo de páginas — fuente única: pdfjs-dist ─────────────────────────────
-// El bucket `documentos` es público → fetch() recibe Access-Control-Allow-Origin: *
-// y no necesita headers de auth. supabase.storage.download() usa el endpoint
-// autenticado (sujeto a RLS SELECT) — para archivos ajenos puede fallar.
-// Retorna { pages, failedAt } para distinguir error de descarga vs. error de parseo.
+// Estrategia de descarga en dos intentos:
+// 1. fetch(publicUrl) → endpoint /object/public/ (bypass RLS, CORS: *)
+// 2. Si falla, supabase.storage.download(path) → endpoint autenticado (JWT admin)
+// pdfjs requiere Uint8Array — no pasar ArrayBuffer directamente (falla en v6).
 
 type PageResult = { pages: number | null; failedAt: 'download' | 'parse' | null };
 
@@ -77,14 +77,15 @@ async function getPaginasComprobante(url: string): Promise<PageResult> {
   const timer = setTimeout(() => controller.abort(), 15_000);
   let buffer: ArrayBuffer | null = null;
 
+  // Intento 1: fetch() del endpoint público (bypasa RLS)
   try {
-    console.warn('[PLD] descargando comprobante:', url);
+    console.warn('[PLD] intento 1 — fetch público:', url);
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
-      console.warn('[PLD] fetch no OK', res.status, res.statusText, url);
+      console.warn('[PLD] fetch no OK', res.status, res.statusText);
     } else {
       buffer = await res.arrayBuffer();
-      console.warn('[PLD] buffer recibido', {
+      console.warn('[PLD] buffer OK via fetch', {
         sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB',
         contentType: res.headers.get('content-type'),
       });
@@ -93,16 +94,36 @@ async function getPaginasComprobante(url: string): Promise<PageResult> {
     if (err instanceof DOMException && err.name === 'AbortError') {
       console.warn('[PLD] timeout 15s al descargar:', url);
     } else {
-      console.warn('[PLD] error de red/CORS al descargar:', url, err);
+      console.warn('[PLD] fetch falló (CORS/red):', err);
     }
   } finally {
     clearTimeout(timer);
   }
 
-  if (!buffer) return { pages: null, failedAt: 'download' };
+  // Intento 2: supabase.storage.download() con JWT admin (fallback)
+  if (!buffer) {
+    const pathMatch = url.match(/\/storage\/v1\/object\/(?:public\/)?documentos\/(.+?)(?:\?.*)?$/);
+    const filePath = pathMatch?.[1];
+    if (filePath) {
+      try {
+        console.warn('[PLD] intento 2 — download() autenticado:', filePath);
+        const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
+        if (!error && blob) {
+          buffer = await (blob as Blob).arrayBuffer();
+          console.warn('[PLD] buffer OK via download()', { sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB' });
+        } else {
+          console.warn('[PLD] download() también falló:', error);
+        }
+      } catch (err) {
+        console.warn('[PLD] download() excepción:', err);
+      }
+    }
+    if (!buffer) return { pages: null, failedAt: 'download' };
+  }
 
+  // pdfjs requiere Uint8Array — ArrayBuffer raw puede fallar en v6
   try {
-    const loadingTask = getDocument({ data: buffer });
+    const loadingTask = getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
     const pages = pdf.numPages;
     await pdf.destroy();
@@ -1243,6 +1264,9 @@ export function RelacionPagos() {
     // Marcar antes de iniciar para evitar re-ejecución cuando invalidateQueries recarga datos
     pendientes.forEach(p => autoValidadosRef.current.add(p.id));
 
+    console.warn('[PLD] auto-validación iniciada', { pendientes: pendientes.length });
+    toast.info(`Validando ${pendientes.length} comprobante(s) de efectivo...`, { duration: 4000 });
+
     (async () => {
       const results = await Promise.all(
         pendientes.map(async (p) => {
@@ -1264,8 +1288,13 @@ export function RelacionPagos() {
           return false;
         }),
       );
-      if (results.some(Boolean)) {
+      const validated = results.filter(Boolean).length;
+      if (validated > 0) {
+        toast.success(`${validated} comprobante(s) validado(s) automáticamente.`);
         qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+      } else {
+        console.warn('[PLD] auto-validación: ningún comprobante pudo validarse');
+        toast.warning('No se pudo validar automáticamente — revisa consola [PLD] o usa el botón manual.');
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
