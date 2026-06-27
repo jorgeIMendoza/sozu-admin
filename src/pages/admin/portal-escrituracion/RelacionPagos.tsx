@@ -15,6 +15,10 @@ import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { usePldForCuenta, type PldPaymentFlagInfo } from '@/hooks/usePldForCuenta';
 import { toast } from 'sonner';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50;
@@ -60,7 +64,7 @@ function normConcepto(
   return null;
 }
 
-// ─── Comprobante classification (sin librería, solo fetch + regex binario) ────
+// ─── Comprobante classification (pdfjs-dist para conteo fiable de páginas) ────
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 
@@ -84,24 +88,27 @@ async function getPdfPageCount(url: string): Promise<number | null> {
       console.warn('[PLD] getPdfPageCount: respuesta HTTP no OK', res.status, url);
       return null;
     }
+    const contentType = res.headers.get('content-type') ?? '(sin content-type)';
     const buffer = await res.arrayBuffer();
-    const text = new TextDecoder('latin1').decode(new Uint8Array(buffer));
-    if (!text.startsWith('%PDF-')) {
-      console.warn('[PLD] getPdfPageCount: archivo sin header PDF válido', url);
+    const sizeKb = (buffer.byteLength / 1024).toFixed(1);
+    const firstBytes = new TextDecoder('latin1').decode(new Uint8Array(buffer, 0, 8));
+    const startsPdf = firstBytes.startsWith('%PDF-');
+    console.warn('[PLD] PDF diagnóstico', { url, contentType, sizeKb: `${sizeKb}KB`, firstBytes, startsPdf });
+    if (!startsPdf) {
+      console.warn('[PLD] getPdfPageCount: archivo sin header %PDF-, descartado');
       return null;
     }
-    const matches = [...text.matchAll(/\/Count\s+(\d+)/g)];
-    if (!matches.length) {
-      // El mayor /Count es siempre el nodo root; árboles anidados tienen valores menores
-      console.warn('[PLD] getPdfPageCount: /Count no encontrado — PDF posiblemente cifrado o no estándar', url);
-      return null;
-    }
-    return Math.max(...matches.map(m => parseInt(m[1], 10)));
+    const loadingTask = getDocument({ data: buffer });
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    await pdf.destroy();
+    console.warn('[PLD] getPdfPageCount: páginas detectadas por pdfjs:', numPages);
+    return numPages;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       console.warn('[PLD] getPdfPageCount: timeout de 15s al descargar PDF', url);
     } else {
-      console.warn('[PLD] getPdfPageCount: error de red o CORS', url, err);
+      console.warn('[PLD] getPdfPageCount: error de red, CORS o PDF inválido', url, err);
     }
     return null;
   } finally {
@@ -114,8 +121,11 @@ async function detectarTipoComprobante(url: string): Promise<ComprobanteType> {
   if (IMAGE_EXTS.has(ext)) return 'imagen';
   if (ext !== 'pdf') return 'otro';
   const pages = await getPdfPageCount(url);
-  if (pages === null) return 'pdf_indeterminado';
-  return pages >= 2 ? 'pdf_multipagina' : 'pdf_una_pagina';
+  const result: ComprobanteType = pages === null
+    ? 'pdf_indeterminado'
+    : pages >= 2 ? 'pdf_multipagina' : 'pdf_una_pagina';
+  console.warn('[PLD] detectarTipoComprobante resultado:', { pages, result, url });
+  return result;
 }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
@@ -1203,6 +1213,7 @@ export function RelacionPagos() {
       toast.error('Límite de efectivo excedido — no se puede validar documentalmente.');
       return;
     }
+    console.warn('[PLD] analizarComprobante inicio', { pagoId, url });
     setValidandoPagoId(pagoId);
     try {
       const tipo = await detectarTipoComprobante(url);
