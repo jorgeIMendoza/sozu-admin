@@ -23,11 +23,9 @@ async function extractPdfText(file: File): Promise<string> {
   return pages.join("\n").trim();
 }
 
-// Each entry is a list of keyword groups; ALL groups must match (at least one kw per group).
+// Keyword groups for docs without dedicated validators. ALL groups must match (at least one kw per group).
 const PDF_KEYWORDS: Record<number, string[][]> = {
   1:  [["NACIMIENTO", "ACTA DE NACIMIENTO"], ["REGISTRO CIVIL", "REGISTRO"]],
-  5:  [["CURP", "CLAVE ÚNICA", "CLAVE UNICA", "RENAPO"]],
-  6:  [["CONSTANCIA", "SITUACION FISCAL", "SITUACIÓN FISCAL", "SAT"], ["RFC"]],
   8:  [["CFE", "TELMEX", "IZZI", "TOTALPLAY", "MEGACABLE", "TELEFONOS", "GAS NATURAL", "AGUA", "BANCO",
         "CLABE", "ESTADO DE CUENTA", "COMPROBANTE DE DOMICILIO", "DOMICILIO"]],
   11: [["MATRIMONIO", "ACTA DE MATRIMONIO"]],
@@ -43,6 +41,7 @@ import { getTipoPersonaLabel } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
 import { ClienteINECaptureDialog } from "@/components/admin/portal-cliente/ClienteINECaptureDialog";
+import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
 
 /* ─── helpers ─── */
 const INPUT_CLS =
@@ -577,18 +576,25 @@ const ClientePerfil = () => {
           return;
         }
 
-        const textUpper = text.toUpperCase();
-        const keywordGroups = PDF_KEYWORDS[primaryTipoId] ?? [];
-        const passes = keywordGroups.every(group =>
-          group.some(kw => textUpper.includes(kw.toUpperCase()))
-        );
-
-        if (!passes) {
-          toast.error(
-            `El archivo no corresponde a "${TIPO_NOMBRE[primaryTipoId]}". Verifica que sea el documento correcto.`,
-            { duration: 7000 },
+        if (primaryTipoId === 5) {
+          const result = validateCURPPdf(text);
+          if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
+        } else if (primaryTipoId === 6) {
+          const result = validateCSFPdf(text);
+          if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
+        } else {
+          const textUpper = text.toUpperCase();
+          const keywordGroups = PDF_KEYWORDS[primaryTipoId] ?? [];
+          const passes = keywordGroups.every(group =>
+            group.some(kw => textUpper.includes(kw.toUpperCase()))
           );
-          return;
+          if (!passes) {
+            toast.error(
+              `El archivo no corresponde a "${TIPO_NOMBRE[primaryTipoId]}". Verifica que sea el documento correcto.`,
+              { duration: 7000 },
+            );
+            return;
+          }
         }
       }
 
@@ -783,7 +789,7 @@ const ClientePerfil = () => {
           const status = best?.status ?? "missing";
           const isLast = i === SLOTS.length - 1;
           const isUploading = uploadingSlot === slot.key;
-          const canUpload = false; // TEMP: upload desactivado mientras se valida flujo
+          const canUpload = [2, 3, 5, 6].includes(slot.primaryTipoId);
 
           const DOC_STYLE = {
             verified: { dot: "bg-emerald",           badge: "text-emerald bg-emerald-pale",                                                                 label: "Aprobado"    },
