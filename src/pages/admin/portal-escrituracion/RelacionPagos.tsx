@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Download, ExternalLink, X, FileText,
@@ -521,6 +521,7 @@ export function RelacionPagos() {
   const [page, setPage] = useState(1);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [validandoPagoId, setValidandoPagoId] = useState<number | null>(null);
+  const autoValidadosRef = useRef<Set<number>>(new Set());
   const { exportToExcel, isExporting } = useExportToExcel();
   const qc = useQueryClient();
 
@@ -1224,6 +1225,51 @@ export function RelacionPagos() {
       setValidandoPagoId(null);
     }
   };
+
+  // Auto-valida comprobantes de efectivo al cargar la cuenta — sin interacción del usuario
+  useEffect(() => {
+    if (!rpPagosCuenta || !primaryCuentaId || pld.isLoading || pld.hasEfectivoExcedido) return;
+
+    const pendientes = rpPagosCuenta.filter(p =>
+      p.id_metodos_pago === 1 &&
+      !p.clave_rastreo &&
+      !!p.url_recibo &&
+      !p.validacion_documental_efectivo &&
+      !autoValidadosRef.current.has(p.id),
+    );
+
+    if (pendientes.length === 0) return;
+
+    // Marcar antes de iniciar para evitar re-ejecución cuando invalidateQueries recarga datos
+    pendientes.forEach(p => autoValidadosRef.current.add(p.id));
+
+    (async () => {
+      const results = await Promise.all(
+        pendientes.map(async (p) => {
+          try {
+            const { pages } = await getPaginasComprobante(p.url_recibo!);
+            if (pages !== null && pages >= 2) {
+              const { error } = await (supabase as any)
+                .from('pagos')
+                .update({ validacion_documental_efectivo: true })
+                .eq('id', p.id);
+              if (!error) return true;
+              console.warn('[PLD] auto-validación: error al actualizar pago', p.id, error);
+            } else {
+              console.warn('[PLD] auto-validación: no validable', { pagoId: p.id, pages });
+            }
+          } catch (err) {
+            console.warn('[PLD] auto-validación: error inesperado', p.id, err);
+          }
+          return false;
+        }),
+      );
+      if (results.some(Boolean)) {
+        qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rpPagosCuenta, primaryCuentaId, pld.isLoading, pld.hasEfectivoExcedido]);
 
   // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
   const rpTotalMonto = useMemo(
