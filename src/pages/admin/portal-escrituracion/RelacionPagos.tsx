@@ -65,85 +65,52 @@ function normConcepto(
 }
 
 // ─── Conteo de páginas — fuente única: pdfjs-dist ─────────────────────────────
-// Para URLs de Supabase Storage usa el cliente JS (evita CORS en fetch directo).
-// Para otras URLs usa fetch con AbortController. Retorna null ante cualquier error.
+// El bucket `documentos` es público → fetch() recibe Access-Control-Allow-Origin: *
+// y no necesita headers de auth. supabase.storage.download() usa el endpoint
+// autenticado (sujeto a RLS SELECT) — para archivos ajenos puede fallar.
+// Retorna { pages, failedAt } para distinguir error de descarga vs. error de parseo.
 
-function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
-  const match = url.match(/\/storage\/v1\/object\/public\/([^/?#]+)\/(.+?)(?:\?|#|$)/);
-  if (!match) return null;
-  return { bucket: match[1], path: decodeURIComponent(match[2]) };
-}
+type PageResult = { pages: number | null; failedAt: 'download' | 'parse' | null };
 
-async function getPaginasComprobante(url: string): Promise<number | null> {
+async function getPaginasComprobante(url: string): Promise<PageResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
   let buffer: ArrayBuffer | null = null;
 
-  const parsed = parseSupabaseStorageUrl(url);
-  if (parsed) {
-    // Supabase Storage client — el cliente JS incluye credenciales de sesión,
-    // no está sujeto a las restricciones CORS que afectan a fetch() directo.
-    const downloadPromise = supabase.storage
-      .from(parsed.bucket)
-      .download(parsed.path)
-      .then(({ data, error }) => {
-        if (error || !data) {
-          console.warn('[PLD] supabase.storage.download error', error?.message, parsed);
-          return null as null;
-        }
-        return data.arrayBuffer();
-      })
-      .catch((err: unknown) => {
-        console.warn('[PLD] supabase.storage.download exception', err);
-        return null as null;
-      });
-
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => {
-        console.warn('[PLD] timeout 15s en supabase.storage.download', url);
-        resolve(null);
-      }, 15_000)
-    );
-
-    buffer = await Promise.race([downloadPromise, timeoutPromise]);
-  } else {
-    // Fallback: fetch directo para URLs fuera de Supabase Storage
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) {
-        console.warn('[PLD] fetch no OK', res.status, url);
-        return null;
-      }
+  try {
+    console.warn('[PLD] descargando comprobante:', url);
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.warn('[PLD] fetch no OK', res.status, res.statusText, url);
+    } else {
       buffer = await res.arrayBuffer();
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        console.warn('[PLD] timeout 15s (fetch)', url);
-      } else {
-        console.warn('[PLD] fetch error (CORS, red)', url, err);
-      }
-      return null;
-    } finally {
-      clearTimeout(timer);
+      console.warn('[PLD] buffer recibido', {
+        sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB',
+        contentType: res.headers.get('content-type'),
+      });
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      console.warn('[PLD] timeout 15s al descargar:', url);
+    } else {
+      console.warn('[PLD] error de red/CORS al descargar:', url, err);
+    }
+  } finally {
+    clearTimeout(timer);
   }
 
-  if (!buffer) return null;
-
-  console.warn('[PLD] buffer recibido', {
-    sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB',
-    url,
-  });
+  if (!buffer) return { pages: null, failedAt: 'download' };
 
   try {
     const loadingTask = getDocument({ data: buffer });
     const pdf = await loadingTask.promise;
-    const numPages = pdf.numPages;
+    const pages = pdf.numPages;
     await pdf.destroy();
-    console.warn('[PLD] páginas detectadas:', numPages, url);
-    return numPages;
+    console.warn('[PLD] páginas detectadas por pdfjs:', pages);
+    return { pages, failedAt: null };
   } catch (err) {
-    console.warn('[PLD] pdfjs error (imagen, PDF cifrado, formato no soportado)', url, err);
-    return null;
+    console.warn('[PLD] pdfjs error (imagen, PDF cifrado, XFA):', url, err);
+    return { pages: null, failedAt: 'parse' };
   }
 }
 
@@ -1234,7 +1201,7 @@ export function RelacionPagos() {
     console.warn('[PLD] analizarComprobante inicio', { pagoId, url });
     setValidandoPagoId(pagoId);
     try {
-      const pages = await getPaginasComprobante(url);
+      const { pages, failedAt } = await getPaginasComprobante(url);
       if (pages !== null && pages >= 2) {
         const { error } = await (supabase as any)
           .from('pagos')
@@ -1242,13 +1209,13 @@ export function RelacionPagos() {
           .eq('id', pagoId);
         if (error) throw error;
         qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
-        toast.success(`Comprobante validado: contiene ${pages} páginas.`);
+        toast.success(`Comprobante validado: ${pages} páginas detectadas.`);
+      } else if (pages === 1) {
+        toast.warning('El comprobante tiene solo 1 página — se requiere ticket + estado de cuenta en un mismo PDF.');
+      } else if (failedAt === 'download') {
+        toast.warning('No se pudo descargar el comprobante (error de red). Revisa la consola del navegador con filtro [PLD].');
       } else {
-        toast.warning(
-          pages === 1
-            ? 'PDF de 1 página — falta estado de cuenta para completar la validación PLD.'
-            : 'No se pudo confirmar que el comprobante contenga ticket + estado de cuenta. Revisión PLD pendiente.',
-        );
+        toast.warning('El archivo adjunto no pudo leerse como PDF. Revisa la consola del navegador con filtro [PLD].');
       }
     } catch (err) {
       console.error('[PLD] error al guardar validación', err);
