@@ -37,6 +37,7 @@ import {
   useTimbrarFacturaComisionSozu,
 } from "@/hooks/useFacturasComisionSozuPorGenerar";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
+import { useEngancheCompleto } from "@/hooks/useEngancheCompleto";
 
 // Emisor del CFDI (lo configura del lado de la edge function; se replica aquí
 // solo para mostrarlo en "Datos fiscales — Emisor").
@@ -60,6 +61,10 @@ export function EjecucionFacturaSozuContent({
   const { data: detalle, isLoading: detalleLoading } = useExpedienteVentaDetalle(
     entity.folio_cuenta,
   );
+  // Solo se puede generar el CFDI cuando el enganche está pagado por completo
+  // (misma regla que Admin · Finanzas → Comisiones Sozu).
+  const { data: engInfo, isLoading: engLoading } = useEngancheCompleto(entity.id_cuenta_cobranza);
+  const engancheCompleto = !!engInfo?.engancheCompleto;
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [notas, setNotas] = useState("");
 
@@ -422,23 +427,31 @@ export function EjecucionFacturaSozuContent({
             </Button>
           </>
         ) : (
-          <Button
-            size="sm"
-            onClick={() => setPendingAction("generar")}
-            disabled={isWorking}
-          >
-            {generar.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                Generando CFDI…
-              </>
-            ) : (
-              <>
-                <FileText className="h-3.5 w-3.5 mr-1.5" />
-                Generar CFDI
-              </>
+          <div className="flex w-full flex-col items-end gap-1.5">
+            {!engLoading && !engancheCompleto && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 text-right">
+                ⚠ Aún no se cubre el monto total del enganche; no se puede generar el CFDI todavía.
+              </p>
             )}
-          </Button>
+            <Button
+              size="sm"
+              onClick={() => setPendingAction("generar")}
+              disabled={isWorking || engLoading || !engancheCompleto}
+              title={!engancheCompleto ? "El enganche aún no está pagado por completo" : undefined}
+            >
+              {generar.isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Generando CFDI…
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Generar CFDI
+                </>
+              )}
+            </Button>
+          </div>
         )}
       </div>
 
