@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, ChevronRight, User, Building2, Calendar, DollarSign, X, CalendarDays, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Building2, Calendar, DollarSign, X, CalendarDays, Search, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -359,9 +359,17 @@ export default function AltaDireccionPipelinePage() {
                                   </p>
                                 )}
                               </div>
-                              <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+                              <a
+                                href={`/oferta/${card.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Ver oferta digital"
+                                className="text-[10px] shrink-0 font-mono text-primary hover:underline inline-flex items-center gap-0.5"
+                              >
                                 {card.is_producto ? "OP" : "O"}-{String(card.id).padStart(6, "0")}
-                              </span>
+                                <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
                             </div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
