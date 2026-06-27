@@ -64,68 +64,42 @@ function normConcepto(
   return null;
 }
 
-// ─── Comprobante classification (pdfjs-dist para conteo fiable de páginas) ────
+// ─── Conteo de páginas — fuente única: pdfjs-dist ─────────────────────────────
+// Sin dependencia de extensión ni MIME type. pdfjs lee PDFs 1.4, 1.5+ (object
+// streams comprimidos), linealizados y escaneados. Retorna null si el archivo
+// no es un PDF válido, hay CORS, timeout o cualquier otro error.
 
-const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
-
-function getUrlExtension(url: string): string {
-  return url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? '';
-}
-
-type ComprobanteType =
-  | 'imagen'
-  | 'pdf_una_pagina'
-  | 'pdf_multipagina'
-  | 'pdf_indeterminado'
-  | 'otro';
-
-async function getPdfPageCount(url: string): Promise<number | null> {
+async function getPaginasComprobante(url: string): Promise<number | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
-      console.warn('[PLD] getPdfPageCount: respuesta HTTP no OK', res.status, url);
+      console.warn('[PLD] fetch no OK', res.status, url);
       return null;
     }
-    const contentType = res.headers.get('content-type') ?? '(sin content-type)';
     const buffer = await res.arrayBuffer();
-    const sizeKb = (buffer.byteLength / 1024).toFixed(1);
-    const firstBytes = new TextDecoder('latin1').decode(new Uint8Array(buffer, 0, 8));
-    const startsPdf = firstBytes.startsWith('%PDF-');
-    console.warn('[PLD] PDF diagnóstico', { url, contentType, sizeKb: `${sizeKb}KB`, firstBytes, startsPdf });
-    if (!startsPdf) {
-      console.warn('[PLD] getPdfPageCount: archivo sin header %PDF-, descartado');
-      return null;
-    }
+    console.warn('[PLD] buffer recibido', {
+      sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB',
+      contentType: res.headers.get('content-type'),
+      url,
+    });
     const loadingTask = getDocument({ data: buffer });
     const pdf = await loadingTask.promise;
     const numPages = pdf.numPages;
     await pdf.destroy();
-    console.warn('[PLD] getPdfPageCount: páginas detectadas por pdfjs:', numPages);
+    console.warn('[PLD] páginas detectadas:', numPages, url);
     return numPages;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      console.warn('[PLD] getPdfPageCount: timeout de 15s al descargar PDF', url);
+      console.warn('[PLD] timeout 15s al descargar comprobante', url);
     } else {
-      console.warn('[PLD] getPdfPageCount: error de red, CORS o PDF inválido', url, err);
+      console.warn('[PLD] error (CORS, imagen, PDF inválido, contraseña)', url, err);
     }
     return null;
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function detectarTipoComprobante(url: string): Promise<ComprobanteType> {
-  const ext = getUrlExtension(url);
-  if (IMAGE_EXTS.has(ext)) return 'imagen';
-  if (ext !== 'pdf') return 'otro';
-  const pages = await getPdfPageCount(url);
-  const result: ComprobanteType = pages === null
-    ? 'pdf_indeterminado'
-    : pages >= 2 ? 'pdf_multipagina' : 'pdf_una_pagina';
-  console.warn('[PLD] detectarTipoComprobante resultado:', { pages, result, url });
-  return result;
 }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
@@ -1206,9 +1180,8 @@ export function RelacionPagos() {
     }
   };
 
-  // Analiza url_recibo por extensión y páginas PDF antes de marcar validación
+  // Valida comprobante de efectivo contando páginas via pdfjs — sin lógica de extensión
   const handleAnalizarComprobante = async (pagoId: number, url: string) => {
-    // Regla 1: límite de efectivo excedido — no permitir verde
     if (pld.hasEfectivoExcedido) {
       toast.error('Límite de efectivo excedido — no se puede validar documentalmente.');
       return;
@@ -1216,30 +1189,21 @@ export function RelacionPagos() {
     console.warn('[PLD] analizarComprobante inicio', { pagoId, url });
     setValidandoPagoId(pagoId);
     try {
-      const tipo = await detectarTipoComprobante(url);
-      switch (tipo) {
-        case 'imagen':
-          toast.warning('Imagen adjunta; requiere PDF con ticket de depósito y estado de cuenta.');
-          break;
-        case 'pdf_una_pagina':
-          toast.warning('PDF de 1 página; falta estado de cuenta.');
-          break;
-        case 'pdf_multipagina': {
-          const { error } = await (supabase as any)
-            .from('pagos')
-            .update({ validacion_documental_efectivo: true })
-            .eq('id', pagoId);
-          if (error) throw error;
-          qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
-          toast.success('PDF de múltiples páginas validado: ticket de depósito + estado de cuenta.');
-          break;
-        }
-        case 'pdf_indeterminado':
-          toast.warning('No se pudo leer el PDF automáticamente (timeout, CORS o archivo no estándar) — validar manualmente.');
-          break;
-        case 'otro':
-          toast.error('Formato no reconocido como comprobante válido para PLD.');
-          break;
+      const pages = await getPaginasComprobante(url);
+      if (pages !== null && pages >= 2) {
+        const { error } = await (supabase as any)
+          .from('pagos')
+          .update({ validacion_documental_efectivo: true })
+          .eq('id', pagoId);
+        if (error) throw error;
+        qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+        toast.success(`Comprobante validado: contiene ${pages} páginas.`);
+      } else {
+        toast.warning(
+          pages === 1
+            ? 'PDF de 1 página — falta estado de cuenta para completar la validación PLD.'
+            : 'No se pudo confirmar que el comprobante contenga ticket + estado de cuenta. Revisión PLD pendiente.',
+        );
       }
     } finally {
       setValidandoPagoId(null);
