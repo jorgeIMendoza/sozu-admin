@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBandejaOperativa, BandejaCuenta } from '@/hooks/useBandejaOperativa';
-import { usePagosInvalidosPorCuenta } from '@/hooks/usePagosInvalidosPorCuenta';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
@@ -23,9 +22,18 @@ function fmtCurrency(n: number | null | undefined) {
   }).format(n);
 }
 
-type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto';
+function fmtCurrencyExact(n: number | null | undefined) {
+  if (n == null || isNaN(n)) return '-';
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency', currency: 'MXN',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(n);
+}
+
+type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento';
 
 function tipoCategoria(row: BandejaCuenta): TipoCategoria {
+  if (row.tipo_cuenta === 'Mantenimiento') return 'Mantenimiento';
   if (row.tipo_cuenta === 'Propiedad') return 'Propiedad';
   const pn = (row.producto_nombre ?? '').toLowerCase();
   if (pn.includes('bodega')) return 'Bodega';
@@ -39,6 +47,7 @@ function tipoBadgeClass(tipo: TipoCategoria) {
     Bodega:          'border-amber-200 bg-amber-50 text-amber-700',
     Estacionamiento: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     Producto:        'border-violet-200 bg-violet-50 text-violet-700',
+    Mantenimiento:   'border-teal-200 bg-teal-50 text-teal-700',
   }[tipo];
 }
 
@@ -59,13 +68,13 @@ function TipoBadge({ tipo }: { tipo: TipoCategoria }) {
 }
 
 function InvalidosCircle({ n }: { n: number }) {
-  if (n === 0) return null;
   return (
     <span className={cn(
       'inline-flex items-center justify-center size-[22px] rounded-full text-[10px] font-bold tabular-nums leading-none select-none',
-      n >= 3 ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
-             : n === 2 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
-             : 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
+      n === 0 ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+              : n >= 3 ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
+              : n === 2 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
+              : 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
     )}>
       {n}
     </span>
@@ -73,28 +82,108 @@ function InvalidosCircle({ n }: { n: number }) {
 }
 
 function ParcialesCircle({ n }: { n: number }) {
-  if (n === 0) {
-    return (
-      <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 text-[10px] font-bold select-none">
-        ✓
-      </span>
-    );
-  }
   return (
     <span className={cn(
       'inline-flex items-center justify-center size-[22px] rounded-full text-[10px] font-bold tabular-nums leading-none select-none',
-      n >= 3 ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
-             : n === 2 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
-             : 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
+      n === 0 ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+              : n >= 3 ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
+              : n === 2 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
+              : 'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
     )}>
       {n}
     </span>
   );
 }
 
+// ── Prioridad helpers ──────────────────────────────────────────────────────────
+
+type NivelPrioridad = 'Al día' | 'Alerta' | 'Urgente' | 'Crítico';
+const NIVELES_PRIORIDAD: NivelPrioridad[] = ['Al día', 'Alerta', 'Urgente', 'Crítico'];
+
+function nivelDeParcialidades(n: number): NivelPrioridad {
+  if (n === 0) return 'Al día';
+  if (n === 1) return 'Alerta';
+  if (n === 2) return 'Urgente';
+  return 'Crítico';
+}
+
+function NivelMultiSelect({
+  value,
+  onChange,
+  niveles,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  niveles: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const toggle = (nivel: string) => {
+    onChange(value.includes(nivel) ? value.filter(v => v !== nivel) : [...value, nivel]);
+  };
+
+  const label = value.length === 0
+    ? 'Todos'
+    : value.length === 1
+    ? value[0]
+    : `${value.length} niveles`;
+
+  return (
+    <div
+      className="relative w-[155px]"
+      onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 150); }}
+      onFocus={() => clearTimeout(blurTimer.current)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          'h-9 w-full flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm transition-colors hover:bg-accent/50 focus:outline-none',
+          open ? 'ring-1 ring-ring border-ring' : ''
+        )}
+      >
+        <span className={cn('truncate text-left flex-1', value.length === 0 ? 'text-muted-foreground' : 'text-foreground')}>
+          {label}
+        </span>
+        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-1 w-full bg-popover border border-border rounded-md shadow-md py-1">
+          {niveles.map(nivel => (
+            <button
+              key={nivel}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); toggle(nivel); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] hover:bg-accent text-left transition-colors"
+            >
+              <div className={cn(
+                'size-[14px] rounded-[3px] border flex items-center justify-center shrink-0',
+                value.includes(nivel)
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'border-input bg-background'
+              )}>
+                {value.includes(nivel) && <Check className="size-[9px]" />}
+              </div>
+              <span className="text-[12px] text-foreground">{nivel}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PrioridadMultiSelect = ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} />;
+
+const InvalidosMultiSelect = ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} />;
+
 // ── TipoMultiSelect ────────────────────────────────────────────────────────────
 
-const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto'];
+const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento'];
 
 function TipoMultiSelect({
   value,
@@ -193,24 +282,21 @@ export default function BandejaOperativaPage() {
   const [searchUnidad, setSearchUnidad]   = useState('');
   const [filtroTipo, setFiltroTipo]         = useState<string[]>([]);
   const [searchCuenta, setSearchCuenta]     = useState('');
-  const [filtroFocoRojo, setFiltroFocoRojo] = useState(false);
-  const [filtroInvalidos, setFiltroInvalidos] = useState(false);
+  const [filtroPrioridad, setFiltroPrioridad] = useState<string[]>([]);
+  const [filtroInvalidosNivel, setFiltroInvalidosNivel] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
   const { data: proyectos } = useProyectosCobranza();
   const { data: rawData, isLoading } = useBandejaOperativa({ proyectoId });
 
-  const cuentaIds = useMemo(() => (rawData ?? []).map(r => r.cuenta_id), [rawData]);
-  const { data: invalidosMap, isLoading: invalidosLoading } = usePagosInvalidosPorCuenta(cuentaIds);
-
-  // Client-side filter
+  // Client-side filter + sort by criticality (Parc. DESC, Inv. DESC)
   const filtered = useMemo(() => {
     if (!rawData) return [];
     const cl = searchCliente.toLowerCase().trim();
     const cu = searchCuenta.toLowerCase().trim();
     const un = searchUnidad.toLowerCase().trim();
     const cb = searchClabe.toLowerCase().trim();
-    return rawData.filter(r => {
+    const rows = rawData.filter(r => {
       if (cl && !(r.cliente_nombre ?? '').toLowerCase().includes(cl)
                && !(r.cliente_email ?? '').toLowerCase().includes(cl)) return false;
       if (cu) {
@@ -220,11 +306,16 @@ export default function BandejaOperativaPage() {
       if (un && !(r.numero_propiedad ?? '').toLowerCase().includes(un)) return false;
       if (cb && !(r.clabe_stp ?? '').toLowerCase().includes(cb)) return false;
       if (filtroTipo.length > 0 && !filtroTipo.includes(tipoCategoria(r))) return false;
-      if (filtroFocoRojo && r.parcialidades_vencidas === 0) return false;
-      if (filtroInvalidos && (invalidosMap?.[r.cuenta_id] ?? 0) === 0) return false;
+      if (filtroPrioridad.length > 0 && !filtroPrioridad.includes(nivelDeParcialidades(r.parcialidades_vencidas))) return false;
+      if (filtroInvalidosNivel.length > 0 && !filtroInvalidosNivel.includes(nivelDeParcialidades(r.invalidos ?? 0))) return false;
       return true;
     });
-  }, [rawData, searchCliente, searchCuenta, searchUnidad, searchClabe, filtroTipo, filtroFocoRojo, filtroInvalidos, invalidosMap]);
+    return rows.sort((a, b) => {
+      const parcDiff = b.parcialidades_vencidas - a.parcialidades_vencidas;
+      if (parcDiff !== 0) return parcDiff;
+      return (b.invalidos ?? 0) - (a.invalidos ?? 0);
+    });
+  }, [rawData, searchCliente, searchCuenta, searchUnidad, searchClabe, filtroTipo, filtroPrioridad, filtroInvalidosNivel]);
 
   // KPIs from filtered set
   const kpis = useMemo(() => ({
@@ -241,12 +332,12 @@ export default function BandejaOperativaPage() {
 
   const hasFilters = !!searchCliente || !!searchCuenta || !!searchUnidad
     || !!searchClabe || filtroTipo.length > 0 || proyectoId !== null
-    || filtroFocoRojo || filtroInvalidos;
+    || filtroPrioridad.length > 0 || filtroInvalidosNivel.length > 0;
 
   const clearFilters = useCallback(() => {
     setSearchCliente(''); setSearchCuenta(''); setSearchUnidad('');
     setSearchClabe(''); setFiltroTipo([]); setProyectoId(null);
-    setFiltroFocoRojo(false); setFiltroInvalidos(false); setPage(1);
+    setFiltroPrioridad([]); setFiltroInvalidosNivel([]); setPage(1);
   }, []);
 
   // Pagination number list with ellipsis
@@ -369,35 +460,13 @@ export default function BandejaOperativaPage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Alertas</span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => { setFiltroFocoRojo(v => !v); resetPage(); }}
-              className={cn(
-                'h-9 inline-flex items-center gap-1.5 rounded-md px-3 text-[12px] font-medium border transition-all',
-                filtroFocoRojo
-                  ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100'
-                  : 'bg-background border-input text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-              )}
-            >
-              <span className={cn('size-2 rounded-full shrink-0', filtroFocoRojo ? 'bg-red-500' : 'bg-muted-foreground/30')} />
-              Foco rojo
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFiltroInvalidos(v => !v); resetPage(); }}
-              className={cn(
-                'h-9 inline-flex items-center gap-1.5 rounded-md px-3 text-[12px] font-medium border transition-all',
-                filtroInvalidos
-                  ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
-                  : 'bg-background border-input text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-              )}
-            >
-              <span className={cn('size-2 rounded-full shrink-0', filtroInvalidos ? 'bg-amber-500' : 'bg-muted-foreground/30')} />
-              Inv. inválidos
-            </button>
-          </div>
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Prioridad</span>
+          <PrioridadMultiSelect value={filtroPrioridad} onChange={v => { setFiltroPrioridad(v); resetPage(); }} />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Pagos inválidos</span>
+          <InvalidosMultiSelect value={filtroInvalidosNivel} onChange={v => { setFiltroInvalidosNivel(v); resetPage(); }} />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -418,6 +487,17 @@ export default function BandejaOperativaPage() {
         </div>
       </div>
 
+      {/* Row count above table */}
+      {!isLoading && (
+        <div className="flex justify-end">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {filtered.length === 0
+              ? 'Sin resultados'
+              : `${((page - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} – ${Math.min(page * PAGE_SIZE, filtered.length).toLocaleString('es-MX')} de ${filtered.length.toLocaleString('es-MX')} cuentas`}
+          </span>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
@@ -434,7 +514,7 @@ export default function BandejaOperativaPage() {
                 <th className="w-[110px] !text-right">Vencido</th>
                 <th className="w-[110px] !text-right">Pendiente</th>
                 <th className="w-[58px] !text-center">Parc.</th>
-                <th className="w-[52px] !text-center">Inv.</th>
+                <th className="w-[52px] !text-center" title="Pagos inválidos">Inv.</th>
                 <th className="w-[68px] !text-center">Atraso</th>
                 <th className="w-[175px]">CLABE</th>
               </tr>
@@ -514,13 +594,16 @@ export default function BandejaOperativaPage() {
 
                     <td className="px-3 text-right">
                       <span className={cn('text-[12px] tabular-nums font-medium',
-                        row.monto_vencido > 0 ? 'text-danger' : 'text-muted-foreground/40')}>
-                        {row.monto_vencido > 0 ? fmtCurrency(row.monto_vencido) : '-'}
+                        row.monto_vencido === 0 ? 'text-emerald-600' : 'text-danger')}>
+                        {fmtCurrencyExact(row.monto_vencido)}
                       </span>
                     </td>
 
                     <td className="px-3 text-right">
-                      <span className="text-[12px] tabular-nums">{fmtCurrency(row.saldo_pendiente)}</span>
+                      <span className={cn('text-[12px] tabular-nums font-medium',
+                        row.saldo_pendiente === 0 ? 'text-emerald-600' : 'text-danger')}>
+                        {fmtCurrencyExact(row.saldo_pendiente)}
+                      </span>
                     </td>
 
                     <td className="px-3 text-center">
@@ -528,15 +611,12 @@ export default function BandejaOperativaPage() {
                     </td>
 
                     <td className="px-3 text-center">
-                      {invalidosLoading
-                        ? <Loader2 className="size-3 animate-spin text-muted-foreground/30 mx-auto" />
-                        : <InvalidosCircle n={invalidosMap?.[row.cuenta_id] ?? 0} />
-                      }
+                      <InvalidosCircle n={row.invalidos ?? 0} />
                     </td>
 
                     <td className="px-3 text-center">
                       <span className={cn('text-[12px] tabular-nums', atrasoStyle(row.dias_sin_pagar))}>
-                        {row.dias_sin_pagar > 0 ? `${row.dias_sin_pagar}d` : '-'}
+                        {row.dias_sin_pagar === 0 ? '0' : `${row.dias_sin_pagar}d`}
                       </span>
                     </td>
 
