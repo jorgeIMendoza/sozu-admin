@@ -147,7 +147,7 @@ export const PortalJuridicoLayout = () => {
             </div>
           </header>
 
-          <main className="p-4 lg:p-8 bg-background min-h-screen">
+          <main className="px-8 py-4 bg-background min-h-screen">
             <Outlet />
           </main>
         </div>

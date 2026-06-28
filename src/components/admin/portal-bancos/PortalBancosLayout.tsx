@@ -186,7 +186,7 @@ export const PortalBancosLayout = () => {
               </div>
             </header>
 
-            <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
+            <main className="px-8 py-4 bg-background min-h-[calc(100vh-56px)]">
               <BankImpersonationSelector />
               <Outlet />
             </main>
