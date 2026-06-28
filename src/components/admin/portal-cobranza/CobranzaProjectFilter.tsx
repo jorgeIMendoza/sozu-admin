@@ -19,7 +19,6 @@ interface CobranzaProjectFilterProps {
   className?: string;
   popoverClassName?: string;
   popoverAlign?: "start" | "center" | "end";
-  searchThreshold?: number;
 }
 
 export function CobranzaProjectFilter({
@@ -30,7 +29,6 @@ export function CobranzaProjectFilter({
   className,
   popoverClassName,
   popoverAlign = "start",
-  searchThreshold = 10,
 }: CobranzaProjectFilterProps) {
   const [open, setOpen] = useState(false);
 
@@ -38,23 +36,6 @@ export function CobranzaProjectFilter({
     () => projects.find((project) => project.id === value) ?? null,
     [projects, value]
   );
-
-  if (projects.length <= searchThreshold) {
-    return (
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        className={cn("sozu-filter-select", className)}
-      >
-        <option value="">{allLabel}</option>
-        {projects.map((project) => (
-          <option key={project.id} value={project.id}>
-            {project.nombre}
-          </option>
-        ))}
-      </select>
-    );
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

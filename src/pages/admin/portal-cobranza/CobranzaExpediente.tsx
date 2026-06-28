@@ -21,7 +21,7 @@ const tabs = [
 type TabId = typeof tabs[number]['id'];
 
 function formatDate(d: string | null) {
-  if (!d) return '—';
+  if (!d) return '-';
   try {
     return format(parseISO(d), 'dd MMM yyyy', { locale: es });
   } catch {
@@ -190,11 +190,11 @@ function ResumenTab({
         <h3 className="sozu-section-title flex items-center gap-2">
           <User className="w-4 h-4 text-primary" strokeWidth={1.75} />Datos del Cliente
         </h3>
-        <Field label="Nombre" value={cuenta.cliente_nombre || '—'} />
-        <Field label="Tipo" value={cuenta.cliente_tipo || '—'} />
-        <Field label="RFC" value={cuenta.cliente_rfc || '—'} mono />
-        <Field label="Email" value={cuenta.cliente_email || '—'} icon={Mail} />
-        <Field label="Teléfono" value={cuenta.cliente_telefono || '—'} icon={Phone} />
+        <Field label="Nombre" value={cuenta.cliente_nombre || '-'} />
+        <Field label="Tipo" value={cuenta.cliente_tipo || '-'} />
+        <Field label="RFC" value={cuenta.cliente_rfc || '-'} mono />
+        <Field label="Email" value={cuenta.cliente_email || '-'} icon={Mail} />
+        <Field label="Teléfono" value={cuenta.cliente_telefono || '-'} icon={Phone} />
       </div>
 
       {/* Propiedad */}
@@ -202,11 +202,11 @@ function ResumenTab({
         <h3 className="sozu-section-title flex items-center gap-2">
           <Building2 className="w-4 h-4 text-primary" strokeWidth={1.75} />Propiedad
         </h3>
-        <Field label="Proyecto" value={cuenta.proyecto_nombre || '—'} />
-        <Field label="Edificio" value={cuenta.edificio || '—'} />
-        <Field label="Modelo" value={cuenta.modelo || '—'} />
-        <Field label="No. Propiedad" value={cuenta.numero_propiedad || '—'} icon={Hash} />
-        <Field label="Metraje" value={cuenta.metraje ? `${cuenta.metraje} m²` : '—'} />
+        <Field label="Proyecto" value={cuenta.proyecto_nombre || '-'} />
+        <Field label="Edificio" value={cuenta.edificio || '-'} />
+        <Field label="Modelo" value={cuenta.modelo || '-'} />
+        <Field label="No. Propiedad" value={cuenta.numero_propiedad || '-'} icon={Hash} />
+        <Field label="Metraje" value={cuenta.metraje ? `${cuenta.metraje} m²` : '-'} />
         <Field label="Fecha compra" value={formatDate(cuenta.fecha_compra)} icon={Calendar} />
       </div>
 
@@ -484,21 +484,21 @@ function EstadoCuentaTab({
                     )}
                   </div>
                 </td>
-                <td className="px-4 font-mono text-[11px] text-muted-foreground">{m.ref || '—'}</td>
+                <td className="px-4 font-mono text-[11px] text-muted-foreground">{m.ref || '-'}</td>
                 <td className="px-4 text-right text-[13px] tabular-nums">
                   {m.type !== 'pago' ? (
                     <span className={cn('font-semibold', m.type === 'multa' ? 'text-danger' : 'text-foreground')}>
                       {formatCurrency(m.amount)}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </td>
                 <td className="px-4 text-right text-[13px] tabular-nums">
                   {m.type === 'pago' ? (
                     <span className="font-semibold text-success">{formatCurrency(m.amount)}</span>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </td>
                 <td className={cn('px-4 text-right text-[13px] tabular-nums font-medium', saldoColor(m.saldo))}>
@@ -571,7 +571,7 @@ function CalendarioTab({
               return (
                 <tr key={p.id} className={cn('border-b border-border-light h-[44px]', vencido && 'bg-danger-bg/30')}>
                   <td className="px-4 text-center text-[13px] text-muted-foreground">{p.orden}</td>
-                  <td className="px-4 text-[13px] text-foreground truncate max-w-[200px]">{p.concepto || '—'}</td>
+                  <td className="px-4 text-[13px] text-foreground truncate max-w-[200px]">{p.concepto || '-'}</td>
                   <td className="px-4 text-[13px] text-foreground tabular-nums">{formatDate(p.fecha_pago)}</td>
                   <td className="px-4 text-left text-[13px] font-medium text-foreground tabular-nums">{formatCurrency(Number(p.monto))}</td>
                   <td className="px-4 text-left text-[13px] text-success tabular-nums">{formatCurrency(Number(p.aplicado))}</td>
@@ -597,7 +597,7 @@ function CalendarioTab({
                     {diasAtraso > 0 ? (
                       <span className="text-[13px] text-danger font-semibold">{diasAtraso}d</span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">-</span>
                     )}
                   </td>
                 </tr>
@@ -645,21 +645,21 @@ function PagosTab({
               <tr key={p.id} className="border-b border-border-light hover:bg-primary-muted/50 h-[44px]">
                 <td className="px-4 text-[13px] text-muted-foreground tabular-nums">{formatDate(p.fecha_pago)}</td>
                 <td className="px-4 text-left text-[13px] font-semibold text-success tabular-nums">{formatCurrency(Number(p.monto))}</td>
-                <td className="px-4 text-[13px] text-foreground">{p.metodo || '—'}</td>
-                <td className="px-4 font-mono text-[11px] text-muted-foreground">{p.clave_rastreo || '—'}</td>
-                <td className="px-4 text-[13px] text-muted-foreground truncate max-w-[280px]">{p.descripcion || '—'}</td>
+                <td className="px-4 text-[13px] text-foreground">{p.metodo || '-'}</td>
+                <td className="px-4 font-mono text-[11px] text-muted-foreground">{p.clave_rastreo || '-'}</td>
+                <td className="px-4 text-[13px] text-muted-foreground truncate max-w-[280px]">{p.descripcion || '-'}</td>
                 <td className="px-4 text-center">
                   {p.url_cep ? (
                     <a href={p.url_cep} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-[12px]">Ver</a>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </td>
                 <td className="px-4 text-center">
                   {p.url_recibo ? (
                     <a href={p.url_recibo} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-[12px]">Ver</a>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </td>
               </tr>
