@@ -14,6 +14,7 @@ import { ClienteImpersonationSelector } from "./ClienteImpersonationSelector";
 import { PortalSearchInput } from "./PortalSearchInput";
 import Sidebar, { SidebarContent } from "./Sidebar";
 import TopBar from "./TopBar";
+import NotificationSheet from "./notifications/NotificationSheet";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 
 function truncateName(full: string, max = 22): string {
@@ -31,6 +32,7 @@ export const PortalClienteLayout = () => {
   const unreadCount = useUnreadCount();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const [mobileNotifOpen, setMobileNotifOpen] = useState(false);
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
@@ -83,6 +85,7 @@ export const PortalClienteLayout = () => {
 
   return (
     <PortalTrackingProvider portal="clientes">
+      <NotificationSheet open={mobileNotifOpen} onOpenChange={setMobileNotifOpen} />
       <div className="inmob-portal min-h-screen flex bg-background [overflow-x:clip]">
         {/* Desktop sidebar */}
         <Sidebar {...sidebarProps} />
@@ -116,7 +119,7 @@ export const PortalClienteLayout = () => {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => navigate("/admin/portal-cliente/notificaciones")}
+                  onClick={() => setMobileNotifOpen(true)}
                   className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                   aria-label="Notificaciones"
                 >

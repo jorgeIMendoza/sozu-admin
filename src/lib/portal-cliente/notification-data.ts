@@ -59,6 +59,13 @@ interface NotifRow {
   fecha_creacion: string;
 }
 
+function normalizeActionUrl(url: string | null): string {
+  if (!url || url === "/") return "/admin/portal-cliente/inicio";
+  if (url.startsWith("/admin/")) return url;
+  if (url.startsWith("/")) return `/admin/portal-cliente${url}`;
+  return url;
+}
+
 function mapRow(row: NotifRow): Notification {
   return {
     id: String(row.id),
@@ -68,7 +75,7 @@ function mapRow(row: NotifRow): Notification {
     description: row.descripcion,
     createdAt: row.fecha_creacion,
     actionLabel: row.etiqueta_accion ?? "Ver",
-    actionUrl: row.url_accion ?? "/",
+    actionUrl: normalizeActionUrl(row.url_accion),
     propertyId: row.id_cuenta_cobranza ? String(row.id_cuenta_cobranza) : undefined,
     read: row.leida,
     dismissed: row.descartada,
@@ -147,6 +154,21 @@ export function useMarkAsRead() {
       const { error } = await (supabase as any)
         .from("notificaciones_cliente")
         .update({ leida: true, fecha_lectura: new Date().toISOString() })
+        .eq("id", Number(id));
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications", email] }),
+  });
+}
+
+export function useMarkAsUnread() {
+  const qc = useQueryClient();
+  const email = useClientEmail();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from("notificaciones_cliente")
+        .update({ leida: false, fecha_lectura: null })
         .eq("id", Number(id));
       if (error) throw error;
     },

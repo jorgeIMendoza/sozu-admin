@@ -94,7 +94,7 @@ export const ENVIRONMENT = String(
 export const APP_VERSION = `v${__APP_VERSION__}-${__BUILD_TIMESTAMP__}`;
 
 // Brand assets — served from Supabase Storage with WebP conversion (no quality reduction).
-export const SOZU_LOGO_URL = "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/render/image/public/imagenes_generales/sozu_logo.png?quality=90&format=webp";
+export const SOZU_LOGO_URL = "https://tzmhgfjmddkfyffkkmto.supabase.co/storage/v1/object/public/imagenes_generales/sozu_logo.png";
 
 // Production Edge Functions — always points to Supabase Cloud regardless of environment.
 // Used for functions not deployed in self-hosted dev (e.g. generar-recibo-pago).
