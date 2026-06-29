@@ -666,6 +666,43 @@ export function RelacionPagos() {
     },
   });
 
+  // Segunda query ligera — estado de validación CEP por pago (fuente: pago_validaciones)
+  // Habilitada solo cuando rpPagosCuenta tiene datos. Ordena desc para que el primer
+  // registro por id_pago sea el más reciente (validación manual prevalece sobre automática).
+  const { data: pagoValidaciones } = useQuery({
+    queryKey: ['rp-pago-validaciones', primaryCuentaId],
+    enabled: !!primaryCuentaId && (rpPagosCuenta?.length ?? 0) > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const ids = (rpPagosCuenta ?? []).map(p => p.id);
+      if (!ids.length) return [];
+      const { data } = await (supabase as any)
+        .from('pago_validaciones')
+        .select('id_pago, estado, fecha_creacion')
+        .in('id_pago', ids)
+        .order('fecha_creacion', { ascending: false });
+      return (data ?? []) as Array<{ id_pago: number; estado: string; fecha_creacion: string }>;
+    },
+  });
+
+  // Map id_pago → estado más reciente (first-write-wins sobre datos ordenados desc)
+  // Enriquece rpPagosCuenta con estado_validacion para PLD — solo afecta la columna PLD,
+  // no el resto de la tabla ni los cálculos financieros.
+  const rpPagosCuentaConValidacion = useMemo(() => {
+    const pagos = rpPagosCuenta ?? [];
+    if (!pagos.length || !pagoValidaciones?.length) return pagos;
+    const validMap = new Map<number, 'coincide' | 'error' | 'no_coincide'>();
+    for (const v of pagoValidaciones) {
+      const id = Number(v.id_pago);
+      if (!validMap.has(id)) {
+        if (v.estado === 'coincide' || v.estado === 'error' || v.estado === 'no_coincide') {
+          validMap.set(id, v.estado as 'coincide' | 'error' | 'no_coincide');
+        }
+      }
+    }
+    return pagos.map(p => ({ ...p, estado_validacion: validMap.get(p.id) ?? null }));
+  }, [rpPagosCuenta, pagoValidaciones]);
+
   const { data: rpAplicacionesPorPago, isLoading: rpAplicacionesLoading } = useQuery({
     queryKey: ['rp-aplicaciones-por-pago', primaryCuentaId],
     enabled: !!primaryCuentaId,
@@ -1182,7 +1219,7 @@ export function RelacionPagos() {
   // Llamado aquí porque depende de precioFinal y cuentaResumen?.valorUma.
   const pld = usePldForCuenta(
     primaryCuentaId,
-    rpPagosCuenta ?? [],
+    rpPagosCuentaConValidacion,
     cuentaResumen?.valorUma ?? 0,
     precioFinal,
   );
