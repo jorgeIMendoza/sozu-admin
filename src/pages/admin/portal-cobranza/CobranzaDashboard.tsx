@@ -211,54 +211,60 @@ export default function CobranzaDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Filters */}
-      <div className="flex items-end gap-3 flex-wrap">
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Año</span>
-          <FilterCombobox
-            value={String(selectedYear)}
-            onChange={v => setSelectedYear(Number(v))}
-            options={YEARS.map(y => ({ label: String(y), value: String(y) }))}
-            className="w-full sm:w-[100px]"
-          />
+      <div className="space-y-3 sm:space-y-0 sm:flex sm:items-end sm:gap-3">
+        {/* Año + Mes: 2 cols on mobile, flat in flex on desktop */}
+        <div className="grid grid-cols-2 gap-3 sm:contents">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Año</span>
+            <FilterCombobox
+              value={String(selectedYear)}
+              onChange={v => setSelectedYear(Number(v))}
+              options={YEARS.map(y => ({ label: String(y), value: String(y) }))}
+              className="w-full sm:w-[100px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Mes</span>
+            <FilterCombobox
+              value={String(selectedMonth)}
+              onChange={v => setSelectedMonth(Number(v))}
+              options={MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))}
+              className="w-full sm:w-[148px]"
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Mes</span>
-          <FilterCombobox
-            value={String(selectedMonth)}
-            onChange={v => setSelectedMonth(Number(v))}
-            options={MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))}
-            className="w-full sm:w-[148px]"
-          />
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[180px]">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
-          <FilterCombobox
-            value={selectedProyecto != null ? String(selectedProyecto) : ''}
-            onChange={v => setSelectedProyecto(v ? Number(v) : null)}
-            placeholder="Todos los proyectos"
-            options={[
-              { label: 'Todos los proyectos', value: '' },
-              ...(proyectos ?? []).map((p: any) => ({ label: p.nombre, value: String(p.id) })),
-            ]}
-            className="w-full"
-          />
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 invisible select-none">Limpiar</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={isFiltered ? clearFilters : undefined}
-            className={cn(
-              'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150 w-full sm:w-auto',
-              isFiltered
-                ? 'border-success/50 text-success bg-success/5 hover:bg-success/10 hover:border-success cursor-pointer'
-                : 'border-border/40 text-muted-foreground/35 bg-transparent pointer-events-none',
-            )}
-          >
-            <X className="w-3.5 h-3.5" />
-            Limpiar
-          </Button>
+        {/* Proyecto + Limpiar: flex row on mobile, flat in flex on desktop */}
+        <div className="flex items-end gap-3 sm:contents">
+          <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
+            <FilterCombobox
+              value={selectedProyecto != null ? String(selectedProyecto) : ''}
+              onChange={v => setSelectedProyecto(v ? Number(v) : null)}
+              placeholder="Todos los proyectos"
+              options={[
+                { label: 'Todos los proyectos', value: '' },
+                ...(proyectos ?? []).map((p: any) => ({ label: p.nombre, value: String(p.id) })),
+              ]}
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-col gap-1 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 invisible select-none">Limpiar</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={isFiltered ? clearFilters : undefined}
+              className={cn(
+                'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150',
+                isFiltered
+                  ? 'border-success/50 text-success bg-success/5 hover:bg-success/10 hover:border-success cursor-pointer'
+                  : 'border-border/40 text-muted-foreground/35 bg-transparent pointer-events-none',
+              )}
+            >
+              <X className="w-3.5 h-3.5" />
+              Limpiar
+            </Button>
+          </div>
         </div>
       </div>
 

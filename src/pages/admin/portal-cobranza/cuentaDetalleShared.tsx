@@ -360,8 +360,11 @@ export interface CuentaDetalleCtx {
   setMultaGestionDialog: (v: boolean) => void;
   setPagoEvidenciaModal: React.Dispatch<React.SetStateAction<any | null>>;
   setPdfPreviewModal: (v: { url: string; title: string } | null) => void;
+  hayDiscrepancia: boolean;
+  sumaAcuerdos: number;
   generatingPDF: boolean;
   downloadingOferta: boolean;
   handleEstadoCuenta: () => void;
   handleDownloadOferta: () => void;
+  setTransferDialog: (v: boolean) => void;
 }

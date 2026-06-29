@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { EditCuentaCobranzaDialog } from '@/components/admin/EditCuentaCobranzaDialog';
+import { TransferPaymentDialog } from '@/components/admin/TransferPaymentDialog';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -488,6 +489,7 @@ export default function CobranzaCuentaDetalle() {
   const [pagoValidacionSaving, setPagoValidacionSaving] = useState(false);
   const [pagoMetodoSaving, setPagoMetodoSaving] = useState(false);
   const [downloadingOferta, setDownloadingOferta] = useState(false);
+  const [transferDialog, setTransferDialog] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cobranza-cuenta-detalle', cuentaId],
@@ -837,6 +839,10 @@ export default function CobranzaCuentaDetalle() {
 
   const isEnDemanda = estatusPropiedad?.toLowerCase().includes('demanda');
   const porcentajePagado = precio_final > 0 ? Math.min(100, (totalPagado / precio_final) * 100) : 0;
+
+  const sumaAcuerdos = acuerdos.reduce((s: number, a: any) => s + a.monto, 0);
+  const hayDiscrepancia = Math.abs(precio_final - sumaAcuerdos) > 0.01;
+  const ultimoPagoSTP = pagos.find((p: any) => p.clave_rastreo) ?? null;
   const selectedPago = pagos.find((p: any) => p.id === selectedPagoId) ?? null;
 
   const conceptoGroups: Record<string, { total: number; pagado: number; count: number; fechas: (string | null)[] }> = {};
@@ -952,8 +958,10 @@ export default function CobranzaCuentaDetalle() {
     setMultaGestionDialog: (v) => setMultaGestionDialog(v),
     setPagoEvidenciaModal,
     setPdfPreviewModal,
+    hayDiscrepancia, sumaAcuerdos,
     generatingPDF, handleEstadoCuenta,
     downloadingOferta, handleDownloadOferta,
+    setTransferDialog: (v) => setTransferDialog(v),
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -1459,6 +1467,16 @@ export default function CobranzaCuentaDetalle() {
           }}
         />
       )}
+
+      <TransferPaymentDialog
+        isOpen={transferDialog}
+        onClose={() => setTransferDialog(false)}
+        cuentaOrigenId={cuentaId}
+        ultimoPagoSTP={ultimoPagoSTP && ultimoPagoSTP.clave_rastreo
+          ? { id: ultimoPagoSTP.id, clave_rastreo: ultimoPagoSTP.clave_rastreo, monto: ultimoPagoSTP.monto }
+          : null
+        }
+      />
 
     </div>
   );

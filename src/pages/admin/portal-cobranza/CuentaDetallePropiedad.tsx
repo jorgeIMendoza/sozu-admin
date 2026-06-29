@@ -6,8 +6,8 @@ import {
   Undo2, Layers, Plus,
   Building2, Calendar, Hash, Home, Landmark,
   User, Phone, Mail, ChevronRight, Briefcase,
+  AlertTriangle, Lock,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import {
@@ -19,7 +19,6 @@ import {
 } from './cuentaDetalleShared';
 
 export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
-  const navigate = useNavigate();
   const [infoTab, setInfoTab] = useState<InfoTab>('resumen');
   const [activityTab, setActivityTab] = useState<ActivityTab>('acuerdos');
 
@@ -37,7 +36,9 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     setDemandaDialog, setQuitarDemandaDialog,
     setMultaAcuerdoId, setMultaDialog, setMultaGestionAcuerdoId, setMultaGestionDialog,
     setPagoEvidenciaModal, setPdfPreviewModal,
+    hayDiscrepancia, sumaAcuerdos,
     generatingPDF, handleEstadoCuenta, downloadingOferta, handleDownloadOferta,
+    setTransferDialog,
     clabe_stp, fecha_compra, ofertaId,
     compradores, agente,
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad,
@@ -73,6 +74,41 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
 
   return (
     <>
+      {/* Demanda banner — solo lectura */}
+      {isEnDemanda && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+          <div className="flex items-center justify-center size-8 rounded-full bg-red-100 shrink-0 mt-0.5">
+            <Lock className="size-4 text-red-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-red-700 leading-tight">Propiedad En Demanda - Solo Lectura</p>
+            <p className="text-[11px] text-red-600 mt-0.5">No se pueden registrar pagos, multas ni modificar esta cuenta mientras esté en proceso judicial.</p>
+          </div>
+          <button
+            onClick={() => setQuitarDemandaDialog(true)}
+            className="shrink-0 text-[11px] font-semibold text-red-700 border border-red-300 rounded-md px-2.5 py-1.5 hover:bg-red-100 transition-colors whitespace-nowrap"
+          >
+            Juicio Terminado
+          </button>
+        </div>
+      )}
+
+      {/* Discrepancy warning */}
+      {hayDiscrepancia && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-semibold text-amber-800">Discrepancia detectada en acuerdos de pago</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              Precio final: <span className="font-semibold">{fmtCurrency(precio_final)}</span>
+              {' · '}Suma de acuerdos: <span className="font-semibold">{fmtCurrency(sumaAcuerdos)}</span>
+              {' · '}Diferencia: <span className="font-semibold">{fmtCurrency(Math.abs(precio_final - sumaAcuerdos))}</span>
+              {sumaAcuerdos > precio_final ? ' (acuerdos exceden el precio)' : ' (acuerdos faltantes)'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* KPI grid — 5 cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard label="Precio Final" value={fmtCurrency(precio_final)} />
@@ -122,18 +158,22 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
 
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-2 px-0.5">
-        <button
-          onClick={() => navigate(`/admin/portal-cobranza/expediente/${cuentaId}`)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background text-[12px] font-medium text-foreground hover:bg-muted transition-colors"
-        >
-          <ArrowRightLeft className="size-3.5" />Transferir
-        </button>
-        <button
-          onClick={() => setPagoDialog(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-medium hover:bg-emerald-700 transition-colors"
-        >
-          <CreditCard className="size-3.5" />Agregar Pago
-        </button>
+        {!isEnDemanda && (
+          <button
+            onClick={() => setTransferDialog(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background text-[12px] font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <ArrowRightLeft className="size-3.5" />Transferir
+          </button>
+        )}
+        {!isEnDemanda && (
+          <button
+            onClick={() => setPagoDialog(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-medium hover:bg-emerald-700 transition-colors"
+          >
+            <CreditCard className="size-3.5" />Agregar Pago
+          </button>
+        )}
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
           onClick={handleEstadoCuenta}
@@ -143,12 +183,14 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           {generatingPDF ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
           Estado de Cuenta
         </button>
-        <button
-          onClick={() => setEditCuentaDialog(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background text-[12px] font-medium text-foreground hover:bg-muted transition-colors"
-        >
-          <Pencil className="size-3.5" />Editar Cuenta
-        </button>
+        {!isEnDemanda && (
+          <button
+            onClick={() => setEditCuentaDialog(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background text-[12px] font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <Pencil className="size-3.5" />Editar Cuenta
+          </button>
+        )}
         {!isEnDemanda && saldoPendiente > 0 && (
           <button
             onClick={() => setDemandaDialog(true)}
@@ -158,13 +200,12 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           </button>
         )}
         {isEnDemanda && (
-          <button
-            onClick={() => setQuitarDemandaDialog(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition-colors"
-            title="Quitar demanda"
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-semibold text-amber-700 cursor-default select-none"
+            title="Para terminar la demanda usa 'Juicio Terminado' en el aviso superior"
           >
             <Scale className="size-3.5" />En demanda
-          </button>
+          </span>
         )}
       </div>
 
@@ -321,12 +362,14 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                     {acuerdos.filter(a => a.pago_completado).length} de {acuerdos.length} pagados
                   </span>
                 </div>
-                <button
-                  onClick={() => setPagoDialog(true)}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
-                >
-                  <Plus className="size-3.5" />Registrar pago
-                </button>
+                {!isEnDemanda && (
+                  <button
+                    onClick={() => setPagoDialog(true)}
+                    className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <Plus className="size-3.5" />Registrar pago
+                  </button>
+                )}
               </div>
 
               {/* Plan de pagos */}
@@ -488,21 +531,23 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                     className={cn('size-3.5 shrink-0', a.numAplicaciones >= 2 ? 'text-muted-foreground/25' : 'text-amber-500')}
                                   />
                                 )}
-                                <button
-                                  onClick={() => {
-                                    if (a.multas) {
-                                      setMultaGestionAcuerdoId(a.id);
-                                      setMultaGestionDialog(true);
-                                    } else {
-                                      setMultaAcuerdoId(a.id);
-                                      setMultaDialog(true);
-                                    }
-                                  }}
-                                  title={a.multas ? `${a.multas.count} multa${a.multas.count !== 1 ? 's' : ''} - ver detalle` : 'Agregar multa'}
-                                  className={cn('p-1 rounded transition-colors', a.multas ? 'text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600' : 'text-foreground/70 hover:bg-muted hover:text-foreground')}
-                                >
-                                  <FileClock className="size-3.5" />
-                                </button>
+                                {!isEnDemanda && (
+                                  <button
+                                    onClick={() => {
+                                      if (a.multas) {
+                                        setMultaGestionAcuerdoId(a.id);
+                                        setMultaGestionDialog(true);
+                                      } else {
+                                        setMultaAcuerdoId(a.id);
+                                        setMultaDialog(true);
+                                      }
+                                    }}
+                                    title={a.multas ? `${a.multas.count} multa${a.multas.count !== 1 ? 's' : ''} - ver detalle` : 'Agregar multa'}
+                                    className={cn('p-1 rounded transition-colors', a.multas ? 'text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600' : 'text-foreground/70 hover:bg-muted hover:text-foreground')}
+                                  >
+                                    <FileClock className="size-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => {
                                     if (a.numAplicaciones >= 2) return;
@@ -593,12 +638,14 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
               <p className="text-[11px] text-muted-foreground">
                 {docsLoading ? 'Cargando...' : `${docs.length} documento${docs.length !== 1 ? 's' : ''}`}
               </p>
-              <button
-                onClick={() => setUploadDialog(true)}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                <Upload className="size-3.5" />Subir
-              </button>
+              {!isEnDemanda && (
+                <button
+                  onClick={() => setUploadDialog(true)}
+                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  <Upload className="size-3.5" />Subir
+                </button>
+              )}
             </div>
             {docsLoading ? (
               <div className="flex items-center justify-center py-12">
@@ -662,13 +709,15 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                 <Eye className="size-3.5" />
                               </button>
                             )}
-                            <button
-                              onClick={() => { setUploadDialog(true); }}
-                              className="inline-flex items-center justify-center p-1 rounded hover:bg-emerald-50 text-muted-foreground/50 hover:text-emerald-600 transition-colors"
-                              title={d.missing ? 'Subir documento' : 'Reemplazar documento'}
-                            >
-                              <Upload className="size-3.5" />
-                            </button>
+                            {!isEnDemanda && (
+                              <button
+                                onClick={() => { setUploadDialog(true); }}
+                                className="inline-flex items-center justify-center p-1 rounded hover:bg-emerald-50 text-muted-foreground/50 hover:text-emerald-600 transition-colors"
+                                title={d.missing ? 'Subir documento' : 'Reemplazar documento'}
+                              >
+                                <Upload className="size-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -111,10 +111,12 @@ function NivelMultiSelect({
   value,
   onChange,
   niveles,
+  className,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
   niveles: string[];
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -131,7 +133,7 @@ function NivelMultiSelect({
 
   return (
     <div
-      className="relative w-[155px]"
+      className={cn("relative", className ?? "w-[155px]")}
       onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 150); }}
       onFocus={() => clearTimeout(blurTimer.current)}
     >
@@ -175,11 +177,11 @@ function NivelMultiSelect({
   );
 }
 
-const PrioridadMultiSelect = ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) =>
-  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} />;
+const PrioridadMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} className={className} />;
 
-const InvalidosMultiSelect = ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) =>
-  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} />;
+const InvalidosMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={NIVELES_PRIORIDAD} className={className} />;
 
 // ── TipoMultiSelect ────────────────────────────────────────────────────────────
 
@@ -188,9 +190,11 @@ const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Produ
 function TipoMultiSelect({
   value,
   onChange,
+  className,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -213,7 +217,7 @@ function TipoMultiSelect({
 
   return (
     <div
-      className="relative w-[175px]"
+      className={cn("relative", className ?? "w-[175px]")}
       onBlur={() => { blurTimer.current = setTimeout(() => { setOpen(false); setSearch(''); }, 150); }}
       onFocus={() => clearTimeout(blurTimer.current)}
     >
@@ -401,7 +405,7 @@ export default function BandejaOperativaPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-x-4 gap-y-3 items-end">
+      <div className="grid grid-cols-2 gap-3 items-end sm:flex sm:flex-wrap sm:gap-x-4 sm:gap-y-3">
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Proyecto</span>
@@ -409,8 +413,8 @@ export default function BandejaOperativaPage() {
             projects={proyectos ?? []}
             value={proyectoId}
             onChange={v => { setProyectoId(v); resetPage(); }}
-            className="h-9 w-[210px]"
-            popoverClassName="w-[210px]"
+            className="h-9 w-full sm:w-[210px]"
+            popoverClassName="w-full sm:w-[210px]"
           />
         </div>
 
@@ -420,7 +424,7 @@ export default function BandejaOperativaPage() {
             value={searchClabe}
             onChange={e => { setSearchClabe(e.target.value); resetPage(); }}
             placeholder="646180110400123456"
-            className="h-9 w-[175px] text-sm font-mono"
+            className="h-9 w-full sm:w-[175px] text-sm font-mono"
           />
         </div>
 
@@ -430,7 +434,7 @@ export default function BandejaOperativaPage() {
             value={searchCliente}
             onChange={e => { setSearchCliente(e.target.value); resetPage(); }}
             placeholder="García López"
-            className="h-9 w-[185px] text-sm"
+            className="h-9 w-full sm:w-[185px] text-sm"
           />
         </div>
 
@@ -440,13 +444,13 @@ export default function BandejaOperativaPage() {
             value={searchUnidad}
             onChange={e => { setSearchUnidad(e.target.value); resetPage(); }}
             placeholder="A-203"
-            className="h-9 w-[100px] text-sm"
+            className="h-9 w-full sm:w-[100px] text-sm"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo</span>
-          <TipoMultiSelect value={filtroTipo} onChange={v => { setFiltroTipo(v); resetPage(); }} />
+          <TipoMultiSelect value={filtroTipo} onChange={v => { setFiltroTipo(v); resetPage(); }} className="w-full sm:w-[175px]" />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -455,28 +459,28 @@ export default function BandejaOperativaPage() {
             value={searchCuenta}
             onChange={e => { setSearchCuenta(e.target.value); resetPage(); }}
             placeholder="CC-000842"
-            className="h-9 w-[110px] text-sm font-mono"
+            className="h-9 w-full sm:w-[110px] text-sm font-mono"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Prioridad</span>
-          <PrioridadMultiSelect value={filtroPrioridad} onChange={v => { setFiltroPrioridad(v); resetPage(); }} />
+          <PrioridadMultiSelect value={filtroPrioridad} onChange={v => { setFiltroPrioridad(v); resetPage(); }} className="w-full sm:w-[155px]" />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Pagos inválidos</span>
-          <InvalidosMultiSelect value={filtroInvalidosNivel} onChange={v => { setFiltroInvalidosNivel(v); resetPage(); }} />
+          <InvalidosMultiSelect value={filtroInvalidosNivel} onChange={v => { setFiltroInvalidosNivel(v); resetPage(); }} className="w-full sm:w-[155px]" />
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 col-span-2 sm:col-auto">
           <span className="text-xs font-medium text-muted-foreground/0 select-none px-0.5">Limpiar</span>
           <Button
             variant="outline"
             size="sm"
             onClick={hasFilters ? clearFilters : undefined}
             className={cn(
-              'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150',
+              'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150 w-full sm:w-auto',
               hasFilters
                 ? 'border-success/50 text-success bg-success/5 hover:bg-success/10 hover:border-success cursor-pointer'
                 : 'border-border/40 text-muted-foreground/35 bg-transparent pointer-events-none',
