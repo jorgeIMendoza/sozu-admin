@@ -264,7 +264,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
                 </div>
               </header>
 
-              <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
+              <main className="px-8 py-4 bg-background min-h-[calc(100vh-56px)]">
                 <Outlet />
               </main>
             </div>

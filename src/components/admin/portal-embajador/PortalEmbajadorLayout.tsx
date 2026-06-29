@@ -79,7 +79,7 @@ export const PortalEmbajadorLayout = () => {
         </div>
       )}
 
-      <main className="flex-1 p-4 lg:p-8 max-w-6xl mx-auto w-full">
+      <main className="flex-1 px-8 py-4 max-w-6xl mx-auto w-full">
         <Outlet />
       </main>
     </div>

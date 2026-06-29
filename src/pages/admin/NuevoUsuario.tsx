@@ -51,7 +51,7 @@ export default function NuevoUsuario() {
   };
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-4xl">
+    <div className="container mx-auto max-w-4xl">
       <div className="mb-6">
         <Button
           variant="ghost"

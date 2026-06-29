@@ -395,6 +395,77 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
 
+  // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
+  if (selectedIsManual && selectedId && paymentPlans.length > 0) {
+    const { data: cuentas } = await (supabase as any)
+      .from('cuentas_cobranza')
+      .select('id')
+      .eq('id_oferta', numId)
+      .eq('activo', true);
+
+    if (cuentas && cuentas.length > 0) {
+      const cuentaIds = (cuentas as any[]).map((c: any) => c.id);
+      const { data: acuerdos } = await (supabase as any)
+        .from('acuerdos_pago')
+        .select('id, monto, id_concepto')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+
+      if (acuerdos && (acuerdos as any[]).length > 0) {
+        const conceptoIds = [...new Set((acuerdos as any[]).map((a: any) => a.id_concepto))] as number[];
+        const { data: conceptos } = await (supabase as any)
+          .from('conceptos_pago')
+          .select('id, nombre')
+          .in('id', conceptoIds);
+        const conceptoMap: Record<number, string> = {};
+        ((conceptos ?? []) as any[]).forEach((c: any) => { conceptoMap[c.id] = (c.nombre ?? '').toLowerCase(); });
+
+        let engancheTotal = 0, mensualidadesTotal = 0, entregaTotal = 0, nMensualidades = 0;
+        for (const a of acuerdos as any[]) {
+          const nombre = conceptoMap[a.id_concepto] ?? '';
+          const monto = Number(a.monto ?? 0);
+          if (nombre.includes('apartado') || nombre.includes('enganche')) {
+            engancheTotal += monto;
+          } else if (nombre.includes('parcialidad') || nombre.includes('mensualidad')) {
+            mensualidadesTotal += monto;
+            nMensualidades++;
+          } else if (nombre.includes('contra entrega') || nombre.includes('entrega')) {
+            entregaTotal += monto;
+          }
+        }
+
+        const tpl = paymentPlans[0];
+        const fp = tpl.finalPrice;
+        const pctE   = fp > 0 ? Number((engancheTotal   / fp * 100).toFixed(1)) : 0;
+        const pctP   = fp > 0 ? Number((mensualidadesTotal / fp * 100).toFixed(1)) : 0;
+        const pctEnt = fp > 0 ? Number((entregaTotal     / fp * 100).toFixed(1)) : 0;
+
+        const isModified =
+          Math.abs(tpl.downPaymentPct  - pctE)   > 0.5 ||
+          Math.abs(tpl.installmentsPct - pctP)   > 0.5 ||
+          Math.abs(tpl.finalPaymentPct - pctEnt) > 0.5 ||
+          (tpl.installments?.count ?? 0) !== nMensualidades;
+
+        if (isModified) {
+          const perPago = nMensualidades > 0 ? mensualidadesTotal / nMensualidades : 0;
+          const syntheticPlan: PaymentPlan = {
+            ...tpl,
+            name: `${tpl.name} modificado`,
+            downPaymentPct: pctE,
+            downPaymentAmount: engancheTotal,
+            installmentsPct: pctP,
+            installments: nMensualidades > 0
+              ? { count: nMensualidades, monthlyAmount: perPago, endDate: tpl.installments?.endDate ?? '' }
+              : undefined,
+            finalPaymentPct: pctEnt,
+            finalPaymentAmount: entregaTotal,
+          };
+          paymentPlans.splice(0, 1, syntheticPlan);
+        }
+      }
+    }
+  }
+
   // 10. Expiración (7 días desde generación)
   // Vigencia siempre 7 días — calculado en código, sin campo en DB
   const validUntilDate = new Date(oferta.fecha_generacion);

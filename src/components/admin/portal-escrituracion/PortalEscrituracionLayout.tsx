@@ -176,7 +176,7 @@ export const PortalEscrituracionLayout = () => {
             </div>
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-screen">
+          <main className="px-8 py-4 bg-background min-h-screen">
             <Outlet />
           </main>
         </div>

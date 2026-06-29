@@ -352,7 +352,7 @@ export const PortalAltaDireccionLayout = () => {
               </div>
             </header>
 
-            <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-screen">
+            <main className="px-8 py-4 bg-background min-h-screen">
               {!ROUTES_SIN_FILTER_BAR.some((r) => location.pathname.startsWith(r)) && (
                 <GlobalFilterBar />
               )}

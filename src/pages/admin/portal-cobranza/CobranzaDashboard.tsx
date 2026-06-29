@@ -25,7 +25,7 @@ const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
 const CURRENT_MONTH = _now.getMonth() + 1;
 const YEARS = Array.from({ length: CURRENT_YEAR - 2021 }, (_, i) => 2022 + i);
-const AGING_COLOR = 'hsl(0,72%,58%)';
+const AGING_COLOR = '#e04444';
 
 type DashTab = 'resumen' | 'riesgo' | 'cobranza' | 'operacion';
 const tabs: { id: DashTab; label: string; icon: React.ElementType }[] = [
@@ -140,6 +140,11 @@ export default function CobranzaDashboard() {
     return [...base].sort((a, b) => a.cobrado - b.cobrado);
   }, [kpis?.por_proyecto, accessibleIds]);
 
+  // Top 5 by cobrado asc (matches chart order: lowest at top, highest at bottom)
+  const tableProyectos = useMemo(() => {
+    return filteredPorProyecto.slice(0, 5);
+  }, [filteredPorProyecto]);
+
   const chartData = useMemo(() => {
     if (!kpis?.cobrado_mensual) return [];
     const programadoMap = new Map(
@@ -206,54 +211,60 @@ export default function CobranzaDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Filters */}
-      <div className="flex items-end gap-3 flex-wrap">
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Año</span>
-          <FilterCombobox
-            value={String(selectedYear)}
-            onChange={v => setSelectedYear(Number(v))}
-            options={YEARS.map(y => ({ label: String(y), value: String(y) }))}
-            className="w-full sm:w-[100px]"
-          />
+      <div className="space-y-3 sm:space-y-0 sm:flex sm:items-end sm:gap-3">
+        {/* Año + Mes: 2 cols on mobile, flat in flex on desktop */}
+        <div className="grid grid-cols-2 gap-3 sm:contents">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Año</span>
+            <FilterCombobox
+              value={String(selectedYear)}
+              onChange={v => setSelectedYear(Number(v))}
+              options={YEARS.map(y => ({ label: String(y), value: String(y) }))}
+              className="w-full sm:w-[100px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Mes</span>
+            <FilterCombobox
+              value={String(selectedMonth)}
+              onChange={v => setSelectedMonth(Number(v))}
+              options={MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))}
+              className="w-full sm:w-[148px]"
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Mes</span>
-          <FilterCombobox
-            value={String(selectedMonth)}
-            onChange={v => setSelectedMonth(Number(v))}
-            options={MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))}
-            className="w-full sm:w-[148px]"
-          />
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[180px]">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
-          <FilterCombobox
-            value={selectedProyecto != null ? String(selectedProyecto) : ''}
-            onChange={v => setSelectedProyecto(v ? Number(v) : null)}
-            placeholder="Todos los proyectos"
-            options={[
-              { label: 'Todos los proyectos', value: '' },
-              ...(proyectos ?? []).map((p: any) => ({ label: p.nombre, value: String(p.id) })),
-            ]}
-            className="w-full"
-          />
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 invisible select-none">Limpiar</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={isFiltered ? clearFilters : undefined}
-            className={cn(
-              'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150 w-full sm:w-auto',
-              isFiltered
-                ? 'border-success/50 text-success bg-success/5 hover:bg-success/10 hover:border-success cursor-pointer'
-                : 'border-border/40 text-muted-foreground/35 bg-transparent pointer-events-none',
-            )}
-          >
-            <X className="w-3.5 h-3.5" />
-            Limpiar
-          </Button>
+        {/* Proyecto + Limpiar: flex row on mobile, flat in flex on desktop */}
+        <div className="flex items-end gap-3 sm:contents">
+          <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
+            <FilterCombobox
+              value={selectedProyecto != null ? String(selectedProyecto) : ''}
+              onChange={v => setSelectedProyecto(v ? Number(v) : null)}
+              placeholder="Todos los proyectos"
+              options={[
+                { label: 'Todos los proyectos', value: '' },
+                ...(proyectos ?? []).map((p: any) => ({ label: p.nombre, value: String(p.id) })),
+              ]}
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-col gap-1 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 invisible select-none">Limpiar</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={isFiltered ? clearFilters : undefined}
+              className={cn(
+                'h-9 px-3 text-[13px] gap-1.5 transition-all duration-150',
+                isFiltered
+                  ? 'border-success/50 text-success bg-success/5 hover:bg-success/10 hover:border-success cursor-pointer'
+                  : 'border-border/40 text-muted-foreground/35 bg-transparent pointer-events-none',
+              )}
+            >
+              <X className="w-3.5 h-3.5" />
+              Limpiar
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -436,13 +447,13 @@ export default function CobranzaDashboard() {
               <div className="sozu-kpi-card">
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,91%)" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(220,9%,46%)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: 'hsl(220,9%,46%)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
-                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid hsl(220,13%,91%)' }} />
-                    <Line type="monotone" dataKey="cobrado" stroke="hsl(142,71%,45%)" strokeWidth={2} dot={{ r: 3 }} name="Cobrado" />
-                    <Line type="monotone" dataKey="programado" stroke="hsl(220,9%,46%)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Programado (con contraentrega)" />
-                    <Line type="monotone" dataKey="programado_sin_ce" stroke="hsl(38,92%,50%)" strokeWidth={1.5} strokeDasharray="2 4" dot={false} name="Programado (sin contraentrega)" />
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    <Line type="monotone" dataKey="cobrado" stroke="#17c653" strokeWidth={2} dot={{ r: 3 }} name="Cobrado" />
+                    <Line type="monotone" dataKey="programado" stroke="#697280" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Programado (con contraentrega)" />
+                    <Line type="monotone" dataKey="programado_sin_ce" stroke="#f59f0a" strokeWidth={1.5} strokeDasharray="2 4" dot={false} name="Programado (sin contraentrega)" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -508,12 +519,12 @@ export default function CobranzaDashboard() {
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">Antigüedad de cartera</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={kpis.aging.map(a => ({ range: `${a.rango} días`, amount: a.monto_sin_ce, amountCE: a.monto }))} barSize={32}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,91%)" vertical={false} />
-                      <XAxis dataKey="range" tick={{ fontSize: 10, fill: 'hsl(220,9%,46%)' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'hsl(220,9%,46%)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
+                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
+                      <XAxis dataKey="range" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
                       <Tooltip
                         formatter={(v: number, name: string) => [formatCurrency(v), name === 'amount' ? 'Sin CE' : 'Con CE']}
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid hsl(220,13%,91%)' }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
                       />
                       <Bar dataKey="amount" fill={AGING_COLOR} radius={[4, 4, 0, 0]} name="Sin CE" />
                     </BarChart>
@@ -526,20 +537,42 @@ export default function CobranzaDashboard() {
                   <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Riesgo por proyecto
                 </h3>
-                <div className="space-y-0.5">
-                  {riskByProject.length > 0 ? riskByProject.map((p) => (
-                    <button key={p.proyecto_id}
-                      className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left group"
-                      onClick={() => drill(navigate, '/bandeja', { proyecto: p.proyecto })}>
-                      <div className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
-                      <span className="text-[13px] font-medium text-foreground flex-1 truncate">{p.proyecto}</span>
-                      <span className="text-[13px] font-semibold text-danger tabular-nums">{formatCurrency(p.vencido)}</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/30 group-hover:text-danger shrink-0 transition-colors" strokeWidth={1.75} />
-                    </button>
-                  )) : (
-                    <p className="text-[13px] text-muted-foreground text-center py-6">Sin datos de riesgo por proyecto</p>
-                  )}
-                </div>
+                {riskByProject.length > 0 ? (
+                  <div className="space-y-1">
+                    {riskByProject.map((p, i) => {
+                      const total = (p.cobrado ?? 0) + (p.pendiente ?? 0);
+                      const pct = total > 0 ? Math.round((p.vencido / total) * 100) : 0;
+                      const rank = i + 1;
+                      return (
+                        <button key={p.proyecto_id}
+                          className="w-full px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left group"
+                          onClick={() => drill(navigate, '/bandeja', { proyecto: p.proyecto })}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-[18px] h-[18px] rounded-full bg-danger/10 text-danger text-[10px] font-bold flex items-center justify-center shrink-0">{rank}</span>
+                              <span className="text-[13px] font-semibold text-foreground truncate">{p.proyecto}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              <span className="text-[13px] font-bold text-danger tabular-nums">{formatCurrency(p.vencido)}</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-danger transition-colors shrink-0" strokeWidth={1.75} />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex-1 h-[5px] bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-danger transition-all"
+                                style={{ width: `${Math.min(100, pct)}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] tabular-nums font-semibold text-danger/70 shrink-0 w-[52px] text-right">{pct}% venc.</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-muted-foreground text-center py-6">Sin datos de riesgo por proyecto</p>
+                )}
               </div>
             </div>
           </section>
@@ -639,7 +672,7 @@ export default function CobranzaDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPorProyecto.length > 0 ? filteredPorProyecto.map(p => (
+                    {tableProyectos.length > 0 ? tableProyectos.map(p => (
                       <tr key={p.proyecto_id}
                         className="border-b border-border/60 hover:bg-muted/40 cursor-pointer h-[48px] transition-colors group"
                         onClick={() => drill(navigate, '/bandeja', { proyecto: p.proyecto })}>
@@ -673,11 +706,11 @@ export default function CobranzaDashboard() {
               <div className="sozu-kpi-card">
                 <ResponsiveContainer width="100%" height={Math.max(160, filteredPorProyecto.length * 40)}>
                   <BarChart data={filteredPorProyecto} barSize={22} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,91%)" vertical={false} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(220,9%,46%)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
-                    <YAxis type="category" dataKey="proyecto" tick={{ fontSize: 11, fill: 'hsl(220,15%,7%)' }} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid hsl(220,13%,91%)' }} />
-                    <Bar dataKey="cobrado" fill="hsl(220,70%,52%)" radius={[0, 4, 4, 0]} name="Cobrado" />
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
+                    <YAxis type="category" dataKey="proyecto" tick={{ fontSize: 11, fill: '#0f1219' }} axisLine={false} tickLine={false} width={80} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    <Bar dataKey="cobrado" fill="#3068db" radius={[0, 4, 4, 0]} name="Cobrado" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

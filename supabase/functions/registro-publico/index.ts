@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── 6. Generate email confirmation link ───
-    const thankYouUrl = `${AGENTE_PORTAL_URL}/auth/confirmacion-email?email=${encodeURIComponent(emailLower)}&nombre=${encodeURIComponent(nombre.trim())}&portal=inmobiliarias&destination=change-password`;
+    const thankYouUrl = `${AGENTE_PORTAL_URL}/auth/confirmacion-email?email=${encodeURIComponent(emailLower)}&nombre=${encodeURIComponent(nombre.trim())}&portal=agentes&destination=change-password`;
     
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'signup',

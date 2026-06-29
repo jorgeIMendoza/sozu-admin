@@ -36,14 +36,6 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // Allow portal-cobranza routes only for Super Admin
-  if (location.pathname.startsWith('/admin/portal-cobranza')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    return <Navigate to="/admin/access-denied" replace />;
-  }
-
   // Allow portal-estructura-comisiones for Super Admin (1) and Administrador de Proyectos (2),
   // o cualquier rol con permiso explícito en la BD.
   if (location.pathname.startsWith('/admin/portal-estructura-comisiones')) {
@@ -150,6 +142,21 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoLegalFlow
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Cobranza: patrón coarse — basta tener permiso sobre cualquier submenu
+  // del portal para habilitar todas sus rutas (expediente/:id, etc. no tienen submenu propio).
+  if (location.pathname.startsWith('/admin/portal-cobranza')) {
+    let tieneAccesoCobranza = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-cobranza')) {
+        tieneAccesoCobranza = true;
+        break;
+      }
+    }
+    return tieneAccesoCobranza
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }
