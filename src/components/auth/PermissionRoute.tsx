@@ -268,9 +268,17 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   return <Navigate to="/admin/access-denied" replace />;
 }
 
-// Helper to get the first allowed path from dynamic menus
+// Helper to get the first allowed path from dynamic menus.
+// Al aterrizar en /admin priorizamos secciones del admin panel (no portales):
+// si el primer menú del rol es un portal (ej. "Portal Agente"), devolverlo aquí
+// rebotaba al usuario de vuelta a su portal en lugar de dejarlo en el admin panel.
+// Solo si el rol no tiene ninguna sección no-portal caemos a sus portales.
 function getFirstAllowedPath(menuItems: any[]): string | null {
-  for (const item of menuItems) {
+  const ordered = [
+    ...menuItems.filter((item) => !item.isPortal),
+    ...menuItems.filter((item) => item.isPortal),
+  ];
+  for (const item of ordered) {
     if (item.href) return item.href;
     if (item.children?.length > 0) {
       return item.children[0].href;

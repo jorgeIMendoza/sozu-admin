@@ -9,6 +9,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import {
   PortalProductosImpersonationProvider,
   usePortalProductosImpersonation,
@@ -55,6 +56,7 @@ const PortalProductosLayoutInner = () => {
   const { profile, signOut } = useAuth();
   const { impersonatedUser, isImpersonating } = usePortalProductosImpersonation();
   const isSuperAdmin = profile?.rol_id === 1;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Carga de datos REALES de productos → store (reemplaza el mock).
@@ -128,7 +130,7 @@ const PortalProductosLayoutInner = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <button
               onClick={() => handleNavigate("/admin")}
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -140,7 +142,7 @@ const PortalProductosLayoutInner = () => {
             onClick={signOut}
             className={cn(
               "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10",
-              isSuperAdmin ? "flex-1" : "w-full"
+              canReturnToAdmin ? "flex-1" : "w-full"
             )}
           >
             <LogOut className="size-4" /> Cerrar sesión

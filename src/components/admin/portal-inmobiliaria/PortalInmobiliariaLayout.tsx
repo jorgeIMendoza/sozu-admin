@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
@@ -83,7 +84,8 @@ export const PortalInmobiliariaLayout = () => {
   const tabs = usePortalNav(PORTAL_INMOB_MENU_ID, iconMap, LayoutDashboard);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
-  const showBackButton = !isInmobiliariaRole;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  const showBackButton = canReturnToAdmin;
 
   const currentSection = tabs.find(t => isActive(t.path))?.label || "";
 

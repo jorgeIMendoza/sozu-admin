@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useCobranzaImpersonation } from "@/contexts/CobranzaImpersonationContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { CobranzaImpersonationSelector } from "./CobranzaImpersonationSelector";
@@ -99,6 +100,7 @@ export const PortalCobranzaLayout = () => {
   const { profile, signOut } = useAuth();
   const { impersonatedName, impersonatedEmail, impersonatedRoleId, isImpersonating } = useCobranzaImpersonation();
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -311,7 +313,7 @@ export const PortalCobranzaLayout = () => {
         </div>
 
         <div className="flex gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <button
               onClick={() => handleNavigate("/admin")}
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
@@ -324,7 +326,7 @@ export const PortalCobranzaLayout = () => {
             onClick={signOut}
             className={cn(
               "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors",
-              isSuperAdmin ? "flex-1" : "w-full"
+              canReturnToAdmin ? "flex-1" : "w-full"
             )}
           >
             <LogOut className="size-4 shrink-0" />

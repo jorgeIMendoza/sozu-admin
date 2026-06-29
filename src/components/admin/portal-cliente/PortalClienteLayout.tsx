@@ -4,6 +4,7 @@ import { Bell, User, LogOut, Phone, Menu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { APP_VERSION } from "@/lib/config";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
@@ -25,7 +26,8 @@ export const PortalClienteLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const showBackToAdmin = profile?.rol_nombre !== "Cliente";
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  const showBackToAdmin = canReturnToAdmin;
   const unreadCount = useUnreadCount();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);

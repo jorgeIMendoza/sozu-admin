@@ -1,6 +1,7 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useEmbajadorImpersonation } from "@/contexts/EmbajadorImpersonationContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,6 +14,7 @@ export const PortalEmbajadorLayout = () => {
   const { impersonatedEmbajadorName, isImpersonating } = useEmbajadorImpersonation();
 
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
 
   const displayName = isImpersonating
     ? impersonatedEmbajadorName
@@ -41,7 +43,7 @@ export const PortalEmbajadorLayout = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <Button
               variant="ghost"
               size="sm"
