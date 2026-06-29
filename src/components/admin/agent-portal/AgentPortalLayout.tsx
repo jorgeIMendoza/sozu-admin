@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
@@ -47,31 +48,13 @@ export const AgentPortalLayout = () => {
 
   const { profile, signOut } = useAuth();
   const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  const AGENT_PORTAL_HOME_ROLES = [3, 4, 9, 25];
-  const livesInAgentPortal = !!profile?.rol_id && AGENT_PORTAL_HOME_ROLES.includes(profile.rol_id);
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
 
   useLayoutEffect(() => {
     setTheme("light");
     return () => { setTheme(previousThemeRef.current); };
   }, [setTheme]);
-
-  const { data: hasOtherMenus = false } = useQuery({
-    queryKey: ['has-other-menus', profile?.rol_id],
-    queryFn: async () => {
-      if (!profile?.rol_id) return false;
-      const { data, error } = await (supabase as any)
-        .from('submenus')
-        .select('menu_id')
-        .neq('menu_id', AGENT_MENU_ID)
-        .eq('activo', true);
-      if (error || !data) return false;
-      const uniqueMenuIds = [...new Set(data.map((s: any) => s.menu_id))];
-      return uniqueMenuIds.length > 0;
-    },
-    enabled: !isAgentRole && !!profile?.rol_id,
-    staleTime: 10 * 60_000,
-  });
 
   const { data: allTabs = FALLBACK_TABS } = useQuery({
     queryKey: ['agent-portal-tabs'],
@@ -105,7 +88,7 @@ export const AgentPortalLayout = () => {
   }
 
   const isActive = (path: string) => location.pathname.startsWith(path);
-  const showBackButton = !livesInAgentPortal && hasOtherMenus;
+  const showBackButton = canReturnToAdmin;
 
   const rawName   = profile?.nombre || profile?.email?.split('@')[0] || 'Usuario';
   const userName  = rawName.trim().split(/\s+/).slice(0, 2).join(' ');
