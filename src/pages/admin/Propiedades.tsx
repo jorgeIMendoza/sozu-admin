@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
 import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
 import { EditPropertyDialog } from "@/components/admin/EditPropertyDialog";
-import { Settings2, GripVertical } from "lucide-react";
+import { Settings2, GripVertical, ExternalLink, Copy } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -279,6 +279,7 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
 
 const STORAGE_KEY = 'propiedades-visible-columns';
 const ORDER_STORAGE_KEY = 'propiedades-columns-order';
+const FILTERS_STORAGE_KEY = 'propiedades-filtros';
 
 // Sortable Item Component
 const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnConfig; isVisible: boolean; onToggle: (key: ColumnKey) => void }) => {
@@ -329,9 +330,23 @@ const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnCon
 
 const Propiedades = () => {
   const [searchParams] = useSearchParams();
-  const [inputValue, setInputValue] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("activos");
+
+  // Persistencia de filtros: sobreviven al remount del componente (p.ej. al
+  // generar una oferta y regresar a la tabla, o navegar fuera y volver) usando
+  // sessionStorage. Se restauran al montar y se guardan ante cualquier cambio.
+  const savedFiltersRef = useRef<any>(null);
+  if (savedFiltersRef.current === null) {
+    try {
+      savedFiltersRef.current = JSON.parse(sessionStorage.getItem(FILTERS_STORAGE_KEY) || '{}');
+    } catch {
+      savedFiltersRef.current = {};
+    }
+  }
+  const savedFilters = savedFiltersRef.current;
+
+  const [inputValue, setInputValue] = useState(savedFilters.searchTerm ?? "");
+  const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm ?? "");
+  const [activeTab, setActiveTab] = useState(savedFilters.activeTab ?? "activos");
   const [planosProperty, setPlanosProperty] = useState<Property | null>(null);
   
   // Project access control
@@ -427,29 +442,29 @@ const Propiedades = () => {
   const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState<Property | null>(null);
   
   // Filtros de selección múltiple para proyecto y modelo
-  const [selectedProyectos, setSelectedProyectos] = useState<number[]>([]);
-  const [selectedModelos, setSelectedModelos] = useState<number[]>([]);
-  const [selectedModelosLabels, setSelectedModelosLabels] = useState<Record<number, string>>({});
+  const [selectedProyectos, setSelectedProyectos] = useState<number[]>(savedFilters.selectedProyectos ?? []);
+  const [selectedModelos, setSelectedModelos] = useState<number[]>(savedFilters.selectedModelos ?? []);
+  const [selectedModelosLabels, setSelectedModelosLabels] = useState<Record<number, string>>(savedFilters.selectedModelosLabels ?? {});
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState(false);
   const [isModeloFilterOpen, setIsModeloFilterOpen] = useState(false);
-  
+
   const [modeloSearchInput, setModeloSearchInput] = useState("");
   const [modeloSearchTerm, setModeloSearchTerm] = useState("");
-  
-  const [recamarasFilterInput, setRecamarasFilterInput] = useState<string | null>(null);
-  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(null);
-  const [banosFilterInput, setBanosFilterInput] = useState("");
-  const [banosFilter, setBanosFilter] = useState("");
-  const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([]);
-  const [tipoTransaccionFilter, setTipoTransaccionFilter] = useState<string[]>([]);
-  const [bodegasFilter, setBodegasFilter] = useState("");
-  const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
-  const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
-  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([0, 500]);
-  const [areaFilter, setAreaFilter] = useState<number[]>([0, 500]);
-  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([0, 100000000]);
-  const [precioFilter, setPrecioFilter] = useState<number[]>([0, 100000000]);
-  const [precioSort, setPrecioSort] = useState<'asc' | 'desc' | null>(null);
+
+  const [recamarasFilterInput, setRecamarasFilterInput] = useState<string | null>(savedFilters.recamarasFilter ?? null);
+  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(savedFilters.recamarasFilter ?? null);
+  const [banosFilterInput, setBanosFilterInput] = useState(savedFilters.banosFilter ?? "");
+  const [banosFilter, setBanosFilter] = useState(savedFilters.banosFilter ?? "");
+  const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>(savedFilters.disponibilidadFilter ?? []);
+  const [tipoTransaccionFilter, setTipoTransaccionFilter] = useState<string[]>(savedFilters.tipoTransaccionFilter ?? []);
+  const [bodegasFilter, setBodegasFilter] = useState(savedFilters.bodegasFilter ?? "");
+  const [estacionamientosFilter, setEstacionamientosFilter] = useState(savedFilters.estacionamientosFilter ?? "");
+  const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState(savedFilters.cuentaCobranzaFilter ?? "");
+  const [areaFilterInput, setAreaFilterInput] = useState<number[]>(savedFilters.areaFilter ?? [0, 500]);
+  const [areaFilter, setAreaFilter] = useState<number[]>(savedFilters.areaFilter ?? [0, 500]);
+  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>(savedFilters.precioFilter ?? [0, 100000000]);
+  const [precioFilter, setPrecioFilter] = useState<number[]>(savedFilters.precioFilter ?? [0, 100000000]);
+  const [precioSort, setPrecioSort] = useState<'asc' | 'desc' | null>(savedFilters.precioSort ?? null);
 
   // Column visibility and order state
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => {
@@ -1016,22 +1031,61 @@ const Propiedades = () => {
     return () => clearTimeout(timer);
   }, [modeloSearchInput]);
 
-  // Limpiar modelos seleccionados cuando cambian los proyectos
+  // Limpiar modelos seleccionados cuando cambian los proyectos.
+  // Se omite el primer render para no borrar los modelos restaurados desde
+  // sessionStorage al montar (solo limpia ante cambios reales del usuario).
+  const skipModelosResetRef = useRef(true);
   useEffect(() => {
+    if (skipModelosResetRef.current) {
+      skipModelosResetRef.current = false;
+      return;
+    }
     setSelectedModelos([]);
     setSelectedModelosLabels({});
     setModeloSearchInput("");
     setModeloSearchTerm("");
   }, [selectedProyectos]);
 
-  // Initialize price range from dynamic data
+  // Initialize price range from dynamic data.
+  // Solo aplica el rango por defecto una vez y únicamente si el usuario no tiene
+  // un filtro de precio guardado, para no pisar el valor restaurado ni resetearlo
+  // en cada refetch de precioRange.
+  const precioInitRef = useRef(false);
   useEffect(() => {
-    if (precioRange) {
-      setPrecioFilterInput([precioRange.min, precioRange.max]);
-      setPrecioFilter([precioRange.min, precioRange.max]);
+    if (precioRange && !precioInitRef.current) {
+      precioInitRef.current = true;
+      if (!savedFilters.precioFilter) {
+        setPrecioFilterInput([precioRange.min, precioRange.max]);
+        setPrecioFilter([precioRange.min, precioRange.max]);
+      }
     }
   }, [precioRange]);
-  
+
+  // Persistir filtros en sessionStorage ante cualquier cambio
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+        activeTab,
+        searchTerm,
+        selectedProyectos,
+        selectedModelos,
+        selectedModelosLabels,
+        recamarasFilter,
+        banosFilter,
+        disponibilidadFilter,
+        tipoTransaccionFilter,
+        bodegasFilter,
+        estacionamientosFilter,
+        cuentaCobranzaFilter,
+        areaFilter,
+        precioFilter,
+        precioSort,
+      }));
+    } catch {
+      /* ignorar errores de cuota/serialización */
+    }
+  }, [activeTab, searchTerm, selectedProyectos, selectedModelos, selectedModelosLabels, recamarasFilter, banosFilter, disponibilidadFilter, tipoTransaccionFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort]);
+
   // Paginación
   const [currentPageActive, setCurrentPageActive] = useState(1);
   const [currentPageDraft, setCurrentPageDraft] = useState(1);
@@ -5143,7 +5197,7 @@ const Propiedades = () => {
             </div>
             
             {/* Filtros específicos */}
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-4 p-4 bg-muted/50 rounded-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 p-5 rounded-xl border bg-muted/30">
               <div>
                 <label className="text-sm font-medium mb-2 block">Desarrollo</label>
                 <Popover open={isProjectFilterOpen} onOpenChange={setIsProjectFilterOpen}>
@@ -5318,36 +5372,14 @@ const Propiedades = () => {
               </div>
               )}
               {canSeeAdvancedFilters && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Recámaras</label>
-                    <div className="flex gap-1.5">
-                      {[1, 2, 3, '4+'].map((val) => {
-                        const strVal = String(val);
-                        const isActive = recamarasFilterInput === strVal;
-                        return (
-                          <Button
-                            key={strVal}
-                            variant={isActive ? "default" : "outline"}
-                            size="sm"
-                            className={cn("min-w-[40px]", isActive && "bg-primary text-primary-foreground")}
-                            onClick={() => setRecamarasFilterInput(isActive ? null : strVal)}
-                          >
-                            {strVal}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Baños</label>
-                    <Input
-                      placeholder="Ej: 1, 2..."
-                      value={banosFilterInput}
-                      onChange={(e) => setBanosFilterInput(e.target.value)}
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Baños</label>
+                  <Input
+                    placeholder="Ej: 1, 2..."
+                    value={banosFilterInput}
+                    onChange={(e) => setBanosFilterInput(e.target.value)}
+                  />
+                </div>
               )}
               {canSeeAdvancedFilters && (
                 <div>
@@ -5468,37 +5500,65 @@ const Propiedades = () => {
                 </div>
               )}
               {canSeeAdvancedFilters && (
-                <>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Tiene Cuenta de Cobranza</label>
+                  <Select value={cuentaCobranzaFilter} onValueChange={setCuentaCobranzaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por cuenta..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {/* Fila: Recámaras + Bodega + Estacionamiento */}
+              {canSeeAdvancedFilters && (
+                <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Recámaras</label>
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, '4+'].map((val) => {
+                        const strVal = String(val);
+                        const isActive = recamarasFilterInput === strVal;
+                        return (
+                          <Button
+                            key={strVal}
+                            variant={isActive ? "default" : "outline"}
+                            size="sm"
+                            className={cn("min-w-[40px]", isActive && "bg-primary text-primary-foreground")}
+                            onClick={() => setRecamarasFilterInput(isActive ? null : strVal)}
+                          >
+                            {strVal}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Con bodega</label>
-                    <Switch
-                      checked={bodegasFilter === "con_bodegas"}
-                      onCheckedChange={(checked) => setBodegasFilter(checked ? "con_bodegas" : "")}
-                    />
+                    <div className="flex items-center h-9">
+                      <Switch
+                        checked={bodegasFilter === "con_bodegas"}
+                        onCheckedChange={(checked) => setBodegasFilter(checked ? "con_bodegas" : "")}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Con estacionamiento</label>
-                    <Switch
-                      checked={estacionamientosFilter === "con_estacionamientos"}
-                      onCheckedChange={(checked) => setEstacionamientosFilter(checked ? "con_estacionamientos" : "")}
-                    />
+                    <div className="flex items-center h-9">
+                      <Switch
+                        checked={estacionamientosFilter === "con_estacionamientos"}
+                        onCheckedChange={(checked) => setEstacionamientosFilter(checked ? "con_estacionamientos" : "")}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Tiene Cuenta de Cobranza</label>
-                    <Select value={cuentaCobranzaFilter} onValueChange={setCuentaCobranzaFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filtrar por cuenta..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="si">Sí</SelectItem>
-                        <SelectItem value="no">No</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
+                </div>
               )}
+              {/* Fila: Rangos (Área + Precio) — excepción, fila propia */}
               {canSeeAdvancedFilters && (
-                <>
+                <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium mb-2 block">Área (m²)</label>
                     <div className="flex items-center gap-2 mb-2">
@@ -5549,7 +5609,7 @@ const Propiedades = () => {
                       className="mt-1"
                     />
                   </div>
-                  <div className="min-w-[200px]">
+                  <div>
                     <label className="text-sm font-medium mb-2 block whitespace-nowrap">Rango de precio</label>
                     <div className="flex items-center gap-2 mb-2">
                       <Input
@@ -5601,7 +5661,7 @@ const Propiedades = () => {
                       className="mt-1"
                     />
                   </div>
-                </>
+                </div>
               )}
             </div>
             
@@ -5862,7 +5922,7 @@ const Propiedades = () => {
                      <TableHead>Esquema de Pago</TableHead>
                      <TableHead>Estatus Aprob.</TableHead>
                      <TableHead>Cuenta de Cobranza</TableHead>
-                     <TableHead>Descarga</TableHead>
+                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -6185,6 +6245,40 @@ const Propiedades = () => {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p>Enviar oferta por correo</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        title="Abrir oferta digital"
+                                        onClick={() => window.open(`${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`, '_blank', 'noopener')}
+                                      >
+                                        <ExternalLink className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Abrir oferta digital</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        title="Copiar link de oferta digital"
+                                        onClick={() => {
+                                          const url = `${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`;
+                                          navigator.clipboard.writeText(url);
+                                          toast({ title: 'Link copiado', description: url });
+                                        }}
+                                      >
+                                        <Copy className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Copiar link de oferta digital</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </div>
