@@ -48,6 +48,7 @@ export interface PagoInputPld {
   descripcion: string | null;
   id_metodos_pago: number | null;
   validacion_documental_efectivo: boolean;
+  estado_validacion?: 'coincide' | 'error' | 'no_coincide' | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -95,6 +96,15 @@ function buildFlagsPorPago(
     } else if (hasEfectivoExcedido && p.id_metodos_pago === 1) {
       flag    = 'rojo';
       tooltip = 'Límite de efectivo excedido en la cuenta';
+    } else if (p.estado_validacion === 'error') {
+      flag    = 'rojo';
+      tooltip = 'Validación de pago con error.';
+    } else if (p.estado_validacion === 'no_coincide') {
+      flag    = 'amarillo';
+      tooltip = 'Validación de pago: no coincide.';
+    } else if (p.estado_validacion === 'coincide') {
+      flag    = 'verde';
+      tooltip = 'Pago validado: coincide con comprobante.';
     } else if (nombreSet.has(p.id)) {
       flag    = 'amarillo';
       tooltip = 'Nombre de ordenante difiere del comprador';
