@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   useNotifications,
   useMarkAsRead,
+  useMarkAsUnread,
   useMarkAllAsRead,
   useDismissNotification,
   getCategoryIcon,
@@ -24,6 +25,7 @@ const NotificationPopover = ({ trigger }: PopoverProps) => {
 
   const notifications = useNotifications();
   const markAsRead = useMarkAsRead();
+  const markAsUnread = useMarkAsUnread();
   const markAllAsRead = useMarkAllAsRead();
   const dismissNotif = useDismissNotification();
 
@@ -106,7 +108,7 @@ const NotificationPopover = ({ trigger }: PopoverProps) => {
                       >
                         <Icon className="w-4 h-4" />
                       </div>
-                      <div className="flex-1 min-w-0 pr-6">
+                      <div className="flex-1 min-w-0 pr-14">
                         <div className="flex items-start gap-2">
                           <p
                             className={`text-xs text-foreground truncate ${
@@ -127,13 +129,23 @@ const NotificationPopover = ({ trigger }: PopoverProps) => {
                         </p>
                       </div>
                     </button>
-                    <button
-                      onClick={(e) => handleDismiss(e, n.id)}
-                      aria-label="Descartar"
-                      className="absolute top-3 right-3 w-6 h-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                    <div className="absolute top-3 right-3 flex items-center gap-0.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); n.read ? markAsUnread.mutate(n.id) : markAsRead.mutate(n.id); }}
+                        aria-label={n.read ? "Marcar como no leída" : "Marcar como leída"}
+                        title={n.read ? "Marcar como no leída" : "Marcar como leída"}
+                        className="w-6 h-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"
+                      >
+                        {n.read ? <Bell className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                      </button>
+                      <button
+                        onClick={(e) => handleDismiss(e, n.id)}
+                        aria-label="Descartar"
+                        className="w-6 h-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
                   </li>
                 );
               })}
@@ -146,7 +158,7 @@ const NotificationPopover = ({ trigger }: PopoverProps) => {
           <button
             onClick={() => {
               setOpen(false);
-              navigate("/notificaciones");
+              navigate("/admin/portal-cliente/notificaciones");
             }}
             className="w-full flex items-center justify-center gap-1 text-xs font-medium text-primary hover:underline py-1"
           >

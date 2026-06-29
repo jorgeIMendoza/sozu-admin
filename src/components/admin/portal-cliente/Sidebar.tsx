@@ -1,5 +1,4 @@
-import { SOZU_LOGO_URL } from "@/lib/config";
-const sozuLogo = SOZU_LOGO_URL;
+import sozuLogo from "@/assets/sozu-logo-black.png";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
 import { ArrowLeft, ChevronRight, LogOut } from "lucide-react";
