@@ -48,6 +48,7 @@ export interface PagoInputPld {
   descripcion: string | null;
   id_metodos_pago: number | null;
   validacion_documental_efectivo: boolean;
+  estado_validacion?: 'coincide' | 'error' | 'no_coincide' | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,6 +108,15 @@ function buildFlagsPorPago(
     } else if (!p.clave_rastreo) {
       flag    = 'gris';
       tooltip = 'Sin clave de rastreo ni comprobante documental';
+    } else if (p.estado_validacion === 'error') {
+      flag    = 'rojo';
+      tooltip = 'Validación de pago con error.';
+    } else if (p.estado_validacion === 'no_coincide') {
+      flag    = 'amarillo';
+      tooltip = 'Validación de pago: no coincide.';
+    } else if (p.estado_validacion === 'coincide') {
+      flag    = 'verde';
+      tooltip = 'Pago validado: coincide con comprobante.';
     } else {
       flag    = 'verde';
       tooltip = 'Sin alerta PLD';

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Download, ExternalLink, X, FileText,
@@ -15,6 +15,10 @@ import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { usePldForCuenta, type PldPaymentFlagInfo } from '@/hooks/usePldForCuenta';
 import { toast } from 'sonner';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50;
@@ -60,62 +64,75 @@ function normConcepto(
   return null;
 }
 
-// ─── Comprobante classification (sin librería, solo fetch + regex binario) ────
+// ─── Conteo de páginas — fuente única: pdfjs-dist ─────────────────────────────
+// Estrategia de descarga en dos intentos:
+// 1. fetch(publicUrl) → endpoint /object/public/ (bypass RLS, CORS: *)
+// 2. Si falla, supabase.storage.download(path) → endpoint autenticado (JWT admin)
+// pdfjs requiere Uint8Array — no pasar ArrayBuffer directamente (falla en v6).
 
-const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+type PageResult = { pages: number | null; failedAt: 'download' | 'parse' | null };
 
-function getUrlExtension(url: string): string {
-  return url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? '';
-}
-
-type ComprobanteType =
-  | 'imagen'
-  | 'pdf_una_pagina'
-  | 'pdf_multipagina'
-  | 'pdf_indeterminado'
-  | 'otro';
-
-async function getPdfPageCount(url: string): Promise<number | null> {
+async function getPaginasComprobante(url: string): Promise<PageResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
+  let buffer: ArrayBuffer | null = null;
+
+  // Intento 1: fetch() del endpoint público (bypasa RLS)
   try {
+    console.warn('[PLD] intento 1 — fetch público:', url);
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
-      console.warn('[PLD] getPdfPageCount: respuesta HTTP no OK', res.status, url);
-      return null;
+      console.warn('[PLD] fetch no OK', res.status, res.statusText);
+    } else {
+      buffer = await res.arrayBuffer();
+      console.warn('[PLD] buffer OK via fetch', {
+        sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB',
+        contentType: res.headers.get('content-type'),
+      });
     }
-    const buffer = await res.arrayBuffer();
-    const text = new TextDecoder('latin1').decode(new Uint8Array(buffer));
-    if (!text.startsWith('%PDF-')) {
-      console.warn('[PLD] getPdfPageCount: archivo sin header PDF válido', url);
-      return null;
-    }
-    const matches = [...text.matchAll(/\/Count\s+(\d+)/g)];
-    if (!matches.length) {
-      // El mayor /Count es siempre el nodo root; árboles anidados tienen valores menores
-      console.warn('[PLD] getPdfPageCount: /Count no encontrado — PDF posiblemente cifrado o no estándar', url);
-      return null;
-    }
-    return Math.max(...matches.map(m => parseInt(m[1], 10)));
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      console.warn('[PLD] getPdfPageCount: timeout de 15s al descargar PDF', url);
+      console.warn('[PLD] timeout 15s al descargar:', url);
     } else {
-      console.warn('[PLD] getPdfPageCount: error de red o CORS', url, err);
+      console.warn('[PLD] fetch falló (CORS/red):', err);
     }
-    return null;
   } finally {
     clearTimeout(timer);
   }
-}
 
-async function detectarTipoComprobante(url: string): Promise<ComprobanteType> {
-  const ext = getUrlExtension(url);
-  if (IMAGE_EXTS.has(ext)) return 'imagen';
-  if (ext !== 'pdf') return 'otro';
-  const pages = await getPdfPageCount(url);
-  if (pages === null) return 'pdf_indeterminado';
-  return pages >= 2 ? 'pdf_multipagina' : 'pdf_una_pagina';
+  // Intento 2: supabase.storage.download() con JWT admin (fallback)
+  if (!buffer) {
+    const pathMatch = url.match(/\/storage\/v1\/object\/(?:public\/)?documentos\/(.+?)(?:\?.*)?$/);
+    const filePath = pathMatch?.[1];
+    if (filePath) {
+      try {
+        console.warn('[PLD] intento 2 — download() autenticado:', filePath);
+        const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
+        if (!error && blob) {
+          buffer = await (blob as Blob).arrayBuffer();
+          console.warn('[PLD] buffer OK via download()', { sizeKb: (buffer.byteLength / 1024).toFixed(1) + 'KB' });
+        } else {
+          console.warn('[PLD] download() también falló:', error);
+        }
+      } catch (err) {
+        console.warn('[PLD] download() excepción:', err);
+      }
+    }
+    if (!buffer) return { pages: null, failedAt: 'download' };
+  }
+
+  // pdfjs requiere Uint8Array — ArrayBuffer raw puede fallar en v6
+  try {
+    const loadingTask = getDocument({ data: new Uint8Array(buffer) });
+    const pdf = await loadingTask.promise;
+    const pages = pdf.numPages;
+    await pdf.destroy();
+    console.warn('[PLD] páginas detectadas por pdfjs:', pages);
+    return { pages, failedAt: null };
+  } catch (err) {
+    console.warn('[PLD] pdfjs error (imagen, PDF cifrado, XFA):', url, err);
+    return { pages: null, failedAt: 'parse' };
+  }
 }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
@@ -525,6 +542,7 @@ export function RelacionPagos() {
   const [page, setPage] = useState(1);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [validandoPagoId, setValidandoPagoId] = useState<number | null>(null);
+  const autoValidadosRef = useRef<Set<number>>(new Set());
   const { exportToExcel, isExporting } = useExportToExcel();
   const qc = useQueryClient();
 
@@ -647,6 +665,43 @@ export function RelacionPagos() {
       }>;
     },
   });
+
+  // Segunda query ligera — estado de validación CEP por pago (fuente: pago_validaciones)
+  // Habilitada solo cuando rpPagosCuenta tiene datos. Ordena desc para que el primer
+  // registro por id_pago sea el más reciente (validación manual prevalece sobre automática).
+  const { data: pagoValidaciones } = useQuery({
+    queryKey: ['rp-pago-validaciones', primaryCuentaId],
+    enabled: !!primaryCuentaId && (rpPagosCuenta?.length ?? 0) > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const ids = (rpPagosCuenta ?? []).map(p => p.id);
+      if (!ids.length) return [];
+      const { data } = await (supabase as any)
+        .from('pago_validaciones')
+        .select('id_pago, estado, fecha_creacion')
+        .in('id_pago', ids)
+        .order('fecha_creacion', { ascending: false });
+      return (data ?? []) as Array<{ id_pago: number; estado: string; fecha_creacion: string }>;
+    },
+  });
+
+  // Map id_pago → estado más reciente (first-write-wins sobre datos ordenados desc)
+  // Enriquece rpPagosCuenta con estado_validacion para PLD — solo afecta la columna PLD,
+  // no el resto de la tabla ni los cálculos financieros.
+  const rpPagosCuentaConValidacion = useMemo(() => {
+    const pagos = rpPagosCuenta ?? [];
+    if (!pagos.length || !pagoValidaciones?.length) return pagos;
+    const validMap = new Map<number, 'coincide' | 'error' | 'no_coincide'>();
+    for (const v of pagoValidaciones) {
+      const id = Number(v.id_pago);
+      if (!validMap.has(id)) {
+        if (v.estado === 'coincide' || v.estado === 'error' || v.estado === 'no_coincide') {
+          validMap.set(id, v.estado as 'coincide' | 'error' | 'no_coincide');
+        }
+      }
+    }
+    return pagos.map(p => ({ ...p, estado_validacion: validMap.get(p.id) ?? null }));
+  }, [rpPagosCuenta, pagoValidaciones]);
 
   const { data: rpAplicacionesPorPago, isLoading: rpAplicacionesLoading } = useQuery({
     queryKey: ['rp-aplicaciones-por-pago', primaryCuentaId],
@@ -1164,7 +1219,7 @@ export function RelacionPagos() {
   // Llamado aquí porque depende de precioFinal y cuentaResumen?.valorUma.
   const pld = usePldForCuenta(
     primaryCuentaId,
-    rpPagosCuenta ?? [],
+    rpPagosCuentaConValidacion,
     cuentaResumen?.valorUma ?? 0,
     precioFinal,
   );
@@ -1196,44 +1251,91 @@ export function RelacionPagos() {
     }
   };
 
-  // Analiza url_recibo por extensión y páginas PDF antes de marcar validación
+  // Valida comprobante de efectivo contando páginas via pdfjs — sin lógica de extensión
   const handleAnalizarComprobante = async (pagoId: number, url: string) => {
-    // Regla 1: límite de efectivo excedido — no permitir verde
     if (pld.hasEfectivoExcedido) {
       toast.error('Límite de efectivo excedido — no se puede validar documentalmente.');
       return;
     }
+    console.warn('[PLD] analizarComprobante inicio', { pagoId, url });
     setValidandoPagoId(pagoId);
     try {
-      const tipo = await detectarTipoComprobante(url);
-      switch (tipo) {
-        case 'imagen':
-          toast.warning('Imagen adjunta; requiere PDF con ticket de depósito y estado de cuenta.');
-          break;
-        case 'pdf_una_pagina':
-          toast.warning('PDF de 1 página; falta estado de cuenta.');
-          break;
-        case 'pdf_multipagina': {
-          const { error } = await (supabase as any)
-            .from('pagos')
-            .update({ validacion_documental_efectivo: true })
-            .eq('id', pagoId);
-          if (error) throw error;
-          qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
-          toast.success('PDF de múltiples páginas validado: ticket de depósito + estado de cuenta.');
-          break;
-        }
-        case 'pdf_indeterminado':
-          toast.warning('No se pudo leer el PDF automáticamente (timeout, CORS o archivo no estándar) — validar manualmente.');
-          break;
-        case 'otro':
-          toast.error('Formato no reconocido como comprobante válido para PLD.');
-          break;
+      const { pages, failedAt } = await getPaginasComprobante(url);
+      if (pages !== null && pages >= 2) {
+        const { error } = await (supabase as any)
+          .from('pagos')
+          .update({ validacion_documental_efectivo: true })
+          .eq('id', pagoId);
+        if (error) throw error;
+        qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+        toast.success(`Comprobante validado: ${pages} páginas detectadas.`);
+      } else if (pages === 1) {
+        toast.warning('El comprobante tiene solo 1 página — se requiere ticket + estado de cuenta en un mismo PDF.');
+      } else if (failedAt === 'download') {
+        toast.warning('No se pudo descargar el comprobante (error de red). Revisa la consola del navegador con filtro [PLD].');
+      } else {
+        toast.warning('El archivo adjunto no pudo leerse como PDF. Revisa la consola del navegador con filtro [PLD].');
       }
+    } catch (err) {
+      console.error('[PLD] error al guardar validación', err);
+      toast.error('Error al guardar la validación — intenta de nuevo.');
     } finally {
       setValidandoPagoId(null);
     }
   };
+
+  // Auto-valida comprobantes de efectivo al cargar la cuenta — sin interacción del usuario
+  useEffect(() => {
+    if (!rpPagosCuenta || !primaryCuentaId || pld.isLoading || pld.hasEfectivoExcedido) return;
+
+    const pendientes = rpPagosCuenta.filter(p =>
+      p.id_metodos_pago === 1 &&
+      !p.clave_rastreo &&
+      !!p.url_recibo &&
+      !p.validacion_documental_efectivo &&
+      !autoValidadosRef.current.has(p.id),
+    );
+
+    if (pendientes.length === 0) return;
+
+    // Marcar antes de iniciar para evitar re-ejecución cuando invalidateQueries recarga datos
+    pendientes.forEach(p => autoValidadosRef.current.add(p.id));
+
+    console.warn('[PLD] auto-validación iniciada', { pendientes: pendientes.length });
+    toast.info(`Validando ${pendientes.length} comprobante(s) de efectivo...`, { duration: 4000 });
+
+    (async () => {
+      const results = await Promise.all(
+        pendientes.map(async (p) => {
+          try {
+            const { pages } = await getPaginasComprobante(p.url_recibo!);
+            if (pages !== null && pages >= 2) {
+              const { error } = await (supabase as any)
+                .from('pagos')
+                .update({ validacion_documental_efectivo: true })
+                .eq('id', p.id);
+              if (!error) return true;
+              console.warn('[PLD] auto-validación: error al actualizar pago', p.id, error);
+            } else {
+              console.warn('[PLD] auto-validación: no validable', { pagoId: p.id, pages });
+            }
+          } catch (err) {
+            console.warn('[PLD] auto-validación: error inesperado', p.id, err);
+          }
+          return false;
+        }),
+      );
+      const validated = results.filter(Boolean).length;
+      if (validated > 0) {
+        toast.success(`${validated} comprobante(s) validado(s) automáticamente.`);
+        qc.invalidateQueries({ queryKey: ['rp-pagos-cuenta', primaryCuentaId] });
+      } else {
+        console.warn('[PLD] auto-validación: ningún comprobante pudo validarse');
+        toast.warning('No se pudo validar automáticamente — revisa consola [PLD] o usa el botón manual.');
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rpPagosCuenta, primaryCuentaId, pld.isLoading, pld.hasEfectivoExcedido]);
 
   // KPI de tabla en rpMode — calculados desde pagos directos (SUM pagos.monto)
   const rpTotalMonto = useMemo(
