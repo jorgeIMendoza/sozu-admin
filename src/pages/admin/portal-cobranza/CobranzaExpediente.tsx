@@ -448,10 +448,10 @@ function EstadoCuentaTab({
         <table className="w-full text-sm">
           <thead className="sozu-thead">
             <tr>
-              <th>Fecha</th>
-              <th>Tipo</th>
-              <th>Concepto</th>
-              <th>Referencia</th>
+              <th className="text-center">Fecha</th>
+              <th className="text-center">Tipo</th>
+              <th className="text-center">Concepto</th>
+              <th className="text-center">Referencia</th>
               <th className="text-right">Cargo (+)</th>
               <th className="text-right">Abono (−)</th>
               <th className="text-right">Saldo</th>
@@ -459,7 +459,7 @@ function EstadoCuentaTab({
           </thead>
           <tbody>
             <tr className="border-b border-border-light bg-muted/30 h-[36px]">
-              <td className="px-4 text-[12px] text-muted-foreground italic" colSpan={6}>Saldo inicial</td>
+              <td className="px-4 text-[12px] text-muted-foreground" colSpan={6}>Saldo inicial</td>
               <td className="px-4 text-right text-[12px] text-muted-foreground tabular-nums">{formatCurrency(0)}</td>
             </tr>
             {rows.length === 0 ? (
@@ -470,13 +470,13 @@ function EstadoCuentaTab({
               </tr>
             ) : rows.map((m, i) => (
               <tr key={i} className="border-b border-border-light hover:bg-primary-muted/50 h-[44px]">
-                <td className="px-4 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(m.date)}</td>
-                <td className="px-4">
+                <td className="px-4 text-center text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(m.date)}</td>
+                <td className="px-4 text-center">
                   <span className={cn('sozu-chip', chipClass(m.type))}>
                     {movTypeLabels[m.type]}
                   </span>
                 </td>
-                <td className="px-4 text-[13px] text-foreground">
+                <td className="px-4 text-center text-[13px] text-foreground">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate max-w-[320px]">{m.concept}</span>
                     {m.type === 'multa' && m.paid && (
@@ -484,7 +484,7 @@ function EstadoCuentaTab({
                     )}
                   </div>
                 </td>
-                <td className="px-4 font-mono text-[11px] text-muted-foreground">{m.ref || '-'}</td>
+                <td className="px-4 text-center font-mono text-[11px] text-muted-foreground">{m.ref || '-'}</td>
                 <td className="px-4 text-right text-[13px] tabular-nums">
                   {m.type !== 'pago' ? (
                     <span className={cn('font-semibold', m.type === 'multa' ? 'text-danger' : 'text-foreground')}>
@@ -547,11 +547,11 @@ function CalendarioTab({
           <thead className="sozu-thead">
             <tr>
               <th className="text-center">#</th>
-              <th>Concepto</th>
-              <th>Vencimiento</th>
-              <th className="text-left">Monto</th>
-              <th className="text-left">Aplicado</th>
-              <th className="text-left">Pendiente</th>
+              <th className="text-center">Concepto</th>
+              <th className="text-center">Vencimiento</th>
+              <th className="text-center">Monto</th>
+              <th className="text-center">Aplicado</th>
+              <th className="text-center">Pendiente</th>
               <th className="text-center">Estatus</th>
               <th className="text-center">Días atraso</th>
             </tr>
@@ -571,11 +571,11 @@ function CalendarioTab({
               return (
                 <tr key={p.id} className={cn('border-b border-border-light h-[44px]', vencido && 'bg-danger-bg/30')}>
                   <td className="px-4 text-center text-[13px] text-muted-foreground">{p.orden}</td>
-                  <td className="px-4 text-[13px] text-foreground truncate max-w-[200px]">{p.concepto || '-'}</td>
-                  <td className="px-4 text-[13px] text-foreground tabular-nums">{formatDate(p.fecha_pago)}</td>
-                  <td className="px-4 text-left text-[13px] font-medium text-foreground tabular-nums">{formatCurrency(Number(p.monto))}</td>
-                  <td className="px-4 text-left text-[13px] text-success tabular-nums">{formatCurrency(Number(p.aplicado))}</td>
-                  <td className={cn('px-4 text-left text-[13px] tabular-nums', pendiente > 0 ? 'text-warning font-medium' : 'text-muted-foreground')}>
+                  <td className="px-4 text-center text-[13px] text-foreground truncate max-w-[200px]">{p.concepto || '-'}</td>
+                  <td className="px-4 text-center text-[13px] text-foreground tabular-nums">{formatDate(p.fecha_pago)}</td>
+                  <td className="px-4 text-center text-[13px] font-medium text-foreground tabular-nums">{formatCurrency(Number(p.monto))}</td>
+                  <td className="px-4 text-center text-[13px] text-success tabular-nums">{formatCurrency(Number(p.aplicado))}</td>
+                  <td className={cn('px-4 text-center text-[13px] tabular-nums', pendiente > 0 ? 'text-warning font-medium' : 'text-muted-foreground')}>
                     {formatCurrency(pendiente)}
                   </td>
                   <td className="px-4 text-center">

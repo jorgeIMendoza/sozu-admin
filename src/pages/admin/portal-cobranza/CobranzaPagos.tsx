@@ -198,14 +198,14 @@ export default function RelacionPagosPage() {
             <table className="w-full text-sm">
               <thead className="sozu-thead">
                 <tr>
-                  <th>Fecha</th>
-                  <th>Cliente</th>
-                  <th>Proyecto / Unidad</th>
-                  <th>Producto</th>
-                  <th>Método</th>
+                  <th className="text-center">Fecha</th>
+                  <th className="text-center">Cliente</th>
+                  <th className="text-center">Proyecto / Unidad</th>
+                  <th className="text-center">Producto</th>
+                  <th className="text-center">Método</th>
                   <th className="text-center">Monto</th>
-                  <th>Clave rastreo</th>
-                  <th>CLABE</th>
+                  <th className="text-center">Clave rastreo</th>
+                  <th className="text-center">CLABE</th>
                   <th className="text-center">CEP</th>
                   <th className="text-center">Aplicado</th>
                   <th className="text-center w-[90px]">Acciones</th>
@@ -231,12 +231,12 @@ export default function RelacionPagosPage() {
                 )}
                 {!isLoading && pagos.map(r => (
                   <tr key={r.pago_id} className="sozu-table-row h-[52px]">
-                    <td className="px-4 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
-                    <td className="px-4">
+                    <td className="px-4 text-center text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
+                    <td className="px-4 text-center">
                       <p className="text-[13px] font-medium text-foreground truncate max-w-[200px]">{r.cliente || 'Sin identificar'}</p>
                       <p className="text-[11px] font-mono text-muted-foreground">{formatCuenta(r.id_cuenta_cobranza, r.tipo_cuenta)}</p>
                     </td>
-                    <td className="px-4">
+                    <td className="px-4 text-center">
                       <p className="text-[13px] text-foreground">{r.proyecto || '—'}</p>
                       {r.num_propiedad && (
                         <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">
@@ -244,10 +244,10 @@ export default function RelacionPagosPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-4 text-[13px] text-foreground truncate max-w-[180px]" title={r.producto || ''}>
+                    <td className="px-4 text-center text-[13px] text-foreground truncate max-w-[180px]" title={r.producto || ''}>
                       {r.tipo_cuenta === 'producto' ? (r.producto || '—') : '—'}
                     </td>
-                    <td className="px-4">
+                    <td className="px-4 text-center">
                       <span className={cn('sozu-chip text-[10px]',
                         r.metodo_pago === 'STP' ? 'bg-info/10 text-info' :
                         r.metodo_pago === 'Transferencia bancaria' ? 'bg-primary/10 text-primary' :
@@ -255,8 +255,8 @@ export default function RelacionPagosPage() {
                       )}>{r.metodo_pago || '—'}</span>
                     </td>
                     <td className="px-4 text-center text-[13px] font-semibold text-foreground tabular-nums">{formatCurrency(Number(r.monto))}</td>
-                    <td className="px-4 font-mono text-[11px] text-muted-foreground truncate max-w-[160px]">{r.clave_rastreo || '—'}</td>
-                    <td className="px-4 font-mono text-[11px] text-muted-foreground truncate max-w-[140px]">{r.clabe_stp || '—'}</td>
+                    <td className="px-4 text-center font-mono text-[11px] text-muted-foreground truncate max-w-[160px]">{r.clave_rastreo || '—'}</td>
+                    <td className="px-4 text-center font-mono text-[11px] text-muted-foreground truncate max-w-[140px]">{r.clabe_stp || '—'}</td>
                     <td className="px-4 text-center">
                       {r.tiene_cep ? (
                         r.url_cep ? (
@@ -299,7 +299,7 @@ export default function RelacionPagosPage() {
                         <span className="text-[11px] text-muted-foreground" title="Pago sin aplicar">—</span>
                       )}
                     </td>
-                    <td className="px-4">
+                    <td className="px-4 text-center">
                       <div className="flex items-center justify-center gap-0.5">
                         <button
                           className="p-1.5 rounded-md hover:bg-muted transition-colors duration-100"

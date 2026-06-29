@@ -504,25 +504,24 @@ export default function BandejaOperativaPage() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead className="sozu-thead">
               <tr>
-                <th className="w-[42px] pl-4 pr-2 !text-right">#</th>
-                <th className="w-[115px]">Cuenta</th>
-                <th className="w-[185px]">Proyecto</th>
-                <th className="w-[108px]">Tipo</th>
-                <th className="w-[155px]">Producto</th>
-                <th className="w-[170px]">Cliente</th>
-                <th className="w-[105px] !text-right">Precio</th>
+                <th className="w-[148px] text-center">Cuenta</th>
+                <th className="w-[185px] text-center">Proyecto</th>
+                <th className="w-[108px] text-center">Tipo</th>
+                <th className="w-[155px] text-center">Producto</th>
+                <th className="w-[170px] text-center">Cliente</th>
+                <th className="w-[118px] !text-right">Precio</th>
                 <th className="w-[110px] !text-right">Vencido</th>
                 <th className="w-[110px] !text-right">Pendiente</th>
                 <th className="w-[58px] !text-center">Parc.</th>
                 <th className="w-[52px] !text-center" title="Pagos inválidos">Inv.</th>
                 <th className="w-[68px] !text-center">Atraso</th>
-                <th className="w-[175px]">CLABE</th>
+                <th className="w-[175px] text-center">CLABE</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={13} className="py-14 text-center">
+                  <td colSpan={12} className="py-14 text-center">
                     <div className="flex items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="size-5 animate-spin" />
                       <span className="text-sm">Cargando cuentas...</span>
@@ -531,7 +530,7 @@ export default function BandejaOperativaPage() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-14 text-center">
+                  <td colSpan={12} className="py-14 text-center">
                     <p className="text-sm text-muted-foreground mb-1">Sin resultados</p>
                     {hasFilters && (
                       <button onClick={clearFilters} className="text-[12px] text-primary hover:underline">
@@ -550,38 +549,39 @@ export default function BandejaOperativaPage() {
                     onClick={() => navigate(`/admin/portal-cobranza/cuenta/${row.cuenta_id}`)}
                     className="border-b border-border transition-colors duration-100 cursor-pointer hover:bg-muted/40 h-[48px]"
                   >
-                    <td className="pl-4 pr-2 text-right">
-                      <span className="text-[11px] tabular-nums text-muted-foreground/50 select-none">{rowNum}</span>
+                    <td className="pl-3 pr-2">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-[10px] font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">
+                          {rowNum}
+                        </span>
+                        <span className="text-[12px] font-mono font-semibold tabular-nums">
+                          {formatCuentaCobranzaId(row.cuenta_id)}
+                        </span>
+                      </div>
                     </td>
 
-                    <td className="px-3">
-                      <span className="text-[12px] font-mono font-semibold tabular-nums">
-                        {formatCuentaCobranzaId(row.cuenta_id)}
-                      </span>
-                    </td>
-
-                    <td className="px-3 max-w-[185px]">
+                    <td className="px-3 max-w-[185px] text-center">
                       <p className="text-[12px] font-medium truncate">{row.proyecto ?? '-'}</p>
                       {unidad && (
                         <p className="text-[10px] text-muted-foreground truncate">{unidad}</p>
                       )}
                     </td>
 
-                    <td className="px-3">
+                    <td className="px-3 text-center">
                       <TipoBadge tipo={tipo} />
                     </td>
 
-                    <td className="px-3 max-w-[155px]">
+                    <td className="px-3 max-w-[155px] text-center">
                       {row.producto_nombre ? (
                         <span className="text-[11px] text-muted-foreground truncate block">
                           {row.producto_nombre}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground/40 italic">No aplica</span>
+                        <span className="text-[11px] text-muted-foreground/40">No aplica</span>
                       )}
                     </td>
 
-                    <td className="px-3 max-w-[170px]">
+                    <td className="px-3 max-w-[170px] text-center">
                       <p className="text-[12px] font-medium truncate">{row.cliente_nombre ?? '-'}</p>
                       {row.cliente_email && (
                         <p className="text-[10px] text-muted-foreground truncate">{row.cliente_email}</p>
@@ -589,7 +589,7 @@ export default function BandejaOperativaPage() {
                     </td>
 
                     <td className="px-3 text-right">
-                      <span className="text-[12px] tabular-nums">{fmtCurrency(row.precio_final)}</span>
+                      <span className="text-[12px] tabular-nums">{fmtCurrencyExact(row.precio_final)}</span>
                     </td>
 
                     <td className="px-3 text-right">
@@ -620,7 +620,7 @@ export default function BandejaOperativaPage() {
                       </span>
                     </td>
 
-                    <td className="px-3">
+                    <td className="px-3 text-center">
                       <span className="text-[11px] font-mono tabular-nums text-muted-foreground tracking-tight">
                         {row.clabe_stp ?? '-'}
                       </span>
