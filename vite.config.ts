@@ -51,6 +51,13 @@ export default defineConfig(({ mode }) => {
     host: "::",
     port: 8080,
     allowedHosts: ["extruding-splotchy-surfer.ngrok-free.dev"],
+    proxy: {
+      "/api/anthropic": {
+        target: "https://api.anthropic.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/anthropic/, ""),
+      },
+    },
   },
   plugins: [
     react(), 

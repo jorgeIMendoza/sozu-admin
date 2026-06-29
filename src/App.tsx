@@ -175,6 +175,7 @@ const CobranzaInputsObra = lazyRetry(() => import("./pages/admin/portal-cobranza
 const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
 const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
 const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
+const CobranzaCuentaDetalle = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCuentaDetalle"));
 const PECComingSoon = lazyRetry(() => import("./pages/admin/portal-estructura-comisiones/PECComingSoon"));
 const PECDashboard = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DashboardTab"));
 const PECExecutiveDashboard = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ExecutiveDashboardTab"));
@@ -481,7 +482,7 @@ const App = () => (
     >
       <TooltipProvider>
         <Toaster />
-        <Sonner />
+        <Sonner position="top-right" />
         <BrowserRouter>
           <DevelopmentBanner />
           <AuthProvider>
@@ -832,6 +833,7 @@ const App = () => (
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
                   <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
+                  <Route path="portal-cobranza/cuenta/:id" element={<CobranzaCuentaDetalle />} />
                   {/* Portal Estructura de Comisiones */}
                   <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
                   <Route path="portal-estructura-comisiones/dashboard" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />

@@ -403,7 +403,7 @@ export default function Bancos() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto">
       <Card className="border-border shadow-lg">
         <CardHeader className="border-b border-border bg-muted/30">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

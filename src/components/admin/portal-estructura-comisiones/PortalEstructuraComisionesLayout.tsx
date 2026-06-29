@@ -9,6 +9,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useProjectAdminImpersonation, ProjectAdminImpersonationProvider } from "@/contexts/ProjectAdminImpersonationContext";
 import { ProjectAdminImpersonationSelector } from "./ProjectAdminImpersonationSelector";
 import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
@@ -86,6 +87,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const { profile, signOut } = useAuth();
   const { impersonatedUser, isImpersonating } = useProjectAdminImpersonation();
   const isSuperAdmin = profile?.rol_id === 1;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -192,7 +194,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <button
               onClick={() => handleNavigate("/admin")}
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -204,7 +206,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
             onClick={signOut}
             className={cn(
               "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10",
-              isSuperAdmin ? "flex-1" : "w-full"
+              canReturnToAdmin ? "flex-1" : "w-full"
             )}
           >
             <LogOut className="size-4" /> Cerrar sesión
@@ -264,7 +266,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
                 </div>
               </header>
 
-              <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
+              <main className="px-8 py-4 bg-background min-h-[calc(100vh-56px)]">
                 <Outlet />
               </main>
             </div>

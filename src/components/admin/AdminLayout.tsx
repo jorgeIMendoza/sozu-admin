@@ -126,7 +126,7 @@ export const AdminLayout = () => {
           />
         )}
         
-        <main className={cn("flex-1", isSimplifiedRole ? "p-0" : "p-6")}>
+        <main className={cn("flex-1", isSimplifiedRole ? "p-0" : "px-8 py-4")}>
           <Outlet />
         </main>
       </div>
