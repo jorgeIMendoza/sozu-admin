@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Inbox, FileText, CreditCard, FileCheck,
-  AlertTriangle, Handshake, Megaphone, HardHat, BarChart3, Settings,
+  AlertTriangle, Handshake, Megaphone, BarChart3,
   ArrowLeft, LogOut, LucideIcon, ChevronDown, ChevronRight, Menu,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -31,67 +31,53 @@ interface NavParent {
 
 type NavItem = NavLeaf | NavParent;
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
 const isParent = (i: NavItem): i is NavParent => "children" in i;
 
-const navGroups: NavGroup[] = [
-  {
-    label: "Operación",
-    items: [
-      { label: "Dashboard",            path: "/admin/portal-cobranza/dashboard",     icon: LayoutDashboard },
-      { label: "Bandeja Operativa",    path: "/admin/portal-cobranza/bandeja",       icon: Inbox },
-      { label: "Atención de Clientes", path: "/admin/portal-cobranza/atencion",      icon: FileText },
-      { label: "Relación de Pagos",    path: "/admin/portal-cobranza/pagos",         icon: CreditCard },
-      { label: "CEPs Pendientes",      path: "/admin/portal-cobranza/ceps",          icon: FileCheck },
-      { label: "Conciliaciones",       path: "/admin/portal-cobranza/conciliaciones",icon: AlertTriangle },
-      { label: "Promesas de Pago",     path: "/admin/portal-cobranza/promesas",      icon: Handshake },
-    ],
-  },
-  {
-    label: "Comunicación",
-    items: [
-      {
-        label: "Comunicación",
-        icon: Megaphone,
-        children: [
-          { label: "Administrar Avisos", path: "/admin/portal-cobranza/comunicacion/avisos" },
-          { label: "Enviar Avisos",      path: "/admin/portal-cobranza/comunicacion/enviar" },
-          { label: "Ejecuciones",        path: "/admin/portal-cobranza/comunicacion/ejecuciones" },
-          { label: "Plantillas",         path: "/admin/portal-cobranza/comunicacion/plantillas" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Herramientas",
-    items: [
-      { label: "Inputs de Obra", path: "/admin/portal-cobranza/inputs-obra",  icon: HardHat },
-      { label: "Reportes",       path: "/admin/portal-cobranza/reportes",     icon: BarChart3 },
-      { label: "Configuración",  path: "/admin/portal-cobranza/configuracion",icon: Settings },
-    ],
-  },
-];
+interface CobranzaSubmenu {
+  id: number;
+  nombre: string;
+  vista_front_end: string;
+  orden: number;
+}
 
-const SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-cobranza/dashboard": "Dashboard",
-  "/admin/portal-cobranza/bandeja": "Bandeja Operativa",
-  "/admin/portal-cobranza/atencion": "Atención de Clientes",
-  "/admin/portal-cobranza/pagos": "Relación de Pagos",
-  "/admin/portal-cobranza/ceps": "CEPs Pendientes",
-  "/admin/portal-cobranza/conciliaciones": "Conciliaciones",
-  "/admin/portal-cobranza/promesas": "Promesas de Pago",
-  "/admin/portal-cobranza/comunicacion/avisos": "Administrar Avisos",
-  "/admin/portal-cobranza/comunicacion/enviar": "Enviar Avisos",
-  "/admin/portal-cobranza/comunicacion/ejecuciones": "Ejecuciones",
-  "/admin/portal-cobranza/comunicacion/plantillas": "Plantillas",
-  "/admin/portal-cobranza/inputs-obra": "Inputs de Obra",
-  "/admin/portal-cobranza/reportes": "Reportes",
-  "/admin/portal-cobranza/configuracion": "Configuración",
+// Íconos por nombre de submenú (estable ante rename de vista_front_end).
+const NAV_ICONS: Record<string, LucideIcon> = {
+  "Dashboard": LayoutDashboard,
+  "Bandeja Operativa": Inbox,
+  "Atención de Clientes": FileText,
+  "Relación de Pagos": CreditCard,
+  "CEPs Pendientes": FileCheck,
+  "Conciliaciones": AlertTriangle,
+  "Promesas de Pago": Handshake,
+  "Reportes": BarChart3,
+};
+
+// Roles que ven todos los submenús activos sin filtrar por submenus_permisos.
+const SUPER_ADMIN_ROLES = new Set([1, 2]);
+
+// Etiquetas de header para rutas de detalle que no aparecen en el nav.
+const DETAIL_SECTION_LABELS: Record<string, string> = {
   "/admin/portal-cobranza/cuenta": "Detalle de Cuenta",
+  "/admin/portal-cobranza/expediente": "Expediente",
+};
+
+// Construye el árbol de navegación desde los submenús de BD.
+// Los submenús bajo /comunicacion/ se agrupan en un desplegable "Comunicación".
+const buildNavItems = (subs: CobranzaSubmenu[]): NavItem[] => {
+  const items: NavItem[] = [];
+  let comunicacion: NavParent | null = null;
+  for (const s of subs) {
+    if (s.vista_front_end.includes("/comunicacion/")) {
+      if (!comunicacion) {
+        comunicacion = { label: "Comunicación", icon: Megaphone, children: [] };
+        items.push(comunicacion);
+      }
+      comunicacion.children.push({ label: s.nombre, path: s.vista_front_end });
+    } else {
+      items.push({ label: s.nombre, path: s.vista_front_end, icon: NAV_ICONS[s.nombre] || FileText });
+    }
+  }
+  return items;
 };
 
 export const PortalCobranzaLayout = () => {
@@ -124,60 +110,57 @@ export const PortalCobranzaLayout = () => {
     enabled: !!profile?.id_persona,
   });
 
-  const { data: impersonatedAllowedRoutes } = useQuery({
-    queryKey: ["cobranza-impersonated-routes", impersonatedRoleId],
+  // Rol efectivo: el impersonado si hay impersonation, sino el del usuario.
+  const effectiveRoleId = isImpersonating ? impersonatedRoleId : (profile?.rol_id ?? null);
+  // Super Admin / Admin Cobranza ven todos los submenús activos sin filtrar por permisos.
+  const showAll = !isImpersonating && profile?.rol_id != null && SUPER_ADMIN_ROLES.has(profile.rol_id);
+
+  // Navegación 100% desde BD (tabla submenus del menú "Portal Cobranza").
+  // Sin fallback hardcoded: lo que no esté activo/permitido en BD no aparece,
+  // y el path usado es el vista_front_end de BD (revela rutas desincronizadas).
+  const { data: navItems = [], isLoading: navLoading } = useQuery({
+    queryKey: ["cobranza-nav", effectiveRoleId, showAll],
     queryFn: async () => {
-      if (!impersonatedRoleId) return null;
-      const { data: menuData } = await (supabase as any)
+      const { data: menu } = await (supabase as any)
         .from("menus")
         .select("id")
         .eq("nombre", "Portal Cobranza")
-        .single();
-      if (!menuData) return null;
-      const { data: subData } = await (supabase as any)
+        .eq("activo", true)
+        .maybeSingle();
+      if (!menu) return [];
+      const { data: subs } = await (supabase as any)
         .from("submenus")
-        .select("id, vista_front_end")
-        .eq("menu_id", menuData.id)
-        .eq("activo", true);
-      if (!subData || subData.length === 0) return null;
-      const { data: permData } = await (supabase as any)
-        .from("submenus_permisos")
-        .select("submenu_id")
-        .in("submenu_id", subData.map((s: any) => s.id))
-        .eq("rol_id", impersonatedRoleId)
-        .eq("activo", true);
-      const allowedIds = new Set((permData || []).map((p: any) => p.submenu_id));
-      return new Set<string>(
-        subData
-          .filter((s: any) => allowedIds.has(s.id))
-          .map((s: any) => s.vista_front_end as string)
+        .select("id, nombre, vista_front_end, orden")
+        .eq("menu_id", menu.id)
+        .eq("activo", true)
+        .order("orden");
+      if (!subs || subs.length === 0) return [];
+      let allowed: Set<number> | null = null;
+      if (!showAll) {
+        if (!effectiveRoleId) return [];
+        const { data: perms } = await (supabase as any)
+          .from("submenus_permisos")
+          .select("submenu_id")
+          .in("submenu_id", subs.map((s: any) => s.id))
+          .eq("rol_id", effectiveRoleId)
+          .eq("activo", true);
+        allowed = new Set((perms || []).map((p: any) => p.submenu_id));
+      }
+      const visible = (subs as CobranzaSubmenu[]).filter(
+        (s) => s.vista_front_end && (!allowed || allowed.has(s.id))
       );
+      return buildNavItems(visible);
     },
-    enabled: isImpersonating && !!impersonatedRoleId,
+    enabled: showAll || !!effectiveRoleId,
   });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const currentSection = Object.entries(SECTION_LABELS).find(([path]) => isActive(path))?.[1] || "Cobranza";
-
-  const filteredNavGroups = isImpersonating && impersonatedAllowedRoutes
-    ? navGroups
-        .map(group => {
-          const items = group.items
-            .map(item => {
-              if (isParent(item)) {
-                const allowedChildren = item.children.filter(c =>
-                  (impersonatedAllowedRoutes as Set<string>).has(c.path)
-                );
-                return allowedChildren.length > 0 ? { ...item, children: allowedChildren } : null;
-              }
-              return (impersonatedAllowedRoutes as Set<string>).has(item.path) ? item : null;
-            })
-            .filter((i): i is NavItem => i !== null);
-          return { ...group, items };
-        })
-        .filter(g => g.items.length > 0)
-    : navGroups;
+  const sectionFromNav = navItems
+    .flatMap((i) => (isParent(i) ? i.children : [{ label: i.label, path: i.path }]))
+    .find((c) => isActive(c.path))?.label;
+  const sectionFromDetail = Object.entries(DETAIL_SECTION_LABELS).find(([p]) => isActive(p))?.[1];
+  const currentSection = sectionFromNav || sectionFromDetail || "Cobranza";
 
   const activeUserName = isImpersonating
     ? impersonatedName || impersonatedEmail || profile?.nombre || profile?.email || "Usuario"
@@ -212,92 +195,97 @@ export const PortalCobranzaLayout = () => {
             Viendo como: {impersonatedName || impersonatedEmail}
           </div>
         )}
-        {filteredNavGroups.map((group) => (
-          <div key={group.label}>
-            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                if (isParent(item)) {
-                  const groupActive = item.children.some((c) => isActive(c.path));
-                  const expanded = expandedMenu === item.label || groupActive;
-                  return (
-                    <div key={item.label}>
-                      <button
-                        onClick={() => setExpandedMenu(expanded ? null : item.label)}
-                        className={cn(
-                          "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150",
-                          groupActive
-                            ? "bg-primary/[0.06] text-primary"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        )}
-                      >
-                        <span className={cn(
-                          "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
-                          groupActive ? "opacity-100" : "opacity-0"
-                        )} />
-                        <item.icon className={cn(
-                          "size-4 shrink-0",
-                          groupActive ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
-                        )} />
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {expanded
-                          ? <ChevronDown className="size-3.5 shrink-0 opacity-60" />
-                          : <ChevronRight className="size-3.5 shrink-0 opacity-60" />}
-                      </button>
-                      {expanded && (
-                        <div className="mt-0.5 ml-7 space-y-0.5">
-                          {item.children.map((child) => {
-                            const childActive = isActive(child.path);
-                            return (
-                              <button
-                                key={child.path}
-                                onClick={() => handleNavigate(child.path)}
-                                className={cn(
-                                  "w-full flex items-center px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
-                                  childActive
-                                    ? "bg-primary/[0.06] text-primary"
-                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                )}
-                              >
-                                {child.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                const active = isActive(item.path);
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => handleNavigate(item.path)}
-                    className={cn(
-                      "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
-                      active
-                        ? "bg-primary/[0.06] text-primary"
-                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    )}
-                  >
-                    <span className={cn(
-                      "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
-                      active ? "opacity-100" : "opacity-0"
-                    )} />
-                    <item.icon className={cn(
-                      "size-4 shrink-0",
-                      active ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
-                    )} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
+        {navLoading ? (
+          <div className="px-1 space-y-1">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="h-9 rounded-md bg-muted/50 animate-pulse" />
+            ))}
           </div>
-        ))}
+        ) : navItems.length === 0 ? (
+          <p className="px-3 py-4 text-[12px] text-muted-foreground">
+            Sin menús asignados en BD para este rol.
+          </p>
+        ) : (
+          <div className="space-y-0.5">
+            {navItems.map((item) => {
+              if (isParent(item)) {
+                const groupActive = item.children.some((c) => isActive(c.path));
+                const expanded = expandedMenu === item.label || groupActive;
+                return (
+                  <div key={item.label}>
+                    <button
+                      onClick={() => setExpandedMenu(expanded ? null : item.label)}
+                      className={cn(
+                        "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150",
+                        groupActive
+                          ? "bg-primary/[0.06] text-primary"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      <span className={cn(
+                        "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
+                        groupActive ? "opacity-100" : "opacity-0"
+                      )} />
+                      <item.icon className={cn(
+                        "size-4 shrink-0",
+                        groupActive ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+                      )} />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {expanded
+                        ? <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+                        : <ChevronRight className="size-3.5 shrink-0 opacity-60" />}
+                    </button>
+                    {expanded && (
+                      <div className="mt-0.5 ml-7 space-y-0.5">
+                        {item.children.map((child) => {
+                          const childActive = isActive(child.path);
+                          return (
+                            <button
+                              key={child.path}
+                              onClick={() => handleNavigate(child.path)}
+                              className={cn(
+                                "w-full flex items-center px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
+                                childActive
+                                  ? "bg-primary/[0.06] text-primary"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                              )}
+                            >
+                              {child.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const active = isActive(item.path);
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => handleNavigate(item.path)}
+                  className={cn(
+                    "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
+                    active
+                      ? "bg-primary/[0.06] text-primary"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  )}
+                >
+                  <span className={cn(
+                    "absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary transition-opacity duration-150",
+                    active ? "opacity-100" : "opacity-0"
+                  )} />
+                  <item.icon className={cn(
+                    "size-4 shrink-0",
+                    active ? "" : "opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+                  )} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Footer */}

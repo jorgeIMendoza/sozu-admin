@@ -171,9 +171,7 @@ const CobranzaAdminAvisos = lazyRetry(() => import("./pages/admin/portal-cobranz
 const CobranzaEnviarAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEnviarAvisos"));
 const CobranzaEjecuciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEjecuciones"));
 const CobranzaPlantillas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPlantillas"));
-const CobranzaInputsObra = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaInputsObra"));
 const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
-const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
 const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
 const CobranzaCuentaDetalle = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCuentaDetalle"));
 const PECComingSoon = lazyRetry(() => import("./pages/admin/portal-estructura-comisiones/PECComingSoon"));
@@ -818,20 +816,18 @@ const App = () => (
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
                   <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
-                  <Route path="portal-cobranza/bandeja" element={<CobranzaBandeja />} />
-                  <Route path="portal-cobranza/atencion" element={<CobranzaAtencion />} />
-                  <Route path="portal-cobranza/pagos" element={<CobranzaPagos />} />
-                  <Route path="portal-cobranza/ceps" element={<CobranzaCeps />} />
+                  <Route path="portal-cobranza/bandeja-operativa" element={<CobranzaBandeja />} />
+                  <Route path="portal-cobranza/atencion-clientes" element={<CobranzaAtencion />} />
+                  <Route path="portal-cobranza/relacion-pagos" element={<CobranzaPagos />} />
+                  <Route path="portal-cobranza/ceps-pendientes" element={<CobranzaCeps />} />
                   <Route path="portal-cobranza/conciliaciones" element={<CobranzaConciliaciones />} />
-                  <Route path="portal-cobranza/promesas" element={<CobranzaPromesas />} />
+                  <Route path="portal-cobranza/promesas-pago" element={<CobranzaPromesas />} />
                   <Route path="portal-cobranza/comunicacion/avisos" element={<CobranzaAdminAvisos />} />
                   <Route path="portal-cobranza/comunicacion/enviar" element={<CobranzaEnviarAvisos />} />
                   <Route path="portal-cobranza/comunicacion/ejecuciones" element={<CobranzaEjecuciones />} />
                   <Route path="portal-cobranza/comunicacion/plantillas" element={<CobranzaPlantillas />} />
-                  <Route path="portal-cobranza/inputs-obra" element={<CobranzaInputsObra />} />
                   <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
-                  <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
                   <Route path="portal-cobranza/cuenta/:id" element={<CobranzaCuentaDetalle />} />
                   {/* Portal Estructura de Comisiones */}
