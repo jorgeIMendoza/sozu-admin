@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { mockNotifications } from "@/data/legalFlow/mockData";
 
 interface NavItem {
@@ -95,7 +96,7 @@ export function LegalFlowLayout() {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Legal Flow
         </p>
