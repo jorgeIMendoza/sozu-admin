@@ -805,11 +805,6 @@ export function RelacionPagos() {
     });
   }, [isRpMode, rpPagosCuenta, rpAplicacionesPorPago, filteredPagos, primaryCuentaId, proyectos, proyectoId]);
 
-  const metodoPagoOptions = useMemo(() => {
-    const methods = [...new Set(rpTableRows.map(r => r.metodo_pago).filter((m): m is string => !!m))];
-    return methods.sort((a, b) => a.localeCompare(b, 'es'));
-  }, [rpTableRows]);
-
   // ── Queries Pagos de Bodega ───────────────────────────────────────────────────
   // Waterfall: bodegas → ofertas (scoped a id_propiedad) → cuentas_cobranza → pagos
   // Fuente idéntica a tab "Pagos Aplicados" de /admin/cuentas-cobranza/905/detalle
@@ -1399,6 +1394,12 @@ export function RelacionPagos() {
 
   // Fuente activa de la tabla: queries directas (rpMode) o RPC (fallback para vista global)
   const displayRows = isRpMode ? rpTableRows : filteredPagos;
+
+  const metodoPagoOptions = useMemo(() => {
+    const methods = [...new Set(displayRows.map(r => r.metodo_pago).filter((m): m is string => !!m))];
+    return methods.sort((a, b) => a.localeCompare(b, 'es'));
+  }, [displayRows]);
+
   const filteredDisplayRows = useMemo(
     () => metodoPagoFilter === 'todos' ? displayRows : displayRows.filter(r => r.metodo_pago === metodoPagoFilter),
     [displayRows, metodoPagoFilter],
