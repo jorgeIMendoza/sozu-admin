@@ -2,7 +2,7 @@ import {
   User, Mail, FileText, LogOut, Shield, ArrowLeft,
   CheckCircle2, Building2, CreditCard, Lock, Eye, EyeOff,
   BadgeCheck, AlertCircle, Clock, Loader2, Check, X,
-  Download, Pencil, Upload, ChevronRight, Camera,
+  Download, Pencil, Upload, ChevronRight,
 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -40,8 +40,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTipoPersonaLabel } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
-import { ClienteINECaptureDialog } from "@/components/admin/portal-cliente/ClienteINECaptureDialog";
-import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
+import { validateCURPPdf, validateCSFPdf, validateComprobanteDomicilioPdf } from "@/utils/pdfDocumentValidators";
 
 /* ─── helpers ─── */
 const INPUT_CLS =
@@ -411,7 +410,6 @@ const ClientePerfil = () => {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const pendingAfterPwRef = useRef<(() => void) | null>(null);
   const justAuthedRef = useRef(false);
-  const [showINECapture, setShowINECapture] = useState(false);
   const clienteEmail = isImpersonating ? (impersonatedClienteEmail ?? null) : (profile?.email ?? null);
 
   const PDF_VALIDATE_TIPO_IDS = [1, 5, 6, 8, 11];
@@ -838,6 +836,9 @@ const ClientePerfil = () => {
         } else if (primaryTipoId === 6) {
           const result = validateCSFPdf(text);
           if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
+        } else if (primaryTipoId === 8) {
+          const result = validateComprobanteDomicilioPdf(text);
+          if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
         } else {
           const textUpper = text.toUpperCase();
           const keywordGroups = PDF_KEYWORDS[primaryTipoId] ?? [];
@@ -1222,16 +1223,7 @@ const ClientePerfil = () => {
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
                         <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 8px', borderRadius:6, background:badge.bg, color:badge.c, whiteSpace:'nowrap' }}>{badgeLabel}</span>
-                        {best?.url && (
-                          <button onClick={() => setPreviewDoc({ title:slot.label, url:best.url! })} style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            <Eye style={{ width:15, height:15, color:textSecondary }} />
-                          </button>
-                        )}
-                        {canUpload && isINE ? (
-                          <button onClick={() => setShowINECapture(true)} disabled={isUploading} style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            {isUploading ? <Loader2 style={{ width:15, height:15, color:textSecondary }} className="animate-spin" /> : <Camera style={{ width:15, height:15, color:textSecondary }} />}
-                          </button>
-                        ) : canUpload ? (
+                        {canUpload && !isINE ? (
                           <>
                             <input
                               ref={(el) => { fileInputRefs.current[slot.key] = el; }}
@@ -1245,6 +1237,13 @@ const ClientePerfil = () => {
                             </button>
                           </>
                         ) : null}
+                        <button
+                          onClick={best?.url ? () => setPreviewDoc({ title:slot.label, url:best.url! }) : undefined}
+                          disabled={!best?.url}
+                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:best?.url ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', opacity:best?.url ? 1 : 0.35 }}
+                        >
+                          <Eye style={{ width:15, height:15, color:textSecondary }} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -1841,16 +1840,6 @@ const ClientePerfil = () => {
         {/* ══════════════════════════════════════════════
             Doc viewer
         ══════════════════════════════════════════════ */}
-        {/* ── INE Camera Dialog ── */}
-        {effectivePersonaId && (
-          <ClienteINECaptureDialog
-            open={showINECapture}
-            onOpenChange={setShowINECapture}
-            personaId={effectivePersonaId}
-            clienteEmail={clienteEmail}
-            isDesktop={isDesktop}
-          />
-        )}
 
         {isDesktop ? (
           <Dialog open={!!previewDoc} onOpenChange={(v) => { if (!v) setPreviewDoc(null); }}>
