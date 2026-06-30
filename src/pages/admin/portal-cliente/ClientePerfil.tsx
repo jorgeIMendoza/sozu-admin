@@ -215,6 +215,37 @@ const DocViewerHeader = ({ doc }: { doc: DocViewerDoc }) => (
     </div>
   </div>
 );
+async function downloadDocFile(url: string, title: string) {
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  const fetchUrl = driveMatch
+    ? `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`
+    : url;
+  const ext = url.match(/\.([a-z0-9]+)($|\?)/i)?.[1] ?? 'pdf';
+  const fileName = `${title.replace(/\s+/g, '-')}.${ext}`;
+  try {
+    const res = await fetch(fetchUrl);
+    if (!res.ok) throw new Error();
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = fileName;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 30_000);
+  } catch {
+    const a = document.createElement('a');
+    a.href = fetchUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
 const DocViewerBody = ({ doc }: { doc: DocViewerDoc }) => (
   <div className="flex-1 overflow-hidden bg-muted/20 min-h-0">
     {/\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(doc.url)
@@ -242,7 +273,7 @@ const SectionCard = ({
   rows: { label: string; value: string | null | undefined }[];
   ctas: SectionCTA[];
 }) => (
-  <section style={{ background:'#fff', border:'1px solid #ededf0', borderRadius:8, padding:'18px 20px', display:'flex', flexDirection:'column' }}>
+  <section style={{ background:'#fff', border:'1px solid #ededf0', borderRadius:8, padding:'18px 20px', display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
     <div style={{ display:'flex', alignItems:'flex-start', gap:11 }}>
       <div style={{ width:36, height:36, borderRadius:6, background:'#eaf6ef', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
         {icon}
@@ -942,8 +973,8 @@ const ClientePerfil = () => {
   const textMuted = '#9aa0a6';
 
   return (
-    <div style={{ background: '#f5f6f7', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '24px 20px 80px' }}>
+    <div style={{ background: '#f5f6f7', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif', overflowX: 'hidden' }}>
+      <div style={{ maxWidth: 920, margin: '0 auto', padding: '24px 20px 80px', boxSizing: 'border-box', width: '100%' }}>
 
         {/* ── Identity card (always visible) ── */}
         <section style={{ ...card, padding: '20px 22px', marginBottom: 16 }}>
@@ -1175,7 +1206,7 @@ const ClientePerfil = () => {
                   const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
                   const status = best?.status ?? 'missing';
                   const isUploading = uploadingSlot === slot.key;
-                  const canUpload = [2, 3, 5, 6].includes(slot.primaryTipoId);
+                  const canUpload = status === 'expired' || status === 'missing' || status === 'rejected' || (!slot.required && !best);
                   const isINE = slot.key === 'ine_frente' || slot.key === 'ine_reverso';
                   const dotColor = status === 'verified' ? green : status === 'review' ? '#f59e0b' : status === 'rejected' ? '#ef4444' : '#d1d5db';
                   const badge = status === 'verified' ? { c:'#3f8f5c', bg:'#eaf6ef' } : status === 'review' ? { c:'#92400e', bg:'#fef3c7' } : status === 'rejected' ? { c:'#c0392b', bg:'#fef2f2' } : { c:'#6b7280', bg:'#f3f4f6' };
@@ -1829,11 +1860,11 @@ const ClientePerfil = () => {
                   <DocViewerHeader doc={previewDoc} />
                   <DocViewerBody doc={previewDoc} />
                   <div className="px-4 pb-5 pt-3 border-t border-border/50 flex gap-2 shrink-0">
-                    <a href={previewDoc.url} download target="_blank" rel="noopener noreferrer"
+                    <button onClick={() => downloadDocFile(previewDoc.url, previewDoc.title)}
                       className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-emerald bg-emerald-pale hover:opacity-80 rounded-md transition-opacity">
                       <Download className="w-4 h-4" />
                       Descargar
-                    </a>
+                    </button>
                     <button onClick={() => setPreviewDoc(null)}
                       className="flex-1 h-10 text-sm font-semibold text-destructive hover:bg-destructive/5 rounded-md transition-colors">
                       Cerrar
@@ -1851,11 +1882,11 @@ const ClientePerfil = () => {
                   <DocViewerHeader doc={previewDoc} />
                   <DocViewerBody doc={previewDoc} />
                   <div className="px-4 pb-8 pt-3 border-t border-border/50 flex gap-2 shrink-0">
-                    <a href={previewDoc.url} download target="_blank" rel="noopener noreferrer"
+                    <button onClick={() => downloadDocFile(previewDoc.url, previewDoc.title)}
                       className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-emerald bg-emerald-pale hover:opacity-80 rounded-md transition-opacity">
                       <Download className="w-4 h-4" />
                       Descargar
-                    </a>
+                    </button>
                     <button onClick={() => setPreviewDoc(null)}
                       className="flex-1 h-10 text-sm font-semibold text-destructive hover:bg-destructive/5 rounded-md transition-colors">
                       Cerrar

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,15 @@ import { cn } from "@/lib/utils";
 export function ClienteImpersonationSelector() {
   const { profile } = useAuth();
   const { impersonatedClienteEmail, impersonatedClienteName, setImpersonatedCliente, clearImpersonation, isImpersonating } = useClienteImpersonation();
+  const { isSuperAdmin, allowedPaths } = useAllowedMenus();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
+  let hasPortalClienteAccess = false;
+  for (const p of allowedPaths) {
+    if (p.startsWith('/admin/portal-cliente')) { hasPortalClienteAccess = true; break; }
+  }
+  const canAccessClientPortal = isSuperAdmin || hasPortalClienteAccess;
+  if (!canAccessClientPortal) return null;
 
   const { data: clients = [] } = useQuery({
     queryKey: ["all-clients-for-impersonation"],
@@ -34,7 +40,7 @@ export function ClienteImpersonationSelector() {
         nombre: u.personas?.nombre_legal || u.email,
       })).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: isSuperAdmin,
+    enabled: canAccessClientPortal,
   });
 
   return (
