@@ -13,7 +13,8 @@ import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { usePortalNav } from "@/hooks/usePortalNav";
@@ -103,7 +104,7 @@ export const PortalInmobiliariaLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Inmobiliaria
         </p>

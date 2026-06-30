@@ -8,14 +8,12 @@ import { UserSettingsDialog } from "./UserSettingsDialog";
 import { AgentOnboardingWidget } from "./AgentOnboardingWidget";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import sozuLogoBlack from "@/assets/sozu-logo-black.png";
-import sozuLogoWhite from "@/assets/sozu-logo-white.png";
-import { useTheme } from "next-themes";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -28,9 +26,7 @@ const SIMPLIFIED_ROLES = ["Agente Inmobiliario", "Inmobiliaria"];
 export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
-  const { resolvedTheme } = useTheme();
-  const sozuLogo = resolvedTheme === "dark" ? sozuLogoWhite : sozuLogoBlack;
-  
+
   const isSimplifiedRole = SIMPLIFIED_ROLES.includes(profile?.rol_nombre ?? "");
 
   // Fetch agent commission for simplified roles
@@ -59,7 +55,7 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
           {isSimplifiedRole ? (
             <div className="flex items-center gap-3 shrink-0">
               <div className="flex flex-col gap-0.5">
-                <img src={sozuLogo} alt="Sozu" className="h-7" />
+                <SozuLogo className="h-7" />
                 <span className="text-[9px] text-muted-foreground/40 select-none">{APP_VERSION}</span>
               </div>
               <span className="text-sm text-muted-foreground hidden sm:inline">
@@ -117,7 +113,7 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
             )}
 
             {!isSimplifiedRole && <ThemeToggle />}
-            
+
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Notificaciones">
