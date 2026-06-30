@@ -384,7 +384,7 @@ export default function CobranzaDashboard() {
               </div>
               <button
                 className="sozu-kpi-card overflow-hidden text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/bandeja', { preset: 'critical' })}
+                onClick={() => drill(navigate, '/bandeja-operativa', { preset: 'critical' })}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Vencido total</span>
@@ -432,7 +432,7 @@ export default function CobranzaDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/bandeja')}
+                onClick={() => drill(navigate, '/bandeja-operativa')}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vendidas</span>
@@ -471,7 +471,7 @@ export default function CobranzaDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 className="sozu-kpi-card overflow-hidden text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/bandeja', { preset: 'critical' })}
+                onClick={() => drill(navigate, '/bandeja-operativa', { preset: 'critical' })}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Cartera vencida</span>
@@ -482,7 +482,7 @@ export default function CobranzaDashboard() {
               </button>
               <button
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/bandeja', { preset: 'prelegal' })}
+                onClick={() => drill(navigate, '/bandeja-operativa', { preset: 'prelegal' })}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Cuentas críticas</span>
@@ -493,7 +493,7 @@ export default function CobranzaDashboard() {
               </button>
               <button
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/bandeja')}
+                onClick={() => drill(navigate, '/bandeja-operativa')}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-warning">En riesgo</span>
@@ -504,7 +504,7 @@ export default function CobranzaDashboard() {
               </button>
               <button
                 className="sozu-kpi-card overflow-hidden text-left group hover:shadow-sm transition-all duration-200"
-                onClick={() => drill(navigate, '/pagos')}
+                onClick={() => drill(navigate, '/relacion-pagos')}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Meta del mes</span>
@@ -555,7 +555,7 @@ export default function CobranzaDashboard() {
               Nivel de morosidad
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button onClick={() => drill(navigate, '/bandeja', { parcVencidas: '1' })}
+              <button onClick={() => drill(navigate, '/bandeja-operativa', { parcVencidas: '1' })}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-warning">Alerta temprana</span>
@@ -566,7 +566,7 @@ export default function CobranzaDashboard() {
                 <p className="text-[11px] text-muted-foreground leading-snug">Intervención preventiva - aún se pueden recuperar fácilmente</p>
               </button>
 
-              <button onClick={() => drill(navigate, '/bandeja', { parcVencidas: '2' })}
+              <button onClick={() => drill(navigate, '/bandeja-operativa', { parcVencidas: '2' })}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Riesgo activo</span>
@@ -577,7 +577,7 @@ export default function CobranzaDashboard() {
                 <p className="text-[11px] text-muted-foreground leading-snug">Patrón de incumplimiento detectado - gestión urgente</p>
               </button>
 
-              <button onClick={() => drill(navigate, '/bandeja', { parcVencidas: '3plus' })}
+              <button onClick={() => drill(navigate, '/bandeja-operativa', { parcVencidas: '3plus' })}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Crítico / prelegal</span>
@@ -625,7 +625,7 @@ export default function CobranzaDashboard() {
                       return (
                         <button key={p.proyecto_id}
                           className="w-full px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left group"
-                          onClick={() => drill(navigate, '/bandeja', { proyecto: p.proyecto })}>
+                          onClick={() => drill(navigate, '/bandeja-operativa', { proyecto: p.proyecto })}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="w-[18px] h-[18px] rounded-full bg-danger/10 text-danger text-[10px] font-bold flex items-center justify-center shrink-0">{rank}</span>
@@ -670,7 +670,7 @@ export default function CobranzaDashboard() {
                   </span>
                 )}
                 <button
-                  onClick={() => drill(navigate, '/bandeja', { parcVencidas: '3plus' })}
+                  onClick={() => drill(navigate, '/bandeja-operativa', { parcVencidas: '3plus' })}
                   className="flex items-center gap-1 text-[11px] text-primary hover:underline font-medium whitespace-nowrap"
                 >
                   Ver todas <ArrowRight className="w-3 h-3" />
@@ -754,7 +754,7 @@ export default function CobranzaDashboard() {
                     {tableProyectos.length > 0 ? tableProyectos.map(p => (
                       <tr key={p.proyecto_id}
                         className="border-b border-border/60 hover:bg-muted/40 cursor-pointer h-[48px] transition-colors group"
-                        onClick={() => drill(navigate, '/bandeja', { proyecto: p.proyecto })}>
+                        onClick={() => drill(navigate, '/bandeja-operativa', { proyecto: p.proyecto })}>
                         <td className="pl-5 pr-4 text-center text-[13px] font-medium text-foreground group-hover:text-primary transition-colors">{p.proyecto}</td>
                         <td className="px-4 text-center text-[13px] text-success font-medium tabular-nums">{formatCurrency(p.cobrado)}</td>
                         <td className="px-4 text-center text-[13px] text-muted-foreground tabular-nums">{formatCurrency(p.pendiente)}</td>
@@ -811,7 +811,7 @@ export default function CobranzaDashboard() {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
-                onClick={() => drill(navigate, '/ceps')}
+                onClick={() => drill(navigate, '/ceps-pendientes')}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">
@@ -836,7 +836,7 @@ export default function CobranzaDashboard() {
               </button>
 
               <button
-                onClick={() => drill(navigate, '/bandeja')}
+                onClick={() => drill(navigate, '/bandeja-operativa')}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">

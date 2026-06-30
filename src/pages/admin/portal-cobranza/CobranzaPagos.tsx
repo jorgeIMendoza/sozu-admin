@@ -304,7 +304,7 @@ export default function RelacionPagosPage() {
                         <button
                           className="p-1.5 rounded-md hover:bg-muted transition-colors duration-100"
                           title="Ver expediente de la cuenta"
-                          onClick={() => navigate(`/cuenta/${r.id_cuenta_cobranza}`)}
+                          onClick={() => navigate(`/admin/portal-cobranza/cuenta/${r.id_cuenta_cobranza}`)}
                         >
                           <Eye className="w-[14px] h-[14px] text-muted-foreground" strokeWidth={1.75} />
                         </button>

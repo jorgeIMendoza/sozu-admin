@@ -337,7 +337,7 @@ export default function ConciliacionesPage() {
                 )}
 
                 {/* Quick link to account */}
-                <button onClick={() => navigate(`/cuenta/${selectedCase.accountId}`)}
+                <button onClick={() => navigate(`/admin/portal-cobranza/cuenta/${selectedCase.accountId}`)}
                   className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/30 hover:bg-muted transition-colors text-[13px]">
                   <span className="font-medium text-foreground">Abrir expediente completo</span>
                   <ChevronRight className="w-4 h-4 text-muted-foreground" strokeWidth={1.75} />
