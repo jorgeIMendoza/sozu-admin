@@ -360,9 +360,12 @@ interface FilterBarProps {
   searchInput: string;
   onProyectoChange: (id: number | null) => void;
   onSearchChange: (v: string) => void;
+  metodoPagoFilter: string;
+  metodoPagoOptions: string[];
+  onMetodoPagoChange: (v: string) => void;
 }
 
-function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSearchChange }: FilterBarProps) {
+function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSearchChange, metodoPagoFilter, metodoPagoOptions, onMetodoPagoChange }: FilterBarProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm mb-6 flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2 shrink-0">
@@ -381,6 +384,25 @@ function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSea
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
       </div>
+
+      {metodoPagoOptions.length > 0 && (
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-medium text-slate-500">Método de pago</span>
+          <div className="relative">
+            <select
+              value={metodoPagoFilter}
+              onChange={(e) => onMetodoPagoChange(e.target.value)}
+              className="appearance-none bg-white border border-slate-200 text-sm rounded-lg py-1.5 pl-3 pr-8 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+            >
+              <option value="todos">Todos los métodos</option>
+              {metodoPagoOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          </div>
+        </div>
+      )}
 
       <div className="relative flex-1 min-w-[280px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -540,6 +562,7 @@ export function RelacionPagos() {
   const [searchInput, setSearchInput] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
   const [search, setSearch] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
   const [page, setPage] = useState(1);
+  const [metodoPagoFilter, setMetodoPagoFilter] = useState('todos');
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [validandoPagoId, setValidandoPagoId] = useState<number | null>(null);
   const autoValidadosRef = useRef<Set<number>>(new Set());
@@ -551,6 +574,8 @@ export function RelacionPagos() {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  useEffect(() => { setPage(1); }, [metodoPagoFilter]);
 
   // Reset when project changes
   const handleProyectoChange = useCallback((id: number | null) => {
@@ -779,6 +804,11 @@ export function RelacionPagos() {
       };
     });
   }, [isRpMode, rpPagosCuenta, rpAplicacionesPorPago, filteredPagos, primaryCuentaId, proyectos, proyectoId]);
+
+  const metodoPagoOptions = useMemo(() => {
+    const methods = [...new Set(rpTableRows.map(r => r.metodo_pago).filter((m): m is string => !!m))];
+    return methods.sort((a, b) => a.localeCompare(b, 'es'));
+  }, [rpTableRows]);
 
   // ── Queries Pagos de Bodega ───────────────────────────────────────────────────
   // Waterfall: bodegas → ofertas (scoped a id_propiedad) → cuentas_cobranza → pagos
@@ -1369,12 +1399,16 @@ export function RelacionPagos() {
 
   // Fuente activa de la tabla: queries directas (rpMode) o RPC (fallback para vista global)
   const displayRows = isRpMode ? rpTableRows : filteredPagos;
-  const displayTotal = isRpMode ? rpTableRows.length : total;
+  const filteredDisplayRows = useMemo(
+    () => metodoPagoFilter === 'todos' ? displayRows : displayRows.filter(r => r.metodo_pago === metodoPagoFilter),
+    [displayRows, metodoPagoFilter],
+  );
+  const displayTotal = isRpMode ? filteredDisplayRows.length : total;
   const displayLoading = isLoading || (isRpMode && (rpPagosLoading || rpAplicacionesLoading));
   const totalPages = Math.max(1, Math.ceil(displayTotal / PAGE_SIZE));
   const pagedPagos = useMemo(
-    () => displayRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [displayRows, page],
+    () => filteredDisplayRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredDisplayRows, page],
   );
 
   const exportTotal = isRpMode
@@ -1461,6 +1495,9 @@ export function RelacionPagos() {
         searchInput={searchInput}
         onProyectoChange={handleProyectoChange}
         onSearchChange={setSearchInput}
+        metodoPagoFilter={metodoPagoFilter}
+        metodoPagoOptions={metodoPagoOptions}
+        onMetodoPagoChange={setMetodoPagoFilter}
       />
 
       {/* ── Sin proyecto seleccionado ─────────────────────────────────────── */}
