@@ -485,7 +485,10 @@ function EditPagoValidacionModal({ row, onClose }: {
     mutationFn: async () => {
       if (!row) throw new Error("No hay pago seleccionado");
       const { error } = await (supabase as any).from("pago_validaciones")
-        .insert({ id_pago: row.pago_id, estado, motivo: motivo.trim() || null });
+        .upsert(
+          { id_pago: row.pago_id, estado, motivo: motivo.trim() || null },
+          { onConflict: "id_pago" }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
