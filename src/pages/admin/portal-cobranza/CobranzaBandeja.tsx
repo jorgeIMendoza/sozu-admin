@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBandejaOperativa, BandejaCuenta } from '@/hooks/useBandejaOperativa';
+import { useBandejaStore } from '@/lib/portal-cobranza/bandeja-store';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
@@ -280,14 +281,20 @@ function TipoMultiSelect({
 
 export default function BandejaOperativaPage() {
   const navigate = useNavigate();
-  const [proyectoId, setProyectoId] = useState<number | null>(null);
-  const [searchClabe, setSearchClabe]     = useState('');
-  const [searchCliente, setSearchCliente] = useState('');
-  const [searchUnidad, setSearchUnidad]   = useState('');
-  const [filtroTipo, setFiltroTipo]         = useState<string[]>([]);
-  const [searchCuenta, setSearchCuenta]     = useState('');
-  const [filtroPrioridad, setFiltroPrioridad] = useState<string[]>([]);
-  const [filtroInvalidosNivel, setFiltroInvalidosNivel] = useState<string[]>([]);
+  // Filtros persistidos en sessionStorage (sobreviven navegación + recarga).
+  const {
+    proyectoId, searchClabe, searchCliente, searchUnidad,
+    filtroTipo, searchCuenta, filtroPrioridad, filtroInvalidosNivel,
+    setFiltro, resetFiltros,
+  } = useBandejaStore();
+  const setProyectoId          = (v: number | null) => setFiltro('proyectoId', v);
+  const setSearchClabe         = (v: string)        => setFiltro('searchClabe', v);
+  const setSearchCliente       = (v: string)        => setFiltro('searchCliente', v);
+  const setSearchUnidad        = (v: string)        => setFiltro('searchUnidad', v);
+  const setFiltroTipo          = (v: string[])      => setFiltro('filtroTipo', v);
+  const setSearchCuenta        = (v: string)        => setFiltro('searchCuenta', v);
+  const setFiltroPrioridad     = (v: string[])      => setFiltro('filtroPrioridad', v);
+  const setFiltroInvalidosNivel = (v: string[])     => setFiltro('filtroInvalidosNivel', v);
   const [page, setPage] = useState(1);
 
   const { data: proyectos } = useProyectosCobranza();
@@ -339,10 +346,8 @@ export default function BandejaOperativaPage() {
     || filtroPrioridad.length > 0 || filtroInvalidosNivel.length > 0;
 
   const clearFilters = useCallback(() => {
-    setSearchCliente(''); setSearchCuenta(''); setSearchUnidad('');
-    setSearchClabe(''); setFiltroTipo([]); setProyectoId(null);
-    setFiltroPrioridad([]); setFiltroInvalidosNivel([]); setPage(1);
-  }, []);
+    resetFiltros(); setPage(1);
+  }, [resetFiltros]);
 
   // Pagination number list with ellipsis
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)

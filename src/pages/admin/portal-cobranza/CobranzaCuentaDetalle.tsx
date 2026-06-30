@@ -547,6 +547,7 @@ export default function CobranzaCuentaDetalle() {
       setPagoDialog(false);
       setPagoForm({ fecha: todayIso(), monto: '', id_metodo: '', clave: '' });
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al registrar');
     } finally {
@@ -574,6 +575,7 @@ export default function CobranzaCuentaDetalle() {
       setMultaAcuerdoId(null);
       setMultaForm({ monto: '', descripcion: '', id_tipo_multa: '' });
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error');
     } finally {
@@ -588,6 +590,7 @@ export default function CobranzaCuentaDetalle() {
       if (error) throw error;
       toast.success('Multa eliminada');
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al eliminar');
     } finally {
@@ -611,6 +614,7 @@ export default function CobranzaCuentaDetalle() {
       toast.success('Multa actualizada');
       setMultaGestionEditId(null);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al actualizar');
     } finally {
@@ -637,6 +641,7 @@ export default function CobranzaCuentaDetalle() {
       setMultaGestionAddOpen(false);
       setMultaGestionAddForm({ monto: '', descripcion: '', id_tipo_multa: '' });
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al agregar');
     } finally {
@@ -714,6 +719,7 @@ export default function CobranzaCuentaDetalle() {
       toast.success('Cuenta puesta en demanda');
       setDemandaDialog(false);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error');
     } finally {
@@ -736,6 +742,7 @@ export default function CobranzaCuentaDetalle() {
       toast.success('Demanda removida - propiedad vuelve a Vendida');
       setQuitarDemandaDialog(false);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error');
     } finally {
@@ -756,6 +763,7 @@ export default function CobranzaCuentaDetalle() {
       toast.success('Estado de validación actualizado');
       setPagoEvidenciaModal((prev: any) => prev ? { ...prev, validacion: { ...(prev.validacion ?? {}), estado: nuevoEstado } } : null);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al actualizar');
     } finally {
@@ -779,6 +787,7 @@ export default function CobranzaCuentaDetalle() {
         id_metodos_pago: newMetodoId,
       } : null);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al actualizar');
     } finally {
@@ -1464,6 +1473,7 @@ export default function CobranzaCuentaDetalle() {
           onClose={() => setEditCuentaDialog(false)}
           onUpdate={() => {
             queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
           }}
         />
       )}

@@ -2,9 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
 import { navigateWithFilters } from '@/lib/navigationFilters';
-import { useCobranzaDashboard, useProyectosCobranza, useCobranzaPipelineKPIs } from '@/hooks/useCobranzaDashboard';
-import { useBandejaOperativa } from '@/hooks/useBandejaOperativa';
-import { useRelacionPagos } from '@/hooks/useRelacionPagos';
+import { useCobranzaDashboard, useProyectosCobranza, type DuenoOption } from '@/hooks/useCobranzaDashboard';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -86,6 +84,62 @@ function FilterCombobox({ options, value, onChange, placeholder, className }: {
   );
 }
 
+function OwnerMultiCombobox({ options, value, onChange, placeholder, className }: {
+  options: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = value.length === 0 ? (placeholder ?? 'Todos los dueños')
+    : value.length === 1 ? value[0]
+    : `${value.length} dueños`;
+  const toggle = (name: string) =>
+    onChange(value.includes(name) ? value.filter(v => v !== name) : [...value, name]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn('h-9 justify-between text-[13px] font-normal min-w-0', className)}
+        >
+          <span className={cn('truncate', value.length === 0 && 'text-muted-foreground')}>{label}</span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0"
+        align="start"
+        style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '200px' }}
+      >
+        <Command>
+          <CommandInput placeholder="Buscar dueño..." />
+          <CommandList>
+            <CommandEmpty>Sin coincidencias</CommandEmpty>
+            <CommandGroup>
+              {options.map((name) => (
+                <CommandItem key={name} value={name} onSelect={() => toggle(name)}>
+                  <div className={cn(
+                    'mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border',
+                    value.includes(name) ? 'bg-primary border-primary text-primary-foreground' : 'border-input',
+                  )}>
+                    {value.includes(name) && <Check className="h-3 w-3" />}
+                  </div>
+                  <span className="truncate">{name}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function drill(navigate: ReturnType<typeof useNavigate>, path: string, filters: Record<string, string> = {}) {
   navigateWithFilters(navigate, `/admin/portal-cobranza${path}`, { ...filters, from: 'dashboard' });
 }
@@ -96,12 +150,25 @@ export default function CobranzaDashboard() {
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
   const [activeTab, setActiveTab] = useState<DashTab>('resumen');
   const [selectedProyecto, setSelectedProyecto] = useState<number | null>(null);
+  const [selectedDuenos, setSelectedDuenos] = useState<string[]>([]);
+  // La lista de dueños viene DENTRO de la respuesta del RPC (kpis.duenos). Se cachea
+  // en estado para romper la dependencia circular con la query de kpis.
+  const [duenos, setDuenos] = useState<DuenoOption[]>([]);
 
-  const isFiltered = selectedYear !== CURRENT_YEAR || selectedMonth !== CURRENT_MONTH || selectedProyecto !== null;
+  // Nombres seleccionados → unión de todos los entidad_ids de esos dueños.
+  const entidadIds = useMemo(() => {
+    if (selectedDuenos.length === 0 || duenos.length === 0) return null;
+    const sel = new Set(selectedDuenos);
+    const ids = duenos.filter(d => sel.has(d.nombre)).flatMap(d => d.entidadIds);
+    return ids.length > 0 ? ids : null;
+  }, [selectedDuenos, duenos]);
+
+  const isFiltered = selectedYear !== CURRENT_YEAR || selectedMonth !== CURRENT_MONTH || selectedProyecto !== null || selectedDuenos.length > 0;
   const clearFilters = () => {
     setSelectedYear(CURRENT_YEAR);
     setSelectedMonth(CURRENT_MONTH);
     setSelectedProyecto(null);
+    setSelectedDuenos([]);
   };
 
   const fechaInicio = useMemo(() => new Date(selectedYear, selectedMonth - 1, 1).toISOString().slice(0, 10), [selectedYear, selectedMonth]);
@@ -110,18 +177,20 @@ export default function CobranzaDashboard() {
 
   const { data: proyectos } = useProyectosCobranza();
 
-  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto, fechaInicio, fechaFin, null);
-  const accessibleProjectIds = useMemo(() => (proyectos ?? []).map((p: any) => p.id as number), [proyectos]);
-  const { data: pipeline } = useCobranzaPipelineKPIs(selectedProyecto, accessibleProjectIds);
-  const { data: bandejaCuentas } = useBandejaOperativa({ proyectoId: selectedProyecto, soloVencidas: true });
-  const { totalSinCep: cepsSinValidar } = useRelacionPagos({ proyectoId: selectedProyecto, page: 1, pageSize: 1 });
+  const { data: kpis, isLoading, error } = useCobranzaDashboard(selectedProyecto, fechaInicio, fechaFin, entidadIds);
 
-  const clientesCriticos = useMemo(() => {
-    if (!bandejaCuentas) return [];
-    return bandejaCuentas
-      .filter(c => c.prioridad === 'purple')
-      .sort((a, b) => (b.parcialidades_vencidas ?? 0) - (a.parcialidades_vencidas ?? 0));
-  }, [bandejaCuentas]);
+  // El RPC unificado alimenta TODO el dashboard en una sola llamada.
+  const pipeline = kpis?.pipeline ?? null;
+  const cepsSinValidar = kpis?.ceps_sin_validar ?? 0;
+  // clientes_criticos ya viene filtrado (proyecto+dueño) y ordenado (días desc, monto desc) server-side.
+  const clientesCriticos = kpis?.clientes_criticos ?? [];
+
+  // Sincroniza la lista de dueños (viene en la respuesta del RPC) al estado local.
+  useEffect(() => {
+    if (kpis?.duenos) {
+      setDuenos(kpis.duenos.map(d => ({ nombre: d.nombre, entidadIds: d.entidad_ids })));
+    }
+  }, [kpis?.duenos]);
 
   const accessibleIds = useMemo(() => {
     if (!proyectos) return null;
@@ -233,7 +302,7 @@ export default function CobranzaDashboard() {
             />
           </div>
         </div>
-        {/* Proyecto + Limpiar: flex row on mobile, flat in flex on desktop */}
+        {/* Proyecto + Dueño + Limpiar: flex row on mobile, flat in flex on desktop */}
         <div className="flex items-end gap-3 sm:contents">
           <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
@@ -246,6 +315,16 @@ export default function CobranzaDashboard() {
                 ...(proyectos ?? []).map((p: any) => ({ label: p.nombre, value: String(p.id) })),
               ]}
               className="w-full"
+            />
+          </div>
+          <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Dueño</span>
+            <OwnerMultiCombobox
+              options={(duenos ?? []).map(d => d.nombre)}
+              value={selectedDuenos}
+              onChange={setSelectedDuenos}
+              placeholder="Todos los dueños"
+              className="w-full sm:w-[200px]"
             />
           </div>
           <div className="flex flex-col gap-1 shrink-0">
