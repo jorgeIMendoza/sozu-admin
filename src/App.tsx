@@ -101,6 +101,7 @@ const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas
 const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
 const ValidacionPagos = lazyRetry(() => import("./pages/admin/ValidacionPagos"));
 const EstadosCuenta = lazyRetry(() => import("./pages/admin/finanzas/EstadosCuenta"));
+const InformacionFinanciera = lazyRetry(() => import("./pages/admin/finanzas/InformacionFinanciera"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -753,6 +754,7 @@ const App = () => (
                   <Route path="validacion-contratos" element={<ValidacionContratosPDF />} />
                   <Route path="validacion-pagos" element={<ValidacionPagos />} />
                   <Route path="estados-cuenta" element={<EstadosCuenta />} />
+                  <Route path="informacion-financiera" element={<InformacionFinanciera />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
