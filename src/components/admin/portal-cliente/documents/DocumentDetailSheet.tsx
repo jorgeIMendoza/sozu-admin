@@ -41,6 +41,35 @@ function formatDate(iso?: string): string {
   });
 }
 
+function triggerAnchor(href: string, download?: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  if (download) a.download = download;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function downloadFile(url: string, fileName?: string) {
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  if (driveMatch) {
+    triggerAnchor(`https://drive.google.com/uc?export=download&id=${driveMatch[1]}`);
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error();
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    triggerAnchor(objUrl, fileName ?? url.split("/").pop()?.split("?")[0] ?? "archivo");
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+  } catch {
+    triggerAnchor(url);
+  }
+}
+
 const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +93,14 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const TypeIcon = ((Icons as any)[typeInfo.icon] ?? Icons.FileText) as React.ComponentType<{
     className?: string;
   }>;
+
+  const toneIconStyle: Record<string, { bg: string; text: string }> = {
+    warning: { bg: "bg-amber-50", text: "text-amber-600" },
+    primary: { bg: "bg-primary/10", text: "text-primary" },
+    success: { bg: "bg-emerald-50", text: "text-emerald-600" },
+    destructive: { bg: "bg-red-50", text: "text-red-500" },
+  };
+  const iconStyle = toneIconStyle[statusInfo.tone] ?? { bg: "bg-muted", text: "text-muted-foreground" };
   const { data: portfolio = [] } = usePortfolioCliente();
   const inv = portfolio.find((p) => p.property.id === document.propertyId);
   const hasRealUrl = !!document.url && document.url !== "#";
@@ -113,7 +150,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
   const handleDownload = () => {
     if (hasRealUrl) {
-      window.open(document.url, "_blank", "noopener,noreferrer");
+      downloadFile(document.url!, document.fileName);
     } else {
       toast.success(`Descargando ${document.fileName ?? document.name}...`);
     }
@@ -130,7 +167,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
       />
       <button
         onClick={() => fileInputRef.current?.click()}
-        className="w-full rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 transition-colors p-5 flex flex-col items-center gap-2 mb-3"
+        className="w-full rounded-md border-2 border-dashed border-border hover:border-primary/40 hover:bg-muted/30 transition-colors p-5 flex flex-col items-center gap-2 mb-3"
       >
         {uploadedFile ? (
           <>
@@ -162,7 +199,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const renderMetadata = () => {
     if (!document.fileName) return null;
     return (
-      <div className="rounded-xl border border-border bg-muted/20 p-4 mb-4 space-y-2">
+      <div className="rounded-md border border-border bg-muted/20 p-4 mb-4 space-y-2">
         <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
           Detalles del archivo
         </p>
@@ -205,7 +242,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
               <button
                 onClick={handleUpload}
                 disabled={!uploadedFile || submitting}
-                className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
+                className="w-full h-12 rounded-md bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
               >
                 {submitting ? (
                   <>
@@ -239,7 +276,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
             <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{document.rejectionReason}</p>
           )}
           {document.fileName && (
-            <div className="rounded-xl border border-border bg-muted/20 p-3 mb-4 flex items-center gap-3">
+            <div className="rounded-md border border-border bg-muted/20 p-3 mb-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
                 <FileText className="w-4 h-4 text-muted-foreground" />
               </div>
@@ -264,7 +301,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
           <button
             onClick={handleUpload}
             disabled={!uploadedFile || submitting}
-            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-12 rounded-md bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
@@ -298,7 +335,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
       {document.status === "firmado" && (
         <>
-          <div className="rounded-xl bg-success/10 border border-success/20 p-4 mb-4">
+          <div className="rounded-md bg-success/10 border border-success/20 p-4 mb-4">
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-success" />
               <span className="text-[10px] uppercase tracking-widest font-semibold text-success">
@@ -322,7 +359,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
       {/* File preview — mobile only, after details */}
       {!inDialog && hasRealUrl && (
-        <div className="rounded-xl overflow-hidden bg-muted mt-4 border border-border">
+        <div className="rounded-md overflow-hidden bg-muted mt-4 border border-border">
           {isImage ? (
             <img
               src={document.url}
@@ -345,32 +382,26 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const footer = (
     <div className="px-5 pb-8 pt-4 border-t border-border/50 space-y-2 shrink-0">
       {hasRealUrl && (
-        <a
-          href={document.url}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+        <button
+          onClick={() => downloadFile(document.url!, document.fileName)}
+          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-md transition-colors"
         >
           <Download className="w-4 h-4" />
           Descargar
-        </a>
+        </button>
       )}
       {document.nom151ConstancyUrl && (
-        <a
-          href={document.nom151ConstancyUrl}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+        <button
+          onClick={() => downloadFile(document.nom151ConstancyUrl!, "constancia-nom151.pdf")}
+          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-md transition-colors"
         >
           <ShieldCheck className="w-4 h-4" />
           Constancia NOM-151
-        </a>
+        </button>
       )}
       <button
         onClick={onClose}
-        className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
+        className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-md transition-colors"
       >
         Cerrar
       </button>
@@ -379,7 +410,9 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
   const stickyHeader = (
     <div className="sticky top-0 z-20 flex items-center gap-3 px-5 pt-5 pb-4 bg-card border-b border-border shrink-0">
-      <TypeIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+      <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${iconStyle.bg}`}>
+        <TypeIcon className={`w-[18px] h-[18px] ${iconStyle.text}`} />
+      </div>
       <div className="flex-1 min-w-0">
         <h2 className="font-bold text-sm text-foreground leading-tight truncate">
           {document.name}
@@ -394,7 +427,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl [&>button:last-child]:hidden" style={{ maxHeight: "90vh" }}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-md [&>button:last-child]:hidden" style={{ maxHeight: "90vh" }}>
           <div className="flex h-full" style={{ minHeight: hasRealUrl ? "560px" : undefined }}>
             {/* Left preview pane */}
             {hasRealUrl && (
