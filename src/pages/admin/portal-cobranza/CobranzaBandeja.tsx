@@ -370,7 +370,7 @@ export default function BandejaOperativaPage() {
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">
             {isLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : kpis.total.toLocaleString('es-MX')}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">en bandeja operativa</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">en cuentas de cobranza</p>
         </div>
 
         <div className="sozu-kpi-card overflow-hidden">
@@ -555,7 +555,7 @@ export default function BandejaOperativaPage() {
                 return (
                   <tr
                     key={row.cuenta_id}
-                    onClick={() => navigate(`/admin/portal-cobranza/cuenta/${row.cuenta_id}`)}
+                    onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${row.cuenta_id}/detalle`)}
                     className="border-b border-border transition-colors duration-100 cursor-pointer hover:bg-muted/40 h-[48px]"
                   >
                     <td className="pl-3 pr-2">

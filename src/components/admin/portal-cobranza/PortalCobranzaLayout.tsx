@@ -43,8 +43,8 @@ interface CobranzaSubmenu {
 // Íconos por nombre de submenú (estable ante rename de vista_front_end).
 const NAV_ICONS: Record<string, LucideIcon> = {
   "Dashboard": LayoutDashboard,
-  "Bandeja Operativa": Inbox,
-  "Atención de Clientes": FileText,
+  "Cuentas de Cobranza": Inbox,
+  "Atención a Clientes": FileText,
   "Relación de Pagos": CreditCard,
   "CEPs Pendientes": FileCheck,
   "Conciliaciones": AlertTriangle,
@@ -57,27 +57,44 @@ const SUPER_ADMIN_ROLES = new Set([1, 2]);
 
 // Etiquetas de header para rutas de detalle que no aparecen en el nav.
 const DETAIL_SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-cobranza/cuenta": "Detalle de Cuenta",
   "/admin/portal-cobranza/expediente": "Expediente",
 };
 
-// Construye el árbol de navegación desde los submenús de BD.
-// Los submenús bajo /comunicacion/ se agrupan en un desplegable "Comunicación".
-const buildNavItems = (subs: CobranzaSubmenu[]): NavItem[] => {
-  const items: NavItem[] = [];
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+// Agrupaciones fijas del sidebar. El ORDEN de grupos es fijo; los ÍTEMS dentro
+// de cada grupo vienen de BD (orden por `orden`). Submenú no mapeado → "Operación".
+const GROUP_ORDER = ["Operación", "Comunicación", "Herramientas"];
+const GROUP_BY_NOMBRE: Record<string, string> = {
+  "Reportes": "Herramientas",
+};
+
+// Construye los grupos del sidebar desde los submenús de BD.
+// Los submenús bajo /comunicacion/ se anidan en un desplegable dentro de "Comunicación".
+const buildNavGroups = (subs: CobranzaSubmenu[]): NavGroup[] => {
+  const byGroup = new Map<string, NavItem[]>();
+  const push = (group: string, item: NavItem) => {
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group)!.push(item);
+  };
   let comunicacion: NavParent | null = null;
   for (const s of subs) {
     if (s.vista_front_end.includes("/comunicacion/")) {
       if (!comunicacion) {
         comunicacion = { label: "Comunicación", icon: Megaphone, children: [] };
-        items.push(comunicacion);
+        push("Comunicación", comunicacion);
       }
       comunicacion.children.push({ label: s.nombre, path: s.vista_front_end });
     } else {
-      items.push({ label: s.nombre, path: s.vista_front_end, icon: NAV_ICONS[s.nombre] || FileText });
+      const group = GROUP_BY_NOMBRE[s.nombre] || "Operación";
+      push(group, { label: s.nombre, path: s.vista_front_end, icon: NAV_ICONS[s.nombre] || FileText });
     }
   }
-  return items;
+  const ordered = [...GROUP_ORDER, ...[...byGroup.keys()].filter((g) => !GROUP_ORDER.includes(g))];
+  return ordered.filter((g) => byGroup.has(g)).map((g) => ({ label: g, items: byGroup.get(g)! }));
 };
 
 export const PortalCobranzaLayout = () => {
@@ -118,7 +135,7 @@ export const PortalCobranzaLayout = () => {
   // Navegación 100% desde BD (tabla submenus del menú "Portal Cobranza").
   // Sin fallback hardcoded: lo que no esté activo/permitido en BD no aparece,
   // y el path usado es el vista_front_end de BD (revela rutas desincronizadas).
-  const { data: navItems = [], isLoading: navLoading } = useQuery({
+  const { data: navGroups = [], isLoading: navLoading } = useQuery({
     queryKey: ["cobranza-nav", effectiveRoleId, showAll],
     queryFn: async () => {
       const { data: menu } = await (supabase as any)
@@ -149,14 +166,15 @@ export const PortalCobranzaLayout = () => {
       const visible = (subs as CobranzaSubmenu[]).filter(
         (s) => s.vista_front_end && (!allowed || allowed.has(s.id))
       );
-      return buildNavItems(visible);
+      return buildNavGroups(visible);
     },
     enabled: showAll || !!effectiveRoleId,
   });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const sectionFromNav = navItems
+  const sectionFromNav = navGroups
+    .flatMap((g) => g.items)
     .flatMap((i) => (isParent(i) ? i.children : [{ label: i.label, path: i.path }]))
     .find((c) => isActive(c.path))?.label;
   const sectionFromDetail = Object.entries(DETAIL_SECTION_LABELS).find(([p]) => isActive(p))?.[1];
@@ -201,13 +219,18 @@ export const PortalCobranzaLayout = () => {
               <div key={i} className="h-9 rounded-md bg-muted/50 animate-pulse" />
             ))}
           </div>
-        ) : navItems.length === 0 ? (
+        ) : navGroups.length === 0 ? (
           <p className="px-3 py-4 text-[12px] text-muted-foreground">
             Sin menús asignados en BD para este rol.
           </p>
         ) : (
-          <div className="space-y-0.5">
-            {navItems.map((item) => {
+          navGroups.map((group) => (
+          <div key={group.label}>
+            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+            {group.items.map((item) => {
               if (isParent(item)) {
                 const groupActive = item.children.some((c) => isActive(c.path));
                 const expanded = expandedMenu === item.label || groupActive;
@@ -284,7 +307,9 @@ export const PortalCobranzaLayout = () => {
                 </button>
               );
             })}
+            </div>
           </div>
+          ))
         )}
       </nav>
 

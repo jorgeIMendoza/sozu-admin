@@ -1,13 +1,24 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import {
   Copy, ChevronsUpDown, Search, Check, Download, ExternalLink, X,
   LayoutDashboard, Users, Calendar, FileText,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
+
+// Tooltip popup para los iconos de acción de las tablas de pagos.
+export function IconTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" className="text-[11px]">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function fmtCurrency(n: number | null | undefined) {
   if (n == null || isNaN(n)) return '-';
@@ -351,6 +362,7 @@ export interface CuentaDetalleCtx {
   selectedPago: any | null;
   setPagoDialog: (v: boolean) => void;
   setUploadDialog: (v: boolean) => void;
+  openCargarEvidencia: (pago: any) => void;
   setEditCuentaDialog: (v: boolean) => void;
   setDemandaDialog: (v: boolean) => void;
   setQuitarDemandaDialog: (v: boolean) => void;

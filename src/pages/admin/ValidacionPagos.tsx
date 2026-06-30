@@ -15,10 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, Building2, ChevronDown, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileSearch, FileText, FileUp, Loader2, Pencil, XCircle, Receipt,
+  Clock, Eye, FileCheck, FileSearch, FileText, FileUp, Loader2, Pencil, Upload, UploadCloud, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -485,7 +485,10 @@ function EditPagoValidacionModal({ row, onClose }: {
     mutationFn: async () => {
       if (!row) throw new Error("No hay pago seleccionado");
       const { error } = await (supabase as any).from("pago_validaciones")
-        .insert({ id_pago: row.pago_id, estado, motivo: motivo.trim() || null });
+        .upsert(
+          { id_pago: row.pago_id, estado, motivo: motivo.trim() || null },
+          { onConflict: "id_pago" }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
@@ -572,10 +575,134 @@ function EditPagoValidacionModal({ row, onClose }: {
   );
 }
 
+// ── Cargar evidencia / CEP ───────────────────────────────────────────────────
+// Bucket por check "Es CEP"; columna por check "Validado".
+//   validado  → url_cep  ; no validado → url_recibo
+//   es CEP    → bucket 'ceps' ; no CEP   → bucket 'evidencias_efectivo'
+
+function CargarEvidenciaModal({ row, onClose }: {
+  row: PagoRow | null;
+  onClose: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [esValido, setEsValido] = useState(false);
+  const [esCep, setEsCep] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setFile(null); setDragging(false); setEsValido(false); setEsCep(false);
+  }, [row?.pago_id]);
+
+  const bucket = esCep ? "ceps" : "evidencias_efectivo";
+  const columna: "url_cep" | "url_recibo" = esValido ? "url_cep" : "url_recibo";
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Selecciona un archivo");
+      if (!row) throw new Error("No hay pago seleccionado");
+      const ext = file.name.split(".").pop() ?? "bin";
+      const path = `${row.cuenta_id}/${row.pago_id}/${Date.now()}.${ext}`;
+      const { error: se } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+      if (se) throw se;
+      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+      const { error: ue } = await (supabase as any).from("pagos")
+        .update({ [columna]: pub.publicUrl }).eq("id", row.pago_id);
+      if (ue) throw ue;
+      return pub.publicUrl as string;
+    },
+    onSuccess: (url) => {
+      queryClient.setQueryData(["validacion-pagos-all"], (old: PagoRow[] | undefined) => {
+        if (!old || !row) return old;
+        return old.map(r =>
+          r.pago_id === row.pago_id ? { ...r, [columna]: url } : r
+        );
+      });
+      toast({ title: "Evidencia cargada" });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error al subir evidencia", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleClose = () => { if (!mutation.isPending) onClose(); };
+
+  return (
+    <Dialog open={row !== null} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-md w-[95vw] p-0 gap-0">
+        <DialogHeader className="px-5 py-4 border-b">
+          <DialogTitle className="flex items-center gap-2 text-[14px]">
+            <Upload className="size-4 text-muted-foreground" />Cargar evidencia de pago
+          </DialogTitle>
+        </DialogHeader>
+        <div className="px-5 py-4 space-y-4">
+          {row && (
+            <div className="rounded-xl border bg-muted/20 p-3 space-y-0.5">
+              <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{formatCuentaCobranzaId(row.cuenta_id)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Monto: <span className="font-medium text-foreground tabular-nums">{fmtCurrency(row.monto)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Fecha: <span className="font-medium text-foreground">{fmtDate(row.fecha_pago)}</span></p>
+            </div>
+          )}
+
+          {/* Dropzone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
+            className={cn("relative rounded-lg border-2 border-dashed transition-colors",
+              dragging ? "border-primary bg-primary/5" : "border-border bg-muted/30")}
+          >
+            <input
+              type="file" accept=".pdf,.jpg,.jpeg,.png,.xml"
+              onChange={e => setFile(e.target.files?.[0] ?? null)}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+            <div className="flex flex-col items-center justify-center gap-1.5 py-7 px-4 text-center pointer-events-none">
+              {file ? (
+                <>
+                  <FileCheck className="size-7 text-primary" />
+                  <p className="text-[13px] font-medium text-foreground break-all">{file.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · clic para cambiar</p>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="size-7 text-muted-foreground" />
+                  <p className="text-[13px] font-medium text-foreground">Arrastra el archivo aquí</p>
+                  <p className="text-[11px] text-muted-foreground">o haz clic para seleccionar · PDF, imagen o XML</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Checks */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+              <input type="checkbox" checked={esValido} onChange={e => setEsValido(e.target.checked)} className="size-4 accent-primary" />
+              <span className="text-[13px] font-medium text-foreground">Pago validado</span>
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+              <input type="checkbox" checked={esCep} onChange={e => setEsCep(e.target.checked)} className="size-4 accent-primary" />
+              <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+            </label>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={mutation.isPending} className="text-[12px] h-8">Cancelar</Button>
+          <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file} className="text-[12px] h-8">
+            {mutation.isPending && <Loader2 className="size-3.5 animate-spin mr-1.5" />}Cargar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Página principal ───────────────────────────────────────────────────────────
 
 export default function ValidacionPagos() {
-  const { isSuperAdmin } = useAllowedMenus();
+  const { canUpdate } = usePagePermissions("/admin/validacion-pagos");
   const [searchCuenta, setSearchCuenta] = useState("");
   const [searchCliente, setSearchCliente] = useState("");
   const [searchDepto, setSearchDepto] = useState("");
@@ -596,6 +723,7 @@ export default function ValidacionPagos() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("Comprobante de pago");
   const [editRow, setEditRow] = useState<PagoRow | null>(null);
+  const [cargarRow, setCargarRow] = useState<PagoRow | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(searchCuenta.trim()); setCurrentPage(1); }, 350);
@@ -1308,7 +1436,7 @@ export default function ValidacionPagos() {
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell whitespace-nowrap">Fecha pago</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Monto</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Estado</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[100px]">Acciones</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[140px]">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1389,7 +1517,13 @@ export default function ValidacionPagos() {
                           className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                           <Eye className="size-4" />
                         </button>
-                        {isSuperAdmin && (
+                        {canUpdate && (
+                          <button onClick={() => setCargarRow(row)} title="Cargar evidencia / CEP"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                            <Upload className="size-4" />
+                          </button>
+                        )}
+                        {canUpdate && (
                           <button onClick={() => setEditRow(row)} title="Editar validación"
                             className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                             <Pencil className="size-4" />
@@ -1440,6 +1574,7 @@ export default function ValidacionPagos() {
         onClose={() => { setDetallePagoId(null); setDetallePagoRow(null); }}
       />
       <EditPagoValidacionModal row={editRow} onClose={() => setEditRow(null)} />
+      <CargarEvidenciaModal row={cargarRow} onClose={() => setCargarRow(null)} />
     </div>
   );
 }

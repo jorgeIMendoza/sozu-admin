@@ -26,6 +26,47 @@ function isWithin3Months(date: Date): boolean {
 
 export type PdfValidationResult = { ok: true } | { ok: false; reason: string };
 
+function extractMostRecentDate(text: string): Date | null {
+  const dates: Date[] = [];
+  const now = new Date();
+  const norm = normalizeSpaces(text);
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const reDMY = /\b(\d{1,2})[/\-](\d{2})[/\-](\d{4})\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = reDMY.exec(norm)) !== null) {
+    const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+    if (!isNaN(d.getTime()) && d <= now) dates.push(d);
+  }
+
+  // YYYY-MM-DD
+  const reYMD = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+  while ((m = reYMD.exec(norm)) !== null) {
+    const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+    if (!isNaN(d.getTime()) && d <= now) dates.push(d);
+  }
+
+  // DD de MMMM de YYYY
+  const reDMes = /(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})/gi;
+  while ((m = reDMes.exec(norm)) !== null) {
+    const d = parseSpanishDate(m[1], m[2], m[3]);
+    if (d && d <= now) dates.push(d);
+  }
+
+  // MMMM YYYY (billing period)
+  const reMesYear = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(\d{4})\b/gi;
+  while ((m = reMesYear.exec(norm)) !== null) {
+    const monthNum = SPANISH_MONTHS[m[1].toLowerCase()];
+    if (monthNum) {
+      const d = new Date(parseInt(m[2]), monthNum - 1, 1);
+      if (!isNaN(d.getTime()) && d <= now) dates.push(d);
+    }
+  }
+
+  if (dates.length === 0) return null;
+  return dates.reduce((a, b) => (a > b ? a : b));
+}
+
 export function validateCURPPdf(text: string): PdfValidationResult {
   const norm = normalizeSpaces(text);
 
@@ -55,6 +96,31 @@ export function validateCURPPdf(text: string): PdfValidationResult {
       ok: false,
       reason: "La CURP tiene más de 3 meses de antigüedad. Descarga una versión actualizada en gob.mx/curp.",
     };
+  }
+
+  return { ok: true };
+}
+
+export function validateComprobanteDomicilioPdf(text: string): PdfValidationResult {
+  const norm = normalizeSpaces(text);
+  const upper = norm.toUpperCase();
+
+  const KEYWORDS = [
+    "CFE", "TELMEX", "IZZI", "TOTALPLAY", "MEGACABLE", "TELEFONOS",
+    "GAS NATURAL", "AGUA", "BANCO", "CLABE", "ESTADO DE CUENTA",
+    "COMPROBANTE DE DOMICILIO", "DOMICILIO",
+  ];
+  if (!KEYWORDS.some(kw => upper.includes(kw))) {
+    return { ok: false, reason: "El documento no corresponde a un comprobante de domicilio válido (CFE, agua, banco, etc.)." };
+  }
+
+  const date = extractMostRecentDate(norm);
+  if (!date) {
+    return { ok: false, reason: "No se encontró la fecha de emisión en el comprobante de domicilio." };
+  }
+
+  if (!isWithin3Months(date)) {
+    return { ok: false, reason: "El comprobante de domicilio tiene más de 3 meses de antigüedad. Sube uno reciente." };
   }
 
   return { ok: true };
