@@ -132,7 +132,7 @@ import {
     '/admin/portal-cliente/perfil': User,
     // Portal Cobranza
     '/admin/portal-cobranza/dashboard': LayoutDashboard,
-    '/admin/portal-cobranza/bandeja-operativa': ClipboardList,
+    '/admin/portal-cobranza/cuentas-cobranza': ClipboardList,
     '/admin/portal-cobranza/atencion-clientes': Users,
     '/admin/portal-cobranza/relacion-pagos': CreditCard,
     '/admin/portal-cobranza/ceps-pendientes': FileText,
