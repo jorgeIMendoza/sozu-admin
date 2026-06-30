@@ -818,7 +818,7 @@ const App = () => (
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
                   <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
-                  <Route path="portal-cobranza/bandeja-operativa" element={<CobranzaBandeja />} />
+                  <Route path="portal-cobranza/cuentas-cobranza" element={<CobranzaBandeja />} />
                   <Route path="portal-cobranza/atencion-clientes" element={<CobranzaAtencion />} />
                   <Route path="portal-cobranza/relacion-pagos" element={<CobranzaPagos />} />
                   <Route path="portal-cobranza/ceps-pendientes" element={<CobranzaCeps />} />
@@ -831,7 +831,7 @@ const App = () => (
                   <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
                   <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
-                  <Route path="portal-cobranza/cuenta/:id" element={<CobranzaCuentaDetalle />} />
+                  <Route path="portal-cobranza/cuentas-cobranza/:id/detalle" element={<CobranzaCuentaDetalle />} />
                   {/* Portal Estructura de Comisiones */}
                   <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
                   <Route path="portal-estructura-comisiones/dashboard" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />

@@ -310,7 +310,7 @@ export default function CEPsPage() {
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Acciones</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   <ActionBtn icon={Upload} label="Adjuntar CEP" onClick={() => setCepDialogOpen(true)} />
-                  <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/admin/portal-cobranza/cuenta/${selectedCEP.id_cuenta_cobranza}`)} />
+                  <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${selectedCEP.id_cuenta_cobranza}/detalle`)} />
                 </div>
               </div>
             </div>

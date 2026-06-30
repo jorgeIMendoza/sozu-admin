@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import {
   ArrowLeft, Loader2, AlertTriangle, Scale, Upload, Plus, X, Pencil,
-  FileText,
+  FileText, UploadCloud, FileCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -477,6 +477,15 @@ export default function CobranzaCuentaDetalle() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadSaving, setUploadSaving] = useState(false);
 
+  // ── Cargar evidencia de pago (por registro → bucket ceps / evidencias_efectivo) ──
+  const [cargarPagoDialog, setCargarPagoDialog] = useState(false);
+  const [cpTarget, setCpTarget] = useState<any | null>(null); // pago destino
+  const [cpFile, setCpFile] = useState<File | null>(null);
+  const [cpDragging, setCpDragging] = useState(false);
+  const [cpEsValido, setCpEsValido] = useState(false);
+  const [cpEsCep, setCpEsCep] = useState(false);
+  const [cpSaving, setCpSaving] = useState(false);
+
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [pdfPreviewModal, setPdfPreviewModal] = useState<{ url: string; title: string } | null>(null);
   const [demandaDialog, setDemandaDialog] = useState(false);
@@ -678,6 +687,47 @@ export default function CobranzaCuentaDetalle() {
       toast.error(err.message ?? 'Error');
     } finally {
       setUploadSaving(false);
+    }
+  }
+
+  // Bucket por check "Es CEP"; columna por check "Validado".
+  const cpBucket = cpEsCep ? 'ceps' : 'evidencias_efectivo';
+  const cpColumna = cpEsValido ? 'url_cep' : 'url_recibo';
+
+  function cpResetForm() {
+    setCpTarget(null); setCpFile(null); setCpEsValido(false); setCpEsCep(false);
+  }
+
+  function openCargarEvidencia(pago: any) {
+    setCpTarget(pago);
+    setCpFile(null);
+    setCpEsValido(false);
+    setCpEsCep(false);
+    setCargarPagoDialog(true);
+  }
+
+  async function handleCargarPagoSubmit() {
+    if (!cpFile) { toast.error('Arrastra o selecciona un archivo'); return; }
+    if (!cpTarget?.id) { toast.error('No hay pago destino'); return; }
+    setCpSaving(true);
+    try {
+      const ext = cpFile.name.split('.').pop() ?? 'bin';
+      const path = `${cuentaId}/${cpTarget.id}/${Date.now()}.${ext}`;
+      const { error: se } = await supabase.storage.from(cpBucket).upload(path, cpFile, { upsert: true });
+      if (se) throw se;
+      const { data: pub } = supabase.storage.from(cpBucket).getPublicUrl(path);
+      // Columna: validado → url_cep ; no validado → url_recibo (evidencia)
+      const { error: ue } = await (supabase as any).from('pagos')
+        .update({ [cpColumna]: pub.publicUrl }).eq('id', cpTarget.id);
+      if (ue) throw ue;
+      toast.success('Evidencia cargada');
+      setCargarPagoDialog(false);
+      cpResetForm();
+      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al subir evidencia');
+    } finally {
+      setCpSaving(false);
     }
   }
 
@@ -958,6 +1008,7 @@ export default function CobranzaCuentaDetalle() {
     selectedPagoId, setSelectedPagoId, selectedPago,
     setPagoDialog: (v) => setPagoDialog(v),
     setUploadDialog: (v) => setUploadDialog(v),
+    openCargarEvidencia,
     setEditCuentaDialog: (v) => setEditCuentaDialog(v),
     setDemandaDialog: (v) => setDemandaDialog(v),
     setQuitarDemandaDialog: (v) => setQuitarDemandaDialog(v),
@@ -1235,6 +1286,88 @@ export default function CobranzaCuentaDetalle() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
               {uploadSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
               Subir
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Cargar pago (evidencia → bucket) */}
+      <Dialog open={cargarPagoDialog} onOpenChange={(o) => { setCargarPagoDialog(o); if (!o) cpResetForm(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-[15px]">Cargar evidencia de pago</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-1">
+            {/* Dropzone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setCpDragging(true); }}
+              onDragLeave={() => setCpDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setCpDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setCpFile(f); }}
+              className={`relative rounded-lg border-2 border-dashed transition-colors ${cpDragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'}`}
+            >
+              <input
+                id="cp-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.xml"
+                onChange={(e) => setCpFile(e.target.files?.[0] ?? null)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <div className="flex flex-col items-center justify-center gap-1.5 py-7 px-4 text-center pointer-events-none">
+                {cpFile ? (
+                  <>
+                    <FileCheck className="size-7 text-primary" />
+                    <p className="text-[13px] font-medium text-foreground break-all">{cpFile.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{(cpFile.size / 1024).toFixed(0)} KB · clic para cambiar</p>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud className="size-7 text-muted-foreground" />
+                    <p className="text-[13px] font-medium text-foreground">Arrastra el archivo aquí</p>
+                    <p className="text-[11px] text-muted-foreground">o haz clic para seleccionar · PDF, imagen o XML</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Pago destino (registro) */}
+            {cpTarget && (
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12px] space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Método</span>
+                  <span className="font-medium text-foreground">{cpTarget.metodo ?? '—'}</span>
+                </div>
+                {cpTarget.monto != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Monto</span>
+                    <span className="font-medium tabular-nums text-foreground">{fmtCurrency(Number(cpTarget.monto))}</span>
+                  </div>
+                )}
+                {cpTarget.fecha_pago && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Fecha de pago</span>
+                    <span className="font-medium text-foreground">{fmtDate(cpTarget.fecha_pago)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Checks */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" checked={cpEsValido} onChange={(e) => setCpEsValido(e.target.checked)}
+                  className="size-4 accent-primary" />
+                <span className="text-[13px] font-medium text-foreground">Pago validado</span>
+              </label>
+              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" checked={cpEsCep} onChange={(e) => setCpEsCep(e.target.checked)}
+                  className="size-4 accent-primary" />
+                <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => { setCargarPagoDialog(false); cpResetForm(); }}
+              className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancelar</button>
+            <button onClick={handleCargarPagoSubmit} disabled={cpSaving || !cpFile}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              {cpSaving && <Loader2 className="size-3.5 animate-spin" />}
+              Cargar
             </button>
           </DialogFooter>
         </DialogContent>
