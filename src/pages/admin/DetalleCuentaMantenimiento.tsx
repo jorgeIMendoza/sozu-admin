@@ -719,8 +719,12 @@ export default function DetalleCuentaMantenimiento() {
 
   // Botón recalcular mantenimiento: solo ante inconsistencia real (saldo a favor sin aplicar
   // + meses pendientes) Y siendo día 1 del mes (ventana en que n8n aún no aplicó los pagos).
+  // Umbral $1 (no $0.01): el recálculo redondea aplicaciones a 2 decimales y deja residuos de
+  // centavos no aplicables (ej. cuenta 1557 con excedente $0.02 y saldo pendiente real). Esos
+  // centavos no son un saldo a favor real, así que no deben disparar el botón.
+  const UMBRAL_SALDO_A_FAVOR = 1;
   const esInicioDeMes = new Date().getDate() === 1;
-  const hayInconsistenciaMantenimiento = excedente > 0.01 && !!acuerdosPago?.some(a => !a.pago_completado);
+  const hayInconsistenciaMantenimiento = excedente > UMBRAL_SALDO_A_FAVOR && !!acuerdosPago?.some(a => !a.pago_completado);
   const mostrarBotonRecalcular = hayInconsistenciaMantenimiento && esInicioDeMes;
 
   // Find last payment and check if it's STP
