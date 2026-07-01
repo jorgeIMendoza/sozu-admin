@@ -48,6 +48,8 @@ interface PagoRow {
   monto_esperado: number | null;
   monto_real: number | null;
   tipo_nombre: string;
+  id_estatus_disponibilidad: number | null;
+  id_propiedad: number | null;
 }
 
 interface AplicacionDetalle {
@@ -492,7 +494,7 @@ function EditPagoValidacionModal({ row, onClose }: {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.setQueryData(["validacion-pagos-all"], (old: PagoRow[] | undefined) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: PagoRow[] | undefined) => {
         if (!old || !row) return old;
         return old.map(r =>
           r.pago_id === row.pago_id
@@ -613,7 +615,7 @@ function CargarEvidenciaModal({ row, onClose }: {
       return pub.publicUrl as string;
     },
     onSuccess: (url) => {
-      queryClient.setQueryData(["validacion-pagos-all"], (old: PagoRow[] | undefined) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: PagoRow[] | undefined) => {
         if (!old || !row) return old;
         return old.map(r =>
           r.pago_id === row.pago_id ? { ...r, [columna]: url } : r
@@ -745,7 +747,7 @@ export default function ValidacionPagos() {
   // ── Main query ────────────────────────────────────────────────────────────────
 
   const { data: allRows = [], isLoading, isError } = useQuery({
-    queryKey: ["validacion-pagos-all"],
+    queryKey: ["validacion-pagos-all-v2"],
     staleTime: 1000 * 60 * 5,
     queryFn: async (): Promise<PagoRow[]> => {
       const { count: totalPagos } = await (supabase as any)
@@ -846,12 +848,13 @@ export default function ValidacionPagos() {
       const personaIds = [...new Set([...compradorMap.values()])];
 
       const [props, personas] = await Promise.all([
-        inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad", { activo: true }),
+        inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad", { activo: true }),
         inQuery("personas", "id", personaIds, "id, nombre_legal"),
       ]);
 
       const propEMMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_edificio_modelo]));
       const propNumMap = new Map<number, string>(props.map((p: any) => [p.id, p.numero_propiedad]));
+      const propEstatusMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_estatus_disponibilidad]));
       const personaMap = new Map<number, string>(personas.map((p: any) => [p.id, p.nombre_legal]));
 
       const emIds = [...new Set(props.map((p: any) => p.id_edificio_modelo as number).filter(Boolean))];
@@ -908,6 +911,8 @@ export default function ValidacionPagos() {
           monto_esperado: v?.monto_esperado != null ? safeNum(v.monto_esperado) : null,
           monto_real: v?.monto_real != null ? safeNum(v.monto_real) : null,
           tipo_nombre,
+          id_estatus_disponibilidad: propId ? (propEstatusMap.get(propId) ?? null) : null,
+          id_propiedad: propId ?? null,
         };
       });
     },
@@ -979,15 +984,34 @@ export default function ValidacionPagos() {
     return rowsExceptEstado.filter(r => filtroEstados.has(r.estado_validacion ?? "sin_validar"));
   }, [rowsExceptEstado, filtroEstados]);
 
-  // Unidades/propiedades distintas a revisar bajo TODOS los filtros activos (incl. estado).
-  // Clave = proyecto + número de propiedad; filas sin unidad caen a su cuenta de cobranza.
-  const unidadesARevisar = useMemo(() => {
+  // Clave de unidad: proyecto + número de propiedad; filas sin unidad caen a su cuenta.
+  const unidadKey = (r: PagoRow) =>
+    r.id_propiedad != null ? `p:${r.id_propiedad}`
+      : r.numero_propiedad ? `${r.proyecto}||${r.numero_propiedad}`
+      : `cc:${r.cuenta_id}`;
+  const countUnidades = (rows: PagoRow[], pred: (r: PagoRow) => boolean) => {
     const set = new Set<string>();
-    for (const r of filteredRows) {
-      set.add(r.numero_propiedad ? `${r.proyecto}||${r.numero_propiedad}` : `cc:${r.cuenta_id}`);
-    }
+    for (const r of rows) if (pred(r)) set.add(unidadKey(r));
     return set.size;
-  }, [filteredRows]);
+  };
+
+  // Unidades a revisar bajo TODOS los filtros activos (incl. estado).
+  const unidadesARevisar = useMemo(() => countUnidades(filteredRows, () => true), [filteredRows]);
+
+  // Denominador (vendidas) y "listas para escriturar" solo dependen del filtro de proyecto.
+  const ESTATUS_VENDIDAS = new Set([5, 7, 8, 9]); // Vendido, Escrituración, Entregada, Pagada
+  const rowsByProyecto = useMemo(
+    () => filtroProyecto === "todos" ? allRows : allRows.filter(r => r.proyecto === filtroProyecto),
+    [allRows, filtroProyecto]
+  );
+  const vendidasTotal = useMemo(
+    () => countUnidades(rowsByProyecto, r => r.id_estatus_disponibilidad != null && ESTATUS_VENDIDAS.has(r.id_estatus_disponibilidad)),
+    [rowsByProyecto]
+  );
+  const listasEscriturar = useMemo(
+    () => countUnidades(rowsByProyecto, r => r.id_estatus_disponibilidad === 7),
+    [rowsByProyecto]
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -1013,8 +1037,8 @@ export default function ValidacionPagos() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card>
+      <div className="flex flex-wrap gap-4">
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
             <FileSearch className="h-4 w-4 text-muted-foreground" />
@@ -1025,7 +1049,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.coincide > 0 && "border-emerald-200 bg-emerald-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.coincide > 0 && "border-emerald-200 bg-emerald-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.coincide > 0 ? "text-emerald-700" : "text-muted-foreground")}>Coincide</CardTitle>
             <CheckCircle2 className={cn("h-4 w-4", !isLoading && stats.coincide > 0 ? "text-emerald-600" : "text-muted-foreground")} />
@@ -1036,7 +1060,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.error > 0 && "border-red-200 bg-red-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.error > 0 && "border-red-200 bg-red-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.error > 0 ? "text-red-700" : "text-muted-foreground")}>Error</CardTitle>
             <AlertCircle className={cn("h-4 w-4", !isLoading && stats.error > 0 ? "text-red-600" : "text-muted-foreground")} />
@@ -1047,7 +1071,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.noCoincide > 0 && "border-amber-200 bg-amber-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.noCoincide > 0 && "border-amber-200 bg-amber-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.noCoincide > 0 ? "text-amber-700" : "text-muted-foreground")}>No coincide</CardTitle>
             <XCircle className={cn("h-4 w-4", !isLoading && stats.noCoincide > 0 ? "text-amber-600" : "text-muted-foreground")} />
@@ -1058,7 +1082,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Sin validar</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1069,15 +1093,32 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-sky-200 bg-sky-50/40">
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px] border-sky-200 bg-sky-50/40">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-sky-700">Unidades a revisar</CardTitle>
+            <CardTitle className="text-sm font-medium text-sky-700">A revisar</CardTitle>
             <Building2 className="h-4 w-4 text-sky-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold tabular-nums text-sky-700">
-              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : unidadesARevisar.toLocaleString("es-MX")}
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : (
+                <>{unidadesARevisar.toLocaleString("es-MX")}<span className="text-base font-medium text-sky-700/50">/{vendidasTotal.toLocaleString("es-MX")}</span></>
+              )}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">unidades / vendidas</p>
+          </CardContent>
+        </Card>
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px] border-indigo-200 bg-indigo-50/40">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-indigo-700">Listas escriturar</CardTitle>
+            <FileText className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-indigo-700">
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : (
+                <>{listasEscriturar.toLocaleString("es-MX")}<span className="text-base font-medium text-indigo-700/50">/{vendidasTotal.toLocaleString("es-MX")}</span></>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">escrituración / vendidas</p>
           </CardContent>
         </Card>
       </div>
