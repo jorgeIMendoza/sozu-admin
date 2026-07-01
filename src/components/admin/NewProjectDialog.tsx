@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2, Trash2 } from "lucide-react";
+import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2, Trash2, Smartphone } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -74,6 +75,7 @@ const formSchema = z.object({
   instagram_handle: z.string().optional(),
   facebook_handle: z.string().optional(),
   youtube_handle: z.string().optional(),
+  es_app: z.boolean().default(false),
 }).refine((data) => {
   // Si no es tipo Productos, Servicios o Mantenimientos, id_estatus_proyecto es requerido
   if (data.id_tipo_uso !== "9" && data.id_tipo_uso !== "10" && data.id_tipo_uso !== "11") {
@@ -294,6 +296,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         instagram_handle: values.instagram_handle || null,
         facebook_handle: values.facebook_handle || null,
         youtube_handle: values.youtube_handle || null,
+        es_app: values.es_app ?? false,
       };
 
       const { data: newProject, error } = await (supabase as any)
@@ -464,6 +467,26 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
               </TabsList>
               
               <TabsContent value="information" className="mt-6">
+                {/* Toggle es_app */}
+                <FormField
+                  control={form.control}
+                  name="es_app"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-primary" />
+                        <div>
+                          <FormLabel className="text-sm font-medium">Es App</FormLabel>
+                          <p className="text-xs text-muted-foreground">Marca este proyecto como aplicación móvil/app</p>
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="nombre"
