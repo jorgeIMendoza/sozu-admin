@@ -717,6 +717,12 @@ export default function DetalleCuentaMantenimiento() {
   const discrepanciaPagosVsAplicaciones = totalPagado - totalAplicacionesGlobal;
   const hayDiscrepanciaAplicaciones = pagosData && pagosData.length > 0 && aplicacionesPorPago !== undefined && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
 
+  // Botón recalcular mantenimiento: solo ante inconsistencia real (saldo a favor sin aplicar
+  // + meses pendientes) Y siendo día 1 del mes (ventana en que n8n aún no aplicó los pagos).
+  const esInicioDeMes = new Date().getDate() === 1;
+  const hayInconsistenciaMantenimiento = excedente > 0.01 && !!acuerdosPago?.some(a => !a.pago_completado);
+  const mostrarBotonRecalcular = hayInconsistenciaMantenimiento && esInicioDeMes;
+
   // Find last payment and check if it's STP
   const pagosAplicados = acuerdosPago?.flatMap(acuerdo => 
     (acuerdo.aplicaciones || [])
@@ -756,8 +762,9 @@ export default function DetalleCuentaMantenimiento() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button 
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+          <Button
             onClick={async () => {
               if (!cuentaId) return;
               try {
@@ -827,8 +834,9 @@ export default function DetalleCuentaMantenimiento() {
               )}
             </Tooltip>
           </TooltipProvider>
-          {(hayDiscrepanciaAplicaciones || (excedente > 0.01 && acuerdosPago?.some(a => !a.pago_completado))) && (
-            <Button 
+          </div>
+          {mostrarBotonRecalcular && (
+            <Button
               onClick={async () => {
                 setRecalculando(true);
                 try {
