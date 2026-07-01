@@ -14,6 +14,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import JSZip from "jszip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useFacturasDocumentos } from "@/lib/portal-cliente/use-facturas-documentos";
+import { useFacturasMantenimiento } from "@/lib/portal-cliente/use-facturas-mantenimiento";
 import {
   getDocumentStats,
   getStatusInfo,
@@ -95,36 +96,42 @@ async function downloadFacturaZip(
 // ─── Facturas CFDI ────────────────────────────────────────────────────────────
 
 type FacturaEntry = {
-  cuentaId: string;
-  propertyName: string;
-  unitNumber: string;
+  id: string;
+  title: string;
+  subtitle: string;
+  fileBase: string;
   pdf?: string;
   xml?: string;
 };
 
 const FacturasSection = ({
+  title,
   facturas,
   onSelect,
 }: {
+  title: string;
   facturas: FacturaEntry[];
   onSelect: (id: string) => void;
 }) => (
   <section className="px-5 md:px-0 py-1.5">
+    <p className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground mb-2 px-1">
+      {title}
+    </p>
     <div className="rounded-md border border-border overflow-hidden">
       <div className="divide-y divide-border/40">
         {facturas.map((f) => (
           <button
-            key={f.cuentaId}
-            onClick={() => onSelect(f.cuentaId)}
+            key={f.id}
+            onClick={() => onSelect(f.id)}
             className="w-full flex items-center gap-3.5 px-4 py-3.5 bg-card hover:bg-muted/20 transition-colors text-left"
           >
             <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
               <Receipt className="w-4 h-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Factura CFDI</p>
+              <p className="text-sm font-medium text-foreground">{f.title}</p>
               <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                {f.propertyName} · U-{f.unitNumber}
+                {f.subtitle}
               </p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -162,9 +169,9 @@ const FacturaModalContent = ({
         <Receipt className="w-5 h-5 text-primary" />
       </div>
       <div className="flex-1 min-w-0">
-        <h2 className="font-bold text-base text-foreground">Factura CFDI</h2>
+        <h2 className="font-bold text-base text-foreground">{factura.title}</h2>
         <p className="text-xs text-muted-foreground truncate mt-0.5">
-          {factura.propertyName} · Unidad {factura.unitNumber}
+          {factura.subtitle}
         </p>
       </div>
     </div>
@@ -176,7 +183,7 @@ const FacturaModalContent = ({
       <div className={isMobile ? "space-y-2" : "grid grid-cols-2 gap-3"}>
         {factura.pdf && (
           <button
-            onClick={() => downloadFactura(factura.pdf!, `factura-${factura.unitNumber}.pdf`)}
+            onClick={() => downloadFactura(factura.pdf!, `factura-${factura.fileBase}.pdf`)}
             className="w-full flex items-center gap-3 p-3.5 rounded-md border border-border bg-card hover:bg-muted/40 transition-colors text-left group"
           >
             <div className="w-9 h-9 rounded-md bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
@@ -191,7 +198,7 @@ const FacturaModalContent = ({
         )}
         {factura.xml && (
           <button
-            onClick={() => downloadFactura(factura.xml!, `factura-${factura.unitNumber}.xml`)}
+            onClick={() => downloadFactura(factura.xml!, `factura-${factura.fileBase}.xml`)}
             className="w-full flex items-center gap-3 p-3.5 rounded-md border border-border bg-card hover:bg-muted/40 transition-colors text-left group"
           >
             <div className="w-9 h-9 rounded-md bg-blue-100 flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors">
@@ -212,7 +219,7 @@ const FacturaModalContent = ({
     >
       {factura.pdf && factura.xml && (
         <button
-          onClick={() => downloadFacturaZip(factura.pdf, factura.xml, factura.unitNumber)}
+          onClick={() => downloadFacturaZip(factura.pdf, factura.xml, factura.fileBase)}
           className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/15 rounded-md transition-colors"
         >
           <Download className="w-4 h-4" />
@@ -409,9 +416,12 @@ const ClienteDocumentos = () => {
       facturasRaw.map((f) => {
         const inv = portfolio.find((p) => p.property.id === f.cuentaId);
         return {
-          cuentaId: f.cuentaId,
-          propertyName: inv ? inv.property.projectName : `Cuenta ${f.cuentaId}`,
-          unitNumber: inv ? inv.property.unitNumber : "—",
+          id: `prop-${f.cuentaId}`,
+          title: "Factura CFDI",
+          subtitle: inv
+            ? `${inv.property.projectName} · U-${inv.property.unitNumber}`
+            : `Cuenta ${f.cuentaId}`,
+          fileBase: inv ? inv.property.unitNumber : f.cuentaId,
           pdf: f.pdf,
           xml: f.xml,
         };
@@ -419,9 +429,34 @@ const ClienteDocumentos = () => {
     [facturasRaw, portfolio],
   );
 
+  const { data: facturasMantRaw = [] } = useFacturasMantenimiento();
+  const facturasMantenimiento = useMemo(
+    (): FacturaEntry[] =>
+      facturasMantRaw.map((f) => {
+        const fecha = f.fechaPago
+          ? new Date(f.fechaPago).toLocaleDateString("es-MX", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : null;
+        return {
+          id: `mant-${f.pagoId}`,
+          title: "Factura mantenimiento",
+          subtitle: `Pago #${f.pagoId}${fecha ? ` · ${fecha}` : ""}`,
+          fileBase: `mantenimiento-${f.pagoId}`,
+          pdf: f.pdf,
+          xml: f.xml,
+        };
+      }),
+    [facturasMantRaw],
+  );
+
   const selectedFactura =
     selectedFacturaId != null
-      ? (facturas.find((f) => f.cuentaId === selectedFacturaId) ?? null)
+      ? ([...facturas, ...facturasMantenimiento].find(
+          (f) => f.id === selectedFacturaId,
+        ) ?? null)
       : null;
 
   const filteredDocs = useMemo(() => {
@@ -470,15 +505,25 @@ const ClienteDocumentos = () => {
     if (filterStatus !== null) return [];
     if (filterType !== null && filterType !== "cfdi") return [];
     return facturas.filter((f) => {
-      if (filterProperty && f.cuentaId !== filterProperty) return false;
+      if (filterProperty && f.id !== `prop-${filterProperty}`) return false;
       return true;
     });
   }, [facturas, filterType, filterProperty, filterStatus]);
 
+  // Facturas de mantenimiento: sin asociación a una propiedad del portafolio,
+  // por eso se ocultan cuando hay filtro de propiedad activo.
+  const filteredFacturasMantenimiento = useMemo(() => {
+    if (filterStatus !== null) return [];
+    if (filterType !== null && filterType !== "cfdi") return [];
+    if (filterProperty) return [];
+    return facturasMantenimiento;
+  }, [facturasMantenimiento, filterType, filterProperty, filterStatus]);
+
   const showEmptyState =
     !isLoading &&
     filteredDocs.length === 0 &&
-    filteredFacturas.length === 0;
+    filteredFacturas.length === 0 &&
+    filteredFacturasMantenimiento.length === 0;
 
   return (
     <div className="animate-fade-in">
@@ -544,7 +589,18 @@ const ClienteDocumentos = () => {
               />
             ))}
             {filteredFacturas.length > 0 && (
-              <FacturasSection facturas={filteredFacturas} onSelect={setSelectedFacturaId} />
+              <FacturasSection
+                title="Facturas · Propiedad"
+                facturas={filteredFacturas}
+                onSelect={setSelectedFacturaId}
+              />
+            )}
+            {filteredFacturasMantenimiento.length > 0 && (
+              <FacturasSection
+                title="Facturas · Mantenimiento"
+                facturas={filteredFacturasMantenimiento}
+                onSelect={setSelectedFacturaId}
+              />
             )}
           </>
         )}
