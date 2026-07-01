@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
@@ -183,7 +184,7 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
          {/* Brand */}
          <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1 flex-shrink-0">
            <div className="flex items-center justify-between">
-             <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+             <SozuLogo className="h-6" />
              <button
                onClick={onClose}
                className="lg:hidden p-1 rounded-md hover:bg-accent transition-colors"

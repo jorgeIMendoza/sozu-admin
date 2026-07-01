@@ -1,4 +1,4 @@
-import sozuLogo from "@/assets/sozu-logo-black.png";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
 import { ArrowLeft, ChevronRight, LogOut } from "lucide-react";
@@ -41,7 +41,7 @@ export const SidebarContent = ({
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal del cliente
         </p>

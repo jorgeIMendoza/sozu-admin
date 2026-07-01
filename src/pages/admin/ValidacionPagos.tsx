@@ -711,7 +711,7 @@ export default function ValidacionPagos() {
   const [debouncedDepto, setDebouncedDepto] = useState("");
   const [filtroProyecto, setFiltroProyecto] = useState("todos");
   const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set());
-  const [filtroMetodo, setFiltroMetodo] = useState("todos");
+  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set());
   const [searchProyecto, setSearchProyecto] = useState("");
   const [searchMetodo, setSearchMetodo] = useState("");
   const [searchComprobante, setSearchComprobante] = useState("");
@@ -915,13 +915,43 @@ export default function ValidacionPagos() {
 
   // ── Derived state ─────────────────────────────────────────────────────────────
 
+  // Rows filtered by everything EXCEPT estado — base para las cards y para filteredRows.
+  // Las cards reflejan proyecto/cliente/depto/método/tipo/comprobante, pero siguen mostrando
+  // el desglose por estado (no se auto-filtran por el filtro de estado seleccionado).
+  const rowsExceptEstado = useMemo(() => {
+    let rows = allRows;
+    if (debouncedSearch) {
+      const s = debouncedSearch.toLowerCase();
+      rows = rows.filter(r =>
+        String(r.pago_id).includes(s) ||
+        String(r.cuenta_id).includes(s) ||
+        (r.clave_rastreo ?? "").toLowerCase().includes(s)
+      );
+    }
+    if (debouncedCliente) {
+      const s = debouncedCliente.toLowerCase();
+      rows = rows.filter(r => r.cliente.toLowerCase().includes(s));
+    }
+    if (debouncedDepto) {
+      const s = debouncedDepto.trim().toLowerCase();
+      rows = rows.filter(r => (r.numero_propiedad ?? "").toLowerCase() === s);
+    }
+    if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
+    if (filtroMetodos.size > 0) rows = rows.filter(r => filtroMetodos.has(r.id_metodos_pago));
+    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
+    if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
+    if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
+    if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
+    return rows;
+  }, [allRows, debouncedSearch, debouncedCliente, debouncedDepto, filtroProyecto, filtroMetodos, filtroTipos, filtroComprobante]);
+
   const stats = useMemo(() => ({
-    total: allRows.length,
-    coincide: allRows.filter(r => r.estado_validacion === "coincide").length,
-    error: allRows.filter(r => r.estado_validacion === "error").length,
-    noCoincide: allRows.filter(r => r.estado_validacion === "no_coincide").length,
-    sinValidar: allRows.filter(r => r.estado_validacion === null).length,
-  }), [allRows]);
+    total: rowsExceptEstado.length,
+    coincide: rowsExceptEstado.filter(r => r.estado_validacion === "coincide").length,
+    error: rowsExceptEstado.filter(r => r.estado_validacion === "error").length,
+    noCoincide: rowsExceptEstado.filter(r => r.estado_validacion === "no_coincide").length,
+    sinValidar: rowsExceptEstado.filter(r => r.estado_validacion === null).length,
+  }), [rowsExceptEstado]);
 
   const proyectosOptions = useMemo(() =>
     [...new Set(allRows.map(r => r.proyecto).filter(p => p !== "-"))].sort(),
@@ -945,37 +975,19 @@ export default function ValidacionPagos() {
   }, [allRows]);
 
   const filteredRows = useMemo(() => {
-    let rows = allRows;
-    if (debouncedSearch) {
-      const s = debouncedSearch.toLowerCase();
-      rows = rows.filter(r =>
-        String(r.pago_id).includes(s) ||
-        String(r.cuenta_id).includes(s) ||
-        (r.clave_rastreo ?? "").toLowerCase().includes(s)
-      );
+    if (filtroEstados.size === 0) return rowsExceptEstado;
+    return rowsExceptEstado.filter(r => filtroEstados.has(r.estado_validacion ?? "sin_validar"));
+  }, [rowsExceptEstado, filtroEstados]);
+
+  // Unidades/propiedades distintas a revisar bajo TODOS los filtros activos (incl. estado).
+  // Clave = proyecto + número de propiedad; filas sin unidad caen a su cuenta de cobranza.
+  const unidadesARevisar = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of filteredRows) {
+      set.add(r.numero_propiedad ? `${r.proyecto}||${r.numero_propiedad}` : `cc:${r.cuenta_id}`);
     }
-    if (debouncedCliente) {
-      const s = debouncedCliente.toLowerCase();
-      rows = rows.filter(r => r.cliente.toLowerCase().includes(s));
-    }
-    if (debouncedDepto) {
-      const s = debouncedDepto.trim().toLowerCase();
-      rows = rows.filter(r => (r.numero_propiedad ?? "").toLowerCase() === s);
-    }
-    if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
-    if (filtroEstados.size > 0) {
-      rows = rows.filter(r => {
-        const key = r.estado_validacion ?? "sin_validar";
-        return filtroEstados.has(key);
-      });
-    }
-    if (filtroMetodo !== "todos") rows = rows.filter(r => r.id_metodos_pago === Number(filtroMetodo));
-    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
-    if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
-    if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
-    if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
-    return rows;
-  }, [allRows, debouncedSearch, debouncedCliente, debouncedDepto, filtroProyecto, filtroEstados, filtroMetodo, filtroTipos, filtroComprobante]);
+    return set.size;
+  }, [filteredRows]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -1001,7 +1013,7 @@ export default function ValidacionPagos() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
@@ -1054,6 +1066,17 @@ export default function ValidacionPagos() {
           <CardContent>
             <div className="text-2xl font-bold tabular-nums text-muted-foreground">
               {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.sinValidar.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-sky-200 bg-sky-50/40">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-sky-700">Unidades a revisar</CardTitle>
+            <Building2 className="h-4 w-4 text-sky-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-sky-700">
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : unidadesARevisar.toLocaleString("es-MX")}
             </div>
           </CardContent>
         </Card>
@@ -1263,14 +1286,25 @@ export default function ValidacionPagos() {
           );
         })()}
 
-        {/* Método de pago — searchable popover */}
+        {/* Método de pago — multi-select con búsqueda */}
         {(() => {
           const filtrados = metodosOptions.filter(m =>
             m.nombre.toLowerCase().includes(searchMetodo.toLowerCase())
           );
-          const metodoActivo = metodosOptions.find(m => String(m.id) === filtroMetodo);
-          const label = metodoActivo ? metodoActivo.nombre : "Todos";
-          const isActive = filtroMetodo !== "todos";
+          const noneSelected = filtroMetodos.size === 0;
+          const label = noneSelected
+            ? "Todos"
+            : filtroMetodos.size === 1
+              ? metodosOptions.find(m => filtroMetodos.has(m.id))?.nombre ?? "Método"
+              : `${filtroMetodos.size} métodos`;
+          const toggle = (id: number) => {
+            setFiltroMetodos(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+            setCurrentPage(1);
+          };
           return (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground px-0.5">Metodo de pago</span>
@@ -1279,7 +1313,7 @@ export default function ValidacionPagos() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", isActive && "border-primary/40 bg-primary/5")}
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", !noneSelected && "border-primary/40 bg-primary/5")}
                   >
                     <span className="truncate">{label}</span>
                     <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
@@ -1293,25 +1327,24 @@ export default function ValidacionPagos() {
                     className="h-8 text-sm mb-2 w-full"
                   />
                   <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
-                    <button
-                      className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full", filtroMetodo === "todos" && "bg-muted font-medium")}
-                      onClick={() => { setFiltroMetodo("todos"); setCurrentPage(1); }}
-                    >
-                      Todos los metodos
-                    </button>
                     {filtrados.map(m => (
-                      <button
-                        key={m.id}
-                        className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full truncate", filtroMetodo === String(m.id) && "bg-muted font-medium")}
-                        onClick={() => { setFiltroMetodo(String(m.id)); setCurrentPage(1); }}
-                      >
-                        {m.nombre}
-                      </button>
+                      <label key={m.id} className="flex items-center gap-2 rounded px-1.5 py-1.5 hover:bg-muted cursor-pointer select-none">
+                        <Checkbox checked={filtroMetodos.has(m.id)} onCheckedChange={() => toggle(m.id)} className="size-4" />
+                        <span className="text-sm truncate">{m.nombre}</span>
+                      </label>
                     ))}
                     {filtrados.length === 0 && (
                       <p className="text-xs text-muted-foreground px-2 py-2">Sin resultados</p>
                     )}
                   </div></div>
+                  {!noneSelected && (
+                    <button
+                      className="mt-1.5 w-full text-[11px] text-muted-foreground hover:text-foreground text-left px-1.5 py-0.5"
+                      onClick={() => { setFiltroMetodos(new Set()); setCurrentPage(1); }}
+                    >
+                      Limpiar filtro
+                    </button>
+                  )}
                 </PopoverContent>
               </Popover>
             </div>
@@ -1382,7 +1415,7 @@ export default function ValidacionPagos() {
         {(() => {
           const hayFiltros =
             searchCuenta !== "" || searchCliente !== "" || searchDepto !== "" ||
-            filtroProyecto !== "todos" || filtroMetodo !== "todos" || filtroComprobante !== "todos" ||
+            filtroProyecto !== "todos" || filtroMetodos.size > 0 || filtroComprobante !== "todos" ||
             filtroEstados.size > 0 || filtroTipos.size > 0;
           return (
             <div className="flex flex-col gap-1.5 self-end">
@@ -1391,7 +1424,7 @@ export default function ValidacionPagos() {
                 size="sm"
                 onClick={() => {
                   setSearchCuenta(""); setSearchCliente(""); setSearchDepto("");
-                  setFiltroProyecto("todos"); setFiltroMetodo("todos"); setFiltroComprobante("todos");
+                  setFiltroProyecto("todos"); setFiltroMetodos(new Set()); setFiltroComprobante("todos");
                   setFiltroEstados(new Set()); setFiltroTipos(new Set());
                   setCurrentPage(1);
                 }}

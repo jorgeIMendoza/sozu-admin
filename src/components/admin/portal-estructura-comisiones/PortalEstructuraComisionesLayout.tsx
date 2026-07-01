@@ -16,7 +16,8 @@ import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/Sim
 import { InventoryProvider } from "@/lib/portal-estructura-comisiones/stores/InventoryContext";
 import { CompetitorsProvider } from "@/lib/portal-estructura-comisiones/stores/CompetitorsContext";
 import { AmbassadorsProvider as PECAmbassadorsProvider } from "@/lib/portal-estructura-comisiones/stores/AmbassadorsContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 
 interface NavLeaf { label: string; path: string; icon: LucideIcon }
 interface NavParent { label: string; icon: LucideIcon; children: { label: string; path: string }[] }
@@ -109,7 +110,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const sidebarContent = (
     <>
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] text-gray-500">
           Estructura de comisiones
         </p>

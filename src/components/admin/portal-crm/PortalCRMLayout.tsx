@@ -66,7 +66,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,7 +75,6 @@ import { Button } from "@/components/ui/button";
 import { CrmImpersonationSelector } from "./CrmImpersonationSelector";
 import { CrmOrgSwitcher } from "./CrmOrgSwitcher";
 
-const sozuLogo = SOZU_LOGO_URL;
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -295,7 +295,7 @@ export const PortalCRMLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal CRM
         </p>
