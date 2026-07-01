@@ -1,7 +1,32 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCobranzaImpersonation } from '@/contexts/CobranzaImpersonationContext';
+
+export interface DuenoOption {
+  nombre: string;
+  entidadIds: number[];
+}
+
+export interface ClienteCritico {
+  cuenta_id: number;
+  cliente_nombre: string | null;
+  proyecto: string | null;
+  numero_propiedad: string | null;
+  producto_nombre: string | null;
+  tipo_cuenta: 'Propiedad' | 'Producto';
+  parcialidades_vencidas: number;
+  monto_vencido: number;
+  dias_sin_pagar: number;
+}
+
+export interface DashboardPipeline {
+  vendidas: number;
+  listas_escrituracion: number;
+  en_escrituracion: number;
+  entregadas: number;
+  pagadas_completamente: number;
+}
 
 export interface DashboardKPIs {
   cobrado_total: number;
@@ -19,6 +44,12 @@ export interface DashboardKPIs {
   por_proyecto: { proyecto: string; proyecto_id: number; cobrado: number; vencido: number; pendiente: number }[] | null;
   cobrado_mensual: { mes: string; cobrado: number }[] | null;
   programado_mensual: { mes: string; programado: number; programado_sin_ce: number }[] | null;
+  // Secciones unificadas (el RPC alimenta TODO el dashboard en una sola llamada)
+  pipeline: DashboardPipeline | null;
+  ceps_sin_validar: number | null;
+  clientes_criticos: ClienteCritico[] | null;
+  // Dueños SOZU para el filtro (no se filtran por p_entidad_ids). entidad_ids del RPC.
+  duenos: { nombre: string; entidad_ids: number[] }[] | null;
 }
 
 export function useCobranzaDashboard(
@@ -40,6 +71,8 @@ export function useCobranzaDashboard(
       return data as unknown as DashboardKPIs;
     },
     staleTime: 5 * 60 * 1000,
+    // Mantener datos previos al cambiar filtros (evita flash de spinner full-page).
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -60,11 +93,30 @@ export function useProyectosCobranza() {
       if (!effectiveEmail && !hasFullProjectAccess) return [];
 
       if (hasFullProjectAccess) {
-        // Effective Super Admin / Admin see all active projects
+        // Step 1: proyectos con cuenta_madre_stp configurada (operan con SOZU)
+        const { data: erData, error: erErr } = await (supabase as any)
+          .from('entidades_relacionadas')
+          .select('id_proyecto')
+          .not('cuenta_madre_stp', 'is', null)
+          .eq('activo', true);
+        if (erErr) throw erErr;
+        const erpIds = [...new Set(((erData ?? []) as any[]).map((r) => r.id_proyecto as number))];
+        if (!erpIds.length) return [];
+
+        // Step 2: solo proyectos con edificios (desarrollos reales, no cubetas)
+        const { data: edifData, error: edifErr } = await (supabase as any)
+          .from('edificios')
+          .select('id_proyecto')
+          .in('id_proyecto', erpIds);
+        if (edifErr) throw edifErr;
+        const validIds = [...new Set(((edifData ?? []) as any[]).map((e) => e.id_proyecto as number))];
+        if (!validIds.length) return [];
+
+        // Step 3: datos del proyecto
         const { data, error } = await supabase
           .from('proyectos')
           .select('id, nombre')
-          .eq('activo', true)
+          .in('id', validIds)
           .order('nombre');
         if (error) throw error;
         return data ?? [];

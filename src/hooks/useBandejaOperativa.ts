@@ -15,8 +15,9 @@ export interface BandejaCuenta {
   numero_propiedad: string | null;
   modelo: string | null;
   producto_nombre: string | null;
-  tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio';
+  tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio' | 'Mantenimiento';
   parcialidades_vencidas: number;
+  invalidos: number;
   monto_vencido: number;
   saldo_pendiente: number;
   proximo_vencimiento: string | null;

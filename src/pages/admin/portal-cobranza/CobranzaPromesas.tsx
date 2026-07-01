@@ -98,12 +98,12 @@ export default function PromesasPage() {
           <table className="w-full text-sm">
             <thead className="sozu-thead">
               <tr>
-                <th>Cliente</th>
-                <th>Proyecto</th>
-                <th>Fecha Promesa</th>
+                <th className="text-center">Cliente</th>
+                <th className="text-center">Proyecto</th>
+                <th className="text-center">Fecha Promesa</th>
                 <th className="text-center">Monto</th>
-                <th>Canal</th>
-                <th>Registró</th>
+                <th className="text-center">Canal</th>
+                <th className="text-center">Registró</th>
                 <th className="text-center">Estatus</th>
               </tr>
             </thead>
@@ -114,12 +114,12 @@ export default function PromesasPage() {
                   className={`sozu-table-row h-[52px] ${selectedPromise?.id === p.id ? 'bg-primary-muted' : ''}`}
                   onClick={() => setSelectedPromise(p)}
                 >
-                  <td className="px-4 text-[13px] font-medium text-foreground">{p.account.client.name}</td>
-                  <td className="px-4 text-[13px] text-muted-foreground">{p.account.project.name}</td>
-                  <td className="px-4 text-[13px] text-foreground tabular-nums">{formatDate(p.promiseDate)}</td>
+                  <td className="px-4 text-center text-[13px] font-medium text-foreground">{p.account.client.name}</td>
+                  <td className="px-4 text-center text-[13px] text-muted-foreground">{p.account.project.name}</td>
+                  <td className="px-4 text-center text-[13px] text-foreground tabular-nums">{formatDate(p.promiseDate)}</td>
                   <td className="px-4 text-center text-[13px] font-semibold text-foreground tabular-nums">{formatCurrency(p.amount)}</td>
-                  <td className="px-4 text-[13px] text-muted-foreground capitalize">{p.channel.replace('_', ' ')}</td>
-                  <td className="px-4 text-[13px] text-muted-foreground">{p.registeredBy}</td>
+                  <td className="px-4 text-center text-[13px] text-muted-foreground capitalize">{p.channel.replace('_', ' ')}</td>
+                  <td className="px-4 text-center text-[13px] text-muted-foreground">{p.registeredBy}</td>
                   <td className="px-4 text-center"><PromiseStatusBadge status={p.status} /></td>
                 </tr>
               ))}

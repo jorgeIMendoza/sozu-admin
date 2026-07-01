@@ -191,13 +191,13 @@ export default function CEPsPage() {
                   <table className="w-full text-sm">
                     <thead className="sozu-thead">
                       <tr>
-                        <th>Fecha Pago</th>
-                        <th>Cliente</th>
-                        <th>Proyecto</th>
-                        <th>Método</th>
+                        <th className="text-center">Fecha Pago</th>
+                        <th className="text-center">Cliente</th>
+                        <th className="text-center">Proyecto</th>
+                        <th className="text-center">Método</th>
                         <th className="text-center">Monto</th>
-                        <th>Clave rastreo</th>
-                        <th>CLABE</th>
+                        <th className="text-center">Clave rastreo</th>
+                        <th className="text-center">CLABE</th>
                         <th className="text-center" title="Número de aplicaciones del pago a acuerdos de pago">Aplicaciones</th>
                       </tr>
                     </thead>
@@ -209,13 +209,13 @@ export default function CEPsPage() {
                           selectedCEP?.pago_id === r.pago_id && 'bg-primary-muted',
                           sinAplicar && 'border-l-2 border-l-danger bg-danger/[0.03] hover:bg-danger/[0.06]')}
                           onClick={() => setSelectedCEP(r)}>
-                          <td className="px-4 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
-                          <td className="px-4">
+                          <td className="px-4 text-center text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(r.fecha_pago)}</td>
+                          <td className="px-4 text-center">
                             <p className="text-[13px] font-medium text-foreground truncate max-w-[180px]">{r.cliente || 'Sin identificar'}</p>
                             {r.num_propiedad && <p className="text-[11px] text-muted-foreground">Prop. {r.num_propiedad}</p>}
                           </td>
-                          <td className="px-4 text-[13px] text-foreground">{r.proyecto || '—'}</td>
-                          <td className="px-4">
+                          <td className="px-4 text-center text-[13px] text-foreground">{r.proyecto || '—'}</td>
+                          <td className="px-4 text-center">
                             <span className={cn('sozu-chip text-[10px]',
                               r.metodo_pago === 'STP' ? 'bg-info/10 text-info' :
                               r.metodo_pago === 'Transferencia bancaria' ? 'bg-primary/10 text-primary' :
@@ -223,8 +223,8 @@ export default function CEPsPage() {
                             )}>{r.metodo_pago || '—'}</span>
                           </td>
                           <td className="px-4 text-center text-[13px] font-semibold text-foreground tabular-nums">{formatCurrency(Number(r.monto))}</td>
-                          <td className="px-4 font-mono text-[11px] text-muted-foreground truncate max-w-[160px]">{r.clave_rastreo || '—'}</td>
-                          <td className="px-4 font-mono text-[11px] text-muted-foreground truncate max-w-[140px]">{r.clabe_stp || '—'}</td>
+                          <td className="px-4 text-center font-mono text-[11px] text-muted-foreground truncate max-w-[160px]">{r.clave_rastreo || '—'}</td>
+                          <td className="px-4 text-center font-mono text-[11px] text-muted-foreground truncate max-w-[140px]">{r.clabe_stp || '—'}</td>
                           <td className="px-4 text-center">
                             {r.num_aplicaciones > 0
                               ? <span className="sozu-chip bg-success-bg text-success text-[10px]" title={`${r.num_aplicaciones} aplicación(es) — Total aplicado: ${formatCurrency(Number(r.monto_aplicado))}`}>{r.num_aplicaciones}</span>
@@ -310,7 +310,7 @@ export default function CEPsPage() {
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Acciones</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   <ActionBtn icon={Upload} label="Adjuntar CEP" onClick={() => setCepDialogOpen(true)} />
-                  <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/cuenta/${selectedCEP.id_cuenta_cobranza}`)} />
+                  <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${selectedCEP.id_cuenta_cobranza}/detalle`)} />
                 </div>
               </div>
             </div>

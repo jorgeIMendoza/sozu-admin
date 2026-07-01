@@ -210,7 +210,7 @@ export default function InboxPage() {
         {/* Header */}
         <div className="sticky top-0 z-10 bg-background border-b border-border px-5 py-3 space-y-3">
           <div>
-            <h1 className="sozu-page-title">Atención de Clientes</h1>
+            <h1 className="sozu-page-title">Atención a Clientes</h1>
             <p className="text-[12px] text-muted-foreground mt-0.5">CRM de seguimiento por cliente · Casos, agenda y atención personalizada</p>
           </div>
 
@@ -295,7 +295,7 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/cuenta/${selectedCase.accountId}`)} title="Ver expediente">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${selectedCase.accountId}/detalle`)} title="Ver expediente">
                   <Eye className="w-4 h-4" strokeWidth={1.75} />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedCase(null)}>
@@ -373,7 +373,7 @@ export default function InboxPage() {
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Cuentas vinculadas ({clientAccounts.length})</p>
                   <div className="space-y-1.5">
                     {clientAccounts.slice(0, 3).map(({ account, role }) => (
-                      <button key={account.id} onClick={() => navigate(`/cuenta/${account.id}`)}
+                      <button key={account.id} onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${account.id}/detalle`)}
                         className="w-full p-2.5 rounded-lg border border-border-light bg-background hover:bg-muted/30 text-left transition-colors">
                         <div className="flex items-center justify-between mb-0.5">
                           <span className="text-[12px] font-semibold text-foreground">{account.project.name} · {account.unitNumber}</span>
@@ -417,7 +417,7 @@ export default function InboxPage() {
                     <ActionBtn icon={Handshake} label="Crear promesa" onClick={() => handleQuickAction('promesa')} />
                     <ActionBtn icon={ArrowUpRight} label="Escalar caso" variant="destructive" onClick={() => handleQuickAction('escalar')} />
                     <ActionBtn icon={CheckCircle2} label="Marcar resuelto" onClick={() => handleQuickAction('resolver')} />
-                    <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/cuenta/${selectedCase.accountId}`)} />
+                    <ActionBtn icon={Eye} label="Ver expediente" onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${selectedCase.accountId}/detalle`)} />
                   </div>
                 </div>
               </div>
@@ -566,7 +566,7 @@ export default function InboxPage() {
                   {clientAccounts.length === 0 ? (
                     <p className="text-[12px] text-muted-foreground text-center py-6">Sin cuentas vinculadas</p>
                   ) : clientAccounts.map(({ account, role, percentage }) => (
-                    <button key={account.id} onClick={() => navigate(`/cuenta/${account.id}`)}
+                    <button key={account.id} onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${account.id}/detalle`)}
                       className="w-full p-3 rounded-lg border border-border-light bg-background hover:bg-muted/30 text-left transition-colors">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[13px] font-semibold text-foreground">{account.project.name} · {account.unitNumber}</span>

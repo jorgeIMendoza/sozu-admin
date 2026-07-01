@@ -5,7 +5,7 @@ import type { NavTab } from "./BottomNav";
 import { useUnreadCountsByNavTab, useUnreadCount } from "@/lib/offers/notification-data";
 import { filterPortfolioByCategory, mockPortfolio } from "@/lib/offers/mock-data";
 import { useOfferStore } from "@/lib/offers/offer-data";
-import sozuLogo from "@/assets/sozu-logo.png";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -63,7 +63,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 z-30 flex-col bg-sidebar border-r border-border">
       {/* Brand */}
       <div className="px-5 pt-6 pb-5 border-b border-border-soft">
-        <img src={sozuLogo} alt="SOZU" className="h-7 w-auto object-contain dark:invert" />
+        <SozuLogo className="h-7" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground mt-3">
           Portal del inversionista
         </p>

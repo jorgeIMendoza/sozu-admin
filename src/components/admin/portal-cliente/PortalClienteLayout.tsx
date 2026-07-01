@@ -4,6 +4,8 @@ import { Bell, User, LogOut, Phone, Menu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
@@ -13,6 +15,7 @@ import { ClienteImpersonationSelector } from "./ClienteImpersonationSelector";
 import { PortalSearchInput } from "./PortalSearchInput";
 import Sidebar, { SidebarContent } from "./Sidebar";
 import TopBar from "./TopBar";
+import NotificationSheet from "./notifications/NotificationSheet";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 
 function truncateName(full: string, max = 22): string {
@@ -25,12 +28,19 @@ export const PortalClienteLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const showBackToAdmin = profile?.rol_nombre !== "Cliente";
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  const showBackToAdmin = canReturnToAdmin;
   const unreadCount = useUnreadCount();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const [mobileNotifOpen, setMobileNotifOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  // Mismo criterio que ClienteImpersonationSelector: ve el selector cualquier
+  // rol con acceso al portal cliente, no solo super admin.
+  const { isSuperAdmin: menusSuperAdmin, allowedPaths } = useAllowedMenus();
+  const canAccessClientPortal =
+    menusSuperAdmin ||
+    [...allowedPaths].some((p) => p.startsWith("/admin/portal-cliente"));
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -81,6 +91,7 @@ export const PortalClienteLayout = () => {
 
   return (
     <PortalTrackingProvider portal="clientes">
+      <NotificationSheet open={mobileNotifOpen} onOpenChange={setMobileNotifOpen} />
       <div className="inmob-portal min-h-screen flex bg-background [overflow-x:clip]">
         {/* Desktop sidebar */}
         <Sidebar {...sidebarProps} />
@@ -114,7 +125,7 @@ export const PortalClienteLayout = () => {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => navigate("/admin/portal-cliente/notificaciones")}
+                  onClick={() => setMobileNotifOpen(true)}
                   className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                   aria-label="Notificaciones"
                 >
@@ -176,8 +187,8 @@ export const PortalClienteLayout = () => {
               <PortalSearchInput className="w-full" inputHeight="h-9" />
             </div>
 
-            {/* Impersonation (solo superadmin) */}
-            {isSuperAdmin && (
+            {/* Impersonation (cualquier rol con acceso al portal cliente) */}
+            {canAccessClientPortal && (
               <div className="px-4 pb-3 flex items-center gap-2 min-w-0 overflow-hidden">
                 <span className="text-[11px] text-muted-foreground shrink-0">Vista como:</span>
                 <div className="flex-1 min-w-0">
