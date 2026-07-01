@@ -21,7 +21,6 @@ export function ClienteImpersonationSelector() {
     if (p.startsWith('/admin/portal-cliente')) { hasPortalClienteAccess = true; break; }
   }
   const canAccessClientPortal = isSuperAdmin || hasPortalClienteAccess;
-  if (!canAccessClientPortal) return null;
 
   const { data: clients = [] } = useQuery({
     queryKey: ["all-clients-for-impersonation"],
@@ -42,6 +41,11 @@ export function ClienteImpersonationSelector() {
     },
     enabled: canAccessClientPortal,
   });
+
+  // Early return DESPUÉS de todos los hooks (Rules of Hooks): canAccessClientPortal
+  // arranca en false mientras allowedPaths carga y luego pasa a true, así que
+  // retornar antes del useQuery cambiaba el número de hooks entre renders.
+  if (!canAccessClientPortal) return null;
 
   return (
     <div className="flex items-center gap-2 min-w-0">

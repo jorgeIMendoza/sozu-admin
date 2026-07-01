@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
@@ -34,7 +35,12 @@ export const PortalClienteLayout = () => {
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [mobileNotifOpen, setMobileNotifOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  // Mismo criterio que ClienteImpersonationSelector: ve el selector cualquier
+  // rol con acceso al portal cliente, no solo super admin.
+  const { isSuperAdmin: menusSuperAdmin, allowedPaths } = useAllowedMenus();
+  const canAccessClientPortal =
+    menusSuperAdmin ||
+    [...allowedPaths].some((p) => p.startsWith("/admin/portal-cliente"));
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -181,8 +187,8 @@ export const PortalClienteLayout = () => {
               <PortalSearchInput className="w-full" inputHeight="h-9" />
             </div>
 
-            {/* Impersonation (solo superadmin) */}
-            {isSuperAdmin && (
+            {/* Impersonation (cualquier rol con acceso al portal cliente) */}
+            {canAccessClientPortal && (
               <div className="px-4 pb-3 flex items-center gap-2 min-w-0 overflow-hidden">
                 <span className="text-[11px] text-muted-foreground shrink-0">Vista como:</span>
                 <div className="flex-1 min-w-0">
