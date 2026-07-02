@@ -6331,6 +6331,57 @@ export type Database = {
         }
         Relationships: []
       }
+      facturas_mantenimientos: {
+        Row: {
+          facturado: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_cuenta_cobranza: number | null
+          id_pago: number | null
+          monto: number
+          url_factura_pdf: string | null
+          url_factura_xml: string | null
+        }
+        Insert: {
+          facturado?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto: number
+          url_factura_pdf?: string | null
+          url_factura_xml?: string | null
+        }
+        Update: {
+          facturado?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto?: number
+          url_factura_pdf?: string | null
+          url_factura_xml?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facturas_mantenimientos_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "pagos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "facturas_mantenimientos_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_pago"]
+          },
+        ]
+      }
       firmas_digitales: {
         Row: {
           carta_acuerdo_id: string | null
@@ -7291,6 +7342,81 @@ export type Database = {
         }
         Relationships: []
       }
+      notificaciones_cliente: {
+        Row: {
+          activo: boolean
+          categoria: string
+          descartada: boolean
+          descripcion: string
+          email_cliente: string
+          etiqueta_accion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_descarte: string | null
+          fecha_lectura: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          leida: boolean
+          metadata: Json | null
+          tipo: string
+          titulo: string
+          url_accion: string | null
+        }
+        Insert: {
+          activo?: boolean
+          categoria: string
+          descartada?: boolean
+          descripcion: string
+          email_cliente: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo: string
+          titulo: string
+          url_accion?: string | null
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string
+          descartada?: boolean
+          descripcion?: string
+          email_cliente?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo?: string
+          titulo?: string
+          url_accion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificaciones_cliente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificaciones_cliente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
+      }
       notificaciones_configuracion: {
         Row: {
           activo: boolean
@@ -7525,7 +7651,7 @@ export type Database = {
       }
       pago_validaciones: {
         Row: {
-          estado: string
+          estado: string | null
           fecha_creacion: string
           fuente_pdf: string | null
           id: number
@@ -7535,7 +7661,7 @@ export type Database = {
           motivo: string | null
         }
         Insert: {
-          estado: string
+          estado?: string | null
           fecha_creacion?: string
           fuente_pdf?: string | null
           id?: number
@@ -7545,7 +7671,7 @@ export type Database = {
           motivo?: string | null
         }
         Update: {
-          estado?: string
+          estado?: string | null
           fecha_creacion?: string
           fuente_pdf?: string | null
           id?: number
@@ -7558,14 +7684,14 @@ export type Database = {
           {
             foreignKeyName: "pago_validaciones_id_pago_fkey"
             columns: ["id_pago"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "pagos"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "pago_validaciones_id_pago_fkey"
             columns: ["id_pago"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_pago"]
           },
@@ -11711,46 +11837,21 @@ export type Database = {
         }[]
       }
       get_proyectos_publicados: { Args: never; Returns: Json }
-      get_relacion_pagos:
-        | {
-            Args: {
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_metodos_permitidos?: string[]
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_has_aplicaciones?: boolean
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_metodos_permitidos?: string[]
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
+      get_relacion_pagos: {
+        Args: {
+          p_clabe?: string
+          p_cliente?: string
+          p_cuenta?: string
+          p_invalidos?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_prioridades?: string[]
+          p_proyecto_id?: number
+          p_tipos?: string[]
+          p_unidad?: string
+        }
+        Returns: Json
+      }
       get_showrooms_contacto: { Args: never; Returns: Json }
       get_stats_respaldo: { Args: never; Returns: Json }
       get_totales_comisiones_sozu: {
