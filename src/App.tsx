@@ -714,6 +714,7 @@ const App = () => (
                   <Route path="propiedades" element={<Propiedades />} />
                   <Route path="activos-comerciales" element={<ActivosComerciales />} />
                   <Route path="activos-comerciales/nuevo" element={<ActivosComercialesNuevo />} />
+                 <Route path="activos-comerciales/:id/editar" element={<ActivosComercialesNuevo />} />
                   <Route path="usuarios" element={<Usuarios />} />
                   <Route path="usuarios/nuevo" element={<NuevoUsuario />} />
                   <Route path="usuarios-directivos" element={<UsuariosDirectivos />} />
