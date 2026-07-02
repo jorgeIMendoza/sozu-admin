@@ -22,7 +22,8 @@ const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
 const CURRENT_MONTH = _now.getMonth() + 1;
-const YEARS = Array.from({ length: CURRENT_YEAR - 2021 }, (_, i) => 2022 + i);
+// Año actual + 4 previos (5 años). Coincide con la ventana de la serie mensual del RPC.
+const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 4 + i);
 const AGING_COLOR = '#e04444';
 
 type DashTab = 'resumen' | 'riesgo' | 'cobranza' | 'operacion';
@@ -146,8 +147,10 @@ function drill(navigate: ReturnType<typeof useNavigate>, path: string, filters: 
 
 export default function CobranzaDashboard() {
   const navigate = useNavigate();
-  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
-  const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
+  // Sin selección por defecto (null). Vacío → dashboard usa periodo actual y la
+  // gráfica muestra toda la ventana (últimos 5 años). Al elegir año+mes se acota.
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<DashTab>('resumen');
   const [selectedProyecto, setSelectedProyecto] = useState<number | null>(null);
   const [selectedDuenos, setSelectedDuenos] = useState<string[]>([]);
@@ -163,17 +166,24 @@ export default function CobranzaDashboard() {
     return ids.length > 0 ? ids : null;
   }, [selectedDuenos, duenos]);
 
-  const isFiltered = selectedYear !== CURRENT_YEAR || selectedMonth !== CURRENT_MONTH || selectedProyecto !== null || selectedDuenos.length > 0;
+  // Periodo acotado solo cuando hay año Y mes seleccionados.
+  const hasPeriodo = selectedYear !== null && selectedMonth !== null;
+  const isFiltered = selectedYear !== null || selectedMonth !== null || selectedProyecto !== null || selectedDuenos.length > 0;
   const clearFilters = () => {
-    setSelectedYear(CURRENT_YEAR);
-    setSelectedMonth(CURRENT_MONTH);
+    setSelectedYear(null);
+    setSelectedMonth(null);
     setSelectedProyecto(null);
     setSelectedDuenos([]);
   };
 
-  const fechaInicio = useMemo(() => new Date(selectedYear, selectedMonth - 1, 1).toISOString().slice(0, 10), [selectedYear, selectedMonth]);
-  const fechaFin = useMemo(() => new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10), [selectedYear, selectedMonth]);
-  const periodLabel = useMemo(() => `${MONTH_NAMES[selectedMonth - 1].toLowerCase()} ${selectedYear}`, [selectedYear, selectedMonth]);
+  // Sin periodo → null (el RPC usa el mes actual para los KPIs del mes).
+  const fechaInicio = useMemo(() => hasPeriodo ? new Date(selectedYear!, selectedMonth! - 1, 1).toISOString().slice(0, 10) : null, [hasPeriodo, selectedYear, selectedMonth]);
+  const fechaFin = useMemo(() => hasPeriodo ? new Date(selectedYear!, selectedMonth!, 0).toISOString().slice(0, 10) : null, [hasPeriodo, selectedYear, selectedMonth]);
+  const periodLabel = useMemo(() => {
+    const y = selectedYear ?? CURRENT_YEAR;
+    const m = selectedMonth ?? CURRENT_MONTH;
+    return `${MONTH_NAMES[m - 1].toLowerCase()} ${y}`;
+  }, [selectedYear, selectedMonth]);
 
   const { data: proyectos } = useProyectosCobranza();
 
@@ -216,19 +226,27 @@ export default function CobranzaDashboard() {
 
   const chartData = useMemo(() => {
     if (!kpis?.cobrado_mensual) return [];
+    // Con año+mes: ese año, enero → mes seleccionado. Sin selección: toda la ventana (5 años).
     const programadoMap = new Map(
       (kpis.programado_mensual ?? []).map(p => [p.mes, { total: p.programado, sinCe: p.programado_sin_ce }])
     );
-    return kpis.cobrado_mensual.map(c => {
-      const prog = programadoMap.get(c.mes);
-      return {
-        month: c.mes,
-        cobrado: c.cobrado,
-        programado: prog?.total ?? 0,
-        programado_sin_ce: prog?.sinCe ?? 0,
-      };
-    });
-  }, [kpis?.cobrado_mensual, kpis?.programado_mensual]);
+    // Año seleccionado → ese año (enero–diciembre, o enero→mes si además hay mes).
+    const serie = selectedYear != null
+      ? kpis.cobrado_mensual.filter(c =>
+          c.mes >= `${selectedYear}-01` &&
+          c.mes <= `${selectedYear}-${String(selectedMonth ?? 12).padStart(2, '0')}`)
+      : kpis.cobrado_mensual;
+    return serie
+      .map(c => {
+        const prog = programadoMap.get(c.mes);
+        return {
+          month: c.mes,
+          cobrado: c.cobrado,
+          programado: prog?.total ?? 0,
+          programado_sin_ce: prog?.sinCe ?? 0,
+        };
+      });
+  }, [kpis?.cobrado_mensual, kpis?.programado_mensual, hasPeriodo, selectedYear, selectedMonth]);
 
   const getMorosidad = (grupo: string) =>
     kpis?.morosidad?.find(m => m.grupo === grupo)?.cuentas ?? 0;
@@ -286,18 +304,20 @@ export default function CobranzaDashboard() {
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Año</span>
             <FilterCombobox
-              value={String(selectedYear)}
-              onChange={v => setSelectedYear(Number(v))}
-              options={YEARS.map(y => ({ label: String(y), value: String(y) }))}
+              value={selectedYear != null ? String(selectedYear) : ''}
+              onChange={v => setSelectedYear(v ? Number(v) : null)}
+              placeholder="Año"
+              options={[{ label: 'Todos', value: '' }, ...YEARS.map(y => ({ label: String(y), value: String(y) }))]}
               className="w-full sm:w-[100px]"
             />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Mes</span>
             <FilterCombobox
-              value={String(selectedMonth)}
-              onChange={v => setSelectedMonth(Number(v))}
-              options={MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))}
+              value={selectedMonth != null ? String(selectedMonth) : ''}
+              onChange={v => setSelectedMonth(v ? Number(v) : null)}
+              placeholder="Mes"
+              options={[{ label: 'Todos', value: '' }, ...MONTH_NAMES.map((m, i) => ({ label: m, value: String(i + 1) }))]}
               className="w-full sm:w-[148px]"
             />
           </div>
@@ -524,11 +544,11 @@ export default function CobranzaDashboard() {
                 Cobrado vs programado por mes
               </h3>
               <div className="sozu-kpi-card">
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={chartData}>
+                <ResponsiveContainer width="100%" height={230}>
+                  <LineChart data={chartData} margin={{ top: 12, right: 24, left: 12, bottom: 8 }}>
                     <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickMargin={12} padding={{ left: 16, right: 16 }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickMargin={10} width={64} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
                     <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                     <Line type="monotone" dataKey="cobrado" stroke="#17c653" strokeWidth={2} dot={{ r: 3 }} name="Cobrado" />
                     <Line type="monotone" dataKey="programado" stroke="#697280" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Programado (con contraentrega)" />
@@ -811,7 +831,7 @@ export default function CobranzaDashboard() {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
-                onClick={() => drill(navigate, '/ceps-pendientes')}
+                onClick={() => drill(navigate, '/relacion-pagos', { cep: 'sin' })}
                 className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">

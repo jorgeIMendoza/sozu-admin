@@ -135,7 +135,6 @@ import {
     '/admin/portal-cobranza/cuentas-cobranza': ClipboardList,
     '/admin/portal-cobranza/atencion-clientes': Users,
     '/admin/portal-cobranza/relacion-pagos': CreditCard,
-    '/admin/portal-cobranza/ceps-pendientes': FileText,
     '/admin/portal-cobranza/conciliaciones': Activity,
     '/admin/portal-cobranza/promesas-pago': Banknote,
     '/admin/portal-cobranza/comunicacion/avisos': Mail,
