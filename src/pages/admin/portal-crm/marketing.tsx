@@ -32,6 +32,10 @@ import {
 } from "@/components/ui/table";
 import { fmtMXN, fmtNum, fmtPct, fmtDateTime, relTime } from "@/data/portal-crm/mockData";
 import { type DateRange, RANGE_LABEL, rangeToSince } from "@/lib/crm-marketing";
+import {
+  isMetaConfigured, fetchMetaCampaigns, fetchMetaAdAccount,
+  type MetaCampaign,
+} from "@/lib/meta-ads-client";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 
@@ -1001,31 +1005,85 @@ export function CrmMarketingPerformance() {
 // ===================================================================
 // CrmMetaAds
 // ===================================================================
+const STATUS_MAP: Record<MetaCampaign["status"], string> = {
+  active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  paused: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  ended:  "bg-muted text-muted-foreground",
+};
+
 export function CrmMetaAds() {
-  const metaCampaigns = CAMPAIGNS.filter(c => c.platform === "meta_ads");
+  const configured = isMetaConfigured();
+
+  const { data: campaigns, isLoading, error, refetch, isFetching } = useQuery<MetaCampaign[], { message: string }>({
+    queryKey: ["meta-campaigns"],
+    queryFn: fetchMetaCampaigns,
+    enabled: configured,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const { data: account } = useQuery({
+    queryKey: ["meta-account"],
+    queryFn: fetchMetaAdAccount,
+    enabled: configured,
+    staleTime: 60 * 60_000,
+  });
+
+  const rows = campaigns ?? [];
+  const totals = useMemo(() => ({
+    active: rows.filter(c => c.status === "active").length,
+    spend: rows.reduce((s, c) => s + c.spend, 0),
+    leads: rows.reduce((s, c) => s + c.leads, 0),
+    impressions: rows.reduce((s, c) => s + c.impressions, 0),
+    clicks: rows.reduce((s, c) => s + c.clicks, 0),
+  }), [rows]);
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Meta Ads" subtitle="Campañas activas en Facebook / Instagram">
-        <MockBadge />
-        <Button size="sm" variant="outline" onClick={() => toast.info("Sync Meta Ads (mock)")}>
-          <RefreshCw className="w-4 h-4 mr-1" />Sincronizar
+      <PageHeader title="Meta Ads" subtitle="Campañas en Facebook / Instagram — datos en vivo">
+        {!configured && <MockBadge />}
+        {account && (
+          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+            {account.name} · {account.currency}
+          </Badge>
+        )}
+        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching || !configured}>
+          <RefreshCw className={`w-4 h-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+          {isFetching ? "Sincronizando…" : "Sincronizar"}
         </Button>
       </PageHeader>
 
-      <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="font-medium text-amber-800 dark:text-amber-400">Conexión en modo mock</p>
-          <p className="text-amber-700 dark:text-amber-500 text-xs mt-0.5">Para conectar Meta Ads en vivo, configura las credenciales en <strong>Ajustes → Conexiones</strong>.</p>
+      {!configured && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-amber-800 dark:text-amber-400">Sin credenciales — modo mock</p>
+            <p className="text-amber-700 dark:text-amber-500 text-xs mt-0.5">
+              Configura <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">VITE_META_ACCESS_TOKEN</code> y{" "}
+              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">VITE_META_AD_ACCOUNT_ID</code> en{" "}
+              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env.development</code> para ver datos reales.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-3 gap-3">
+      {error && (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-950/20 p-3 flex items-start gap-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-rose-800 dark:text-rose-400">Error Meta Graph API</p>
+            <p className="text-rose-700 dark:text-rose-500 text-xs mt-0.5">{(error as any).message}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { label: "Campañas activas", value: metaCampaigns.filter(c=>c.status==="active").length },
-          { label: "Gasto total", value: fmtMXN(metaCampaigns.reduce((s,c)=>s+c.spend,0)) },
-          { label: "Leads", value: metaCampaigns.reduce((s,c)=>s+c.leads,0) },
+          { label: "Campañas activas", value: isLoading ? "…" : String(totals.active) },
+          { label: "Gasto 30d", value: isLoading ? "…" : fmtMXN(totals.spend) },
+          { label: "Leads 30d", value: isLoading ? "…" : fmtNum(totals.leads) },
+          { label: "Impresiones 30d", value: isLoading ? "…" : fmtNum(totals.impressions) },
+          { label: "Clics 30d", value: isLoading ? "…" : fmtNum(totals.clicks) },
         ].map(k => (
           <Card key={k.label} className="p-3">
             <p className="text-xs text-muted-foreground">{k.label}</p>
@@ -1038,28 +1096,58 @@ export function CrmMetaAds() {
         <Table>
           <TableHeader><TableRow>
             <TableHead>Campaña</TableHead>
+            <TableHead>Objetivo</TableHead>
             <TableHead>Estatus</TableHead>
-            <TableHead className="text-right">Presupuesto</TableHead>
-            <TableHead className="text-right">Gasto</TableHead>
+            <TableHead className="text-right">Presupuesto/día</TableHead>
+            <TableHead className="text-right">Gasto 30d</TableHead>
+            <TableHead className="text-right">Impresiones</TableHead>
+            <TableHead className="text-right">Clics</TableHead>
             <TableHead className="text-right">Leads</TableHead>
-            <TableHead className="text-right">QL</TableHead>
+            <TableHead className="text-right">CTR</TableHead>
             <TableHead className="text-right">CPL</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {metaCampaigns.map(c => (
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 10 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                  {configured ? "Sin campañas en la cuenta" : "Configura credenciales para ver campañas reales"}
+                </TableCell>
+              </TableRow>
+            ) : rows.map(c => (
               <TableRow key={c.id}>
-                <TableCell className="font-medium text-sm truncate max-w-[200px]">{c.name}</TableCell>
-                <TableCell><Badge variant="outline" className="text-xs">{c.status}</Badge></TableCell>
-                <TableCell className="text-right text-sm">{fmtMXN(c.budget)}</TableCell>
+                <TableCell className="font-medium text-sm max-w-[200px] truncate">{c.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{c.objective}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`text-xs border-transparent ${STATUS_MAP[c.status]}`}>
+                    {c.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right text-sm">{c.daily_budget != null ? fmtMXN(c.daily_budget) : "—"}</TableCell>
                 <TableCell className="text-right text-sm">{fmtMXN(c.spend)}</TableCell>
-                <TableCell className="text-right text-sm">{c.leads}</TableCell>
-                <TableCell className="text-right text-sm">{c.ql}</TableCell>
-                <TableCell className="text-right text-sm">{c.leads ? fmtMXN(c.spend/c.leads) : "—"}</TableCell>
+                <TableCell className="text-right text-sm">{fmtNum(c.impressions)}</TableCell>
+                <TableCell className="text-right text-sm">{fmtNum(c.clicks)}</TableCell>
+                <TableCell className="text-right text-sm font-medium">{fmtNum(c.leads)}</TableCell>
+                <TableCell className="text-right text-sm">{fmtPct(c.ctr / 100, 2)}</TableCell>
+                <TableCell className="text-right text-sm">{c.leads ? fmtMXN(c.spend / c.leads) : "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {configured && rows.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {rows.length} campañas · datos últimos 30 días · Meta Graph API v19.0
+        </p>
+      )}
     </div>
   );
 }

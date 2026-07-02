@@ -2,23 +2,33 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Ruler, Map, Maximize2, X } from "lucide-react";
 import type { PropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
+import { FloorPlanCanvas } from "@/components/admin/PlanosPropertyModal";
 
 interface Props {
   propDetalle: PropiedadDetalle;
 }
+
+// Zoom del lightbox: imagen simple (arquitectónico) o canvas de nivel con la unidad resaltada
+type ZoomState =
+  | { kind: "img"; url: string }
+  | { kind: "nivel"; url: string; regiones: any[]; highlightUnit: string; fullPropertyNumber: string };
 
 const FichaTecnicaSection = ({ propDetalle }: Props) => {
   const {
     numeroPiso,
     totalPisos,
     planoUbicacionUrl,
+    planoUbicacionRegiones,
     planoArquitectonico,
     m2Total,
     modelo,
     numeroDepa,
+    unidad,
   } = propDetalle;
 
-  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<ZoomState | null>(null);
+
+  const hasRegiones = Array.isArray(planoUbicacionRegiones) && planoUbicacionRegiones.length > 0;
 
   const hasLocation = numeroPiso != null || planoUbicacionUrl != null;
   const hasDistribution = planoArquitectonico != null;
@@ -74,22 +84,43 @@ const FichaTecnicaSection = ({ propDetalle }: Props) => {
                   <button
                     type="button"
                     aria-label="Ampliar plano de ubicación"
-                    className="group relative w-full rounded-xl overflow-hidden border border-border bg-muted cursor-zoom-in aspect-auto h-full min-h-[260px]"
-                    onClick={() => setZoomUrl(planoUbicacionUrl)}
+                    className="group relative block w-full rounded-xl overflow-hidden border border-border bg-background cursor-zoom-in"
+                    onClick={() =>
+                      setZoom(
+                        hasRegiones
+                          ? {
+                              kind: "nivel",
+                              url: planoUbicacionUrl,
+                              regiones: planoUbicacionRegiones,
+                              highlightUnit: numeroDepa,
+                              fullPropertyNumber: unidad,
+                            }
+                          : { kind: "img", url: planoUbicacionUrl },
+                      )
+                    }
                   >
-                    <img
-                      src={planoUbicacionUrl}
-                      alt="Planta del nivel con la unidad resaltada"
-                      className="w-full h-full object-contain bg-background"
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    {hasRegiones ? (
+                      <FloorPlanCanvas
+                        imageUrl={planoUbicacionUrl}
+                        regiones={planoUbicacionRegiones}
+                        highlightUnit={numeroDepa}
+                        fullPropertyNumber={unidad}
+                      />
+                    ) : (
+                      <img
+                        src={planoUbicacionUrl}
+                        alt="Planta del nivel"
+                        className="block w-full h-auto bg-background"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
                     <span className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/45 backdrop-blur text-white flex items-center justify-center opacity-90 group-hover:opacity-100">
                       <Maximize2 className="w-3.5 h-3.5" />
                     </span>
                   </button>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Planta del nivel · unidad resaltada
+                    {hasRegiones ? "Planta del nivel · tu unidad resaltada" : "Planta del nivel"}
                   </p>
                 </div>
               </div>
@@ -133,7 +164,7 @@ const FichaTecnicaSection = ({ propDetalle }: Props) => {
               type="button"
               aria-label="Ampliar plano arquitectónico"
               className="group relative w-full aspect-[16/10] rounded-xl overflow-hidden border border-border bg-muted cursor-zoom-in"
-              onClick={() => setZoomUrl(planoArquitectonico)}
+              onClick={() => setZoom({ kind: "img", url: planoArquitectonico })}
             >
               <img
                 src={planoArquitectonico}
@@ -166,25 +197,39 @@ const FichaTecnicaSection = ({ propDetalle }: Props) => {
       </p>
 
       {/* Lightbox */}
-      {zoomUrl &&
+      {zoom &&
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setZoomUrl(null)}
+            onClick={() => setZoom(null)}
           >
             <button
-              onClick={(e) => { e.stopPropagation(); setZoomUrl(null); }}
+              onClick={(e) => { e.stopPropagation(); setZoom(null); }}
               className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors"
               aria-label="Cerrar"
             >
               <X className="w-5 h-5 text-white" />
             </button>
-            <img
-              src={zoomUrl}
-              alt="Plano ampliado"
-              className="max-w-full max-h-[90vh] object-contain rounded-xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+            {zoom.kind === "nivel" ? (
+              <div
+                className="w-full max-w-[min(1100px,92vw)] max-h-[90vh] overflow-auto rounded-xl bg-background p-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <FloorPlanCanvas
+                  imageUrl={zoom.url}
+                  regiones={zoom.regiones}
+                  highlightUnit={zoom.highlightUnit}
+                  fullPropertyNumber={zoom.fullPropertyNumber}
+                />
+              </div>
+            ) : (
+              <img
+                src={zoom.url}
+                alt="Plano ampliado"
+                className="max-w-full max-h-[90vh] object-contain rounded-xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
           </div>,
           document.body,
         )}

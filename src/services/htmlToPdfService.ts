@@ -1135,7 +1135,19 @@ class HTMLToPDFService {
           }
         }
 
-        schemes = manualScheme ? [manualScheme] : [];
+        // Manual tiene prioridad: se muestra primero (esquema enviado al cliente)
+        // seguido del resto de esquemas dinámicos aplicables a la propiedad.
+        const { data: otrosEsquemas } = await supabase
+          .from('esquemas_pago')
+          .select('*')
+          .eq('id_proyecto', projectId)
+          .eq('es_manual', false)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        schemes = manualScheme
+          ? [manualScheme, ...(otrosEsquemas || [])]
+          : (otrosEsquemas || []);
       } else {
         // If not manual: show all non-manual schemes from the project
         const { data: nonManualSchemes, error } = await supabase

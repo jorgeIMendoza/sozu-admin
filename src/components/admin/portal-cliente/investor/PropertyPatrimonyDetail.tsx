@@ -118,7 +118,10 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
           ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
             <FichaTecnicaSection propDetalle={propDetalle} />
           ) : null}
-          <UsageSection usage={usage} />
+          {/* Oculto en prod: aún no se maneja renta/cambio de uso */}
+          {import.meta.env.VITE_ENVIRONMENT !== "production" && (
+            <UsageSection usage={usage} />
+          )}
           <PropertyDocuments propertyId={property.id} />
           <ManualsBlock cuentaId={property.id} />
 
