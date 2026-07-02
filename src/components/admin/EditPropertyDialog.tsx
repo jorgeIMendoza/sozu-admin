@@ -258,6 +258,7 @@ export const EditPropertyDialog = ({ property, onClose, onSuccess }: EditPropert
         .from('tipos_propiedad')
         .select('id, nombre')
         .eq('activo', true)
+        .lte('id', 10)
         .order('nombre');
       if (error) throw error;
       return data;

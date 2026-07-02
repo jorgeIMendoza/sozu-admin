@@ -77,6 +77,8 @@ interface UsePropiedadesPaginadasParams {
   esAprobado?: boolean;
   ordenPrecio?: 'asc' | 'desc' | null;
   enabled?: boolean;
+  tipoPropiedadMin?: number | null;
+  tipoPropiedadMax?: number | null;
 }
 
 interface PropiedadRPCResult {
@@ -147,6 +149,8 @@ export function usePropiedadesPaginadas({
   esAprobado = true,
   ordenPrecio,
   enabled = true,
+  tipoPropiedadMin = null,
+  tipoPropiedadMax = null,
 }: UsePropiedadesPaginadasParams) {
   const { 
     accessibleProjectIds, 
@@ -181,6 +185,8 @@ export function usePropiedadesPaginadas({
       hasUnrestrictedAccess,
       accessibleProjectIds,
       ownershipEntityIds,
+      tipoPropiedadMin,
+      tipoPropiedadMax,
     ],
     enabled: enabled && !isLoadingAccess,
     queryFn: async () => {
@@ -206,6 +212,8 @@ export function usePropiedadesPaginadas({
         p_orden_precio: ordenPrecio || null,
         p_accessible_project_ids: hasUnrestrictedAccess ? null : (accessibleProjectIds.length > 0 ? accessibleProjectIds : null),
         p_ownership_entity_ids: isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
+        p_tipo_propiedad_min: tipoPropiedadMin ?? null,
+        p_tipo_propiedad_max: tipoPropiedadMax ?? null,
       });
 
       if (error) {
