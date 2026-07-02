@@ -169,7 +169,6 @@ const Proyectos = () => {
           id_tipo_uso,
           id_estatus_proyecto,
           publicar,
-          es_app,
           direccion_id_pais,
           direccion_id_estado,
           direccion_id_municipio,
@@ -305,7 +304,6 @@ const Proyectos = () => {
           id_tipo_uso,
           id_estatus_proyecto,
           publicar,
-          es_app,
           direccion_id_pais,
           direccion_id_estado,
           direccion_id_municipio,
@@ -517,21 +515,6 @@ const Proyectos = () => {
     }
   };
 
-
-  const handleToggleEsApp = async (projectId: number, currentValue: boolean) => {
-    try {
-      const { error } = await (supabase as any)
-        .from("proyectos")
-        .update({ es_app: !currentValue })
-        .eq("id", projectId);
-      if (error) throw error;
-      refetchActive();
-      refetchDeleted();
-    } catch (error) {
-      console.error("Error toggling es_app:", error);
-      toast.error("Error al cambiar el estado de App");
-    }
-  };
 
   const handleProjectAdded = () => {
     refetchActive();
@@ -791,7 +774,6 @@ const Proyectos = () => {
                 <TableHead>Estatus</TableHead>
                 <TableHead>Comercializada por</TableHead>
                 <TableHead>Publicar</TableHead>
-                <TableHead>App</TableHead>
                 {hasAnyActionPermission && <TableHead>Acciones</TableHead>}
               </TableRow>
             </TableHeader>
@@ -935,13 +917,6 @@ const Proyectos = () => {
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={!!(project as any).es_app}
-                        onCheckedChange={() => handleToggleEsApp(project.id, !!(project as any).es_app)}
-                        disabled={isDeletedTab}
-                      />
                     </TableCell>
                     {hasAnyActionPermission && (
                       <TableCell>
