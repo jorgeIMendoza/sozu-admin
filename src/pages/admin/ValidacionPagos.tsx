@@ -494,14 +494,18 @@ function EditPagoValidacionModal({ row, onClose }: {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: PagoRow[] | undefined) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: { rows: PagoRow[]; readiness: Map<number, boolean> } | undefined) => {
         if (!old || !row) return old;
-        return old.map(r =>
-          r.pago_id === row.pago_id
-            ? { ...r, estado_validacion: estado as PagoRow["estado_validacion"], motivo: motivo.trim() || null }
-            : r
-        );
+        return {
+          ...old,
+          rows: old.rows.map(r =>
+            r.pago_id === row.pago_id
+              ? { ...r, estado_validacion: estado as PagoRow["estado_validacion"], motivo: motivo.trim() || null }
+              : r
+          ),
+        };
       });
+      if (row) queryClient.invalidateQueries({ queryKey: ["pago-detalle-modal", row.pago_id] });
       toast({ title: "Validación guardada" });
       onClose();
     },
@@ -615,12 +619,16 @@ function CargarEvidenciaModal({ row, onClose }: {
       return pub.publicUrl as string;
     },
     onSuccess: (url) => {
-      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: PagoRow[] | undefined) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: { rows: PagoRow[]; readiness: Map<number, boolean> } | undefined) => {
         if (!old || !row) return old;
-        return old.map(r =>
-          r.pago_id === row.pago_id ? { ...r, [columna]: url } : r
-        );
+        return {
+          ...old,
+          rows: old.rows.map(r =>
+            r.pago_id === row.pago_id ? { ...r, [columna]: url } : r
+          ),
+        };
       });
+      if (row) queryClient.invalidateQueries({ queryKey: ["pago-detalle-modal", row.pago_id] });
       toast({ title: "Evidencia cargada" });
       onClose();
     },
@@ -703,22 +711,29 @@ function CargarEvidenciaModal({ row, onClose }: {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 
+// Filtros persistidos en localStorage (sobreviven navegación, F5 y nueva sesión).
+const FILTROS_KEY = "validacion-pagos-filtros";
+function loadFiltros(): any {
+  try { return JSON.parse(localStorage.getItem(FILTROS_KEY) || "{}"); } catch { return {}; }
+}
+
 export default function ValidacionPagos() {
   const { canUpdate } = usePagePermissions("/admin/validacion-pagos");
-  const [searchCuenta, setSearchCuenta] = useState("");
-  const [searchCliente, setSearchCliente] = useState("");
-  const [searchDepto, setSearchDepto] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [debouncedCliente, setDebouncedCliente] = useState("");
-  const [debouncedDepto, setDebouncedDepto] = useState("");
-  const [filtroProyecto, setFiltroProyecto] = useState("todos");
-  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set());
-  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set());
+  const PF = useMemo(loadFiltros, []);
+  const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta ?? "");
+  const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente ?? "");
+  const [searchDepto, setSearchDepto] = useState<string>(PF.searchDepto ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>((PF.searchCuenta ?? "").trim());
+  const [debouncedCliente, setDebouncedCliente] = useState<string>((PF.searchCliente ?? "").trim());
+  const [debouncedDepto, setDebouncedDepto] = useState<string>((PF.searchDepto ?? "").trim());
+  const [filtroProyecto, setFiltroProyecto] = useState<string>(PF.filtroProyecto ?? "todos");
+  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set(PF.filtroEstados ?? []));
+  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set(PF.filtroMetodos ?? []));
   const [searchProyecto, setSearchProyecto] = useState("");
   const [searchMetodo, setSearchMetodo] = useState("");
   const [searchComprobante, setSearchComprobante] = useState("");
-  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set());
-  const [filtroComprobante, setFiltroComprobante] = useState("todos");
+  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set(PF.filtroTipos ?? []));
+  const [filtroComprobante, setFiltroComprobante] = useState<string>(PF.filtroComprobante ?? "todos");
   const [currentPage, setCurrentPage] = useState(1);
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
   const [detallePagoRow, setDetallePagoRow] = useState<PagoRow | null>(null);
@@ -742,7 +757,14 @@ export default function ValidacionPagos() {
     return () => clearTimeout(t);
   }, [searchDepto]);
 
-
+  // Persistir filtros seleccionados (localStorage).
+  useEffect(() => {
+    localStorage.setItem(FILTROS_KEY, JSON.stringify({
+      searchCuenta, searchCliente, searchDepto, filtroProyecto,
+      filtroEstados: [...filtroEstados], filtroMetodos: [...filtroMetodos],
+      filtroTipos: [...filtroTipos], filtroComprobante,
+    }));
+  }, [searchCuenta, searchCliente, searchDepto, filtroProyecto, filtroEstados, filtroMetodos, filtroTipos, filtroComprobante]);
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
