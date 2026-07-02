@@ -22,8 +22,9 @@ const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
 const CURRENT_MONTH = _now.getMonth() + 1;
-// Año actual + 4 previos (5 años). Coincide con la ventana de la serie mensual del RPC.
-const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 4 + i);
+// Año actual + 4 previos (5 años), del más reciente al más viejo. Coincide con la
+// ventana de la serie mensual del RPC.
+const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 const AGING_COLOR = '#e04444';
 
 type DashTab = 'resumen' | 'riesgo' | 'cobranza' | 'operacion';
