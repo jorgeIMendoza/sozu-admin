@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -112,8 +112,12 @@ function CatalogSelect({
 export default function ActivosComercialesNuevo() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { id: routeId } = useParams<{ id: string }>();
+  const editingId = routeId ? Number(routeId) : null;
+  const isEdit = editingId !== null && !Number.isNaN(editingId);
   const [tab, setTab] = useState("general");
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(!isEdit);
 
   const [prop, setProp] = useState<Dict>({
     id_tipo_propiedad: "11",
@@ -140,6 +144,7 @@ export default function ActivosComercialesNuevo() {
     cam_es_porcentaje: false,
     comision_es_porcentaje: true,
   });
+  const [rentaId, setRentaId] = useState<number | null>(null);
 
   const tipo = Number(prop.id_tipo_propiedad);
   const trans = Number(prop.id_tipo_transaccion);
@@ -147,7 +152,69 @@ export default function ActivosComercialesNuevo() {
   const showRenta = trans === 2 || trans === 3;
 
   // Reset atributos al cambiar tipo
-  useEffect(() => setAtts({}), [tipo]);
+  useEffect(() => {
+    if (!isEdit) setAtts({});
+  }, [tipo, isEdit]);
+
+  // Cargar datos existentes en modo edición
+  useEffect(() => {
+    if (!isEdit || !editingId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const { data: p, error: eP } = await (supabase as any)
+          .from("propiedades")
+          .select("*")
+          .eq("id", editingId)
+          .maybeSingle();
+        if (eP) throw eP;
+        if (!p) throw new Error("Activo no encontrado");
+        const tipoId = Number(p.id_tipo_propiedad);
+        const attTable =
+          tipoId === 14
+            ? "propiedades_atributos_terreno"
+            : tipoId === 12
+            ? "propiedades_atributos_oficina"
+            : "propiedades_atributos_comercio";
+
+        const [{ data: pac }, { data: a }, { data: r }] = await Promise.all([
+          (supabase as any).from("propiedades_activo_comercial").select("*").eq("id_propiedad", editingId).maybeSingle(),
+          (supabase as any).from(attTable).select("*").eq("id_propiedad", editingId).maybeSingle(),
+          (supabase as any).from("ofertas_renta").select("*").eq("id_propiedad", editingId).eq("activa", true).maybeSingle(),
+        ]);
+
+        if (cancel) return;
+        setProp({
+          id_tipo_propiedad: String(p.id_tipo_propiedad ?? ""),
+          id_tipo_transaccion: String(p.id_tipo_transaccion ?? "1"),
+          numero_propiedad: p.numero_propiedad ?? "",
+          numero_piso: p.numero_piso ?? "",
+          m2_interiores: p.m2_interiores ?? "",
+          m2_exteriores: p.m2_exteriores ?? "",
+          precio_lista: p.precio_lista ?? "",
+          descripcion: p.descripcion ?? "",
+          url_imagen_portada: p.url_imagen_portada ?? "",
+        });
+        if (pac) setPac(pac);
+        if (a) setAtts(a);
+        if (r) {
+          setRenta({ ...r });
+          setRentaId(r.id ?? null);
+        }
+        setLoaded(true);
+      } catch (e: any) {
+        console.error(e);
+        toast({
+          title: "No se pudo cargar",
+          description: e.message ?? "Error desconocido",
+          variant: "destructive",
+        });
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [isEdit, editingId, toast]);
 
   const setP = (k: string, v: any) => setProp((p) => ({ ...p, [k]: v }));
   const setA = (k: string, v: any) => setAtts((p) => ({ ...p, [k]: v }));
@@ -167,6 +234,12 @@ export default function ActivosComercialesNuevo() {
   async function handleSave() {
     setSaving(true);
     try {
+      if (isEdit && editingId) {
+        await handleUpdate(editingId);
+        toast({ title: "Activo actualizado", description: `ID ${editingId}` });
+        setSaving(false);
+        return;
+      }
       const payload: Dict = {
         propiedad: prop,
         activo_comercial: pac,
@@ -180,16 +253,62 @@ export default function ActivosComercialesNuevo() {
       });
       if (error) throw error;
       toast({ title: "Activo creado", description: `ID ${data}` });
-      navigate(`/admin/activos-comerciales/${data}`);
+      navigate(`/admin/activos-comerciales/${data}/editar`);
     } catch (e: any) {
       console.error(e);
       toast({
-        title: "No se pudo crear",
+        title: isEdit ? "No se pudo actualizar" : "No se pudo crear",
         description: e.message ?? "Error desconocido",
         variant: "destructive",
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdate(id: number) {
+    const toNum = (v: any) => (v === "" || v == null ? null : Number(v));
+    const propUpd = {
+      id_tipo_transaccion: Number(prop.id_tipo_transaccion),
+      numero_propiedad: prop.numero_propiedad || null,
+      numero_piso: prop.numero_piso || null,
+      m2_interiores: toNum(prop.m2_interiores),
+      m2_exteriores: toNum(prop.m2_exteriores),
+      precio_lista: toNum(prop.precio_lista),
+      descripcion: prop.descripcion || null,
+      url_imagen_portada: prop.url_imagen_portada || null,
+    };
+    const { error: e1 } = await (supabase as any).from("propiedades").update(propUpd).eq("id", id);
+    if (e1) throw e1;
+
+    const { error: e2 } = await (supabase as any)
+      .from("propiedades_activo_comercial")
+      .upsert({ ...pac, id_propiedad: id }, { onConflict: "id_propiedad" });
+    if (e2) throw e2;
+
+    const attTable =
+      tipo === 14
+        ? "propiedades_atributos_terreno"
+        : tipo === 12
+        ? "propiedades_atributos_oficina"
+        : "propiedades_atributos_comercio";
+    const { error: e3 } = await (supabase as any)
+      .from(attTable)
+      .upsert({ ...atts, id_propiedad: id }, { onConflict: "id_propiedad" });
+    if (e3) throw e3;
+
+    if (showRenta) {
+      const rentaRow = { ...renta, id_propiedad: id, activa: true };
+      if (rentaId) {
+        const { error: e4 } = await (supabase as any).from("ofertas_renta").update(rentaRow).eq("id", rentaId);
+        if (e4) throw e4;
+      } else {
+        const { data: ins, error: e4 } = await (supabase as any).from("ofertas_renta").insert(rentaRow).select("id").maybeSingle();
+        if (e4) throw e4;
+        if (ins?.id) setRentaId(ins.id);
+      }
+    } else if (rentaId) {
+      await (supabase as any).from("ofertas_renta").update({ activa: false }).eq("id", rentaId);
     }
   }
 
@@ -205,21 +324,29 @@ export default function ActivosComercialesNuevo() {
             <ArrowLeft className="h-4 w-4 mr-1" /> Volver
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Nuevo activo comercial</h1>
+            <h1 className="text-2xl font-bold">
+              {isEdit ? `Editar activo #${editingId}` : "Nuevo activo comercial"}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Alta de local, oficina, bodega o terreno.
+              {isEdit ? "Actualiza los datos del activo comercial." : "Alta de local, oficina, bodega o terreno."}
             </p>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={!canSave || saving}>
+        <Button onClick={handleSave} disabled={!canSave || saving || !loaded}>
           {saving ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <Save className="h-4 w-4 mr-2" />
           )}
-          Guardar activo
+          {isEdit ? "Guardar cambios" : "Guardar activo"}
         </Button>
       </div>
+
+      {isEdit && !loaded && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando activo…
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
@@ -241,6 +368,7 @@ export default function ActivosComercialesNuevo() {
                 <Select
                   value={String(prop.id_tipo_propiedad)}
                   onValueChange={(v) => setP("id_tipo_propiedad", v)}
+                  disabled={isEdit}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

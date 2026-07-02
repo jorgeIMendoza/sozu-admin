@@ -144,7 +144,7 @@ export default function ActivosComerciales() {
                     <TableRow
                       key={r.id}
                       className="cursor-pointer"
-                      onClick={() => navigate(`/admin/activos-comerciales/${r.id}`)}
+                      onClick={() => navigate(`/admin/activos-comerciales/${r.id}/editar`)}
                     >
                       <TableCell className="font-mono text-xs">{r.id}</TableCell>
                       <TableCell>{r.numero_propiedad ?? "-"}</TableCell>
