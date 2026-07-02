@@ -105,9 +105,9 @@ export function clasificarRfcCurp(raw: string | null): { rfc: string | null; cur
 export function derivePld(
   pagos: PagoInfo[],
   precioFinal: number,
-  clienteNombre: string,
-  clienteRfc: string | null,
-  clienteCurp: string | null,
+  clienteNombres: string[],
+  clienteRfcs: string[],
+  clienteCurps: string[],
   valorUma: number,
 ): PldResult {
   const limiteEfectivo = (valorUma || 0) * 8025;
@@ -136,19 +136,20 @@ export function derivePld(
   const hasSinCR    = pagos.some(p => !p.clave_rastreo);
   const hasSinCep   = pagos.some(p => p.clave_rastreo && !p.url_cep);
 
-  const clienteNorm     = normalizarTexto(clienteNombre);
-  const clienteRfcNorm  = normalizarRfc(clienteRfc);
-  const clienteCurpNorm = normalizarRfc(clienteCurp);
+  // Soporta copropiedad: comparar contra TODOS los compradores activos
+  const clienteNormsArr    = clienteNombres.map(n => normalizarTexto(n));
+  const clienteRfcNormsSet = new Set(clienteRfcs.map(r => normalizarRfc(r)).filter((r): r is string => !!r));
+  const clienteCurpNormsSet= new Set(clienteCurps.map(c => normalizarRfc(c)).filter((c): c is string => !!c));
 
-  // ── Regla 1: Nombre ordenante ≠ nombre cliente → PRECAUCIÓN ───────────────
+  // ── Regla 1: Nombre ordenante ≠ ningún comprador → PRECAUCIÓN ────────────
   const seenNombre = new Set<string>();
   const pagosNombreDistinto: OrdenanteDistinto[] = [];
   for (const p of pagos) {
     if (!p.clave_rastreo || !p.nombre_ordenante) continue;
-    if (normalizarTexto(p.nombre_ordenante) === clienteNorm) continue;
-    const key = normalizarTexto(p.nombre_ordenante);
-    if (!seenNombre.has(key)) {
-      seenNombre.add(key);
+    const ordenanteNorm = normalizarTexto(p.nombre_ordenante);
+    if (clienteNormsArr.some(cn => ordenanteNorm === cn)) continue;
+    if (!seenNombre.has(ordenanteNorm)) {
+      seenNombre.add(ordenanteNorm);
       pagosNombreDistinto.push({
         pagoId: p.id,
         monto: p.monto,
@@ -162,10 +163,10 @@ export function derivePld(
   }
   const hasNombreDistinto = pagosNombreDistinto.length > 0;
 
-  // ── Regla 2: RFC/CURP ordenante ≠ RFC/CURP cliente → BLOQUEO ─────────────
+  // ── Regla 2: RFC/CURP ordenante ≠ ningún comprador → BLOQUEO ─────────────
   const hasBuyerSinRfc =
-    !clienteRfcNorm &&
-    !clienteCurpNorm &&
+    clienteRfcNormsSet.size === 0 &&
+    clienteCurpNormsSet.size === 0 &&
     pagos.some(p => p.clave_rastreo && (p.rfc_ordenante || p.curp_ordenante));
 
   const seenRfc = new Set<string>();
@@ -174,10 +175,10 @@ export function derivePld(
     if (!p.clave_rastreo) continue;
     const rawCepVal = p.rfc_ordenante ?? p.curp_ordenante;
     if (!rawCepVal) continue;
-    if (!clienteRfcNorm && !clienteCurpNorm) continue;
+    if (clienteRfcNormsSet.size === 0 && clienteCurpNormsSet.size === 0) continue;
     const cepNorm     = normalizarRfc(rawCepVal);
-    const matchesRfc  = !!clienteRfcNorm  && cepNorm === clienteRfcNorm;
-    const matchesCurp = !!clienteCurpNorm && cepNorm === clienteCurpNorm;
+    const matchesRfc  = clienteRfcNormsSet.has(cepNorm);
+    const matchesCurp = clienteCurpNormsSet.has(cepNorm);
     if (matchesRfc || matchesCurp) continue;
     if (!seenRfc.has(cepNorm)) {
       seenRfc.add(cepNorm);
