@@ -12948,10 +12948,9 @@ export type Database = {
           p_clabe?: string
           p_cliente?: string
           p_cuenta?: string
-          p_invalidos?: string[]
+          p_estatus?: string[]
           p_limit?: number
           p_offset?: number
-          p_prioridades?: string[]
           p_proyecto_id?: number
           p_tipos?: string[]
           p_unidad?: string
