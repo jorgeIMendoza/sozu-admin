@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw, Stamp } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw, Stamp, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -3625,28 +3625,44 @@ export default function DetalleCuentaCobranza() {
               <label className="text-sm font-medium">No. Propiedad</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
             </div>
-            {cuentaDetalle.oferta_id && (
-            <div>
-              <label className="text-sm font-medium">Oferta</label>
+            {cuentaDetalle.oferta_id && (() => {
+              const ofertaSlug = cuentaDetalle.tipo_cuenta === 'Propiedad'
+                ? `O-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`
+                : `OP-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`;
+              return (
               <div>
-                <Button
-                  variant="link"
-                  className="p-0 h-auto text-sm"
-                  disabled={downloadingOferta}
-                  onClick={handleDownloadOferta}
-                >
-                  {downloadingOferta ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 mr-1" />
-                  )}
-                  {cuentaDetalle.tipo_cuenta === 'Propiedad'
-                    ? `O-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`
-                    : `OP-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`}
-                </Button>
+                <label className="text-sm font-medium">Oferta</label>
+                <div className="flex flex-col gap-0.5">
+                  {/* Oferta digital — abre la página pública de la oferta */}
+                  <a
+                    href={`${window.location.origin}/oferta/${ofertaSlug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm text-primary hover:underline"
+                    title="Ver oferta digital"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    {ofertaSlug} <span className="text-muted-foreground ml-1">(digital)</span>
+                  </a>
+                  {/* Oferta PDF — descarga/genera el PDF */}
+                  <button
+                    type="button"
+                    disabled={downloadingOferta}
+                    onClick={handleDownloadOferta}
+                    title="Descargar PDF de oferta"
+                    className="inline-flex items-center text-sm text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingOferta ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-1" />
+                    )}
+                    {ofertaSlug} <span className="text-muted-foreground ml-1">(PDF)</span>
+                  </button>
+                </div>
               </div>
-            </div>
-            )}
+              );
+            })()}
             
             {cuentaDetalle.tipo_cuenta === 'Propiedad' ? (
               <>

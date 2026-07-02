@@ -27,7 +27,7 @@ function mapAmbassador(row: any): Ambassador {
     clavePaisTelefono: row.personas?.clave_pais_telefono ?? 'MX',
     email: row.personas?.email ?? '',
     company: cfg?.empresa ?? undefined,
-    type: Number(cfg?.tipo) || 0,
+    type: Number(cfg?.id_tipo_embajador) || 0,
     status: (cfg?.estatus ?? 'pendiente') as AmbassadorStatus,
     createdAt: row.fecha_creacion ?? new Date().toISOString(),
     code: cfg?.codigo ?? `EMB-${String(row.id).padStart(4, '0')}`,
@@ -176,7 +176,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         id, id_persona, activo, fecha_creacion,
         personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono, clave_pais_telefono),
         embajadores_config(
-          codigo, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
+          codigo, empresa, id_tipo_embajador, pct_comision, monto_fijo, trigger_comision,
           dias_proteccion, notas, estatus, documentos_pago
         )
       `)
@@ -301,7 +301,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       setAmbassadors(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
       const dbPatch: Record<string, any> = {};
       if (patch.company !== undefined) dbPatch.empresa = patch.company;
-      if (patch.type !== undefined) dbPatch.tipo = patch.type;
+      if (patch.type !== undefined) dbPatch.id_tipo_embajador = patch.type;
       if (patch.status !== undefined) dbPatch.estatus = patch.status;
       if (patch.commissionPct !== undefined) dbPatch.pct_comision = patch.commissionPct;
       if (patch.fixedAmount !== undefined) dbPatch.monto_fijo = patch.fixedAmount;
