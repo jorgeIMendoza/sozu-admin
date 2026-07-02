@@ -620,6 +620,9 @@ const Propiedades = () => {
         query = query.eq('activo', false);
       }
 
+      // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+      query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
+
       // Precio es columna directa → filtrar server-side (columna real, no requiere fetch completo).
       if (precioFilterIsActive) {
         query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
