@@ -935,7 +935,13 @@ export function PldDashboard() {
             hasCepSinRfc, hasBuyerSinRfc,
             hasOrdenanteDistinto, pagosOrdenanteDistinto,
             escrituraBloqueada, totalPagado,
-          } = derivePld(pagos, cuenta.precio_final, clienteNombre, clienteRfc, clienteCurp, valorUma);
+          } = derivePld(
+            pagos, cuenta.precio_final,
+            clienteNombre ? [clienteNombre] : [],
+            clienteRfc    ? [clienteRfc]    : [],
+            clienteCurp   ? [clienteCurp]   : [],
+            valorUma,
+          );
           return {
             cuentaId: cuenta.id,
             cuentaLabel: `CC-${String(cuenta.id).padStart(6, '0')}`,
