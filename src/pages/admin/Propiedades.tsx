@@ -567,22 +567,7 @@ const Propiedades = () => {
   
   // Hook reutilizable para exportación
   const { exportToExcel, isExporting } = useExportToExcel();
-  
-  // Verificar si hay filtros activos
-  const hasActiveFilters = 
-    selectedProyectos.length > 0 ||
-    selectedModelos.length > 0 ||
-    recamarasFilter !== null ||
-    banosFilter !== "" ||
-    disponibilidadFilter.length > 0 ||
-    tipoTransaccionFilter.length > 0 ||
-    bodegasFilter !== "" ||
-    estacionamientosFilter !== "" ||
-    cuentaCobranzaFilter !== "" ||
-    areaFilter[0] !== 0 || areaFilter[1] !== 500 ||
-    precioFilter[0] !== 0 || precioFilter[1] !== 100000000 ||
-    searchTerm !== "";
-  
+
   // Función para exportar a Excel - obtiene TODOS los datos filtrados sin paginación
   const handleExportToExcel = async () => {
     try {
@@ -633,6 +618,11 @@ const Propiedades = () => {
         query = query.eq('activo', true).eq('es_aprobado', false);
       } else {
         query = query.eq('activo', false);
+      }
+
+      // Precio es columna directa → filtrar server-side (columna real, no requiere fetch completo).
+      if (precioFilterIsActive) {
+        query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
       }
 
       // Aplicar búsqueda - buscar por proyecto, edificio, propietario, o número de propiedad
@@ -814,7 +804,7 @@ const Propiedades = () => {
         });
       }
 
-      if (precioFilter[0] !== 0 || precioFilter[1] !== 100000000) {
+      if (precioFilterIsActive) {
         filteredData = filteredData.filter(p => {
           return p.precio_lista >= precioFilter[0] && p.precio_lista <= precioFilter[1];
         });
@@ -968,34 +958,66 @@ const Propiedades = () => {
   const { data: precioRange } = useQuery({
     queryKey: ['precio-range-filter', accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      let query = supabase
-        .from('propiedades')
-        .select('precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id, id_tipo_uso)))')
-        .eq('activo', true)
-        .eq('es_aprobado', true)
-        .gt('precio_lista', 0);
-      
-      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-        query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
-      }
+      // Select con join para poder filtrar por proyectos accesibles (usuarios restringidos).
+      const selectWithJoin =
+        'precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id)))';
 
-      const { data, error } = await query.order('precio_lista', { ascending: true }).limit(1);
-      const { data: dataMax } = await supabase
-        .from('propiedades')
-        .select('precio_lista')
-        .eq('activo', true)
-        .eq('es_aprobado', true)
-        .gt('precio_lista', 0)
-        .order('precio_lista', { ascending: false })
-        .limit(1);
+      const applyFilters = (q: any) => {
+        q = q.eq('activo', true).eq('es_aprobado', true).gt('precio_lista', 0);
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          q = q.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        }
+        return q;
+      };
 
-      const minPrice = data?.[0]?.precio_lista || 0;
-      const maxPrice = dataMax?.[0]?.precio_lista || 100000000;
+      // Total de propiedades elegibles: se usa para ubicar los percentiles por posición.
+      const { count } = await applyFilters(
+        supabase.from('propiedades').select(selectWithJoin, { count: 'exact', head: true })
+      );
+      const n = count || 0;
+      if (n === 0) return { min: 0, max: 100000000 };
+
+      // Percentil 1 y 99 por offset: recorta outliers extremos ($1, $2.69B) que arruinan el slider.
+      const idxLow = Math.min(Math.floor(n * 0.01), n - 1);
+      const idxHigh = Math.min(Math.floor(n * 0.99), n - 1);
+
+      const fetchAt = async (idx: number): Promise<number | null> => {
+        const { data } = await applyFilters(supabase.from('propiedades').select(selectWithJoin))
+          .order('precio_lista', { ascending: true })
+          .range(idx, idx);
+        return (data?.[0] as any)?.precio_lista ?? null;
+      };
+
+      const [p1, p99] = await Promise.all([fetchAt(idxLow), fetchAt(idxHigh)]);
+      const minPrice = p1 ?? 0;
+      const maxPrice = p99 ?? 100000000;
       return { min: Math.floor(minPrice), max: Math.ceil(maxPrice) };
     },
     enabled: !isLoadingAccess,
     staleTime: 5 * 60 * 1000,
   });
+
+  // El rango de precio se auto-inicializa a [min,max] reales de la BD, que nunca igualan los
+  // centinelas [0, 100000000]. Por eso NO se puede detectar "precio filtrado" comparando contra
+  // los centinelas (daría siempre true → needsFullFetch true → listado capado a 1000 filas).
+  // Solo cuenta como filtro activo si el usuario estrechó el rango respecto al real.
+  const precioFilterIsActive =
+    !!precioRange && (precioFilter[0] > precioRange.min || precioFilter[1] < precioRange.max);
+
+  // Verificar si hay filtros activos
+  const hasActiveFilters =
+    selectedProyectos.length > 0 ||
+    selectedModelos.length > 0 ||
+    recamarasFilter !== null ||
+    banosFilter !== "" ||
+    disponibilidadFilter.length > 0 ||
+    tipoTransaccionFilter.length > 0 ||
+    bodegasFilter !== "" ||
+    estacionamientosFilter !== "" ||
+    cuentaCobranzaFilter !== "" ||
+    areaFilter[0] !== 0 || areaFilter[1] !== 500 ||
+    precioFilterIsActive ||
+    searchTerm !== "";
 
   // Debounce filtros de sliders y búsqueda de modelos
   useEffect(() => {
@@ -2170,15 +2192,18 @@ const Propiedades = () => {
           }
         }
 
-        // Determine if we need full fetch for local filtering
+        // Precio es columna directa → filtrar server-side evita el tope de 1000 filas del fetch cliente.
+        if (precioFilterIsActive) {
+          query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
+        }
+
+        // Determine if we need full fetch for local filtering (solo filtros no expresables en SQL)
         const needsFullFetch =
           bodegasFilter !== "" ||
           estacionamientosFilter !== "" ||
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) || // Need local filter for "no"
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
           precioSort !== null;
 
         let enrichedData;
@@ -2594,8 +2619,7 @@ const Propiedades = () => {
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) ||
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
+          precioFilterIsActive ||
           precioSort !== null;
 
         let enrichedData;
@@ -3011,8 +3035,7 @@ const Propiedades = () => {
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) ||
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
+          precioFilterIsActive ||
           precioSort !== null;
 
         let enrichedData;
@@ -3950,8 +3973,7 @@ const Propiedades = () => {
     cuentaCobranzaFilter !== "" ||
     areaFilter[0] !== 0 ||
     areaFilter[1] !== 500 ||
-    precioFilter[0] !== 0 ||
-    precioFilter[1] !== 100000000;
+    precioFilterIsActive;
 
   const totalActivePage = Math.ceil((hasClientSideFilters ? filteredActivosCount : totalActivosCount) / itemsPerPage);
   const totalDraftPage = Math.ceil((hasClientSideFilters ? filteredDraftCount : totalDraftCount) / itemsPerPage);
