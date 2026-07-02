@@ -746,10 +746,10 @@ export default function ValidacionPagos() {
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
-  const { data: allRows = [], isLoading, isError } = useQuery({
+  const { data: queryData, isLoading, isError } = useQuery({
     queryKey: ["validacion-pagos-all-v2"],
     staleTime: 1000 * 60 * 5,
-    queryFn: async (): Promise<PagoRow[]> => {
+    queryFn: async (): Promise<{ rows: PagoRow[]; readiness: Map<number, boolean> }> => {
       const { count: totalPagos } = await (supabase as any)
         .from("pagos").select("*", { count: "exact", head: true }).eq("activo", true);
 
@@ -780,7 +780,7 @@ export default function ValidacionPagos() {
         inQuery("pago_validaciones", "id_pago", pagoIds,
           "id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion"),
         inQuery("cuentas_cobranza", "id", cuentaIds,
-          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre", { activo: true }),
+          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true }),
       ]);
 
       validacionesRaw.sort((a: any, b: any) =>
@@ -801,7 +801,7 @@ export default function ValidacionPagos() {
       const cuentaIdsSet = new Set(cuentaIds);
       const missingParentIds = [...new Set([...cuentaParentMap.values()])].filter(id => !cuentaIdsSet.has(id));
       const parentCuentas = missingParentIds.length
-        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad", { activo: true })
+        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad, precio_final", { activo: true })
         : [];
       const allCuentas = [...cuentas, ...parentCuentas];
 
@@ -869,7 +869,7 @@ export default function ValidacionPagos() {
       const proyectos = await inQuery("proyectos", "id", proyectoIds, "id, nombre");
       const proyectoMap = new Map<number, string>(proyectos.map((p: any) => [p.id, p.nombre]));
 
-      return allPagos.map(p => {
+      const rows: PagoRow[] = allPagos.map(p => {
         const v = validacionMap.get(p.id);
         const cId = p.id_cuenta_cobranza as number;
         const parentId = cuentaParentMap.get(cId);
@@ -915,8 +915,91 @@ export default function ValidacionPagos() {
           id_propiedad: propId ?? null,
         };
       });
+
+      // ── Readiness "lista para escriturar" por unidad (propiedad) ─────────────
+      // Una unidad está lista si TODAS sus cuentas (propiedad + bodega/estac) están
+      // liquidadas (saldo ≤ $0.01) Y todos sus pagos están validados en "coincide";
+      // o como fallback si la propiedad ya tiene estatus escrituración (7).
+      const VENDIDAS = new Set([5, 7, 8, 9]);
+      const vendidasPropIds = propIds.filter(pid => VENDIDAS.has(propEstatusMap.get(pid) ?? -1));
+      const readiness = new Map<number, boolean>();
+
+      if (vendidasPropIds.length) {
+        // Todas las cuentas de cada propiedad vendida (incluye cuentas SIN pagos:
+        // p.ej. bodega/estac no abonados → cuenta no liquidada).
+        const cuentasPrincipales = await inQuery("cuentas_cobranza", "id_propiedad", vendidasPropIds,
+          "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true });
+        const cuentasHijas = cuentasPrincipales.length
+          ? await inQuery("cuentas_cobranza", "id_cuenta_cobranza_padre",
+              cuentasPrincipales.map((c: any) => c.id),
+              "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true })
+          : [];
+
+        const unitCuentas = new Map<number, any>();
+        for (const c of [...cuentasPrincipales, ...cuentasHijas]) unitCuentas.set(c.id, c);
+
+        // propId de cada cuenta: directo, o heredado del padre (cuentas hija)
+        const principalPropMap = new Map<number, number>(
+          cuentasPrincipales.filter((c: any) => c.id_propiedad != null).map((c: any) => [c.id, c.id_propiedad])
+        );
+        const cuentaToProp = new Map<number, number>();
+        for (const c of unitCuentas.values()) {
+          const pid = (c.id_propiedad ?? (c.id_cuenta_cobranza_padre ? principalPropMap.get(c.id_cuenta_cobranza_padre) : null)) as number | null;
+          if (pid != null) cuentaToProp.set(c.id, pid);
+        }
+
+        // Total aplicado al precio (es_multa=false) por cuenta, vía sus pagos
+        const unitCuentaIds = new Set([...unitCuentas.keys()]);
+        const pagosDeUnidad = allPagos.filter(p => unitCuentaIds.has(p.id_cuenta_cobranza as number));
+        const pagoCuentaMap = new Map<number, number>(pagosDeUnidad.map(p => [p.id as number, p.id_cuenta_cobranza as number]));
+        const aplicaciones = await inQuery("aplicaciones_pago", "id_pago",
+          pagosDeUnidad.map(p => p.id as number), "id_pago, monto", { activo: true, es_multa: false });
+        const aplicadoByCuenta = new Map<number, number>();
+        for (const a of aplicaciones) {
+          const cId = pagoCuentaMap.get(Number(a.id_pago));
+          if (cId != null) aplicadoByCuenta.set(cId, (aplicadoByCuenta.get(cId) ?? 0) + safeNum(a.monto));
+        }
+
+        // Cuentas agrupadas por propiedad + estado de validación de pagos por propiedad
+        const cuentasByProp = new Map<number, any[]>();
+        for (const c of unitCuentas.values()) {
+          const pid = cuentaToProp.get(c.id);
+          if (pid == null) continue;
+          const arr = cuentasByProp.get(pid);
+          if (arr) arr.push(c); else cuentasByProp.set(pid, [c]);
+        }
+        const valByProp = new Map<number, { total: number; coincide: number }>();
+        for (const p of pagosDeUnidad) {
+          const pid = cuentaToProp.get(p.id_cuenta_cobranza as number);
+          if (pid == null) continue;
+          const est = validacionMap.get(p.id)?.estado ?? null;
+          const acc = valByProp.get(pid) ?? { total: 0, coincide: 0 };
+          acc.total += 1;
+          if (est === "coincide") acc.coincide += 1;
+          valByProp.set(pid, acc);
+        }
+
+        for (const pid of vendidasPropIds) {
+          // Fallback: estatus escrituración (7) ya marcado en BD
+          if ((propEstatusMap.get(pid) ?? -1) === 7) { readiness.set(pid, true); continue; }
+
+          const cuentas = cuentasByProp.get(pid) ?? [];
+          const liquidada = cuentas.length > 0 && cuentas.every((c: any) =>
+            safeNum(c.precio_final) - (aplicadoByCuenta.get(c.id) ?? 0) <= 0.01
+          );
+          const val = valByProp.get(pid);
+          const todosCoincide = !!val && val.total > 0 && val.coincide === val.total;
+
+          readiness.set(pid, liquidada && todosCoincide);
+        }
+      }
+
+      return { rows, readiness };
     },
   });
+
+  const allRows = queryData?.rows ?? [];
+  const readiness = queryData?.readiness ?? new Map<number, boolean>();
 
   // ── Derived state ─────────────────────────────────────────────────────────────
 
@@ -995,10 +1078,7 @@ export default function ValidacionPagos() {
     return set.size;
   };
 
-  // Unidades a revisar bajo TODOS los filtros activos (incl. estado).
-  const unidadesARevisar = useMemo(() => countUnidades(filteredRows, () => true), [filteredRows]);
-
-  // Denominador (vendidas) y "listas para escriturar" solo dependen del filtro de proyecto.
+  // "A revisar", "vendidas" y "listas para escriturar" solo dependen del filtro de proyecto.
   const ESTATUS_VENDIDAS = new Set([5, 7, 8, 9]); // Vendido, Escrituración, Entregada, Pagada
   const rowsByProyecto = useMemo(
     () => filtroProyecto === "todos" ? allRows : allRows.filter(r => r.proyecto === filtroProyecto),
@@ -1008,10 +1088,13 @@ export default function ValidacionPagos() {
     () => countUnidades(rowsByProyecto, r => r.id_estatus_disponibilidad != null && ESTATUS_VENDIDAS.has(r.id_estatus_disponibilidad)),
     [rowsByProyecto]
   );
+  // Listas = unidades vendidas cuya readiness (todas las cuentas liquidadas + todos los
+  // pagos "coincide", o fallback estatus 7) es true. A revisar = vendidas que aún no lo están.
   const listasEscriturar = useMemo(
-    () => countUnidades(rowsByProyecto, r => r.id_estatus_disponibilidad === 7),
-    [rowsByProyecto]
+    () => countUnidades(rowsByProyecto, r => r.id_propiedad != null && readiness.get(r.id_propiedad) === true),
+    [rowsByProyecto, readiness]
   );
+  const unidadesARevisar = Math.max(0, vendidasTotal - listasEscriturar);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -1104,7 +1187,7 @@ export default function ValidacionPagos() {
                 <>{unidadesARevisar.toLocaleString("es-MX")}<span className="text-base font-medium text-sky-700/50">/{vendidasTotal.toLocaleString("es-MX")}</span></>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">unidades / vendidas</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">por revisar / vendidas</p>
           </CardContent>
         </Card>
         <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px] border-indigo-200 bg-indigo-50/40">
