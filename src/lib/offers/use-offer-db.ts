@@ -98,14 +98,27 @@ function calcPaymentPlans(
     let finalPaymentAmount: number;
     let pctMensual: number;
     let pctEntrega: number;
+    let installmentsEndDate = "";
 
     if (isEscalonado) {
-      const tramosExpanded = expandirTramos(tramos);
-      nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
-      installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
-        return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
-      }, 0);
-      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      // Los esquemas dinámicos (no manuales) recalculan meses y fecha final contra
+      // la fecha de entrega ACTUAL del proyecto. Los manuales conservan sus tramos.
+      const recomputeVsEntrega = e.es_manual !== true && !!fechaEntrega && !!fechaGeneracion;
+      const montoMensualFijo = ((tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100);
+
+      if (recomputeVsEntrega) {
+        nMensual          = mesesEntreFechas(fechaGeneracion!, fechaEntrega!);
+        monthlyAmount     = montoMensualFijo;
+        installmentsTotal = monthlyAmount * nMensual;
+        installmentsEndDate = fechaEntrega!;
+      } else {
+        const tramosExpanded = expandirTramos(tramos);
+        nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+        installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
+          return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
+        }, 0);
+        monthlyAmount = nMensual > 0 ? installmentsTotal / nMensual : 0;
+      }
       finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
       pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
       pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
@@ -137,7 +150,7 @@ function calcPaymentPlans(
       downPaymentPct: pctEnganche,
       downPaymentAmount,
       installments: nMensual > 0
-        ? { count: nMensual, monthlyAmount, endDate: "" }
+        ? { count: nMensual, monthlyAmount, endDate: installmentsEndDate }
         : undefined,
       installmentsPct: pctMensual,
       finalPaymentPct: pctEntrega,
