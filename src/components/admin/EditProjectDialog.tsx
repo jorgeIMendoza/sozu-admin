@@ -9,8 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye, Building2, Plus, Smartphone } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye, Building2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -60,7 +59,6 @@ const formSchema = z.object({
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
   mostrar_piso_en_oferta: z.boolean().default(true),
   mostrar_seccion_efectivo_en_oferta: z.boolean().default(true),
-  es_app: z.boolean().default(false),
   slogan: z.string().optional(),
   url_sitio_web: z.string().optional(),
   instagram_handle: z.string().optional(),
@@ -423,7 +421,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         mostrar_precio_m2_en_oferta: project.mostrar_precio_m2_en_oferta ?? true,
         mostrar_piso_en_oferta: project.mostrar_piso_en_oferta ?? true,
         mostrar_seccion_efectivo_en_oferta: project.mostrar_seccion_efectivo_en_oferta ?? true,
-        es_app: (project as any).es_app ?? false,
         slogan: (project as any).slogan || "",
         url_sitio_web: (project as any).url_sitio_web || "",
         instagram_handle: (project as any).instagram_handle || "",
@@ -466,7 +463,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         mostrar_precio_m2_en_oferta: values.mostrar_precio_m2_en_oferta,
         mostrar_piso_en_oferta: values.mostrar_piso_en_oferta,
         mostrar_seccion_efectivo_en_oferta: values.mostrar_seccion_efectivo_en_oferta,
-        es_app: values.es_app,
         slogan: values.slogan || null,
         url_sitio_web: values.url_sitio_web || null,
         instagram_handle: values.instagram_handle || null,
@@ -636,26 +632,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                 </TabsList>
                 
                 <TabsContent value="information" className="mt-6">
-                  {/* Toggle es_app */}
-                  <FormField
-                    control={form.control}
-                    name="es_app"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3 mb-4">
-                        <div className="flex items-center gap-2">
-                          <Smartphone className="h-4 w-4 text-primary" />
-                          <div>
-                            <FormLabel className="text-sm font-medium">Es App</FormLabel>
-                            <p className="text-xs text-muted-foreground">Marca este proyecto como aplicación móvil/app</p>
-                          </div>
-                        </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
                   <FormField
                     control={form.control}
                     name="nombre"
