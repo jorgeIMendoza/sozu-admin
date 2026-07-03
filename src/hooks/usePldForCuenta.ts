@@ -163,7 +163,7 @@ export function usePldForCuenta(
 ): PldForCuentaResult {
   const enabled = !!primaryCuentaId && pagosInput.length > 0;
 
-  // ── Query 1: RFC y CURP del comprador ────────────────────────────────────
+  // ── Query 1: RFC y CURP de TODOS los compradores (soporta copropiedad) ───
   const { data: personaData, isLoading: loadingPersona } = useQuery({
     queryKey: ['pld-persona-cuenta', primaryCuentaId],
     enabled: !!primaryCuentaId,
@@ -173,16 +173,14 @@ export function usePldForCuenta(
         .from('compradores')
         .select('id_persona')
         .eq('id_cuenta_cobranza', primaryCuentaId!)
-        .eq('activo', true)
-        .limit(1);
-      const id_persona = compradores?.[0]?.id_persona;
-      if (!id_persona) return null;
-      const { data: persona } = await supabase
+        .eq('activo', true);
+      const personaIds = (compradores ?? []).map(c => c.id_persona).filter(Boolean);
+      if (!personaIds.length) return [];
+      const { data: personas } = await supabase
         .from('personas')
         .select('id, nombre_legal, rfc, curp')
-        .eq('id', id_persona)
-        .maybeSingle();
-      return persona as { id: number; nombre_legal: string; rfc: string | null; curp: string | null } | null;
+        .in('id', personaIds);
+      return (personas ?? []) as Array<{ id: number; nombre_legal: string; rfc: string | null; curp: string | null }>;
     },
   });
 
@@ -244,11 +242,12 @@ export function usePldForCuenta(
       curp_ordenante:   p.clave_rastreo ? (curpOrdenanteMap[p.clave_rastreo]  ?? null) : null,
     }));
 
-    const clienteNombre = personaData?.nombre_legal ?? '—';
-    const clienteRfc    = personaData?.rfc    ?? null;
-    const clienteCurp   = personaData?.curp   ?? null;
+    const personas       = personaData ?? [];
+    const clienteNombres = personas.length > 0 ? personas.map(p => p.nombre_legal) : ['—'];
+    const clienteRfcs    = personas.map(p => p.rfc).filter((r): r is string => !!r);
+    const clienteCurps   = personas.map(p => p.curp).filter((c): c is string => !!c);
 
-    const pldResult = derivePld(pagoInfos, precioFinal, clienteNombre, clienteRfc, clienteCurp, valorUma);
+    const pldResult = derivePld(pagoInfos, precioFinal, clienteNombres, clienteRfcs, clienteCurps, valorUma);
 
     const motivoPrincipal = buildMotivoPrincipal(
       pldResult.pldStatus,
