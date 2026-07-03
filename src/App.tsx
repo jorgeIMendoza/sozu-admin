@@ -47,6 +47,7 @@ const Proyectos = lazyRetry(() => import("./pages/admin/Proyectos"));
 const Propiedades = lazyRetry(() => import("./pages/admin/Propiedades"));
 const ActivosComerciales = lazyRetry(() => import("./pages/admin/ActivosComerciales"));
 const ActivosComercialesNuevo = lazyRetry(() => import("./pages/admin/ActivosComercialesNuevo"));
+const ActivosComercialesDetalle = lazyRetry(() => import("./pages/admin/ActivosComercialesDetalle"));
 const Modelos = lazyRetry(() => import("./pages/admin/Modelos"));
 const Vistas = lazyRetry(() => import("./pages/admin/Vistas"));
 const Estacionamientos = lazyRetry(() => import("./pages/admin/Estacionamientos"));
@@ -715,6 +716,7 @@ const App = () => (
                   <Route path="activos-comerciales" element={<ActivosComerciales />} />
                   <Route path="activos-comerciales/nuevo" element={<ActivosComercialesNuevo />} />
                  <Route path="activos-comerciales/:id/editar" element={<ActivosComercialesNuevo />} />
+                <Route path="activos-comerciales/:id" element={<ActivosComercialesDetalle />} />
                   <Route path="usuarios" element={<Usuarios />} />
                   <Route path="usuarios/nuevo" element={<NuevoUsuario />} />
                   <Route path="usuarios-directivos" element={<UsuariosDirectivos />} />
