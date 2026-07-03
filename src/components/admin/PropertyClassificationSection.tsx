@@ -32,6 +32,7 @@ export const PropertyClassificationSection = ({ form }: PropertyClassificationSe
         .from("tipos_propiedad")
         .select("*")
         .eq("activo", true)
+        .lte("id", 10)
         .order("nombre");
       
       if (error) throw error;

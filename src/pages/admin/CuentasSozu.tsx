@@ -81,17 +81,19 @@ export default function CuentasSozu() {
     },
   });
 
-  const { data: activeBancos = [] } = useQuery<Banco[]>({
-    queryKey: ["bancos-activos-select"],
+  const { data: bancos = [] } = useQuery<(Banco & { activo: boolean })[]>({
+    queryKey: ["bancos-select-all"],
     staleTime: 1000 * 60 * 30,
     queryFn: async () => {
-      const { data } = await supabase.from("bancos").select("id, nombre").eq("activo", true).order("nombre");
-      return (data ?? []) as Banco[];
+      const { data } = await supabase.from("bancos").select("id, nombre, activo").order("nombre");
+      return (data ?? []) as (Banco & { activo: boolean })[];
     },
   });
 
+  const activeBancos = bancos.filter((b) => b.activo);
+
   const bancoNombreMap: Record<number, string> = Object.fromEntries(
-    activeBancos.map((b) => [b.id, b.nombre])
+    bancos.map((b) => [b.id, b.nombre])
   );
 
   const fetchCuentas = async (activo: boolean): Promise<CuentaSozu[]> => {
@@ -102,10 +104,7 @@ export default function CuentasSozu() {
       .eq("activo", activo)
       .order("alias");
     if (error) return [];
-    return (data ?? []).map((c: any) => ({
-      ...c,
-      banco_nombre: bancoNombreMap[c.id_banco] ?? "?",
-    }));
+    return (data ?? []) as CuentaSozu[];
   };
 
   const { data: activeCuentas = [], isLoading: loadingActive } = useQuery({
@@ -120,7 +119,10 @@ export default function CuentasSozu() {
     queryFn: () => fetchCuentas(false),
   });
 
-  const cuentas = activeTab === "active" ? activeCuentas : deletedCuentas;
+  const cuentas = (activeTab === "active" ? activeCuentas : deletedCuentas).map((c) => ({
+    ...c,
+    banco_nombre: bancoNombreMap[c.id_banco] ?? "?",
+  }));
   const filteredCuentas = cuentas.filter(
     (c) =>
       c.alias?.toLowerCase().includes(searchTerm.toLowerCase()) ||

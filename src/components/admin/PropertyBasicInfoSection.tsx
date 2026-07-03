@@ -121,6 +121,7 @@ export const PropertyBasicInfoSection = ({
         .from("tipos_propiedad")
         .select("*")
         .eq("activo", true)
+        .lte("id", 10)
         .order("nombre");
       
       if (error) throw error;
