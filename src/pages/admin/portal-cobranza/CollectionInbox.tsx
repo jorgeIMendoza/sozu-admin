@@ -7,7 +7,8 @@ import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2, SlidersHorizontal, X, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2, SlidersHorizontal, X } from 'lucide-react';
+import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
 import { cn } from '@/lib/utils';
 import {
   TipoMultiSelect, nivelDeParcialidades, type TipoCategoria,
@@ -271,6 +272,18 @@ export default function CollectionInboxPage() {
       return acc;
     }, []);
 
+  // Primera carga: solo el mensaje centrado (nada de KPIs/tabla). keepPreviousData
+  // evita que al cambiar de proyecto se vacíe la vista.
+  // Primera carga: solo el mensaje centrado. keepPreviousData evita vaciar la vista
+  // al cambiar de proyecto.
+  if (isLoading && !rawData) {
+    return <CollectionLoading label="Cargando cuentas..." />;
+  }
+
+  if (isError) {
+    return <CollectionError title="No pudimos cargar las cuentas" onRetry={() => refetch()} />;
+  }
+
   return (
     <div className="space-y-4">
 
@@ -427,26 +440,7 @@ export default function CollectionInboxPage() {
         </div>
       )}
 
-      {/* Error: replaces the table with a centered message (the table is wide
-          and the notice would look off inside it). */}
-      {isError ? (
-        <div className="rounded-xl border py-16 px-6">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-danger/10">
-              <AlertTriangle className="size-6 text-danger" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">No pudimos cargar las cuentas</p>
-              <p className="text-[13px] text-muted-foreground mt-1 max-w-sm">
-                Hubo un problema al obtener la información. Revisa tu conexión e inténtalo de nuevo.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="h-8 text-[12px] mt-1">
-              Reintentar
-            </Button>
-          </div>
-        </div>
-      ) : (
+      {/* Table (data ready — loading/error are handled with early returns above) */}
       <div className="rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1420px] table-fixed text-sm whitespace-nowrap">
@@ -467,16 +461,7 @@ export default function CollectionInboxPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={12} className="py-14 text-center">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                      <Loader2 className="size-5 animate-spin" />
-                      <span className="text-sm">Cargando cuentas...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : pageRows.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-14 text-center">
                     <p className="text-sm text-muted-foreground mb-1">Sin resultados</p>
@@ -583,7 +568,6 @@ export default function CollectionInboxPage() {
           </table>
         </div>
       </div>
-      )}
 
       {/* Pagination */}
       {filtered.length > 0 && (

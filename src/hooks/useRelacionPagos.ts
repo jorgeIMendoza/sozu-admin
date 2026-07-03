@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 export interface PagoRecord {
   pago_id: number;
@@ -98,6 +98,8 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
     },
     staleTime: 30_000,
     enabled: filters.enabled !== false,
+    // Mantener resultados previos al cambiar filtros/página (evita parpadeo).
+    placeholderData: keepPreviousData,
   });
 
   return {

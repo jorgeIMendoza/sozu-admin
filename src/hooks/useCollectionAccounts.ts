@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 // Row returned by the get_pcobranza_cuentas_cobranza RPC.
@@ -52,5 +52,7 @@ export function useCollectionAccounts(params: CollectionAccountsParams = {}) {
       return (data as unknown as CollectionAccount[]) ?? [];
     },
     staleTime: 3 * 60 * 1000,
+    // Keep previous rows while refetching (project change) to avoid blanking the UI.
+    placeholderData: keepPreviousData,
   });
 }

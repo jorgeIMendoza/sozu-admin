@@ -1,80 +1,11 @@
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCobranzaImpersonation } from '@/contexts/CobranzaImpersonationContext';
 
-export interface DuenoOption {
-  nombre: string;
-  entidadIds: number[];
-}
-
-export interface ClienteCritico {
-  cuenta_id: number;
-  cliente_nombre: string | null;
-  proyecto: string | null;
-  numero_propiedad: string | null;
-  producto_nombre: string | null;
-  tipo_cuenta: 'Propiedad' | 'Producto';
-  parcialidades_vencidas: number;
-  monto_vencido: number;
-  dias_sin_pagar: number;
-}
-
-export interface DashboardPipeline {
-  vendidas: number;
-  listas_escrituracion: number;
-  en_escrituracion: number;
-  entregadas: number;
-  pagadas_completamente: number;
-}
-
-export interface DashboardKPIs {
-  cobrado_total: number;
-  vencido_total: number;
-  vencido_total_sin_ce: number;
-  pendiente_total: number;
-  cobrado_mes: number;
-  programado_mes: number;
-  programado_mes_sin_ce: number;
-  por_cobrar_mes: number;
-  por_cobrar_mes_sin_ce: number;
-  recovery_rate: number;
-  aging: { rango: string; monto: number; monto_sin_ce: number; cantidad: number }[] | null;
-  morosidad: { grupo: string; cuentas: number }[] | null;
-  por_proyecto: { proyecto: string; proyecto_id: number; cobrado: number; vencido: number; pendiente: number }[] | null;
-  cobrado_mensual: { mes: string; cobrado: number }[] | null;
-  programado_mensual: { mes: string; programado: number; programado_sin_ce: number }[] | null;
-  // Secciones unificadas (el RPC alimenta TODO el dashboard en una sola llamada)
-  pipeline: DashboardPipeline | null;
-  ceps_sin_validar: number | null;
-  clientes_criticos: ClienteCritico[] | null;
-  // Dueños SOZU para el filtro (no se filtran por p_entidad_ids). entidad_ids del RPC.
-  duenos: { nombre: string; entidad_ids: number[] }[] | null;
-}
-
-export function useCobranzaDashboard(
-  proyectoId?: number | null,
-  fechaInicio?: string | null,
-  fechaFin?: string | null,
-  entidadIds?: number[] | null,
-) {
-  return useQuery({
-    queryKey: ['cobranza-dashboard-kpis', proyectoId, fechaInicio, fechaFin, entidadIds],
-    queryFn: async (): Promise<DashboardKPIs> => {
-      const { data, error } = await supabase.rpc('get_dashboard_cobranza_kpis', {
-        p_proyecto_id: proyectoId ?? null,
-        p_fecha_inicio: fechaInicio ?? null,
-        p_fecha_fin: fechaFin ?? null,
-        p_entidad_ids: entidadIds && entidadIds.length > 0 ? entidadIds : null,
-      } as any);
-      if (error) throw error;
-      return data as unknown as DashboardKPIs;
-    },
-    staleTime: 5 * 60 * 1000,
-    // Mantener datos previos al cambiar filtros (evita flash de spinner full-page).
-    placeholderData: keepPreviousData,
-  });
-}
+// NOTA: el hook y tipos del Dashboard se movieron a `useCollectionDashboard.ts`
+// (migración del menú a inglés). Este archivo compartido conserva solo
+// `useProyectosCobranza`, usado por varios menús del portal de cobranza.
 
 /**
  * Returns only projects the current user has access to via proyectos_acceso.

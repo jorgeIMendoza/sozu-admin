@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import {
-  BarChart3, DollarSign, Package, Search, Loader2, FileSpreadsheet, Download,
+  BarChart3, DollarSign, Package, Search, FileSpreadsheet, Download,
 } from 'lucide-react';
+import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
@@ -47,7 +48,7 @@ export default function CobranzaReportes() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   // Fetch all submenus for report categories
-  const { data: submenuMap = {}, isLoading: subLoading } = useQuery({
+  const { data: submenuMap = {}, isLoading: subLoading, isError: subError, refetch: refetchSub } = useQuery({
     queryKey: ['reportes-submenus-cobranza'],
     queryFn: async () => {
       const paths = CATEGORY_CONFIG.map(c => c.submenuPath);
@@ -63,7 +64,7 @@ export default function CobranzaReportes() {
 
   // Fetch all reports across categories
   const submenuIds = Object.values(submenuMap);
-  const { data: allReportes = [], isLoading: repLoading } = useQuery({
+  const { data: allReportes = [], isLoading: repLoading, isError: repError, refetch: refetchRep } = useQuery({
     queryKey: ['reportes-all-cobranza', submenuIds],
     queryFn: async () => {
       if (submenuIds.length === 0) return [];
@@ -120,11 +121,11 @@ export default function CobranzaReportes() {
   const isLoading = subLoading || repLoading;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <CollectionLoading label="Cargando reportes..." />;
+  }
+
+  if (subError || repError) {
+    return <CollectionError title="No pudimos cargar los reportes" onRetry={() => { refetchSub(); refetchRep(); }} />;
   }
 
   return (

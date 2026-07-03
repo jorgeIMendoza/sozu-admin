@@ -17,10 +17,11 @@ import { Badge } from '@/components/ui/badge';
 import { IconTip, ClaveCopyable, fmtCurrency } from './cuentaDetalleShared';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import {
-  X, AlertTriangle, Loader2, ChevronLeft, ChevronRight,
+  X, Loader2, ChevronLeft, ChevronRight,
   FileCheck, FileWarning, FileText, DollarSign, Eye, Upload, Pencil, ShieldCheck, Loader,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
 
 const PAGE_SIZE = 15;
 
@@ -199,6 +200,15 @@ export default function RelacionPagosPage() {
       return acc;
     }, []);
 
+  // Primera carga: solo el mensaje centrado. keepPreviousData evita parpadeo al filtrar.
+  if (isLoading && pagos.length === 0) {
+    return <CollectionLoading label="Cargando pagos..." />;
+  }
+
+  if (error) {
+    return <CollectionError title="No pudimos cargar los pagos" onRetry={refetchPagos} />;
+  }
+
   return (
     <div className="space-y-4">
 
@@ -325,24 +335,13 @@ export default function RelacionPagosPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading && (
-                <tr><td colSpan={11} className="text-center py-12">
-                  <Loader2 className="w-6 h-6 text-muted-foreground animate-spin mx-auto" />
-                </td></tr>
-              )}
-              {error && (
-                <tr><td colSpan={11} className="text-center py-12">
-                  <AlertTriangle className="w-6 h-6 text-danger mx-auto mb-2" />
-                  <p className="text-sm text-danger">{error}</p>
-                </td></tr>
-              )}
-              {!isLoading && !error && pagos.length === 0 && (
+              {pagos.length === 0 && (
                 <tr><td colSpan={11} className="text-center py-12">
                   <DollarSign className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No se encontraron pagos</p>
                 </td></tr>
               )}
-              {!isLoading && pagos.map(r => {
+              {pagos.map(r => {
                 const m = ESTATUS_META[r.estatus] ?? ESTATUS_META.sin_revisar;
                 return (
                 <tr key={r.pago_id} className="border-b border-border/50 hover:bg-muted/20 transition-colors duration-100">
