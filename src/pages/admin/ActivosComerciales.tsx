@@ -42,7 +42,7 @@ export default function ActivosComerciales() {
           precio_lista, id_estatus_disponibilidad, activo, es_aprobado,
           tipos_propiedad:id_tipo_propiedad ( nombre ),
           estatus_disponibilidad:id_estatus_disponibilidad ( nombre ),
-          propiedades_activo_comercial ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
+          propiedades_activo_comercial!inner ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
         `)
         .gt("id_tipo_propiedad", 10)
         .order("id", { ascending: false })
