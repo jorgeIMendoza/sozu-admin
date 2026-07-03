@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Clock, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye } from "lucide-react";
+import { Loader2, Plus, User, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,7 @@ const AgentPipeline = () => {
   const [selectedOferta, setSelectedOferta] = useState<any>(null);
   const { permissions } = useAgentPortalPermissions();
   const pipelinePerms = permissions['/admin/agent/pipeline'];
+  const { presentationMode, mask } = useAgentPresentation();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
 
@@ -264,11 +266,18 @@ const AgentPipeline = () => {
   return (
     <div className="pb-24">
       <AgentPortalHeader>
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Pipeline</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Pipeline</h1>
+            {!isLoading && (
+              <p className="mt-1 text-[12.5px] font-medium tabular-nums text-[#9AA3AD]">
+                {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} en proceso · Últimos 30 días
+              </p>
+            )}
+          </div>
           {pipelinePerms.canCreate && (
             isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs font-medium text-[#9AA3AD]">
                 <Lock className="h-3.5 w-3.5" />
                 Completa tu capacitación
               </span>
@@ -278,7 +287,7 @@ const AgentPipeline = () => {
                   track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
                   navigate('/admin/agent/inventario/unidades?openFilters=true');
                 }}
-                className="flex items-center gap-1 text-xs font-medium text-[hsl(var(--agent-primary))] active:opacity-70"
+                className="flex items-center gap-1.5 rounded-[10px] bg-[#16A45E] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
               >
                 <Plus className="h-4 w-4" />
                 Nueva oferta
@@ -286,18 +295,10 @@ const AgentPipeline = () => {
             )
           )}
         </div>
-        {!isLoading && (
-          <div>
-            <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
-              {nonExpiredOfertas.length} ofertas · {formatCurrency(totalMonto)} en proceso
-            </p>
-            <p className="text-[10px] text-[hsl(var(--agent-muted))]">Últimos 30 días</p>
-          </div>
-        )}
       </AgentPortalHeader>
 
       {/* Stage Filters */}
-      <ScrollArea className="w-full px-4 pb-3">
+      <ScrollArea className="mx-auto w-full max-w-[1000px] px-4 pb-3">
         <div className="flex gap-2 py-1">
           {STAGES.map(stage => {
             const count = stage.key === 'all' ? nonExpiredOfertas.length : (grouped[stage.key]?.length || 0);
@@ -311,10 +312,10 @@ const AgentPipeline = () => {
                   setActiveStage(stage.key);
                 }}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                  "shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
                   isActive
-                    ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
-                    : "bg-white text-[hsl(var(--agent-text-secondary))] border-gray-200"
+                    ? "border-[#16A45E] bg-[#16A45E] text-white"
+                    : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
                 )}
               >
                 {stage.label} {count > 0 && `(${count})`}
@@ -326,20 +327,32 @@ const AgentPipeline = () => {
       </ScrollArea>
 
       {/* Prospect search */}
-      <div className="px-4 pb-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--agent-muted))]" />
+      <div className="mx-auto max-w-[1000px] px-4 pb-2">
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
-            placeholder="Buscar prospecto..."
+            placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="pl-9 h-9 bg-white border-gray-200 text-sm"
+            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
           />
         </div>
       </div>
 
+      {/* Banner modo presentación */}
+      {presentationMode && (
+        <div className="mx-auto mb-2 max-w-[1000px] px-4">
+          <div className="flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
+            <span className="text-[12px] font-semibold text-[#B5601C]">
+              Modo presentación · nombres de prospecto y montos ocultos. Desactívalo arriba para verlos.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Offer Cards */}
-      <div className="px-4 space-y-2.5">
+      <div className="mx-auto max-w-[1000px] space-y-2.5 px-4">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
@@ -380,6 +393,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   getStageInfo: (s: string) => { key: string; label: string; color: string; borderColor: string };
   onClick?: () => void;
 }) {
+  const { mask } = useAgentPresentation();
   const stageInfo = getStageInfo(oferta.stage);
   const ofertaLabel = oferta.is_producto
     ? `OP-${String(oferta.id).padStart(6, '0')}`
@@ -398,7 +412,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   const [apartadoEmail, setApartadoEmail] = useState("");
   const [sendingApartado, setSendingApartado] = useState(false);
 
-  // Botón "Enviar" original — envía PDF al email del lead ya registrado
+  // Botón "Enviar" original - envía PDF al email del lead ya registrado
   const handleSendEmail = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasUrl) {
@@ -417,7 +431,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     });
   };
 
-  // Botón "Apartar" nuevo — captura email → crea apartado_provisional → envía PDF + link
+  // Botón "Apartar" nuevo - captura email → crea apartado_provisional → envía PDF + link
   const handleOpenApartado = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasUrl) {
@@ -451,7 +465,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
 
-      // Enviar PDF + link de apartado (fire-and-forget — el servicio muestra su propio toast)
+      // Enviar PDF + link de apartado (fire-and-forget - el servicio muestra su propio toast)
       import('@/services/offerEmailService').then(({ sendMultipleOffersEmailDirect }) => {
         sendMultipleOffersEmailDirect({
           offerIds: [oferta.id],
@@ -463,7 +477,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       toast({
         title: "Reservación creada",
-        description: `Link enviado a ${trimmedEmail} — ${reservationLink}`,
+        description: `Link enviado a ${trimmedEmail} - ${reservationLink}`,
         duration: 8000,
       });
       setApartadoDialogOpen(false);
@@ -475,7 +489,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   };
 
   return (
-    <div onClick={onClick} className={cn("relative rounded-xl bg-white border-l-4 border border-gray-100 shadow-sm p-3.5 cursor-pointer active:scale-[0.98] transition-transform", stageInfo.borderColor)}>
+    <div onClick={onClick} className="relative cursor-pointer rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.08)]">
       {/* Overlay: captura email para apartado provisional */}
       {apartadoDialogOpen && (
         <div
@@ -518,7 +532,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
             <button
               onClick={handleConfirmApartado}
               disabled={!apartadoEmail.trim() || sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[hsl(var(--agent-primary))] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[#16A45E] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
             >
               {sendingApartado ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
               {sendingApartado ? "Creando…" : "Enviar link"}
@@ -529,7 +543,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] font-mono">
+          <span className="text-[12px] font-bold text-[#0E7A45]">
             Oferta: {ofertaLabel}
           </span>
           <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
@@ -537,13 +551,13 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
           </Badge>
         </div>
 
-        <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
+        <p className="truncate text-[14px] font-bold text-[#171A1D]">
           {unitLabel}
         </p>
 
         <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
           <User className="h-3 w-3 shrink-0" />
-          <span className="truncate">{oferta.lead_nombre}</span>
+          <span className="truncate">{mask(oferta.lead_nombre)}</span>
         </div>
 
         {oferta.inmobiliaria_nombre && (
@@ -562,49 +576,49 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2 pt-0.5">
-          <div className="flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#F2F4F5] pt-3">
+          <div className="flex flex-wrap items-center gap-2">
             {oferta.precio != null && oferta.precio > 0 && (
-              <span className="text-xs font-semibold text-[hsl(var(--agent-text))]">
-                {formatCurrency(oferta.precio)}
+              <span className="mr-1 text-[14px] font-extrabold tabular-nums text-[#171A1D]">
+                {mask(formatCurrency(oferta.precio))}
               </span>
             )}
             <button
               onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
               title="Ver oferta pública"
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors text-violet-600 hover:bg-violet-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ECEEF0] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
             >
-              <Eye className="h-3 w-3" />
+              <Eye className="h-3.5 w-3.5" />
               Ver
             </button>
             <button
               onClick={handleSendEmail}
               title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors",
                 hasUrl
-                  ? "text-[hsl(var(--agent-primary))] hover:bg-[hsl(var(--agent-primary)/0.1)]"
-                  : "text-[hsl(var(--agent-muted))] cursor-not-allowed"
+                  ? "border-[#ECEEF0] text-[#4B5563] hover:bg-[#F6F7F8]"
+                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
               )}
             >
-              <Mail className="h-3 w-3" />
+              <Mail className="h-3.5 w-3.5" />
               Enviar
             </button>
             <button
               onClick={handleOpenApartado}
-              title={hasUrl ? 'Reservar unidad — envía PDF + link de reservación' : 'Descarga la oferta primero'}
+              title={hasUrl ? 'Reservar unidad - envía PDF + link de reservación' : 'Descarga la oferta primero'}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition-colors",
                 hasUrl
-                  ? "text-emerald-600 hover:bg-emerald-50"
-                  : "text-[hsl(var(--agent-muted))] cursor-not-allowed"
+                  ? "border-[#D7EFE1] bg-[#EAF6F0] text-[#0E7A45] hover:bg-[#DDF0E6]"
+                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
               )}
             >
-              <Link2 className="h-3 w-3" />
+              <Link2 className="h-3.5 w-3.5" />
               Reservar
             </button>
           </div>
-          <span className="text-[10px] text-[hsl(var(--agent-text-secondary))] flex items-center gap-0.5 ml-auto">
+          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium tabular-nums text-[#9AA3AD]">
             <Calendar className="h-3 w-3" />
             {format(new Date(oferta.fecha_generacion), 'dd MMM yyyy', { locale: es })}
           </span>
