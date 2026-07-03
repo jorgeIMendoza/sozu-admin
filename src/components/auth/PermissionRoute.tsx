@@ -301,6 +301,9 @@ function getBasePath(fullPath: string): string {
     /^(\/admin\/inmobiliarias\/proyectos)\/\d+$/,
     /^(\/admin\/inmobiliarias\/proyectos)\/\d+\/inventario$/,
     /^(\/admin\/portal-inmobiliaria\/agentes)\/[^/]+$/,
+    /^(\/admin\/activos-comerciales)\/nuevo$/,
+    /^(\/admin\/activos-comerciales)\/\d+$/,
+    /^(\/admin\/activos-comerciales)\/\d+\/editar$/,
   ];
   
   for (const pattern of nestedPatterns) {
