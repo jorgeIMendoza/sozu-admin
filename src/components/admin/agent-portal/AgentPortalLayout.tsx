@@ -2,9 +2,10 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import {
   Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon,
-  ArrowLeft, MessageCircleQuestion, Menu, LogOut, ChevronRight,
+  ArrowLeft, MessageCircleQuestion, Menu, LogOut, ChevronRight, Eye, EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AgentPresentationProvider, useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,10 +16,31 @@ import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 
 const AGENT_MENU_ID = 16;
+
+/** Toggle de Modo presentación - oculta info sensible en todo el portal. */
+const PresentationToggle = () => {
+  const { presentationMode, toggle } = useAgentPresentation();
+  return (
+    <button
+      onClick={toggle}
+      title={presentationMode ? "Info sensible oculta · toca para mostrar" : "Info visible · toca para ocultar"}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors",
+        presentationMode
+          ? "border-[#EBC089] bg-[#FBE3CE] text-[#B5601C]"
+          : "border-[#ECEEF0] bg-white text-[#4B5563] hover:bg-[#F6F7F8]"
+      )}
+    >
+      {presentationMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline">Modo presentación</span>
+    </button>
+  );
+};
 
 const iconMap: Record<string, LucideIcon> = {
   '/admin/agent/inicio': Home,
@@ -100,6 +122,48 @@ export const AgentPortalLayout = () => {
     navigate(path);
     setMobileOpen(false);
   };
+
+  const renderProfileMenu = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          aria-label="Mi perfil"
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+        >
+          {initials}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-60 p-0 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border-soft bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-semibold shrink-0">
+              {initials}
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-[13px] font-semibold text-foreground truncate">{userName}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-1.5 space-y-0.5">
+          <button
+            onClick={() => handleNavigate("/admin/agent/perfil")}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-foreground hover:bg-muted/60 transition-colors duration-150"
+          >
+            <User className="size-4 text-muted-foreground shrink-0" />
+            Ver perfil
+          </button>
+          <button
+            onClick={signOut}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-destructive hover:bg-destructive/10 transition-colors duration-150"
+          >
+            <LogOut className="size-4 shrink-0" />
+            Cerrar sesión
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 
   const sidebar = (
     <>
@@ -186,6 +250,7 @@ export const AgentPortalLayout = () => {
 
   return (
     <PortalTrackingProvider portal="agentes">
+      <AgentPresentationProvider>
       <div className="agent-portal light min-h-screen flex antialiased" style={{ colorScheme: "light" }}>
         {/* Desktop sidebar */}
         <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
@@ -203,14 +268,9 @@ export const AgentPortalLayout = () => {
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
             {isSuperAdmin && <AgentPortalImpersonationSelector />}
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={() => navigate("/admin/agent/perfil")}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
-                aria-label="Mi perfil"
-              >
-                {initials}
-              </button>
+            <div className="ml-auto flex items-center gap-3">
+              <PresentationToggle />
+              {renderProfileMenu()}
             </div>
           </header>
 
@@ -227,13 +287,8 @@ export const AgentPortalLayout = () => {
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{currentSection}</p>
               </div>
-              <button
-                onClick={() => navigate("/admin/agent/perfil")}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
-                aria-label="Mi perfil"
-              >
-                {initials}
-              </button>
+              <PresentationToggle />
+              {renderProfileMenu()}
             </div>
             {isSuperAdmin && (
               <div className="px-4 pb-3">
@@ -258,6 +313,7 @@ export const AgentPortalLayout = () => {
           <MessageCircleQuestion className="h-6 w-6" />
         </a>
       </div>
+      </AgentPresentationProvider>
     </PortalTrackingProvider>
   );
 };

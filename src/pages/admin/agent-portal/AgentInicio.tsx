@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
@@ -12,10 +13,9 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  CalendarPlus, UserPlus, TrendingUp, DollarSign, 
-  ShoppingCart, CheckCircle2, AlertCircle, Loader2,
-  ChevronRight, Building2, Calendar, Clock, MapPin, X, Ban, CalendarClock
+import {
+  CalendarPlus, UserPlus, AlertCircle, Loader2,
+  ChevronRight, Calendar, Clock, MapPin, X, Ban, CalendarClock, EyeOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -34,6 +34,7 @@ const AgentInicio = () => {
   const { percentage, isLoading: onboardingLoading, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
   const inicioPerms = permissions['/admin/agent/inicio'];
+  const { presentationMode, mask } = useAgentPresentation();
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [rescheduleData, setRescheduleData] = useState<{ prospectoId: string; proyectoId: number; prospectoName: string; proyectoName: string } | null>(null);
@@ -295,10 +296,10 @@ const AgentInicio = () => {
     <div className="pb-24">
       <AgentPortalHeader>
         <div>
-          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Inicio</h1>
-          <p className="text-sm text-[hsl(var(--agent-text-secondary))]">{greeting}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">{greeting}, {nombre}</p>
+          <h1 className="mt-1 text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Inicio</h1>
           {attentionItems.length > 0 && (
-            <p className="text-xs text-[hsl(var(--agent-amber))] flex items-center gap-1 mt-0.5">
+            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[#B5601C]">
               <AlertCircle className="h-3.5 w-3.5" />
               {attentionItems.length} {attentionItems.length === 1 ? 'acción pendiente' : 'acciones pendientes'}
             </p>
@@ -306,11 +307,11 @@ const AgentInicio = () => {
         </div>
       </AgentPortalHeader>
 
-      <div className="p-4 space-y-5">
+      <div className="mx-auto max-w-[920px] p-4 pt-2 space-y-5">
 
       {/* Onboarding Progress Banner - only for Agente Inmobiliario */}
       {isAgentRole && percentage < 100 && (
-        <div className="w-full rounded-xl bg-white border border-gray-100 shadow-sm p-4 space-y-2.5">
+        <div className="w-full rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-4 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-[hsl(var(--agent-text))]">
               Activa tu perfil profesional
@@ -356,7 +357,7 @@ const AgentInicio = () => {
                 onClick={() => {
                   track({ page: 'agent_inicio', elementId: 'btn_atencion_item', elementLabel: 'Item atención', metadata: { oferta_id: item.id } });
                 }}
-                className="rounded-xl bg-white border border-gray-100 shadow-sm p-3 flex items-center gap-3"
+                className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3"
               >
                 <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -376,21 +377,24 @@ const AgentInicio = () => {
         </div>
       )}
 
-      {/* Quick Actions — solo si tiene permiso de crear */}
+      {/* Quick Actions - solo si tiene permiso de crear */}
       {inicioPerms.canCreate && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <button
             data-cta="agentes.inicio.nuevo-prospecto"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_nuevo_prospecto', elementLabel: 'Nuevo prospecto' });
               setAddProspectoOpen(true);
             }}
-            className="rounded-xl bg-white border border-gray-100 shadow-sm p-4 flex flex-col items-center gap-2 active:scale-[0.97] transition-transform"
+            className="flex items-center gap-3.5 rounded-2xl border border-[#ECEEF0] bg-white p-[18px] text-left shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.10)]"
           >
-            <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center">
-              <UserPlus className="h-5 w-5 text-purple-600" />
-            </div>
-            <span className="text-xs font-medium text-[hsl(var(--agent-text))]">Nuevo prospecto</span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF6F0] text-[#0E7A45]">
+              <UserPlus className="h-[22px] w-[22px]" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[15px] font-bold text-[#171A1D]">Nuevo prospecto</span>
+              <span className="mt-0.5 block text-[11.5px] font-medium text-[#9AA3AD]">Captura un comprador potencial</span>
+            </span>
           </button>
           <button
             data-cta="agentes.inicio.agendar-cita"
@@ -398,52 +402,59 @@ const AgentInicio = () => {
               track({ page: 'agent_inicio', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita' });
               setAgendarCitaOpen(true);
             }}
-            className="rounded-xl bg-white border border-gray-100 shadow-sm p-4 flex flex-col items-center gap-2 active:scale-[0.97] transition-transform"
+            className="flex items-center gap-3.5 rounded-2xl border border-[#ECEEF0] bg-white p-[18px] text-left shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.10)]"
           >
-            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <CalendarPlus className="h-5 w-5 text-blue-600" />
-            </div>
-            <span className="text-xs font-medium text-[hsl(var(--agent-text))]">Agendar cita</span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF6F0] text-[#0E7A45]">
+              <CalendarPlus className="h-[22px] w-[22px]" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[15px] font-bold text-[#171A1D]">Agendar cita</span>
+              <span className="mt-0.5 block text-[11.5px] font-medium text-[#9AA3AD]">Coordina una visita al desarrollo</span>
+            </span>
           </button>
         </div>
       )}
 
       {/* Metrics */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-[hsl(var(--agent-text))] px-1">
-          Métricas comerciales
-        </h2>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
+            Tus números
+          </h2>
+          {presentationMode && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#EBC089] bg-[#FBE3CE] px-2.5 py-1 text-[10.5px] font-bold text-[#B5601C]">
+              <EyeOff className="h-3 w-3" />
+              Ocultos · desactiva Modo presentación
+            </span>
+          )}
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--agent-muted))]" />
+            <Loader2 className="h-5 w-5 animate-spin text-[#9AA3AD]" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3.5">
             <MetricCard
               label="Comisión pagada"
-              value={formatCurrency(metrics?.comisionPagada || 0)}
-              icon={CheckCircle2}
+              value={mask(formatCurrency(metrics?.comisionPagada || 0))}
               variant="highlight"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Comisión pendiente"
-              value={formatCurrency(metrics?.comisionPendiente || 0)}
-              icon={DollarSign}
+              value={mask(formatCurrency(metrics?.comisionPendiente || 0))}
               variant="default"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Ventas activas"
-              value={String(metrics?.ventasActivas || 0)}
-              icon={TrendingUp}
+              value={mask(String(metrics?.ventasActivas || 0))}
               variant="default"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Ventas cerradas"
-              value={String(metrics?.ventasCerradas || 0)}
-              icon={ShoppingCart}
+              value={mask(String(metrics?.ventasCerradas || 0))}
               variant="default"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
@@ -465,7 +476,7 @@ const AgentInicio = () => {
               {citasProximas.map((cita: any) => {
                 const time = formatTime(cita);
                 return (
-                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-xl bg-white border border-gray-100 shadow-sm p-3 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform">
+                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform">
                   <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
                     <Calendar className="h-4 w-4 text-blue-600" />
                   </div>
@@ -511,7 +522,7 @@ const AgentInicio = () => {
               {citasHistorial.map((cita: any) => {
                 const time = formatTime(cita);
                 return (
-                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-xl bg-white border border-gray-100 shadow-sm p-3 flex items-center gap-3 opacity-70 cursor-pointer active:scale-[0.98] transition-transform">
+                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3 opacity-70 cursor-pointer active:scale-[0.98] transition-transform">
                   <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
                     <Calendar className="h-4 w-4 text-gray-400" />
                   </div>
@@ -714,10 +725,10 @@ const AgentInicio = () => {
   );
 };
 
-function MetricCard({ label, value, icon: Icon, variant = 'default', onClick }: {
+function MetricCard({ label, value, sub, variant = 'default', onClick }: {
   label: string;
   value: string;
-  icon: any;
+  sub?: string;
   variant?: 'highlight' | 'default';
   onClick?: () => void;
 }) {
@@ -726,22 +737,21 @@ function MetricCard({ label, value, icon: Icon, variant = 'default', onClick }: 
     <div
       onClick={onClick}
       className={cn(
-        "rounded-xl p-3.5 space-y-2 cursor-pointer active:scale-[0.97] transition-transform",
-        isHighlight
-          ? "bg-[hsl(var(--agent-primary))] shadow-md"
-          : "bg-white border border-gray-100 shadow-sm"
+        "cursor-pointer rounded-2xl border p-[18px] shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-transform active:scale-[0.98]",
+        isHighlight ? "border-transparent bg-[#16A45E]" : "border-[#ECEEF0] bg-white"
       )}
     >
-      <div className={cn(
-        "h-8 w-8 rounded-lg flex items-center justify-center",
-        isHighlight ? "bg-white/15" : "bg-emerald-50"
-      )}>
-        <Icon className={cn("h-4 w-4", isHighlight ? "text-white/60" : "text-[hsl(var(--agent-text-secondary))]")} />
-      </div>
-      <div>
-        <p className={cn("text-lg font-bold", isHighlight ? "text-white" : "text-[hsl(var(--agent-text))]")}>{value}</p>
-        <p className={cn("text-[11px]", isHighlight ? "text-white/70" : "text-[hsl(var(--agent-text-secondary))]")}>{label}</p>
-      </div>
+      <p className={cn(
+        "text-[10.5px] font-bold uppercase tracking-[0.5px]",
+        isHighlight ? "text-white/80" : "text-[#9AA3AD]"
+      )}>{label}</p>
+      <p className={cn(
+        "mt-2 text-[24px] font-extrabold tabular-nums",
+        isHighlight ? "text-white" : "text-[#171A1D]"
+      )}>{value}</p>
+      {sub && (
+        <p className={cn("mt-1 text-[10px] font-semibold", isHighlight ? "text-white/70" : "text-[#9AA3AD]")}>{sub}</p>
+      )}
     </div>
   );
 }

@@ -9,8 +9,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, Building2, MapPin, ChevronRight, Eye, Share2, Mail, Copy } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, Search, Building2, MapPin, Eye, Share2, Mail, Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -162,11 +161,17 @@ const AgentInventario = () => {
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v);
 
   return (
-    <div className="pb-6">
+    <div className="mx-auto max-w-[1040px] pb-8">
+      {/* Header */}
+      <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Inventario</h1>
+      <p className="mt-1 text-[13.5px] font-medium text-[#6B7280]">
+        Selecciona un desarrollo para ver su detalle e inventario
+      </p>
+
       {/* Search bar */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-1 pt-1 pb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <div className="sticky top-16 z-10 mt-5 -mx-1 bg-background/95 px-1 py-1 backdrop-blur-sm">
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
             placeholder="Buscar desarrollo..."
             value={search}
@@ -176,7 +181,7 @@ const AgentInventario = () => {
                 track({ page: 'agent_inventario', elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
               }
             }}
-            className="pl-9 h-10 rounded-xl bg-card border-border shadow-sm"
+            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
           />
         </div>
       </div>
@@ -184,15 +189,15 @@ const AgentInventario = () => {
       {/* Content */}
       {isLoading ? (
         <div className="flex justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <Loader2 className="h-6 w-6 animate-spin text-[#9AA3AD]" />
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <Building2 className="h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No se encontraron desarrollos</p>
+          <Building2 className="h-10 w-10 text-[#9AA3AD]/40" />
+          <p className="text-sm text-[#6B7280]">No se encontraron desarrollos</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
           {filtered.map(proyecto => (
             <ProjectCard
               key={proyecto.id}
@@ -260,114 +265,106 @@ function ProjectCard({
 
   return (
     <>
-      <div
-        className="group rounded-2xl bg-card border border-border/60 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200 cursor-pointer"
-        onClick={onViewProject}
-      >
+      <div className="group overflow-hidden rounded-2xl border border-[#ECEEF0] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-[box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(20,30,25,0.10)]">
         {/* Image */}
-        <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
+        <div
+          className="relative aspect-[16/9] w-full cursor-pointer overflow-hidden bg-gradient-to-br from-[#E4E7EA] to-[#CBD3D9]"
+          onClick={onViewProject}
+        >
           {proyecto.imagen_url ? (
             <img
               src={proyecto.imagen_url}
               alt={proyecto.nombre}
-              className="h-full w-full object-cover object-bottom group-hover:scale-[1.02] transition-transform duration-300"
+              className="h-full w-full object-cover object-bottom transition-transform duration-300 group-hover:scale-[1.02]"
               loading="lazy"
             />
           ) : (
-            <div className="h-full w-full bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center">
-              <Building2 className="h-10 w-10 text-muted-foreground/40" />
+            <div className="flex h-full w-full items-center justify-center">
+              <Building2 className="h-10 w-10 text-white/50" />
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
 
           {/* Availability badge */}
-          <div className="absolute top-3 right-3">
+          <div className="absolute right-2.5 top-2.5">
             {isAgotado ? (
-              <span className="inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white/80">
+              <span className="inline-flex items-center rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white/80 backdrop-blur-sm">
                 Agotado
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-full bg-emerald-500/90 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white">
+              <span className="inline-flex items-center rounded-full bg-white/[0.92] px-2.5 py-1 text-[10px] font-bold tabular-nums text-[#0E7A45]">
                 {proyecto.unidades_disponibles} disp.
               </span>
             )}
           </div>
-
-          {/* Name / location / price */}
-          <div className="absolute bottom-0 left-0 right-0 p-3.5">
-            <h3 className="font-semibold text-[15px] text-white leading-snug truncate">{proyecto.nombre}</h3>
-            {proyecto.ubicacion && (
-              <p className="text-[12px] text-white/75 flex items-center gap-1 mt-0.5">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">{proyecto.ubicacion}</span>
-              </p>
-            )}
-            {!isAgotado && proyecto.precio_desde && (
-              <p className="text-[12px] text-white/80 mt-1">
-                Desde <span className="font-semibold text-white">{formatCurrency(proyecto.precio_desde)}</span>
-              </p>
-            )}
-          </div>
         </div>
 
-        {/* Stats + actions */}
-        <div onClick={e => e.stopPropagation()}>
-          <div className="px-4 py-3 flex items-center justify-between border-b border-border/50">
-            <div className="flex items-center gap-5">
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Unidades</p>
-                <p className="text-[13px] font-semibold text-foreground tabular-nums">
-                  {proyecto.total_unidades}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Avance</p>
-                <p className="text-[13px] font-semibold text-foreground tabular-nums">{proyecto.avance}%</p>
-              </div>
-            </div>
+        {/* Body */}
+        <div className="px-4 py-4">
+          <h3 className="truncate text-[16px] font-extrabold text-[#171A1D]">{proyecto.nombre}</h3>
+          {proyecto.ubicacion && (
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#9AA3AD]">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{proyecto.ubicacion}</span>
+            </p>
+          )}
+          {!isAgotado && proyecto.precio_desde && (
+            <p className="mt-2.5 text-[13px] font-bold tabular-nums text-[#0E7A45]">
+              Desde {formatCurrency(proyecto.precio_desde)}
+            </p>
+          )}
 
-            {!isAgotado && canRead && (
-              <button
-                onClick={onViewUnits}
-                className="flex items-center gap-1 text-[12px] font-semibold text-primary hover:underline"
-              >
-                Inventario
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            )}
+          {/* Stats */}
+          <div className="mt-3 flex gap-[18px]">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Unidades</p>
+              <p className="text-[13px] font-bold tabular-nums text-[#171A1D]">{proyecto.total_unidades}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Avance</p>
+              <p className="text-[13px] font-bold tabular-nums text-[#171A1D]">{proyecto.avance}%</p>
+            </div>
           </div>
 
-          <div className="px-4 py-3 flex items-center gap-2">
-            {canRead && (
+          {/* Actions - una sola fila: Ver, Inventario, Compartir */}
+          {canRead && (
+            <div className="mt-3.5 flex items-center gap-2">
               <button
                 onClick={onViewProject}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-[12px] font-medium text-foreground hover:bg-muted/60 transition-colors"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
               >
                 <Eye className="h-3.5 w-3.5" />
-                Ver desarrollo
+                Ver
               </button>
-            )}
-            {canRead && (
+              {!isAgotado && (
+                <button
+                  onClick={onViewUnits}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  Inventario
+                </button>
+              )}
               <button
+                title="Compartir"
+                aria-label="Compartir"
                 onClick={(e) => {
                   e.stopPropagation();
                   track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
                   setShareOpen(true);
                 }}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] bg-[#16A45E] text-white transition-opacity hover:opacity-90"
               >
-                <Share2 className="h-3.5 w-3.5" />
-                Compartir
+                <Share2 className="h-4 w-4" />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Compartir — {proyecto.nombre}</DialogTitle>
+            <DialogTitle>Compartir - {proyecto.nombre}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 pt-2">
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShare("whatsapp")}>
