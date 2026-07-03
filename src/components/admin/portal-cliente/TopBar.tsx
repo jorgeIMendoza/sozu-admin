@@ -44,10 +44,10 @@ const TopBar = ({ userName, userRole, userPhone }: TopBarProps) => {
 
   return (
     <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-      {/* Search — 1/3 of available space */}
-      <PortalSearchInput className="w-1/3 min-w-0" />
+      {/* Search */}
+      <PortalSearchInput className="w-full max-w-[260px] min-w-0" />
 
-      {/* Impersonation selector — self-guards for superadmin */}
+      {/* Impersonation toolbar — self-guards for superadmin */}
       <ClienteImpersonationSelector />
 
       {/* Bell + Avatar — pushed to right */}
