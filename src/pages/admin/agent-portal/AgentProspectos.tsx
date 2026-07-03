@@ -3,14 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Search, UserPlus, Mail, Phone, Pencil } from "lucide-react";
+import { Loader2, Plus, Search, UserPlus, Pencil, EyeOff } from "lucide-react";
 
 interface ProspectoAgrupado {
   id_persona: number;
@@ -31,6 +31,7 @@ const AgentProspectos = () => {
   const { track } = useCtaTracker();
   const { permissions } = useAgentPortalPermissions();
   const perms = permissions['/admin/agent/prospectos'] || permissions['/admin/agent/inicio'] || { canRead: true, canCreate: true };
+  const { presentationMode, mask } = useAgentPresentation();
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [editPersonaId, setEditPersonaId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -110,15 +111,15 @@ const AgentProspectos = () => {
   return (
     <div className="pb-24">
       <AgentPortalHeader>
-        <div className="flex items-center justify-between w-full">
-          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Mis Prospectos</h1>
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Mis Prospectos</h1>
           {perms.canCreate && (
             <button
               onClick={() => {
                 track({ page: 'agent_prospectos', elementId: 'btn_nuevo_prospecto' });
                 setAddProspectoOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[hsl(var(--agent-primary))] text-white text-sm font-medium active:scale-95 transition-transform"
+              className="flex items-center gap-1.5 rounded-[10px] bg-[#16A45E] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
             >
               <Plus className="h-4 w-4" />
               Nuevo
@@ -127,89 +128,97 @@ const AgentProspectos = () => {
         </div>
       </AgentPortalHeader>
 
-      <div className="p-4 space-y-4">
+      <div className="mx-auto max-w-[920px] p-4 pt-2">
+        {/* Banner modo presentación */}
+        {presentationMode && (
+          <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
+            <span className="text-[12px] font-semibold text-[#B5601C]">
+              Modo presentación · datos de prospectos ocultos. Desactívalo arriba para verlos.
+            </span>
+          </div>
+        )}
+
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
-            placeholder="Buscar prospecto..."
+            placeholder="Buscar prospecto…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9"
+            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
           />
         </div>
 
         {/* List */}
         {isLoading ? (
           <div className="flex justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-[#9AA3AD]" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-10 space-y-2">
-            <UserPlus className="h-10 w-10 mx-auto text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
+          <div className="space-y-2 py-16 text-center">
+            <UserPlus className="mx-auto h-10 w-10 text-[#9AA3AD]/40" />
+            <p className="text-sm text-[#6B7280]">
               {search ? "No se encontraron prospectos" : "Aún no tienes prospectos"}
             </p>
             {!search && perms.canCreate && (
               <button
                 onClick={() => setAddProspectoOpen(true)}
-                className="text-sm font-medium text-[hsl(var(--agent-primary))] hover:underline"
+                className="text-sm font-bold text-[#0E7A45] hover:underline"
               >
                 + Crear tu primer prospecto
               </button>
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map(p => (
-              <div
-                key={p.id_persona}
-                className="rounded-xl bg-white border border-gray-100 shadow-sm p-3.5 space-y-2"
-              >
-                <div className="flex items-start justify-between">
+          <div className="mt-4 flex flex-col gap-2.5">
+            {filtered.map(p => {
+              const initials = (p.nombre_legal || p.email || "?")
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(w => w.charAt(0).toUpperCase())
+                .join("") || "?";
+              const contacto = [p.telefono, p.email].filter(Boolean).join("  ·  ");
+              return (
+                <div
+                  key={p.id_persona}
+                  onClick={() => {
+                    setEditPersonaId(p.id_persona);
+                    setAddProspectoOpen(true);
+                  }}
+                  className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.08)]"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EAF6F0] text-[13px] font-bold text-[#0E7A45]">
+                    {initials}
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[hsl(var(--agent-text))] truncate">
-                      {p.nombre_legal || p.email}
+                    <p className="truncate text-[13.5px] font-bold text-[#171A1D]">
+                      {mask(p.nombre_legal || p.email)}
                     </p>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {p.email && (
-                        <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1 truncate">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          {p.email}
+                    {contacto && (
+                      <p className="mt-0.5 truncate text-[11px] font-medium tabular-nums text-[#9AA3AD]">
+                        {mask(contacto)}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {p.proyectos.map(pr => (
+                        <span
+                          key={pr.id}
+                          className="rounded-full bg-[#F2F4F5] px-2 py-[3px] text-[9.5px] font-semibold text-[#6B7280]"
+                        >
+                          {pr.nombre}
                         </span>
-                      )}
-                      {p.telefono && (
-                        <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {p.telefono}
-                        </span>
+                      ))}
+                      {p.proyectos.length === 0 && (
+                        <span className="text-[10px] text-[#9AA3AD]">Sin proyectos asignados</span>
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setEditPersonaId(p.id_persona);
-                      setAddProspectoOpen(true);
-                    }}
-                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title="Editar prospecto"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
+                  <Pencil className="h-4 w-4 shrink-0 text-[#9AA3AD] opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
-                {/* Project badges */}
-                <div className="flex flex-wrap gap-1.5">
-                  {p.proyectos.map(pr => (
-                    <Badge key={pr.id} variant="secondary" className="text-[10px] px-2 py-0.5">
-                      {pr.nombre}
-                    </Badge>
-                  ))}
-                  {p.proyectos.length === 0 && (
-                    <span className="text-[10px] text-muted-foreground">Sin proyectos asignados</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

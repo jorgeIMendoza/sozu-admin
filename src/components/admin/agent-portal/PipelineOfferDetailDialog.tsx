@@ -414,7 +414,7 @@ export function PipelineOfferDetailDialog({
         {alreadyHasScheme && (
           <div className="border-t p-2 bg-background text-center">
             <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-              <Lock className="h-3 w-3" /> Plan ya seleccionado — no se puede cambiar
+              <Lock className="h-3 w-3" /> Plan ya seleccionado - no se puede cambiar
             </p>
           </div>
         )}

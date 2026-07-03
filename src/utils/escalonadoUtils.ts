@@ -124,6 +124,67 @@ export function calcDynamicScheme(
 }
 
 /**
+ * Calculates amounts for an escalonado scheme (fixed monthly amount stored in
+ * `tramos_mensualidad`, in centavos). Single source of truth shared by the
+ * digital offer / PDF (`calcPaymentPlans`) and the agent inventory dialog.
+ *
+ * Dynamic (non-manual) schemes recompute the number of months against the
+ * project's delivery date: pass `mesesEfectivos = mesesEntreFechas(gen, entrega)`.
+ * Pass 0 (or a manual scheme) to keep the tramos' own month counts.
+ */
+export function calcEscalonadoScheme(
+  scheme: {
+    porcentaje_enganche?: number;
+    porcentaje_descuento_aumento?: number;
+    es_manual?: boolean;
+    tramos_mensualidad?: any[] | null;
+  },
+  precioLista: number,
+  mesesEfectivos: number
+): DynamicSchemeResult {
+  const pctDesc = Number(scheme.porcentaje_descuento_aumento ?? 0);
+  const precioFinal = precioLista * (1 + pctDesc / 100);
+  const adjustment = precioFinal - precioLista;
+  const enganche = precioFinal * (Number(scheme.porcentaje_enganche ?? 0) / 100);
+  const tramos = Array.isArray(scheme.tramos_mensualidad) ? scheme.tramos_mensualidad : [];
+  const montoMensualFijo =
+    (tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100;
+
+  let meses: number;
+  let mensualidad: number;
+  let mensualidadesTotal: number;
+
+  if (scheme.es_manual !== true && mesesEfectivos > 0) {
+    // Dinámico: monto mensual fijo × meses recalculados contra fecha de entrega
+    meses = mesesEfectivos;
+    mensualidad = montoMensualFijo;
+    mensualidadesTotal = mensualidad * meses;
+  } else {
+    // Manual o sin fecha de entrega: conservar los tramos definidos
+    const tramosExp = expandirTramos(tramos);
+    meses = tramosExp.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+    mensualidadesTotal = tramosExp.reduce(
+      (s: number, t: any) => s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0),
+      0
+    );
+    mensualidad = meses > 0 ? mensualidadesTotal / meses : 0;
+  }
+
+  const entrega = Math.max(0, precioFinal - enganche - mensualidadesTotal);
+  return {
+    enganche,
+    mensualidad,
+    mensualidadesTotal,
+    entrega,
+    precioFinal,
+    adjustment,
+    meses,
+    porcentajeMensualidades: precioFinal > 0 ? (mensualidadesTotal / precioFinal) * 100 : 0,
+    porcentajeEntrega: precioFinal > 0 ? (entrega / precioFinal) * 100 : 0,
+  };
+}
+
+/**
  * Formats a number as MXN currency string (e.g. "$1,234.56")
  */
 export function formatMXN(amount: number): string {
