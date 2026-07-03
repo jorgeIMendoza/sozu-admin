@@ -46,7 +46,9 @@ export function CobranzaProjectFilter({
           aria-expanded={open}
           className={cn("h-[38px] justify-between text-sm font-normal", className)}
         >
-          <span className="truncate">{selectedProject?.nombre ?? allLabel}</span>
+          <span className={cn("truncate", value === null ? "text-muted-foreground" : "text-foreground")}>
+            {selectedProject?.nombre ?? allLabel}
+          </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
