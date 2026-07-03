@@ -104,9 +104,17 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
       if (tipoError || !tipoData) throw new Error('Tipo de entidad "Embajador" no encontrado. Ejecuta la migración 20260527000002.');
 
       // 2. Resolver persona (ruta A: nueva / ruta B: existente)
+      // Re-consultar en vez de confiar en `existingPersona` (puede estar desactualizado
+      // si el usuario editó el email sin volver a disparar el onBlur antes de enviar).
+      const { data: personaActual } = await supabase
+        .from('personas')
+        .select('id, nombre_legal')
+        .eq('email', emailNorm)
+        .maybeSingle();
+
       let personaId: number;
-      if (existingPersona) {
-        personaId = existingPersona.id;
+      if (personaActual) {
+        personaId = personaActual.id;
       } else {
         const { data: persona, error: personaError } = await supabase
           .from('personas')
@@ -151,7 +159,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .insert({
           id_entidad_relacionada: erData.id,
           empresa: form.company.trim() || null,
-          tipo: Number(form.type),
+          id_tipo_embajador: Number(form.type),
           pct_comision: Number(form.commissionPct) || 0,
           monto_fijo: form.fixedAmount ? Number(form.fixedAmount) : null,
           trigger_comision: form.commissionTrigger,
@@ -163,7 +171,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
       if (cfgError) throw cfgError;
 
       // 6. Usuario/rol (ruta A: create-user / ruta B: user_roles secundario)
-      if (existingPersona) {
+      if (personaActual) {
         const { data: rolExistente } = await (supabase as any)
           .from('user_roles')
           .select('id')
@@ -188,7 +196,10 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
             clave_pais_telefono: form.clavePaisTelefono,
           },
         });
-        if (createUserError) throw createUserError;
+        if (createUserError) {
+          const detail = await (createUserError as any).context?.json?.().catch(() => null);
+          throw new Error(detail?.error ?? createUserError.message);
+        }
         toast.success(`Embajador creado. Se envió correo de activación a ${form.email}.`);
       }
 

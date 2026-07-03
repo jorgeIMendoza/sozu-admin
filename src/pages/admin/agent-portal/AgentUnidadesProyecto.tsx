@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme } from "@/utils/escalonadoUtils";
+import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme, expandirTramos } from "@/utils/escalonadoUtils";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
@@ -239,6 +239,47 @@ const AgentUnidadesProyecto = () => {
   const getSchemesForProperty = (prop: any) => prop.esquemas_pago || [];
 
   const calcSchemeAmounts = (scheme: any, precioLista: number, mesesEfectivos: number = 0) => {
+    // Escalonado con monto fijo: tramos_mensualidad trae montos en centavos y las
+    // columnas planas (porcentaje_mensualidades=0) no reflejan las mensualidades.
+    // Mismo cálculo que calcPaymentPlans en use-offer-db.ts.
+    const tramos = scheme.tramos_mensualidad;
+    const isEscalonadoConMontoFijo = Array.isArray(tramos) && tramos.length > 0
+      && tramos.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
+
+    if (isEscalonadoConMontoFijo) {
+      const pctDesc = Number(scheme.porcentaje_descuento_aumento ?? 0);
+      const precioFinal = precioLista * (1 + pctDesc / 100);
+      const enganche = precioFinal * (Number(scheme.porcentaje_enganche ?? 0) / 100);
+
+      let meses: number;
+      let mensualidadesTotal: number;
+      let mensualidad: number;
+      if (mesesEfectivos > 0) {
+        // Esquema dinámico: recalcular meses contra la fecha de entrega actual del proyecto
+        meses = mesesEfectivos;
+        mensualidad = ((tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100);
+        mensualidadesTotal = mensualidad * meses;
+      } else {
+        const tramosExpanded = expandirTramos(tramos);
+        meses = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+        mensualidadesTotal = tramosExpanded.reduce((s: number, t: any) =>
+          s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0), 0);
+        mensualidad = meses > 0 ? mensualidadesTotal / meses : 0;
+      }
+
+      const entrega = Math.max(0, precioFinal - enganche - mensualidadesTotal);
+      return {
+        precioAjustado: precioFinal,
+        enganche,
+        mensualidadesTotal,
+        entrega,
+        mensualidad,
+        numMensualidades: meses,
+        porcentajeMensualidades: precioFinal > 0 ? (mensualidadesTotal / precioFinal) * 100 : 0,
+        porcentajeEntrega: precioFinal > 0 ? (entrega / precioFinal) * 100 : 0,
+      };
+    }
+
     const result = calcDynamicScheme(scheme, precioLista, mesesEfectivos);
     return {
       precioAjustado: result.precioFinal,
