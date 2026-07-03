@@ -370,7 +370,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       pdf.text(planData.proyecto || "Proyecto", margin, 12);
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${planData.edificio} — Unidad ${planData.rawPropertyNumber}`, margin, 19);
+      pdf.text(`${planData.edificio} - Unidad ${planData.rawPropertyNumber}`, margin, 19);
       pdf.setFontSize(8);
       pdf.text("Ficha Técnica", pageWidth - margin, 12, { align: "right" });
       pdf.text(new Date().toLocaleDateString("es-MX", { year: "numeric", month: "long", day: "numeric" }), pageWidth - margin, 19, { align: "right" });
@@ -387,11 +387,11 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       y += 5;
 
       pdf.setFontSize(9);
-      const m2Total = planData.m2Total > 0 ? `${planData.m2Total.toFixed(2)} m²` : "—";
+      const m2Total = planData.m2Total > 0 ? `${planData.m2Total.toFixed(2)} m²` : "Sin registro";
       const details = [
-        ["Nivel", `${planData.numeroPiso || "—"}`],
+        ["Nivel", `${planData.numeroPiso || "Sin registro"}`],
         ["Departamento", planData.numeroDepa],
-        ["Modelo", planData.modelo || "—"],
+        ["Modelo", planData.modelo || "Sin registro"],
         ["Metraje", m2Total],
       ];
       const colWidth = contentWidth / 2;
@@ -418,7 +418,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
         pdf.setFontSize(8);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(120, 120, 120);
-        pdf.text(`Nivel ${planData.numeroPiso} — Depto. ${planData.numeroDepa}`, margin, y + 4);
+        pdf.text(`Nivel ${planData.numeroPiso} - Depto. ${planData.numeroDepa}`, margin, y + 4);
         y += 9;
 
         const floorPlanDataUrl = await renderFloorPlanToDataUrl(
@@ -450,7 +450,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
         pdf.setFontSize(8);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(120, 120, 120);
-        pdf.text(`Modelo ${planData.modelo || "—"}`, margin, y + 4);
+        pdf.text(`Modelo ${planData.modelo || "Sin registro"}`, margin, y + 4);
         y += 9;
 
         const arqData = await loadImageAsDataUrl(planData.planoArqUrl, 1200);
@@ -471,7 +471,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
         pdf.setFontSize(7);
         pdf.setTextColor(160, 160, 160);
         pdf.text(
-          `${planData.proyecto} — Unidad ${planData.rawPropertyNumber} | Página ${i} de ${totalPages}`,
+          `${planData.proyecto} - Unidad ${planData.rawPropertyNumber} | Página ${i} de ${totalPages}`,
           pageWidth / 2, pageHeight - 8, { align: "center" }
         );
       }
@@ -513,10 +513,10 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="text-base">
-                  Planos — {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
+                  Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
                 </DialogTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Nivel {planData.numeroPiso} — Depto. {planData.numeroDepa}
+                  Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
                 </p>
               </div>
               <Button
@@ -558,7 +558,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
                     fullPropertyNumber={planData.rawPropertyNumber}
                   />
                   <p className="text-xs text-muted-foreground mt-2">
-                    Nivel {planData.numeroPiso} — Depto. <span className="font-semibold text-foreground">{planData.numeroDepa}</span>
+                    Nivel {planData.numeroPiso} - Depto. <span className="font-semibold text-foreground">{planData.numeroDepa}</span>
                   </p>
                 </div>
               ) : (
