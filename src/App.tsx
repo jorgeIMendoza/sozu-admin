@@ -164,8 +164,8 @@ const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente
 const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
 
 // Portal Cobranza pages
-const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
-const CobranzaBandeja = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaBandeja"));
+const CollectionDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionDashboard"));
+const CollectionInbox = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionInbox"));
 const CobranzaAtencion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAtencion"));
 const CobranzaPagos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPagos"));
 const CobranzaConciliaciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConciliaciones"));
@@ -839,8 +839,8 @@ const App = () => (
                   <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
-                  <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
-                  <Route path="portal-cobranza/cuentas-cobranza" element={<CobranzaBandeja />} />
+                  <Route path="portal-cobranza/dashboard" element={<CollectionDashboard />} />
+                  <Route path="portal-cobranza/cuentas-cobranza" element={<CollectionInbox />} />
                   <Route path="portal-cobranza/atencion-clientes" element={<CobranzaAtencion />} />
                   <Route path="portal-cobranza/relacion-pagos" element={<CobranzaPagos />} />
                   {/* CEPs Pendientes fusionado en Relación de Pagos → redirige con filtro Sin CEP */}

@@ -280,8 +280,6 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .from("showrooms_proyecto")
       .select("nombre, descripcion_direccion, horarios, latitud, longitud")
       .eq("id_proyecto", proyectoId)
-      .eq("activo", true)
-      .order("fecha_actualizacion", { ascending: false })
       .limit(1)
       .maybeSingle(),
     // Agente: busca persona por email del creador de la oferta en el mismo batch
