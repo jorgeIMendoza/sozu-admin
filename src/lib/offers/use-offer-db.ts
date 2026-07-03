@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
-import { expandirTramos, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme } from "@/utils/escalonadoUtils";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,23 +103,18 @@ function calcPaymentPlans(
     if (isEscalonado) {
       // Los esquemas dinámicos (no manuales) recalculan meses y fecha final contra
       // la fecha de entrega ACTUAL del proyecto. Los manuales conservan sus tramos.
+      // Cálculo compartido con el diálogo de inventario de agentes (calcEscalonadoScheme).
       const recomputeVsEntrega = e.es_manual !== true && !!fechaEntrega && !!fechaGeneracion;
-      const montoMensualFijo = ((tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100);
-
-      if (recomputeVsEntrega) {
-        nMensual          = mesesEntreFechas(fechaGeneracion!, fechaEntrega!);
-        monthlyAmount     = montoMensualFijo;
-        installmentsTotal = monthlyAmount * nMensual;
-        installmentsEndDate = fechaEntrega!;
-      } else {
-        const tramosExpanded = expandirTramos(tramos);
-        nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
-        installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
-          return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
-        }, 0);
-        monthlyAmount = nMensual > 0 ? installmentsTotal / nMensual : 0;
-      }
-      finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
+      const esc = calcEscalonadoScheme(
+        e,
+        listPrice,
+        recomputeVsEntrega ? mesesEntreFechas(fechaGeneracion!, fechaEntrega!) : 0
+      );
+      nMensual           = esc.meses;
+      monthlyAmount      = esc.mensualidad;
+      installmentsTotal  = esc.mensualidadesTotal;
+      finalPaymentAmount = esc.entrega;
+      installmentsEndDate = recomputeVsEntrega ? fechaEntrega! : "";
       pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
       pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
     } else if (mesesEfectivos > 0 && Number(e.porcentaje_mensualidades ?? 0) > 0) {
@@ -280,6 +275,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .from("showrooms_proyecto")
       .select("nombre, descripcion_direccion, horarios, latitud, longitud")
       .eq("id_proyecto", proyectoId)
+      .eq("activo", true)
+      .order("fecha_actualizacion", { ascending: false })
       .limit(1)
       .maybeSingle(),
     // Agente: busca persona por email del creador de la oferta en el mismo batch
