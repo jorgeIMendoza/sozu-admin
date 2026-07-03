@@ -620,6 +620,9 @@ const Propiedades = () => {
         query = query.eq('activo', false);
       }
 
+      // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+      query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
+
       // Precio es columna directa → filtrar server-side (columna real, no requiere fetch completo).
       if (precioFilterIsActive) {
         query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
@@ -964,6 +967,7 @@ const Propiedades = () => {
 
       const applyFilters = (q: any) => {
         q = q.eq('activo', true).eq('es_aprobado', true).gt('precio_lista', 0);
+        q = q.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
         if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
           q = q.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
         }
@@ -1949,6 +1953,7 @@ const Propiedades = () => {
         .in('id_edificio_modelo', edificioModeloIds)
         .eq('activo', true)
         .eq('es_aprobado', true);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
       
       // Also apply ownership filter if rep empresa dueña
       if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
@@ -1998,6 +2003,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', true)
           .eq('es_aprobado', true);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (!hasUnrestrictedAccess && accessiblePropertyIds && accessiblePropertyIds.length > 0) {
@@ -2388,6 +2395,7 @@ const Propiedades = () => {
             .in('id_edificio_modelo', edificioModeloIds)
             .eq('activo', true)
             .eq('es_aprobado', false);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
           
           if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
             propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
@@ -2423,6 +2431,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', true)
           .eq('es_aprobado', false);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (draftPropertyIds && draftPropertyIds.length > 0) {
@@ -2804,6 +2814,7 @@ const Propiedades = () => {
             .in('id_edificio_modelo', edificioModeloIds)
             .eq('activo', false)
             .eq('es_aprobado', false);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
           
           if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
             propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
@@ -2839,6 +2850,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', false)
           .eq('es_aprobado', false);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (deletedPropertyIds && deletedPropertyIds.length > 0) {
