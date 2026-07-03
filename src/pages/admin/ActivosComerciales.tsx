@@ -8,10 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/admin/StatCard";
 import { supabase } from "@/integrations/supabase/client";
 
 type TipoTab = "todos" | "11" | "12" | "13" | "14";
+type EstadoFiltro = "activos" | "inactivos" | "todos";
 
 const TABS: { value: TipoTab; label: string; icon: typeof Store }[] = [
   { value: "todos", label: "Todos", icon: Store },
@@ -28,9 +30,10 @@ export default function ActivosComerciales() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TipoTab>("todos");
   const [search, setSearch] = useState("");
+  const [estado, setEstado] = useState<EstadoFiltro>("activos");
 
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["activos-comerciales", tab],
+    queryKey: ["activos-comerciales", tab, estado],
     queryFn: async () => {
       let q = supabase
         .from("propiedades")
@@ -38,14 +41,16 @@ export default function ActivosComerciales() {
           id, numero_propiedad, id_tipo_propiedad, m2_interiores, m2_exteriores,
           precio_lista, id_estatus_disponibilidad, activo, es_aprobado,
           tipos_propiedad:id_tipo_propiedad ( nombre ),
-          estatus_disponibilidad:id_estatus_disponibilidad ( nombre )
+          estatus_disponibilidad:id_estatus_disponibilidad ( nombre ),
+          propiedades_activo_comercial ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
         `)
         .gt("id_tipo_propiedad", 10)
-        .eq("activo", true)
         .order("id", { ascending: false })
         .limit(500);
 
       if (tab !== "todos") q = q.eq("id_tipo_propiedad", Number(tab));
+      if (estado === "activos") q = q.eq("activo", true);
+      else if (estado === "inactivos") q = q.eq("activo", false);
 
       const { data, error } = await q;
       if (error) throw error;
@@ -56,10 +61,17 @@ export default function ActivosComerciales() {
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return rows;
-    return rows.filter((r: any) =>
-      String(r.numero_propiedad ?? "").toLowerCase().includes(s) ||
-      String(r.id).includes(s)
-    );
+    return rows.filter((r: any) => {
+      const ac = r.propiedades_activo_comercial ?? {};
+      return (
+        String(r.numero_propiedad ?? "").toLowerCase().includes(s) ||
+        String(r.id).includes(s) ||
+        String(ac.codigo_interno ?? "").toLowerCase().includes(s) ||
+        String(ac.ubicacion_ciudad ?? "").toLowerCase().includes(s) ||
+        String(ac.ubicacion_direccion ?? "").toLowerCase().includes(s) ||
+        String(r.tipos_propiedad?.nombre ?? "").toLowerCase().includes(s)
+      );
+    });
   }, [rows, search]);
 
   const kpis = useMemo(() => {
@@ -105,14 +117,29 @@ export default function ActivosComerciales() {
 
       <Card>
         <CardContent className="p-4 space-y-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por número o ID…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[240px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por código, número, ciudad o dirección…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={estado} onValueChange={(v) => setEstado(v as EstadoFiltro)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="activos">Activos</SelectItem>
+                <SelectItem value="inactivos">Inactivos</SelectItem>
+                <SelectItem value="todos">Todos</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground ml-auto tabular-nums">
+              {filtered.length} resultado{filtered.length === 1 ? "" : "s"}
+            </span>
           </div>
 
           {isLoading ? (
@@ -131,11 +158,14 @@ export default function ActivosComerciales() {
                   <TableRow>
                     <TableHead>ID</TableHead>
                     <TableHead>Número</TableHead>
+                    <TableHead>Código</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Ciudad</TableHead>
                     <TableHead className="text-right">m² interior</TableHead>
                     <TableHead className="text-right">m² exterior</TableHead>
                     <TableHead className="text-right">Precio de lista</TableHead>
                     <TableHead>Estatus</TableHead>
+                    <TableHead>Activo</TableHead>
                     <TableHead>Aprobación</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -143,17 +173,26 @@ export default function ActivosComerciales() {
                   {filtered.map((r: any) => (
                     <TableRow
                       key={r.id}
-                      className="cursor-pointer"
+                      className={`cursor-pointer ${r.activo ? "" : "opacity-60"}`}
                       onClick={() => navigate(`/admin/activos-comerciales/${r.id}/editar`)}
                     >
                       <TableCell className="font-mono text-xs">{r.id}</TableCell>
                       <TableCell>{r.numero_propiedad ?? "-"}</TableCell>
+                      <TableCell className="font-mono text-xs">{r.propiedades_activo_comercial?.codigo_interno ?? "-"}</TableCell>
                       <TableCell>{r.tipos_propiedad?.nombre ?? "-"}</TableCell>
+                      <TableCell>{r.propiedades_activo_comercial?.ubicacion_ciudad ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.m2_interiores ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.m2_exteriores ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatMoney(r.precio_lista)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{r.estatus_disponibilidad?.nombre ?? "-"}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.activo ? (
+                          <Badge className="bg-emerald-600 hover:bg-emerald-600">Activo</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground">Inactivo</Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         {r.es_aprobado ? (
