@@ -416,6 +416,7 @@ const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
+const RegistroEmbajador = lazyRetry(() => import("./pages/public/RegistroEmbajador"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
 const OfferPage = lazyRetry(() => import("./pages/public/OfferPage"));
 const CapturaDatosPage = lazyRetry(() => import("./pages/public/CapturaDatosPage"));
@@ -573,6 +574,7 @@ const App = () => (
                 </Routes>
               ) : isEmbajadoresSubdomain ? (
                 <Routes>
+                  <Route path="/registro" element={<RegistroEmbajador />} />
                   <Route path="/login" element={<Login portalContext="embajadores" />} />
                   <Route path="/auth/login" element={<Login portalContext="embajadores" />} />
                   <Route path="/auth/change-password" element={<ChangePassword />} />
