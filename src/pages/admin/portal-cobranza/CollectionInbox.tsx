@@ -362,7 +362,7 @@ export default function CollectionInboxPage() {
             value={projectId}
             onChange={v => { setProjectId(v); resetPage(); }}
             allLabel="Todos"
-            className="h-9 w-full sm:w-[150px]"
+            className="h-9 w-full sm:w-[148px]"
             popoverClassName="w-[280px]"
           />
         </div>
@@ -373,7 +373,7 @@ export default function CollectionInboxPage() {
             value={searchClient}
             onChange={e => { setSearchClient(e.target.value); resetPage(); }}
             placeholder="García López"
-            className="h-9 w-full sm:w-[180px] text-sm"
+            className="h-9 w-full sm:w-[148px] text-sm"
           />
         </div>
 
@@ -384,13 +384,13 @@ export default function CollectionInboxPage() {
             onChange={e => { setSearchUnit(e.target.value); resetPage(); }}
             placeholder="203"
             inputMode="numeric"
-            className="h-9 w-full sm:w-[110px] text-sm"
+            className="h-9 w-full sm:w-[148px] text-sm"
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo</span>
-          <TipoMultiSelect value={filterType} onChange={v => { setFilterType(v); resetPage(); }} options={options.types} className="w-full sm:w-[150px]" />
+          <TipoMultiSelect value={filterType} onChange={v => { setFilterType(v); resetPage(); }} options={options.types} className="w-full sm:w-[148px]" />
         </div>
 
         {/* Button: opens the advanced-filters panel. Badge = active count. */}
