@@ -363,7 +363,6 @@ export default function CollectionInboxPage() {
             onChange={v => { setProjectId(v); resetPage(); }}
             allLabel="Todos"
             className="h-9 w-full sm:w-[148px]"
-            popoverClassName="w-[280px]"
           />
         </div>
 
@@ -390,7 +389,7 @@ export default function CollectionInboxPage() {
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo</span>
-          <TipoMultiSelect value={filterType} onChange={v => { setFilterType(v); resetPage(); }} options={options.types} className="w-full sm:w-[148px]" />
+          <TipoMultiSelect value={filterType} onChange={v => { setFilterType(v); resetPage(); }} options={options.types} className="h-9 w-full sm:w-[148px]" />
         </div>
 
         {/* Button: opens the advanced-filters panel. Badge = active count. */}
