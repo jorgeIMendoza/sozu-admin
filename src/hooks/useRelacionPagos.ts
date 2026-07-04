@@ -14,8 +14,15 @@ export interface PagoRecord {
   metodo_pago: string | null;
   clabe_stp: string | null;
   cliente: string | null;
+  cliente_email: string | null;
   num_propiedad: string | null;
+  modelo: string | null;
+  estatus_propiedad: string | null;
   producto: string | null;
+  // Del acuerdo de pago ligado (vía aplicaciones_pago). Los llena el RPC (pendiente).
+  fecha_limite: string | null;
+  monto_aplicado: number | null;
+  estado_acuerdo: 'pagado' | 'vencido' | 'proximo' | 'pendiente' | null;
   tipo_cuenta: 'propiedad' | 'producto' | null;
   tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | null;
   estatus: 'valido' | 'invalido' | 'error' | 'sin_revisar';

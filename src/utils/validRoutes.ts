@@ -102,7 +102,8 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/notificaciones-config',
   '/admin/notificaciones-log',
   // Portal Cobranza
-  '/admin/portal-cobranza/dashboard',
+  '/admin/portal-cobranza/inmuebles',
+  '/admin/portal-cobranza/complementos',
   '/admin/portal-cobranza/cuentas-cobranza',
   '/admin/portal-cobranza/atencion-clientes',
   '/admin/portal-cobranza/relacion-pagos',

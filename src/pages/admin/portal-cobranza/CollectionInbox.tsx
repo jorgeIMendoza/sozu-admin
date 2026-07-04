@@ -443,11 +443,11 @@ export default function CollectionInboxPage() {
       {/* Table (data ready — loading/error are handled with early returns above) */}
       <div className="rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1420px] table-fixed text-sm whitespace-nowrap">
+          <table className="w-full min-w-[1400px] table-fixed text-sm whitespace-nowrap">
             <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
               <tr>
-                <SortHeader label="Cuenta" sortKey="account" sort={sort} onSort={toggleSort} thClass="w-[128px]" />
-                <th className="w-[132px] text-center">Proyecto</th>
+                <SortHeader label="Cuenta" sortKey="account" sort={sort} onSort={toggleSort} thClass="w-[116px]" />
+                <th className="w-[122px] text-center">Proyecto</th>
                 <th className="w-[124px] text-center">Tipo</th>
                 <th className="w-[120px] text-center">Producto</th>
                 <SortHeader label="Cliente" sortKey="client" sort={sort} onSort={toggleSort} thClass="w-[160px]" />

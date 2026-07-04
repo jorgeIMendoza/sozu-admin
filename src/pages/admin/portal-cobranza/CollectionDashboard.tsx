@@ -56,14 +56,14 @@ function SelectCombobox({ options, value, onChange, placeholder, className }: {
           aria-expanded={open}
           className={cn('h-9 justify-between text-[13px] font-normal min-w-0', className)}
         >
-          <span className={cn('truncate', !displayLabel && 'text-muted-foreground')}>{displayLabel || placeholder}</span>
+          <span className={cn('truncate', !value && 'text-muted-foreground')}>{displayLabel || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
         className="p-0"
         align="start"
-        style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '140px' }}
+        style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}
       >
         <Command>
           <CommandInput placeholder="Buscar..." />
@@ -77,7 +77,7 @@ function SelectCombobox({ options, value, onChange, placeholder, className }: {
                   onSelect={() => { onChange(opt.value); setOpen(false); }}
                 >
                   <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
-                  <span className={cn('truncate', !opt.value && 'text-muted-foreground')}>{opt.label}</span>
+                  <span className={cn('truncate min-w-0', !opt.value && 'text-muted-foreground')}>{opt.label}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -119,7 +119,7 @@ function OwnerMultiSelect({ options, value, onChange, placeholder, className }: 
       <PopoverContent
         className="p-0"
         align="start"
-        style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '200px' }}
+        style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}
       >
         <Command>
           <CommandInput placeholder="Buscar dueño..." />
@@ -134,7 +134,7 @@ function OwnerMultiSelect({ options, value, onChange, placeholder, className }: 
                   )}>
                     {value.includes(name) && <Check className="h-3 w-3" />}
                   </div>
-                  <span className="truncate">{name}</span>
+                  <span className="truncate min-w-0">{name}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -287,7 +287,7 @@ export default function CollectionDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Filters */}
-      <div className="space-y-3 sm:space-y-0 sm:flex sm:items-end sm:gap-3">
+      <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-end sm:gap-3">
         {/* Año + Mes: 2 cols on mobile, flat in flex on desktop */}
         <div className="grid grid-cols-2 gap-3 sm:contents">
           <div className="flex flex-col gap-1">
@@ -297,7 +297,7 @@ export default function CollectionDashboard() {
               onChange={v => setSelectedYear(v ? Number(v) : null)}
               placeholder="Todos"
               options={[{ label: 'Todos', value: '' }, ...YEARS.map(y => ({ label: String(y), value: String(y) }))]}
-              className="w-full sm:w-[100px]"
+              className="w-full sm:w-[148px]"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -311,9 +311,9 @@ export default function CollectionDashboard() {
             />
           </div>
         </div>
-        {/* Proyecto + Dueño + Limpiar: flex row on mobile, flat in flex on desktop */}
-        <div className="flex items-end gap-3 sm:contents">
-          <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
+        {/* Proyecto + Dueño + Limpiar: 2 cols on mobile, flat in flex on desktop */}
+        <div className="grid grid-cols-2 gap-3 sm:contents">
+          <div className="flex flex-col gap-1 sm:w-[148px]">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Proyecto</span>
             <CobranzaProjectFilter
               projects={projects ?? []}
@@ -324,14 +324,14 @@ export default function CollectionDashboard() {
               popoverClassName="w-[240px]"
             />
           </div>
-          <div className="flex flex-col gap-1 flex-1 sm:flex-none sm:min-w-[180px]">
+          <div className="flex flex-col gap-1 sm:w-[148px]">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Dueño</span>
             <OwnerMultiSelect
               options={(owners ?? []).map(o => o.nombre)}
               value={selectedOwners}
               onChange={setSelectedOwners}
               placeholder="Todos"
-              className="w-full sm:w-[200px]"
+              className="w-full sm:w-[148px]"
             />
           </div>
           <div className="flex flex-col gap-1 shrink-0">
@@ -348,7 +348,7 @@ export default function CollectionDashboard() {
               )}
             >
               <X className="w-3.5 h-3.5" />
-              Limpiar
+              <span className="hidden xl:inline">Limpiar</span>
             </Button>
           </div>
         </div>
@@ -376,17 +376,17 @@ export default function CollectionDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="sozu-kpi-card overflow-hidden">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Cartera total</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(totalPortfolio)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(totalPortfolio)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">precio final acumulado</p>
               </div>
               <div className="sozu-kpi-card overflow-hidden">
-                <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3', data.cobrado_total < totalPortfolio ? 'text-warning' : 'text-success')}>Cobrado total</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(data.cobrado_total)}</p>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Cobrado total</span>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(data.cobrado_total)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">pagos registrados</p>
               </div>
               <div className="sozu-kpi-card overflow-hidden">
                 <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3', data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground')}>Pendiente total</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(data.pendiente_total)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(data.pendiente_total)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">saldo por cobrar</p>
               </div>
               <button
@@ -397,7 +397,7 @@ export default function CollectionDashboard() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Vencido total</span>
                   <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-danger shrink-0 transition-colors" strokeWidth={1.75} />
                 </div>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-danger break-all">{formatCurrency(data.vencido_total_sin_ce)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-danger whitespace-nowrap">{formatCurrency(data.vencido_total_sin_ce)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">excl. contraentrega</p>
               </button>
             </div>
@@ -409,17 +409,17 @@ export default function CollectionDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="sozu-kpi-card overflow-hidden">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Programado</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(data.programado_mes_sin_ce)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(data.programado_mes_sin_ce)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">excl. contraentrega</p>
               </div>
               <div className="sozu-kpi-card overflow-hidden">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Cobrado en el mes</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(data.cobrado_mes)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(data.cobrado_mes)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug capitalize">{periodLabel}</p>
               </div>
               <div className="sozu-kpi-card overflow-hidden">
-                <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3', Math.max(toCollectMonthNoCE, 0) > 0 ? 'text-warning' : 'text-success')}>Por cobrar</span>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">{formatCurrency(Math.max(toCollectMonthNoCE, 0))}</p>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-warning block mb-3">Por cobrar</span>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-foreground whitespace-nowrap">{formatCurrency(Math.max(toCollectMonthNoCE, 0))}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">excl. contraentrega</p>
               </div>
               <div className="sozu-kpi-card">
@@ -451,7 +451,7 @@ export default function CollectionDashboard() {
               <div className="sozu-kpi-card">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Listas p/ escriturar</span>
                 <p className="text-[32px] font-bold tabular-nums leading-none mb-1.5 text-success">{pipeline?.listas_escrituracion ?? 0}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">saldo liquidado</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">pagos validados, solo resta contra entrega</p>
               </div>
               <div className="sozu-kpi-card">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">En escrituración</span>
@@ -484,7 +484,7 @@ export default function CollectionDashboard() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Cartera vencida</span>
                   <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-danger shrink-0 transition-colors" strokeWidth={1.75} />
                 </div>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-danger break-all">{formatCurrency(data.vencido_total)}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-danger whitespace-nowrap">{formatCurrency(data.vencido_total)}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">total incl. contraentrega</p>
               </button>
               <button
@@ -517,7 +517,7 @@ export default function CollectionDashboard() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Meta del mes</span>
                   <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary shrink-0 transition-colors" strokeWidth={1.75} />
                 </div>
-                <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-primary break-all">{formatCurrency(Math.max(toCollectMonth, 0))}</p>
+                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-primary whitespace-nowrap">{formatCurrency(Math.max(toCollectMonth, 0))}</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">falta para cumplir</p>
               </button>
             </div>
@@ -617,8 +617,7 @@ export default function CollectionDashboard() {
               )}
 
               <div className="sozu-kpi-card">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">
                   Riesgo por proyecto
                 </h3>
                 {riskByProject.length > 0 ? (
@@ -719,9 +718,6 @@ export default function CollectionDashboard() {
                         )}
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-danger/10 text-danger tabular-nums">
                           {c.parcialidades_vencidas} parc.
-                        </span>
-                        <span className={cn('text-[10px] tabular-nums', c.dias_sin_pagar > 90 ? 'text-danger' : c.dias_sin_pagar > 30 ? 'text-warning' : 'text-muted-foreground')}>
-                          {c.dias_sin_pagar}d sin pagar
                         </span>
                       </div>
                     </button>

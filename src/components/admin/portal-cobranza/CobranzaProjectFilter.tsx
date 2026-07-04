@@ -44,7 +44,7 @@ export function CobranzaProjectFilter({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("h-[38px] justify-between text-sm font-normal", className)}
+          className={cn("h-[38px] justify-between text-[13px] font-normal", className)}
         >
           <span className={cn("truncate", value === null ? "text-muted-foreground" : "text-foreground")}>
             {selectedProject?.nombre ?? allLabel}
@@ -52,7 +52,11 @@ export function CobranzaProjectFilter({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn("w-[320px] p-0", popoverClassName)} align={popoverAlign}>
+      <PopoverContent
+        className={cn("p-0", popoverClassName)}
+        align={popoverAlign}
+        style={{ width: "var(--radix-popover-trigger-width)", minWidth: "160px" }}
+      >
         <Command>
           <CommandInput placeholder="Buscar proyecto..." />
           <CommandList>
@@ -65,8 +69,8 @@ export function CobranzaProjectFilter({
                   setOpen(false);
                 }}
               >
-                <Check className={cn("mr-2 h-4 w-4", value === null ? "opacity-100" : "opacity-0")} />
-                <span className="truncate">{allLabel}</span>
+                <Check className={cn("mr-2 h-4 w-4 shrink-0", value === null ? "opacity-100" : "opacity-0")} />
+                <span className="truncate min-w-0">{allLabel}</span>
               </CommandItem>
               {projects.map((project) => (
                 <CommandItem
@@ -77,8 +81,8 @@ export function CobranzaProjectFilter({
                     setOpen(false);
                   }}
                 >
-                  <Check className={cn("mr-2 h-4 w-4", value === project.id ? "opacity-100" : "opacity-0")} />
-                  <span className="truncate">{project.nombre}</span>
+                  <Check className={cn("mr-2 h-4 w-4 shrink-0", value === project.id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate min-w-0">{project.nombre}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
