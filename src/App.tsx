@@ -211,6 +211,7 @@ const PPHistoricoPage = lazyRetry(() => import("./pages/admin/portal-productos/H
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
+const EscUnidadesListasEscriturar = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscUnidadesListasEscriturar })));
 const EscUnidades = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscUnidades })));
 const EscCredito = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscCredito })));
 const EscPipeline = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscPipeline })));
@@ -871,6 +872,7 @@ const App = () => (
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
+                  <Route path="portal-escrituracion/unidades-listas-escriturar" element={<EscUnidadesListasEscriturar />} />
                   <Route path="portal-escrituracion/unidades" element={<EscUnidades />} />
                   <Route path="portal-escrituracion/credito" element={<EscCredito />} />
                   <Route path="portal-escrituracion/pipeline" element={<EscPipeline />} />
