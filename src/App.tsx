@@ -167,7 +167,8 @@ const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/Cl
 const CollectionDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionDashboard"));
 const CollectionInbox = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionInbox"));
 const CobranzaAtencion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAtencion"));
-const CobranzaPagos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPagos"));
+const CollectionPayments = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionPayments"));
+const CollectionProductsMaintenance = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionProductsMaintenance"));
 const CobranzaConciliaciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConciliaciones"));
 const CobranzaPromesas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPromesas"));
 const CobranzaAdminAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAdminAvisos"));
@@ -175,7 +176,6 @@ const CobranzaEnviarAvisos = lazyRetry(() => import("./pages/admin/portal-cobran
 const CobranzaEjecuciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEjecuciones"));
 const CobranzaPlantillas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPlantillas"));
 const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
-const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
 const CobranzaCuentaDetalle = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCuentaDetalle"));
 const PECComingSoon = lazyRetry(() => import("./pages/admin/portal-estructura-comisiones/PECComingSoon"));
 const PECDashboard = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DashboardTab"));
@@ -839,10 +839,11 @@ const App = () => (
                   <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
-                  <Route path="portal-cobranza/dashboard" element={<CollectionDashboard />} />
+                  <Route path="portal-cobranza/inmuebles" element={<CollectionDashboard />} />
                   <Route path="portal-cobranza/cuentas-cobranza" element={<CollectionInbox />} />
                   <Route path="portal-cobranza/atencion-clientes" element={<CobranzaAtencion />} />
-                  <Route path="portal-cobranza/relacion-pagos" element={<CobranzaPagos />} />
+                  <Route path="portal-cobranza/relacion-pagos" element={<CollectionPayments />} />
+                  <Route path="portal-cobranza/complementos" element={<CollectionProductsMaintenance />} />
                   {/* CEPs Pendientes fusionado en Relación de Pagos → redirige con filtro Sin CEP */}
                   <Route path="portal-cobranza/ceps-pendientes" element={<Navigate to="/admin/portal-cobranza/relacion-pagos?cep=sin" replace />} />
                   <Route path="portal-cobranza/conciliaciones" element={<CobranzaConciliaciones />} />
@@ -853,7 +854,6 @@ const App = () => (
                   <Route path="portal-cobranza/comunicacion/plantillas" element={<CobranzaPlantillas />} />
                   <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
-                  <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
                   <Route path="portal-cobranza/cuentas-cobranza/:id/detalle" element={<CobranzaCuentaDetalle />} />
                   {/* Portal Estructura de Comisiones */}
                   <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />

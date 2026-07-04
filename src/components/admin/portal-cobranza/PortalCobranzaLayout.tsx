@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Inbox, FileText, CreditCard, FileCheck,
-  AlertTriangle, Handshake, Megaphone, BarChart3,
+  AlertTriangle, Handshake, Megaphone, BarChart3, Building2, Package,
   ArrowLeft, LogOut, LucideIcon, ChevronDown, ChevronRight, Menu,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -43,6 +43,8 @@ interface CobranzaSubmenu {
 
 // Íconos por nombre de submenú (estable ante rename de vista_front_end).
 const NAV_ICONS: Record<string, LucideIcon> = {
+  "Inmuebles": Building2,
+  "Complementos": Package,
   "Dashboard": LayoutDashboard,
   "Cuentas de Cobranza": Inbox,
   "Atención a Clientes": FileText,
@@ -58,7 +60,7 @@ const SUPER_ADMIN_ROLES = new Set([1, 2]);
 
 // Etiquetas de header para rutas de detalle que no aparecen en el nav.
 const DETAIL_SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-cobranza/expediente": "Expediente",
+  "/admin/portal-cobranza/cuentas-cobranza": "Cuenta de cobranza",
 };
 
 interface NavGroup {

@@ -131,10 +131,12 @@ import {
     '/admin/portal-cliente/inicio': LayoutDashboard,
     '/admin/portal-cliente/perfil': User,
     // Portal Cobranza
-    '/admin/portal-cobranza/dashboard': LayoutDashboard,
+    '/admin/portal-cobranza/inmuebles': Building2,
+    '/admin/portal-cobranza/complementos': Package,
     '/admin/portal-cobranza/cuentas-cobranza': ClipboardList,
     '/admin/portal-cobranza/atencion-clientes': Users,
     '/admin/portal-cobranza/relacion-pagos': CreditCard,
+    '/admin/portal-cobranza/ceps-pendientes': Receipt,
     '/admin/portal-cobranza/conciliaciones': Activity,
     '/admin/portal-cobranza/promesas-pago': Banknote,
     '/admin/portal-cobranza/comunicacion/avisos': Mail,
@@ -142,6 +144,8 @@ import {
     '/admin/portal-cobranza/comunicacion/ejecuciones': History,
     '/admin/portal-cobranza/comunicacion/plantillas': FileText,
     '/admin/portal-cobranza/reportes': BarChart3,
+    '/admin/portal-cobranza/inputs-obra': Building,
+    '/admin/portal-cobranza/configuracion': Cog,
     // Embajadores
     '/admin/embajadores/gestion': Users,
     // Portal Embajadores
