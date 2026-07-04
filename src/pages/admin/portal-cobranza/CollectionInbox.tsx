@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCollectionAccounts, CollectionAccount } from '@/hooks/useCollectionAccounts';
 import { useCollectionInboxStore } from '@/lib/portal-cobranza/collection-inbox-store';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
@@ -159,6 +159,22 @@ export default function CollectionInboxPage() {
   const setFilterStatus       = (v: string[])      => setFilter('filterStatus', v);
   const [page, setPage] = useState(1);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Filtros entrantes por URL (drills desde dashboard): prioridad, proyecto (id), cliente.
+  // Al llegar con un drill, se LIMPIAN los filtros previos y luego se aplican los
+  // nuevos, para evitar que se mezclen con lo que el usuario tenía guardado.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const p = searchParams.get('prioridad');
+    const proj = searchParams.get('proyecto');
+    const cli = searchParams.get('cliente');
+    if (!p && !proj && !cli) return;
+    resetFilters();
+    if (p) setFilter('filterPriority', [p]);
+    if (proj && !Number.isNaN(Number(proj))) setFilter('projectId', Number(proj));
+    if (cli) setFilter('searchClient', cli);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Table sort. key=null → default criticality order.
   const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'asc' });
   const toggleSort = (key: SortKey) =>

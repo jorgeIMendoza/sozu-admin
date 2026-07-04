@@ -77,7 +77,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-2 px-0.5">
         <button
-          onClick={() => navigate(`/admin/portal-cobranza/expediente/${cuentaId}`)}
+          onClick={() => navigate(`/admin/portal-cobranza/cuentas-cobranza/${cuentaId}/detalle`)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background text-[12px] font-medium text-foreground hover:bg-muted transition-colors"
         >
           <ArrowRightLeft className="size-3.5" />Transferir

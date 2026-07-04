@@ -115,7 +115,6 @@ export const VALID_ADMIN_ROUTES = new Set([
   '/admin/portal-cobranza/comunicacion/ejecuciones',
   '/admin/portal-cobranza/comunicacion/plantillas',
   '/admin/portal-cobranza/reportes',
-  '/admin/portal-cobranza/expediente/:id',
   // Portal Escrituración
   '/admin/portal-escrituracion/dashboard',
   '/admin/portal-escrituracion/expedientes',

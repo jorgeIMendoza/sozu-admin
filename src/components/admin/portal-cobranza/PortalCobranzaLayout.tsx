@@ -60,7 +60,7 @@ const SUPER_ADMIN_ROLES = new Set([1, 2]);
 
 // Etiquetas de header para rutas de detalle que no aparecen en el nav.
 const DETAIL_SECTION_LABELS: Record<string, string> = {
-  "/admin/portal-cobranza/expediente": "Expediente",
+  "/admin/portal-cobranza/cuentas-cobranza": "Cuenta de cobranza",
 };
 
 interface NavGroup {

@@ -10,14 +10,17 @@ import {
 } from '@/hooks/useCollectionProductsMaintenance';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
 import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
+import { SelectCombobox, OwnerMultiSelect, FilterLabel as FLabel } from '@/components/admin/portal-cobranza/CollectionFilterControls';
+import { StatCard } from '@/components/admin/portal-cobranza/CollectionStatCard';
+import { NivelMorosidad, AgingYRiesgo, ClientesCriticos } from '@/components/admin/portal-cobranza/CollectionRiskSections';
+import { TrendChart } from '@/components/admin/portal-cobranza/CollectionTrendChart';
+import { CobranzaPorProyecto } from '@/components/admin/portal-cobranza/CollectionProjectTab';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
-  Target, Shield, Building2, Activity, AlertTriangle, TrendingUp, BarChart3, ArrowRight, ChevronsUpDown, Check, X,
+  Target, Shield, Building2, Activity, BarChart3, Package, X,
 } from 'lucide-react';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +31,6 @@ import { cn } from '@/lib/utils';
 // sección por mes, gráfica de líneas Cobrado vs Programado, cartera y acciones.
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'] as const;
-const MONTH_ABBR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'] as const;
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
 const CURRENT_MONTH = _now.getMonth() + 1;
@@ -60,85 +62,6 @@ const tipoMeta = (t?: string | null) =>
   TIPO_META[t as CollectionExtraType] ?? { label: t ?? 'Otros', cls: 'bg-muted text-muted-foreground' };
 
 const COLOR = { cobrado: '#16a34a', pendiente: '#94a3b8', vencido: '#e04444', programado: '#2563eb' };
-const AGING_COLOR = '#e04444';
-const fmtMes = (m: string) => { const [y, mm] = m.split('-'); return `${MONTH_ABBR[Number(mm) - 1]} ${y.slice(2)}`; };
-
-function SelectCombobox({ options, value, onChange, placeholder, className }: {
-  options: { label: string; value: string }[];
-  value: string; onChange: (v: string) => void; placeholder?: string; className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const displayLabel = options.find(o => o.value === value)?.label ?? '';
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open}
-          className={cn('h-9 justify-between text-[13px] font-normal min-w-0', className)}>
-          <span className={cn('truncate', !value && 'text-muted-foreground')}>{displayLabel || placeholder}</span>
-          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}>
-        <Command>
-          <CommandInput placeholder="Buscar..." />
-          <CommandList>
-            <CommandEmpty>Sin coincidencias</CommandEmpty>
-            <CommandGroup>
-              {options.map(opt => (
-                <CommandItem key={opt.value || '__empty__'} value={opt.label} onSelect={() => { onChange(opt.value); setOpen(false); }}>
-                  <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
-                  <span className={cn('truncate min-w-0', !opt.value && 'text-muted-foreground')}>{opt.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function OwnerMultiSelect({ options, value, onChange, className }: {
-  options: string[]; value: string[]; onChange: (v: string[]) => void; className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const label = value.length === 0 ? 'Todos' : value.length === 1 ? value[0] : `${value.length} dueños`;
-  const toggle = (n: string) => onChange(value.includes(n) ? value.filter(v => v !== n) : [...value, n]);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open}
-          className={cn('h-9 justify-between text-[13px] font-normal min-w-0', className)}>
-          <span className={cn('truncate', value.length === 0 && 'text-muted-foreground')}>{label}</span>
-          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}>
-        <Command>
-          <CommandInput placeholder="Buscar dueño..." />
-          <CommandList>
-            <CommandEmpty>Sin coincidencias</CommandEmpty>
-            <CommandGroup>
-              {options.map(n => (
-                <CommandItem key={n} value={n} onSelect={() => toggle(n)}>
-                  <div className={cn('mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border',
-                    value.includes(n) ? 'bg-primary border-primary text-primary-foreground' : 'border-input')}>
-                    {value.includes(n) && <Check className="h-3 w-3" />}
-                  </div>
-                  <span className="truncate min-w-0">{n}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-const FLabel = ({ label }: { label: string }) => (
-  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">{label}</span>
-);
 
 function drill(navigate: ReturnType<typeof useNavigate>, path: string, filters: Record<string, string> = {}) {
   navigateWithFilters(navigate, `/admin/portal-cobranza${path}`, { ...filters, from: 'complementos' });
@@ -283,26 +206,10 @@ export default function CollectionProductsMaintenance() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales generales</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Cartera total</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(carteraTotal)}</p>
-                <p className="text-[11px] text-muted-foreground">cobrado + pendiente</p>
-              </div>
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Cobrado total</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(data.cobrado_total)}</p>
-                <p className="text-[11px] text-muted-foreground">aplicado a complementos</p>
-              </div>
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3', data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground')}>Pendiente total</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(data.pendiente_total)}</p>
-                <p className="text-[11px] text-muted-foreground">saldo por cobrar</p>
-              </div>
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-danger block mb-3">Vencido total</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-danger whitespace-nowrap">{formatCurrency(data.vencido_total)}</p>
-                <p className="text-[11px] text-muted-foreground">con atraso</p>
-              </div>
+              <StatCard label="Cartera total" value={formatCurrency(carteraTotal)} sublabel="cobrado + pendiente" />
+              <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="aplicado a complementos" />
+              <StatCard label="Pendiente total" labelClass={data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground'} value={formatCurrency(data.pendiente_total)} sublabel="saldo por cobrar" />
+              <StatCard label="Vencido total" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="con atraso" />
             </div>
           </section>
 
@@ -310,26 +217,10 @@ export default function CollectionProductsMaintenance() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 capitalize">{periodLabel}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Programado</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(data.programado_mes)}</p>
-                <p className="text-[11px] text-muted-foreground">vence en el mes</p>
-              </div>
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Cobrado en el mes</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(data.cobrado_mes)}</p>
-                <p className="text-[11px] text-muted-foreground capitalize">{periodLabel}</p>
-              </div>
-              <div className="sozu-kpi-card overflow-hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-warning block mb-3">Por cobrar</span>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 whitespace-nowrap">{formatCurrency(data.por_cobrar_mes)}</p>
-                <p className="text-[11px] text-muted-foreground">pendiente del mes</p>
-              </div>
-              <div className="sozu-kpi-card">
-                <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3', cumplimiento >= 90 ? 'text-success' : 'text-danger')}>Cumplimiento</span>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', cumplimiento >= 90 ? 'text-success' : 'text-danger')}>{cumplimiento}%</p>
-                <p className="text-[11px] text-muted-foreground">{cumplimiento >= 90 ? 'En meta' : 'Bajo meta'}</p>
-              </div>
+              <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence en el mes" />
+              <StatCard label="Cobrado en el mes" labelClass="text-success" value={formatCurrency(data.cobrado_mes)} sublabel={periodLabel} />
+              <StatCard label="Por cobrar" labelClass="text-warning" value={formatCurrency(data.por_cobrar_mes)} sublabel="pendiente del mes" />
+              <StatCard label="Cumplimiento" labelClass={cumplimiento >= 90 ? 'text-success' : 'text-danger'} variant="count" valueClass={cumplimiento >= 90 ? 'text-success' : 'text-danger'} value={`${cumplimiento}%`} sublabel={cumplimiento >= 90 ? 'En meta' : 'Bajo meta'} />
             </div>
           </section>
 
@@ -343,275 +234,134 @@ export default function CollectionProductsMaintenance() {
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <button onClick={() => setActiveTab('riesgo')} className="sozu-kpi-card overflow-hidden text-left group hover:shadow-sm transition-all duration-200">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Cartera vencida</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-danger shrink-0 transition-colors" strokeWidth={1.75} />
-                </div>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-danger whitespace-nowrap">{formatCurrency(data.vencido_total)}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">total vencido</p>
-              </button>
-              <button onClick={() => setActiveTab('riesgo')} className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Cuentas críticas</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-danger shrink-0 transition-colors" strokeWidth={1.75} />
-                </div>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', criticos3 > 0 ? 'text-danger' : 'text-foreground')}>{criticos3}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">3 o más cargos vencidos</p>
-              </button>
-              <button onClick={() => setActiveTab('riesgo')} className="sozu-kpi-card text-left group hover:shadow-sm transition-all duration-200">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-warning">En riesgo</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-warning shrink-0 transition-colors" strokeWidth={1.75} />
-                </div>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', riesgo2 > 0 ? 'text-warning' : 'text-foreground')}>{riesgo2}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">2 cargos vencidos</p>
-              </button>
-              <div className="sozu-kpi-card overflow-hidden">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Meta del mes</span>
-                </div>
-                <p className="text-[15px] sm:text-[17px] font-bold tabular-nums leading-none mb-1.5 text-primary whitespace-nowrap">{formatCurrency(metaMes)}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">falta para cumplir</p>
-              </div>
+              <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="total vencido" />
+              <StatCard label="Cuentas críticas" labelClass="text-danger" variant="count" valueClass={criticos3 > 0 ? 'text-danger' : 'text-foreground'} value={criticos3} sublabel="3 o más cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })} arrowClass="group-hover:text-danger" />
+              <StatCard label="En riesgo" labelClass="text-warning" variant="count" valueClass={riesgo2 > 0 ? 'text-warning' : 'text-foreground'} value={riesgo2} sublabel="2 cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' })} arrowClass="group-hover:text-warning" />
+              <StatCard label="Meta del mes" labelClass="text-primary" valueClass="text-primary" value={formatCurrency(metaMes)} sublabel="falta para cumplir" />
             </div>
           </section>
 
           {/* Gráfica: Cobrado vs Programado mensual */}
-          <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Cobrado vs programado por mes
-            </h3>
-            <div className="sozu-kpi-card">
-              {chartData.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground py-8 text-center">Sin datos para los filtros seleccionados.</p>
-              ) : (
-                <div style={{ width: '100%', height: 300 }}>
-                  <ResponsiveContainer>
-                    <LineChart data={chartData} margin={{ left: 4, right: 16, top: 8, bottom: 4 }}>
-                      <CartesianGrid vertical={false} stroke="#eef1f5" />
-                      <XAxis dataKey="month" tickFormatter={fmtMes} tick={{ fontSize: 10.5, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={16} />
-                      <YAxis tickFormatter={v => `$${(v / 1e6).toFixed(1)}M`} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={54} />
-                      <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={fmtMes}
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e6eaef' }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line type="monotone" dataKey="programado" name="Programado" stroke={COLOR.programado} strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="cobrado" name="Cobrado" stroke={COLOR.cobrado} strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
-          </section>
+          <TrendChart
+            data={chartData}
+            lines={[
+              { key: 'programado', name: 'Programado', color: COLOR.programado, dashed: true },
+              { key: 'cobrado', name: 'Cobrado', color: COLOR.cobrado },
+            ]}
+          />
         </div>
       )}
 
       {/* ════ TAB: RIESGO Y CARTERA (espejo de Inmuebles) ════ */}
       {activeTab === 'riesgo' && (
         <div className="space-y-10">
-          {/* Nivel de morosidad */}
-          <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" strokeWidth={1.75} />Nivel de morosidad
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sozu-kpi-card">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-warning block mb-3">Alerta temprana</span>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', alerta1 > 0 ? 'text-warning' : 'text-foreground')}>{alerta1}</p>
-                <p className="text-[13px] font-medium text-foreground mb-0.5">1 cargo vencido</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Intervención preventiva - aún se recuperan fácil</p>
-              </div>
-              <div className="sozu-kpi-card">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-danger block mb-3">Riesgo activo</span>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', riesgo2 > 0 ? 'text-danger' : 'text-foreground')}>{riesgo2}</p>
-                <p className="text-[13px] font-medium text-foreground mb-0.5">2 cargos vencidos</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Patrón de incumplimiento - gestión urgente</p>
-              </div>
-              <div className="sozu-kpi-card">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-danger block mb-3">Crítico</span>
-                <p className={cn('text-[32px] font-bold tabular-nums leading-none mb-1.5', criticos3 > 0 ? 'text-danger' : 'text-foreground')}>{criticos3}</p>
-                <p className="text-[13px] font-medium text-foreground mb-0.5">3+ cargos vencidos</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Requieren acción inmediata</p>
-              </div>
-            </div>
-          </section>
+          <NivelMorosidad items={[
+            { label: 'Alerta temprana', labelClass: 'text-warning', count: alerta1, valueClass: 'text-warning', title: '1 cargo vencido', desc: 'Intervención preventiva - aún se recuperan fácil', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Alerta' }), arrowClass: 'group-hover:text-warning' },
+            { label: 'Riesgo activo', labelClass: 'text-danger', count: riesgo2, valueClass: 'text-danger', title: '2 cargos vencidos', desc: 'Patrón de incumplimiento - gestión urgente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }), arrowClass: 'group-hover:text-danger' },
+            { label: 'Crítico', labelClass: 'text-danger', count: criticos3, valueClass: 'text-danger', title: '3+ cargos vencidos', desc: 'Requieren acción inmediata', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }), arrowClass: 'group-hover:text-danger' },
+          ]} />
 
-          {/* Antigüedad de cartera + Riesgo por proyecto */}
-          <section>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {(data.aging?.length ?? 0) > 0 && (
-                <div className="sozu-kpi-card">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">Antigüedad de cartera</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto }))} barSize={32}>
-                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
-                      <XAxis dataKey="range" tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: '#697280' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v / 1e6).toFixed(0)}M`} />
-                      <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                      <Bar dataKey="amount" fill={AGING_COLOR} radius={[4, 4, 0, 0]} name="Vencido" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              <div className="sozu-kpi-card">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">Riesgo por proyecto</h3>
-                {riskByProject.length > 0 ? (
-                <div className="space-y-1">
-                  {riskByProject.map((p, i) => {
-                    const total = (p.cobrado ?? 0) + (p.pendiente ?? 0);
-                    const pct = total > 0 ? Math.round((p.vencido / total) * 100) : 0;
-                    return (
-                      <div key={p.proyecto_id} className="px-3 py-3 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-[18px] h-[18px] rounded-full bg-danger/10 text-danger text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                            <span className="text-[13px] font-semibold text-foreground truncate">{p.proyecto}</span>
-                          </div>
-                          <span className="text-[13px] font-bold text-danger tabular-nums shrink-0 ml-2 whitespace-nowrap">{formatCurrency(p.vencido)}</span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex-1 h-[5px] bg-muted rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-danger transition-all" style={{ width: `${Math.min(100, pct)}%` }} />
-                          </div>
-                          <span className="text-[10px] tabular-nums font-semibold text-danger/70 shrink-0 w-[52px] text-right">{pct}% venc.</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-[13px] text-muted-foreground text-center py-6">Sin riesgo por proyecto para los filtros seleccionados.</p>
-              )}
-              </div>
-            </div>
-          </section>
+          <AgingYRiesgo
+            aging={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto }))}
+            projectRows={riskByProject}
+            onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
+          />
 
-          {/* Cuentas críticas */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.75} />Cuentas críticas
-              </h3>
-              <div className="flex items-center gap-3">
-                {criticos3 > 0 && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/20 tabular-nums">
-                    {criticos3} cuenta{criticos3 !== 1 ? 's' : ''} · 3+ cargos
-                  </span>
-                )}
-                <button
-                  onClick={() => drill(navigate, '/cuentas-cobranza', { parcVencidas: '3plus' })}
-                  className="flex items-center gap-1 text-[11px] text-primary hover:underline font-medium whitespace-nowrap"
-                >
-                  Ver todas <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-            {criticalCards.length === 0 ? (
-              <div className="sozu-kpi-card flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-                <span className="text-[13px] text-muted-foreground">Sin cuentas críticas para los filtros seleccionados.</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {criticalCards.map(c => (
-                  <div key={c.cuenta_id} className="sozu-kpi-card">
-                    <div className="flex items-start justify-between mb-3">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-danger">Crítico</span>
-                      <span className="text-[10px] font-mono text-muted-foreground/60">CC-{String(c.cuenta_id).padStart(6, '0')}</span>
-                    </div>
-                    <p className="text-[20px] font-bold tabular-nums leading-none mb-2 text-danger whitespace-nowrap">{formatCurrency(c.vencido)}</p>
-                    <p className={cn('text-[13px] font-semibold text-foreground mb-0.5 truncate', !c.cliente && 'italic text-muted-foreground/60 font-normal')}>{c.cliente ?? 'Sin registro'}</p>
-                    <p className="text-[11px] text-muted-foreground mb-3 truncate">{c.proyecto ?? '—'}</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', tipoMeta(c.tipo).cls)}>{c.categoria}</span>
-                      {c.numero_propiedad && (
-                        <span className="text-[10px] text-muted-foreground">Unidad {c.numero_propiedad}</span>
-                      )}
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-danger/10 text-danger tabular-nums">{c.parcialidades_vencidas} venc.</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <ClientesCriticos
+            title="Cuentas críticas"
+            badgeSuffix="3+ cargos"
+            count={criticos3}
+            accounts={criticalCards.map(c => ({
+              cuentaId: c.cuenta_id,
+              monto: c.vencido,
+              cliente: c.cliente,
+              proyecto: c.proyecto,
+              unidad: c.numero_propiedad,
+              badgeLabel: c.categoria,
+              badgeClass: tipoMeta(c.tipo).cls,
+              parcLabel: `${c.parcialidades_vencidas} venc.`,
+            }))}
+            onSelect={(card) => navigate(`/admin/portal-cobranza/cuentas-cobranza/${card.cuentaId}/detalle`)}
+            onSeeAll={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })}
+          />
         </div>
       )}
 
       {/* ════ TAB: COBRANZA POR PROYECTO ════ */}
       {activeTab === 'cobranza' && (
-        <div className="space-y-8">
-          <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Cobranza por proyecto
-            </h3>
-            {byProject.length === 0 ? (
-              <div className="sozu-kpi-card text-[13px] text-muted-foreground">Sin datos para los filtros seleccionados.</div>
-            ) : (
-              <div className="sozu-kpi-card overflow-x-auto p-0">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <th className="text-left font-semibold px-4 py-2.5">Proyecto</th>
-                      <th className="text-right font-semibold px-4 py-2.5">Cobrado</th>
-                      <th className="text-right font-semibold px-4 py-2.5">Pendiente</th>
-                      <th className="text-right font-semibold px-4 py-2.5">Vencido</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {byProject.map(p => (
-                      <tr key={p.proyecto_id} className="border-b border-border/50 last:border-0">
-                        <td className="px-4 py-2.5">{p.proyecto}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(p.cobrado)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(p.pendiente)}</td>
-                        <td className={cn('px-4 py-2.5 text-right tabular-nums', p.vencido > 0 && 'text-danger font-medium')}>{formatCurrency(p.vencido)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {byProject.length > 0 && (
-            <section>
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
-                <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cobrado por proyecto
-              </h3>
-              <div className="sozu-kpi-card">
-                <div style={{ width: '100%', height: Math.max(160, byProject.length * 46) }}>
-                  <ResponsiveContainer>
-                    <BarChart data={byProject.map(p => ({ name: p.proyecto, cobrado: p.cobrado, vencido: p.vencido }))}
-                      layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }} barGap={2}>
-                      <CartesianGrid horizontal={false} stroke="#eef1f5" />
-                      <XAxis type="number" tickFormatter={v => `$${(v / 1e6).toFixed(1)}M`} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11.5, fill: '#0f172a' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v: number) => formatCurrency(v)} cursor={{ fill: 'rgba(148,163,184,.08)' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e6eaef' }} />
-                      <Bar dataKey="cobrado" name="Cobrado" fill={COLOR.cobrado} radius={[0, 3, 3, 0]} />
-                      <Bar dataKey="vencido" name="Vencido" fill={COLOR.vencido} radius={[0, 3, 3, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </section>
-          )}
-        </div>
+        <CobranzaPorProyecto
+          rows={byProject}
+          onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
+        />
       )}
 
       {/* ════ TAB: OPERACIÓN (detalle por categoría) ════ */}
       {activeTab === 'operacion' && (
-        <div className="space-y-8">
+        <div className="space-y-10">
+
+          {/* ── Tarjetas por categoría ── */}
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
-              <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Cobranza por categoría
+              <Package className="w-3.5 h-3.5" strokeWidth={1.75} />
+              Detalle por categoría
             </h3>
-            <div className="sozu-kpi-card">
-              {byCategory.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground py-8 text-center">Sin cargos para los filtros seleccionados.</p>
-              ) : (
+            {byCategory.length === 0 ? (
+              <div className="sozu-kpi-card text-[13px] text-muted-foreground text-center py-8">Sin cargos para los filtros seleccionados.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {byCategory.map(c => {
+                  const total = c.cobrado + c.pendiente;
+                  const pct = total > 0 ? Math.round((c.cobrado / total) * 100) : 0;
+                  const rows: { label: string; value: number; cls: string }[] = [
+                    { label: 'Cobrado', value: c.cobrado, cls: 'text-success' },
+                    { label: 'Pendiente', value: c.pendiente, cls: 'text-foreground' },
+                    { label: 'Vencido', value: c.vencido, cls: c.vencido > 0 ? 'text-danger' : 'text-muted-foreground/50' },
+                  ];
+                  return (
+                    <div key={c.categoria} className="sozu-kpi-card flex flex-col">
+                      {/* encabezado */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <span className="text-[14px] font-semibold text-foreground leading-tight min-w-0">{c.categoria}</span>
+                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0', tipoMeta(c.tipo).cls)}>{tipoMeta(c.tipo).label}</span>
+                      </div>
+                      {/* métricas en filas — label izq / monto der (nunca se tocan) */}
+                      <div className="space-y-1.5">
+                        {rows.map(r => (
+                          <div key={r.label} className="flex items-baseline justify-between gap-3">
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70 shrink-0">{r.label}</span>
+                            <span className={cn('text-[14px] font-semibold tabular-nums whitespace-nowrap text-right', r.cls)}>{formatCurrency(r.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* barra progreso cobrado */}
+                      {total > 0 && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <div className="flex-1 h-[5px] bg-muted rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.min(100, pct)}%` }} />
+                          </div>
+                          <span className="text-[10px] tabular-nums font-semibold text-success/70 shrink-0 w-[42px] text-right">{pct}% cob.</span>
+                        </div>
+                      )}
+                      {/* pie */}
+                      <div className="mt-3 pt-2.5 border-t border-dashed border-border flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                        <span className="shrink-0">{c.acuerdos.toLocaleString('es-MX')} cargos</span>
+                        <span className="tabular-nums whitespace-nowrap font-medium text-foreground">Total {formatCurrency(c.monto_total)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* ── Gráfica cobranza por categoría ── */}
+          {byCategory.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
+                <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                Cobranza por categoría
+              </h3>
+              <div className="sozu-kpi-card">
                 <div style={{ width: '100%', height: Math.max(180, byCategory.length * 52) }}>
                   <ResponsiveContainer>
                     <BarChart data={byCategory.map(c => ({ name: c.categoria, cobrado: c.cobrado, pendiente: c.pendiente, vencido: c.vencido }))}
@@ -626,32 +376,9 @@ export default function CollectionProductsMaintenance() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              )}
-            </div>
-          </section>
-
-          <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Detalle por categoría</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {byCategory.map(c => (
-                <div key={c.categoria} className="sozu-kpi-card">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[13px] font-semibold">{c.categoria}</span>
-                    <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', tipoMeta(c.tipo).cls)}>{tipoMeta(c.tipo).label}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div><p className="text-[9.5px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Cobrado</p><p className="text-[13px] font-semibold tabular-nums">{formatCurrency(c.cobrado)}</p></div>
-                    <div><p className="text-[9.5px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Pendiente</p><p className="text-[13px] font-semibold tabular-nums">{formatCurrency(c.pendiente)}</p></div>
-                    <div><p className="text-[9.5px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Vencido</p><p className={cn('text-[13px] font-semibold tabular-nums', c.vencido > 0 && 'text-danger')}>{formatCurrency(c.vencido)}</p></div>
-                  </div>
-                  <div className="mt-3 pt-2.5 border-t border-dashed border-border flex justify-between text-[11px] text-muted-foreground">
-                    <span>{c.acuerdos.toLocaleString('es-MX')} cargos</span>
-                    <span className="tabular-nums">Total {formatCurrency(c.monto_total)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>
