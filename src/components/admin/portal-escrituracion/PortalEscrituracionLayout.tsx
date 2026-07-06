@@ -18,6 +18,7 @@ import {
   GitBranch,
   FileSearch,
   ClipboardList,
+  CheckSquare,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -35,8 +36,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Escrituración",         path: "/admin/portal-escrituracion/dashboard",      icon: LayoutDashboard },
-  { label: "Expedientes",           path: "/admin/portal-escrituracion/expedientes",    icon: FileText },
-  { label: "Relación de Pagos",     path: "/admin/portal-escrituracion/relacion-pagos", icon: Receipt },
+  { label: "Expedientes",           path: "/admin/portal-escrituracion/expedientes",              icon: FileText },
+  { label: "Relación de Pagos",     path: "/admin/portal-escrituracion/relacion-pagos",            icon: Receipt },
+  { label: "Unidades p/Escriturar", path: "/admin/portal-escrituracion/unidades-listas-escriturar", icon: CheckSquare },
   { label: "Notarías",              path: "/admin/portal-escrituracion/notarias",       icon: Stamp },
   { label: "PLD",                   path: "/admin/portal-escrituracion/pld",            icon: ShieldAlert },
   { label: "Créditos Hipotecarios", path: "/admin/portal-escrituracion/credito",        icon: Landmark },

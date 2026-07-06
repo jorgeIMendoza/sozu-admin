@@ -1,8 +1,8 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-// Data for the Portal Cobranza > Dashboard menu.
-// The whole dashboard is fed by a single RPC call (get_pcobranza_dashboard).
+// Data for the Portal Cobranza > "Inmuebles" menu (URL /inmuebles).
+// The whole menu is fed by a single RPC call (get_pcobranza_inmuebles).
 // Field names stay in Spanish snake_case: they mirror the DB/RPC json contract.
 
 export interface OwnerOption {
@@ -19,7 +19,6 @@ export interface CriticalClient {
   tipo_cuenta: 'Propiedad' | 'Producto';
   parcialidades_vencidas: number;
   monto_vencido: number;
-  dias_sin_pagar: number;
 }
 
 export interface EscriturationPipeline {
@@ -60,11 +59,11 @@ export function useCollectionDashboard(
   entityIds?: number[] | null,
 ) {
   return useQuery({
-    queryKey: ['pcobranza-dashboard', projectId, startDate, endDate, entityIds],
+    queryKey: ['pcobranza-inmuebles', projectId, startDate, endDate, entityIds],
     queryFn: async (): Promise<CollectionDashboardData> => {
       // Cast to any: the RPC name is not yet in Supabase's generated types.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).rpc('get_pcobranza_dashboard', {
+      const { data, error } = await (supabase as any).rpc('get_pcobranza_inmuebles', {
         p_proyecto_id: projectId ?? null,
         p_fecha_inicio: startDate ?? null,
         p_fecha_fin: endDate ?? null,

@@ -18,6 +18,8 @@ interface UserProfile {
   id_notario: number | null;
   notaria_nombre: string | null;
   id_perfil_juridico: number | null;
+  foto_perfil_url: string | null;
+  frase_perfil: string | null;
 }
 
 interface AuthContextType {
@@ -72,7 +74,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && data.length > 0) {
-        setProfile(data[0] as UserProfile);
+        const base = data[0] as UserProfile;
+        // La RPC get_current_user_profile no devuelve la foto/frase de perfil;
+        // se traen por separado desde usuarios para el avatar del header.
+        let foto_perfil_url: string | null = null;
+        let frase_perfil: string | null = null;
+        try {
+          const { data: u } = await (supabase as any)
+            .from("usuarios")
+            .select("foto_perfil_url, frase_perfil")
+            .eq("email", base.email)
+            .maybeSingle();
+          foto_perfil_url = u?.foto_perfil_url ?? null;
+          frase_perfil = u?.frase_perfil ?? null;
+        } catch (e) {
+          console.error("Error fetching perfil foto:", e);
+        }
+        setProfile({ ...base, foto_perfil_url, frase_perfil });
       } else {
         setProfile(null);
       }
