@@ -180,7 +180,7 @@ export function ClientesCriticos({ title, badgeSuffix, count, accounts, onSelect
                   </div>
                 </div>
                 <p className="text-[20px] font-bold tabular-nums leading-none mb-2 text-danger whitespace-nowrap">{formatCurrency(c.monto)}</p>
-                <p className={cn('text-[13px] font-semibold text-foreground mb-0.5 truncate', !c.cliente && 'italic text-muted-foreground/60 font-normal')}>{c.cliente ?? 'Sin registro'}</p>
+                <p className={cn('text-[13px] font-semibold text-foreground mb-0.5 truncate', !c.cliente && 'text-muted-foreground/60 font-normal')}>{c.cliente ?? 'Sin registro'}</p>
                 <p className="text-[11px] text-muted-foreground mb-3 truncate">{c.proyecto ?? '—'}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', c.badgeClass)}>{c.badgeLabel}</span>

@@ -16,6 +16,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
   const { percentage, isLoading } = useAgentOnboardingStatus(personaId);
   const isVerified = percentage === 100;
   const nombreCompleto = profile?.nombre || "Agente";
+  const photoUrl = profile?.foto_perfil_url || null;
   const initials = nombreCompleto
     .split(" ")
     .filter(Boolean)
@@ -41,13 +42,21 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {showAgentName && (
-              <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center shrink-0">
-                {initials ? (
-                  <span className="text-sm font-bold text-white leading-none">{initials}</span>
-                ) : (
-                  <User className="h-4 w-4 text-white" />
-                )}
-              </div>
+              photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt={nombreCompleto}
+                  className="h-9 w-9 rounded-full object-cover shrink-0"
+                />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center shrink-0">
+                  {initials ? (
+                    <span className="text-sm font-bold text-white leading-none">{initials}</span>
+                  ) : (
+                    <User className="h-4 w-4 text-white" />
+                  )}
+                </div>
+              )
             )}
             <div>
               {showAgentName && (

@@ -176,7 +176,7 @@ export function PaymentDetailDialog({
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Monto aplicado</span>
                 {montoAplicado != null
                   ? <p className="text-[22px] font-bold tabular-nums leading-none text-foreground">{fmtCurrency(Number(montoAplicado))}</p>
-                  : <p className="text-[13px] italic text-muted-foreground/60">Sin registro</p>}
+                  : <p className="text-[13px] text-muted-foreground/60">Sin registro</p>}
               </div>
 
               {/* Detalle del pago (read-only) */}
@@ -222,7 +222,7 @@ export function PaymentDetailDialog({
                 <Field label="Monto">
                   {detail?.aplId != null
                     ? <Input type="number" step="0.01" min="0" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} className="h-9 w-full" />
-                    : <p className="text-[12px] italic text-muted-foreground/60 h-9 flex items-center">Sin aplicación registrada</p>}
+                    : <p className="text-[12px] text-muted-foreground/60 h-9 flex items-center">Sin aplicación registrada</p>}
                 </Field>
               </div>
             </div>

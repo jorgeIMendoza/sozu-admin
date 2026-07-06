@@ -502,8 +502,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       parkingType:    "incluido",
       hasBalcony:     false,
       listPrice,
-      pricePerM2:     oferta.mostrar_precio_m2_en_oferta
-        ? Number((proyecto as any).precio_m2_actual ?? 0)
+      // $/m² = precio_lista / m² total (interiores + exteriores), consistente
+      // con PDFs y admin. NO usar proyecto.precio_m2_actual (valor de proyecto
+      // desligado del metraje real de la unidad → number mostrado no cuadra).
+      pricePerM2:     oferta.mostrar_precio_m2_en_oferta && area > 0
+        ? listPrice / area
         : undefined,
     },
     estimatedDelivery:       entregaFecha ? new Date(entregaFecha).toISOString() : undefined,

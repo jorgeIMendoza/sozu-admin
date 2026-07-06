@@ -6,8 +6,24 @@ import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ChevronsUpDown, Check, UserSearch, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Roles con acceso al portal de agentes (submenus_permisos sobre /admin/agent/*).
+const AGENT_PORTAL_ROLE_IDS = [1, 2, 3, 5, 8, 9, 10, 11];
+
+// Etiqueta corta por rol para el badge del selector.
+const ROLE_BADGE: Record<number, string> = {
+  1: "Super Admin",
+  2: "Admin Proy.",
+  3: "Agente Inmob.",
+  5: "Vendedor",
+  8: "Solo Lectura",
+  9: "Interno",
+  10: "Admin Data",
+  11: "Doc. Escrituras",
+};
 
 export function AgentPortalImpersonationSelector() {
   const { profile } = useAuth();
@@ -28,8 +44,8 @@ export function AgentPortalImpersonationSelector() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("usuarios")
-        .select("email, rol_id, personas!inner(id, nombre_legal)")
-        .in("rol_id", [3, 9])
+        .select("email, rol_id, personas(id, nombre_legal)")
+        .in("rol_id", AGENT_PORTAL_ROLE_IDS)
         .eq("activo", true)
         .order("email");
 
@@ -37,7 +53,8 @@ export function AgentPortalImpersonationSelector() {
       return (data || [])
         .map((u: any) => ({
           email: u.email,
-          personaId: u.personas?.id,
+          rolId: u.rol_id,
+          personaId: u.personas?.id ?? null,
           nombre: u.personas?.nombre_legal || u.email,
         }))
         .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
@@ -58,16 +75,16 @@ export function AgentPortalImpersonationSelector() {
             {isImpersonating ? (
               <span className="truncate">{impersonatedAgentName}</span>
             ) : (
-              <span className="text-muted-foreground">Seleccionar agente...</span>
+              <span className="text-muted-foreground">Seleccionar usuario...</span>
             )}
             <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[min(260px,calc(100vw-2rem))] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Buscar agente..." />
+            <CommandInput placeholder="Buscar usuario..." />
             <CommandList>
-              <CommandEmpty>No se encontró el agente.</CommandEmpty>
+              <CommandEmpty>No se encontró el usuario.</CommandEmpty>
               <CommandGroup>
                 {agents.map((agent: any) => (
                   <CommandItem
@@ -84,9 +101,14 @@ export function AgentPortalImpersonationSelector() {
                         impersonatedAgentEmail === agent.email ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="flex flex-col">
-                      <span className="text-sm">{agent.nombre}</span>
-                      <span className="text-xs text-muted-foreground">{agent.email}</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm truncate">{agent.nombre}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                          {ROLE_BADGE[agent.rolId] ?? `Rol ${agent.rolId}`}
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground truncate">{agent.email}</span>
                     </div>
                   </CommandItem>
                 ))}

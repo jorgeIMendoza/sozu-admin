@@ -413,14 +413,14 @@ export default function CollectionPayments() {
                   {/* Aplicado */}
                   <td className="px-2 text-center">
                     {r.monto_aplicado == null
-                      ? <span className="text-[11px] text-muted-foreground/40 italic">Sin registro</span>
+                      ? <span className="text-[11px] text-muted-foreground/40">Sin registro</span>
                       : <span className="text-[12px] tabular-nums">{fmtCurrency(Number(r.monto_aplicado))}</span>}
                   </td>
                   {/* Estado (acuerdo) */}
                   <td className="px-2 text-center">
                     {r.estado_acuerdo
                       ? <EstadoBadge estado={r.estado_acuerdo} />
-                      : <span className="text-[11px] text-muted-foreground/40 italic">Sin registro</span>}
+                      : <span className="text-[11px] text-muted-foreground/40">Sin registro</span>}
                   </td>
                   {/* Validado (validación) */}
                   <td className="px-2 text-center">
