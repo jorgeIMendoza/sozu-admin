@@ -92,6 +92,11 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
     }
 
     setLoading(true);
+    // Rastrea qué se creó en este intento para poder revertirlo si un paso posterior falla
+    // (ej. permiso insuficiente en create-user) y así no dejar embajadores "fantasma" sin cuenta.
+    let createdPersonaId: number | null = null;
+    let createdEntidadId: number | null = null;
+    let createdConfig = false;
     try {
       const emailNorm = form.email.trim().toLowerCase();
 
@@ -130,6 +135,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           .single();
         if (personaError || !persona) throw personaError ?? new Error('Error al crear persona');
         personaId = persona.id;
+        createdPersonaId = personaId;
       }
 
       // 3. Verificar que no sea ya embajadora (previene duplicados)
@@ -152,6 +158,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .select('id')
         .single();
       if (erError || !erData) throw erError ?? new Error('Error al crear entidades_relacionadas');
+      createdEntidadId = erData.id;
 
       // 5. Crear embajadores_config
       const { error: cfgError } = await supabase
@@ -169,6 +176,7 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
           documentos_pago: DEFAULT_PAYMENT_DOCS.map(d => ({ ...d })),
         });
       if (cfgError) throw cfgError;
+      createdConfig = true;
 
       // 6. Usuario/rol (ruta A: create-user / ruta B: user_roles secundario)
       if (personaActual) {
@@ -210,6 +218,21 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
       onOpenChange(false);
     } catch (err: any) {
       console.error('Error al crear embajador:', err);
+      // Revertir lo ya insertado en este intento para no dejar un embajador "fantasma"
+      // sin cuenta de usuario cuando un paso posterior (ej. create-user) falla.
+      if (createdEntidadId) {
+        try {
+          if (createdConfig) {
+            await supabase.from('embajadores_config').delete().eq('id_entidad_relacionada', createdEntidadId);
+          }
+          await supabase.from('entidades_relacionadas').delete().eq('id', createdEntidadId);
+          if (createdPersonaId) {
+            await supabase.from('personas').delete().eq('id', createdPersonaId);
+          }
+        } catch (rollbackErr) {
+          console.error('Error al revertir registro parcial de embajador:', rollbackErr);
+        }
+      }
       toast.error(err?.message ?? 'Error al crear embajador');
     } finally {
       setLoading(false);

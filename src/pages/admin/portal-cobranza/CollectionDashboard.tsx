@@ -351,7 +351,7 @@ export default function CollectionDashboard() {
               badgeClass: c.tipo_cuenta === 'Propiedad' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
               parcLabel: `${c.parcialidades_vencidas} parc.`,
             }))}
-            onSelect={(c) => drill(navigate, '/cuentas-cobranza', { cliente: c.cliente ?? '' })}
+            onSelect={(c) => navigate(`/admin/portal-cobranza/cuentas-cobranza/${c.cuentaId}/detalle`)}
             onSeeAll={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })}
           />
         </div>
