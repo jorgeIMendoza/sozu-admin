@@ -230,15 +230,17 @@ function DetalleUnidadModal({ row, onClose }: { row: UnidadEscriturable; onClose
           </Section>
 
           {/* Morosidad */}
-          {row.acuerdosVencidos > 0 && (
+          {row.diasSinPagar > 0 && (
             <Section title="Morosidad">
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                <DetailRow label="Acuerdos vencidos">
-                  <span className="text-red-600 font-semibold">{row.acuerdosVencidos}</span>
+              <div className={`rounded-lg p-3 ${row.diasSinPagar > 30 ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                <DetailRow label="Días sin pago">
+                  <span className={`font-semibold ${row.diasSinPagar > 30 ? 'text-red-600' : 'text-yellow-700'}`}>{row.diasSinPagar} días</span>
                 </DetailRow>
-                <DetailRow label="Más antiguo">
-                  <span className="text-red-600 font-semibold">{row.diasMaxVencimiento} días</span>
-                </DetailRow>
+                {row.parcialidadesVencidas > 0 && (
+                  <DetailRow label="Parc. vencidas">
+                    <span className={`font-semibold ${row.diasSinPagar > 30 ? 'text-red-600' : 'text-yellow-700'}`}>{row.parcialidadesVencidas}</span>
+                  </DetailRow>
+                )}
               </div>
             </Section>
           )}
@@ -265,7 +267,7 @@ function KpiCards({ unidades, loading }: { unidades: UnidadEscriturable[]; loadi
   const pendientes    = unidades.filter(u => u.conclusion === 'PENDIENTE_REVISION').length;
   const conErrPago    = unidades.filter(u => u.pagosError > 0).length;
   const sinExpediente = unidades.filter(u => !u.expedienteOk).length;
-  const conMorosidad  = unidades.filter(u => u.acuerdosVencidos > 0).length;
+  const conMorosidad  = unidades.filter(u => u.diasSinPagar > 30).length;
   const enEscriturac  = unidades.filter(u => u.estatusDisponibilidadId === 7).length;
 
   return (
@@ -370,11 +372,13 @@ function TablaUnidades({
                 <ExpedienteChip docsCompletos={u.docsCompletos} />
               </TableCell>
               <TableCell className="text-center">
-                {u.acuerdosVencidos > 0 ? (
+                {u.diasSinPagar > 30 ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600">
                     <AlertTriangle className="w-3 h-3" />
-                    {u.diasMaxVencimiento}d
+                    {u.diasSinPagar}d
                   </span>
+                ) : u.diasSinPagar > 0 ? (
+                  <span className="text-[11px] text-yellow-600">{u.diasSinPagar}d</span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">—</span>
                 )}

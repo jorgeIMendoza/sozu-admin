@@ -57,9 +57,9 @@ export interface UnidadEscriturable {
   docsCompletos: number;     // grupos obligatorios con doc validado (0–5)
   expedienteOk: boolean;     // docsCompletos >= 5
 
-  // Morosidad — acuerdos vencidos > 30 días sin completar
-  acuerdosVencidos: number;
-  diasMaxVencimiento: number;
+  // Morosidad — fuente: get_bandeja_operativa (mismo origen que portal-cobranza)
+  diasSinPagar: number;       // bloquear solo si > 30
+  parcialidadesVencidas: number;
 
   // Compradores
   compradores: CompradoresInfo[];
@@ -345,25 +345,35 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
       }
       const latestDocByKey = buildLatestDocByKey(allDocs);
 
-      // ── Paso 11: acuerdos_pago vencidos > 30 días (chunks 500) ───────────
+      // ── Paso 11: morosidad via get_bandeja_operativa (fuente oficial) ─────
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const cutoff30 = new Date(today);
-      cutoff30.setDate(cutoff30.getDate() - 30);
-      const cutoff30Str = cutoff30.toISOString().split('T')[0];
 
-      type AcuerdoRow = { id: number; id_cuenta_cobranza: number; fecha_pago: string | null };
-      const allAcuerdosVencidos: AcuerdoRow[] = [];
-      for (const chunk of chunkArray(escriturableCuentaIds, 500)) {
-        const { data } = await (supabase as any)
-          .from('acuerdos_pago')
-          .select('id, id_cuenta_cobranza, fecha_pago')
-          .in('id_cuenta_cobranza', chunk)
-          .eq('activo', true)
-          .eq('pago_completado', false)
-          .lt('fecha_pago', cutoff30Str);
-        if (data) allAcuerdosVencidos.push(...data);
-      }
+      type BandejaRow = { cuenta_id: number; dias_sin_pagar: number; parcialidades_vencidas: number };
+      const { data: bandejaData } = await supabase.rpc('get_bandeja_operativa', {
+        p_proyecto_id: proyectoId,
+        p_search: null,
+        p_solo_vencidas: false,
+      });
+      const bandejaRaw = (bandejaData as unknown as BandejaRow[]) ?? [];
+
+      const bandejaByCtaId: Record<number, { diasSinPagar: number; parcialidadesVencidas: number }> = {};
+      bandejaRaw.forEach(r => {
+        bandejaByCtaId[r.cuenta_id] = {
+          diasSinPagar: r.dias_sin_pagar ?? 0,
+          parcialidadesVencidas: r.parcialidades_vencidas ?? 0,
+        };
+      });
+
+      const diasSinPagarByPropId: Record<number, number> = {};
+      const parcialidadesVencidasByPropId: Record<number, number> = {};
+      escriturableCuentas.forEach(c => {
+        const b = bandejaByCtaId[c.id];
+        if (!b) return;
+        const propId = c.id_propiedad;
+        diasSinPagarByPropId[propId] = Math.max(diasSinPagarByPropId[propId] ?? 0, b.diasSinPagar);
+        parcialidadesVencidasByPropId[propId] = (parcialidadesVencidasByPropId[propId] ?? 0) + b.parcialidadesVencidas;
+      });
 
       // ── Paso 12: CEP cutoff ───────────────────────────────────────────────
       const cepCutoff = subtract10BusinessDays(today);
@@ -378,14 +388,6 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
         if (!propId) return;
         if (!pagosByPropId[propId]) pagosByPropId[propId] = [];
         pagosByPropId[propId].push(p);
-      });
-
-      const acuerdosVencidosByPropId: Record<number, AcuerdoRow[]> = {};
-      allAcuerdosVencidos.forEach(a => {
-        const propId = cuentaPropMap[a.id_cuenta_cobranza];
-        if (!propId) return;
-        if (!acuerdosVencidosByPropId[propId]) acuerdosVencidosByPropId[propId] = [];
-        acuerdosVencidosByPropId[propId].push(a);
       });
 
       // Compradores por propiedad (vía cuenta principal)
@@ -418,16 +420,8 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
           }
         }
 
-        const acuerdosVencidos = (acuerdosVencidosByPropId[prop.id] ?? []);
-        const acuerdosVencidosCount = acuerdosVencidos.length;
-        let diasMaxVencimiento = 0;
-        if (acuerdosVencidosCount > 0) {
-          diasMaxVencimiento = Math.max(...acuerdosVencidos.map(a => {
-            if (!a.fecha_pago) return 0;
-            const d = Math.floor((today.getTime() - new Date(a.fecha_pago).getTime()) / 86_400_000);
-            return d;
-          }));
-        }
+        const diasSinPagar = diasSinPagarByPropId[prop.id] ?? 0;
+        const parcialidadesVencidas = parcialidadesVencidasByPropId[prop.id] ?? 0;
 
         const compradores = comprsByPropId[prop.id] ?? [];
         const allPersonaIds = compradores.map(c => c.id_persona);
@@ -443,7 +437,7 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
         const warnings: string[] = [];
 
         if (pagosError > 0) blockers.push(`${pagosError} pago(s) con error de validación`);
-        if (acuerdosVencidosCount > 0) blockers.push(`${acuerdosVencidosCount} acuerdo(s) vencido(s) (${diasMaxVencimiento} días)`);
+        if (diasSinPagar > 30) blockers.push(`Morosidad: ${diasSinPagar} días sin pago`);
 
         if (pagosSinValidar > 0) warnings.push(`${pagosSinValidar} pago(s) sin validar`);
         if (!expedienteOk) warnings.push(`Expediente: ${docsCompletos}/${OBLIGATORIO_GRUPOS.length} grupos`);
@@ -468,8 +462,8 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
           pagosCepPendiente,
           docsCompletos,
           expedienteOk,
-          acuerdosVencidos: acuerdosVencidosCount,
-          diasMaxVencimiento,
+          diasSinPagar,
+          parcialidadesVencidas,
           compradores,
           clienteNombre: compradores[0]?.nombre ?? '—',
           blockers,
