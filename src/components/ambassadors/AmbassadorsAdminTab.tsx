@@ -108,7 +108,7 @@ function AmbassadorEditSheet({
     setSaving(true);
     try {
       // 1. Actualizar embajadores_config (estatus, tipo, comisión, etc.)
-      updateAmbassador(ambassador.id, form);
+      await updateAmbassador(ambassador.id, form);
 
       // 2. Actualizar persona (nombre, teléfono, clave_pais)
       if (ambassador.idPersona) {

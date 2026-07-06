@@ -3,7 +3,7 @@
 
 import { ENVIRONMENT } from './config';
 
-export type PortalKey = 'admin' | 'agentes' | 'inmobiliarias' | 'clientes';
+export type PortalKey = 'admin' | 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores';
 
 export const IS_PRODUCTION = ENVIRONMENT.toLowerCase() === 'production';
 
