@@ -27,25 +27,15 @@ export default function ForgotPassword() {
         return;
       }
 
-      const { data, error: fnError } = await supabase.functions.invoke('reset-user-password', {
+      const { error: fnError } = await supabase.functions.invoke('reset-user-password', {
         body: { email: email.trim() },
-        headers: {},
       });
 
+      // Respuesta enumeration-safe: el backend responde genérico exista o no la
+      // cuenta. Solo distinguimos fallos reales de servicio; nunca revelamos si
+      // el correo está o no registrado.
       if (fnError) {
-        // Try to parse the error body for a user-friendly message
-        try {
-          const errorBody = JSON.parse(fnError.message);
-          setError(errorBody.error || 'No se encontró una cuenta activa con ese correo');
-        } catch {
-          setError('No se encontró una cuenta activa con ese correo');
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      if (data?.error) {
-        setError(data.error);
+        setError('No pudimos procesar tu solicitud en este momento. Intenta de nuevo más tarde.');
         setIsLoading(false);
         return;
       }
@@ -71,15 +61,15 @@ export default function ForgotPassword() {
             <div className="text-center">
               <CheckCircle className="h-14 w-14 mx-auto mb-4" style={{ color: 'hsl(145 40% 45%)' }} />
               <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3" style={{ letterSpacing: '-0.02em' }}>
-                Contraseña reseteada
+                Revisa tu correo
               </h1>
               <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
-                Se ha reseteado tu contraseña exitosamente.
+                Si existe una cuenta activa con ese correo, te enviamos un enlace para restablecer tu contraseña.
               </p>
               <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-left mt-4" style={{ color: 'hsl(210 20% 30%)', background: 'hsl(210 30% 96%)' }}>
                 <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(210 60% 50%)' }} />
                 <span>
-                  Revisa tu correo electrónico. Recibirás un enlace para confirmar tu email. Una vez confirmado, se te enviarán tus nuevas credenciales temporales.
+                  Abre el enlace desde tu bandeja de entrada (revisa también la carpeta de spam) para verificar tu identidad y definir una nueva contraseña. El enlace es de un solo uso.
                 </span>
               </div>
             </div>
