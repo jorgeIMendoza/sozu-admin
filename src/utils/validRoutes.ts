@@ -118,6 +118,7 @@ export const VALID_ADMIN_ROUTES = new Set([
   // Portal Escrituración
   '/admin/portal-escrituracion/dashboard',
   '/admin/portal-escrituracion/expedientes',
+  '/admin/portal-escrituracion/unidades-listas-escriturar',
   '/admin/portal-escrituracion/unidades',
   '/admin/portal-escrituracion/credito',
   '/admin/portal-escrituracion/pipeline',

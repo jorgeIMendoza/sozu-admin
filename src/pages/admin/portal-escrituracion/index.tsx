@@ -15,6 +15,7 @@ import {
 import { DashboardEscrituracion } from "./DashboardEscrituracion";
 import { RelacionPagos } from "./RelacionPagos";
 import { ExpedientesDashboard } from "./ExpedientesDashboard";
+import { UnidadesListasEscriturar } from "./UnidadesListasEscriturar";
 import { NotariasDashboard } from "./NotariasDashboard";
 import { PldDashboard } from "./PldDashboard";
 import { CreditosHipotecariosDashboard } from "./CreditosHipotecariosDashboard";
@@ -43,6 +44,11 @@ export function EscRelacionPagos() {
 // ============================ Expedientes ============================
 export function EscExpedientes() {
   return <ExpedientesDashboard />;
+}
+
+// ============================ Unidades listas para escriturar ============================
+export function EscUnidadesListasEscriturar() {
+  return <UnidadesListasEscriturar />;
 }
 
 // ============================ Pipeline visual ============================
