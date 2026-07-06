@@ -20,29 +20,23 @@ export default function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      const result = emailSchema.safeParse(email.trim());
+      const emailLower = email.trim().toLowerCase();
+      const result = emailSchema.safeParse(emailLower);
       if (!result.success) {
         setError('Ingresa un email válido');
         setIsLoading(false);
         return;
       }
 
-      const { error: fnError } = await supabase.functions.invoke('reset-user-password', {
-        body: { email: email.trim() },
-      });
-
-      // Respuesta enumeration-safe: el backend responde genérico exista o no la
-      // cuenta. Solo distinguimos fallos reales de servicio; nunca revelamos si
-      // el correo está o no registrado.
-      if (fnError) {
-        setError('No pudimos procesar tu solicitud en este momento. Intenta de nuevo más tarde.');
-        setIsLoading(false);
-        return;
-      }
+      // invoke SIEMPRE manda Bearer anon => cae en modo público del edge fn,
+      // que responde genérico exista o no la cuenta. Ignoramos el resultado a
+      // propósito y mostramos SIEMPRE la pantalla genérica de éxito: nunca se
+      // revela si el correo está registrado (anti-enumeración).
+      await supabase.functions
+        .invoke('reset-user-password', { body: { email: emailLower } })
+        .catch(() => {});
 
       setSuccess(true);
-    } catch {
-      setError('Error al procesar la solicitud. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
