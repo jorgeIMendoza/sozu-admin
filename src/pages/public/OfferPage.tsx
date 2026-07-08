@@ -232,6 +232,9 @@ const OfferPage = () => {
   const isExpired = offer.status === "expired" || daysToExpiry < 0;
   const isReserved = offer.status === "pre_reserved" || offer.status === "converted_to_account";
   const ctaDisabled = isExpired || isReserved;
+  // Apartado deshabilitado hasta integrar Stripe: se oculta el botón "Apartar".
+  // Cambiar a true cuando el flujo de pago/hold esté en producción.
+  const APARTADO_HABILITADO = false;
 
   const urgencyLevel: "normal" | "soon" | "imminent" =
     daysToExpiry < 1 ? "imminent" : daysToExpiry <= 3 ? "soon" : "normal";
@@ -248,10 +251,12 @@ const OfferPage = () => {
     .toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })
     .replace(/\./g, "");
 
+  // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
+  // precio, metraje y $/m² reconcilien exacto entre sí.
   const formattedPrice = new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(offer.property.listPrice);
 
   const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
@@ -769,7 +774,7 @@ const OfferPage = () => {
                   </p>
                   {!!offer.property.pricePerM2 && offer.property.area && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
-                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(offer.property.pricePerM2)} /m²
+                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
                     </p>
                   )}
                 </div>
@@ -823,7 +828,7 @@ const OfferPage = () => {
                           Contacta a tu asesor para recibir una oferta actualizada.
                         </p>
                       </div>
-                    ) : (
+                    ) : APARTADO_HABILITADO ? (
                       <>
                         <button
                           onClick={ctaDisabled ? undefined : handleCtaClick}
@@ -843,7 +848,7 @@ const OfferPage = () => {
                           </p>
                         )}
                       </>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -862,8 +867,8 @@ const OfferPage = () => {
         </div>{/* /lg:grid */}
       </div>{/* /max-w-7xl */}
 
-      {/* Mobile sticky CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
-      {!reservationId && (
+      {/* Mobile sticky CTA — oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
+      {!reservationId && (isExpired || APARTADO_HABILITADO) && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
             {isExpired ? (
