@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
-import { mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { mesesEntreFechas, calcDynamicScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
 
 // Icon imports - we'll convert them to base64 on load
 import recamarasIcon from "@/assets/icons/recamaras.png";
@@ -628,8 +628,10 @@ export class OfertaPdfNativeService {
           data.offerData.id_esquema_pago_seleccionado === scheme.id;
         const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
         const fechaEntregaProyecto = data.propertyDetails.projectData?.fecha_entrega;
+        // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración).
+        // Misma regla que la oferta digital (mesesMensualidadesRestantes).
         const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
-          ? mesesEntreFechas(data.offerData.fecha_generacion, fechaEntregaProyecto)
+          ? mesesMensualidadesRestantes(fechaEntregaProyecto)
           : 0;
         const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
         const hasSavings = amounts.adjustment < 0;

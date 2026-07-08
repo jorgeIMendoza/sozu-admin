@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { mesesEntreFechas, calcDynamicScheme } from '@/utils/escalonadoUtils';
+import { mesesEntreFechas, calcDynamicScheme, mesesMensualidadesRestantes } from '@/utils/escalonadoUtils';
 
 interface OfferData {
   id: number;
@@ -315,7 +315,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
               const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
               const fechaEntregaProyecto = propertyDetails.projectData?.fecha_entrega;
               const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
-                ? mesesEntreFechas(offerData.fecha_generacion, fechaEntregaProyecto)
+                ? mesesMensualidadesRestantes(fechaEntregaProyecto)
                 : 0;
               const calculation = calculatePaymentAmounts(scheme, mesesEfectivos);
               return (

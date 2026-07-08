@@ -48,7 +48,7 @@ import { ReventaDialog } from "@/components/admin/ReventaDialog";
 import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
-import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -6131,7 +6131,7 @@ const Propiedades = () => {
                                                ? formatEscalonadoLabel(scheme, tramos, selectedPropertyForOffers?.precio_lista)
                                                : (() => {
                                                    const proyFechaEntrega = (proyectos as any[])?.find((p: any) => p.id === selectedPropertyForOffers?.proyecto_id)?.fecha_entrega as string | null | undefined;
-                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesEntreFechas(new Date(), proyFechaEntrega) : 0;
+                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesMensualidadesRestantes(proyFechaEntrega) : 0;
                                                    const precioLista = selectedPropertyForOffers?.precio_lista || 0;
                                                    const dyn = precioLista > 0 ? calcDynamicScheme(scheme, precioLista, dynMeses) : null;
                                                    const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);

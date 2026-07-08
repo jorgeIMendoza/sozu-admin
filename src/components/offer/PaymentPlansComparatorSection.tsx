@@ -220,11 +220,11 @@ const PaymentPlansComparatorSection = ({ plans, recommendedPlanId }: Props) => {
                   </tr>
                 )}
 
-                {/* A la entrega */}
+                {/* Pago a escrituración */}
                 <tr>
                   <td className="px-4 py-3 border-r border-border">
                     <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-muted-foreground">
-                      A la entrega
+                      Pago a escrituración
                     </p>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">Pago final</p>
                   </td>

@@ -15,6 +15,22 @@ export function mesesEntreFechas(desde: Date | string, hasta: Date | string): nu
 }
 
 /**
+ * Meses de mensualidades RESTANTES para una oferta (regla de negocio SOZU):
+ * de `desde` (hoy por defecto) a la fecha de entrega, MENOS 1 mes — el mes de
+ * entrega es el Pago a escrituración, no una mensualidad. Si ya estamos en/después
+ * del mes de entrega devuelve 0 → todo el saldo pasa al Pago a escrituración.
+ *
+ * Fuente única para oferta digital, PDF comercial y vistas de agente.
+ */
+export function mesesMensualidadesRestantes(
+  fechaEntrega: Date | string | null | undefined,
+  desde: Date | string = new Date()
+): number {
+  if (!fechaEntrega) return 0;
+  return Math.max(0, mesesEntreFechas(desde, fechaEntrega) - 1);
+}
+
+/**
  * Returns a copy of `tramos` with `numero_mensualidades` resolved.
  * If a tramo has `fecha_limite` set, its number of payments is recalculated
  * from `fechaReferencia` (defaults to today) to that date using

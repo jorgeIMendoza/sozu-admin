@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme, expandirTramos } from "@/utils/escalonadoUtils";
+import { mesesMensualidadesRestantes, calcDynamicScheme, calcEscalonadoScheme, expandirTramos } from "@/utils/escalonadoUtils";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
@@ -319,7 +319,9 @@ const AgentUnidadesProyecto = () => {
   });
   // Misma prioridad que la oferta digital: fecha_entrega_proyecto ?? fecha_entrega
   const fechaEntregaEfectiva = selectedProjectData?.fecha_entrega_proyecto ?? selectedProjectData?.fecha_entrega;
-  const efectivaMesesAgente = fechaEntregaEfectiva ? mesesEntreFechas(new Date(), fechaEntregaEfectiva) : 0;
+  // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración),
+  // misma regla que la oferta digital / PDF (mesesMensualidadesRestantes).
+  const efectivaMesesAgente = mesesMensualidadesRestantes(fechaEntregaEfectiva);
 
   // Esquemas del proyecto traídos directo de la tabla (incluye tramos_mensualidad),
   // igual que la oferta digital. El RPC del listado no devuelve tramos, así que los
