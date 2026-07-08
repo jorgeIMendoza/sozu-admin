@@ -43,7 +43,6 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
 const PublicShell = ({
   children,
   agent,
-  contactPhone = "+52 33 3306 6660",
   developmentLogoUrl,
   developmentName,
   navSections,
@@ -51,7 +50,6 @@ const PublicShell = ({
   activeSectionId,
   noFooter,
 }: PublicShellProps) => {
-  const telHref = `tel:${contactPhone.replace(/\s+/g, "")}`;
   const [mobileNavMounted, setMobileNavMounted] = useState(false);
   const [mobileNavVisible, setMobileNavVisible] = useState(false);
   const DURATION = 300;
@@ -138,13 +136,11 @@ const PublicShell = ({
               {agent ? (
                 <AgentBadge agent={agent} />
               ) : (
-                <a
-                  href={telHref}
-                  className="inline-flex items-center gap-2 px-3 py-2.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                  <span className="tabular-nums">{contactPhone}</span>
-                </a>
+                /* Cargando: skeleton — nunca un teléfono corporativo hardcodeado */
+                <div className="inline-flex items-center gap-2 pl-1 pr-3 py-1.5 rounded-full border border-border bg-muted/40">
+                  <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
+                  <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                </div>
               )}
             </div>
           </div>

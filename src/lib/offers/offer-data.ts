@@ -65,6 +65,10 @@ export interface PaymentPlan {
   finalPaymentPct: number;
   finalPaymentAmount: number;
   installmentsPct: number;
+  /** Apartado fijo ($20,000). Se descuenta del enganche. undefined = sin desglose. */
+  apartado?: number;
+  /** Enganche neto = downPaymentAmount − apartado (lo que paga tras el apartado). */
+  downPaymentNetAmount?: number;
 }
 
 export interface InstagramPost {
@@ -277,6 +281,33 @@ export interface OfertaComercial {
   parkingSlots?: ParkingSlot[];
   parkingLevelLayouts?: ParkingLevelLayout[];
   amenitiesEnriched?: Amenity[];
+  // ── Extras reales de la unidad (tablas bodegas / estacionamientos) ──
+  bodegas?: OfertaBodega[];
+  estacionamientos?: OfertaEstacionamiento[];
+  /** CLABE STP temporal del apartado (propiedades.clabe_stp_tmp_apartado). undefined → ocultar. */
+  clabeStp?: string;
+  /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
+  mesesRestantes?: number;
+}
+
+/** Bodega vinculada a la propiedad de la oferta (tabla `bodegas`). */
+export interface OfertaBodega {
+  id: number;
+  nombre: string;
+  ubicacion?: string;
+  m2?: number;
+  incluido: boolean;
+}
+
+/** Estacionamiento vinculado a la propiedad de la oferta (tabla `estacionamientos`). */
+export interface OfertaEstacionamiento {
+  id: number;
+  nombre: string;
+  ubicacion?: string;
+  m2?: number;
+  incluido: boolean;
+  /** Nombre del tipo desde `tipos_estacionamiento` (Normal, Tandem, Doble, Carlift). */
+  tipo?: string;
 }
 
 // ── 18.11.A: tipos de experiencias enriquecidas ──
