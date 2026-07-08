@@ -2,6 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, User } from "lucide-react";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
 interface AgentPortalHeaderProps {
   title?: string;
@@ -16,7 +17,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
   const { percentage, isLoading } = useAgentOnboardingStatus(personaId);
   const isVerified = percentage === 100;
   const nombreCompleto = profile?.nombre || "Agente";
-  const photoUrl = profile?.foto_perfil_url || null;
+  const photoUrl = normalizeAvatarUrl(profile?.foto_perfil_url) || null;
   const initials = nombreCompleto
     .split(" ")
     .filter(Boolean)

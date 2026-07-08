@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
 import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme } from "@/utils/escalonadoUtils";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ function toOptimizedUrl(url: string, _width: number, quality = 80): string {
   const marker = "/storage/v1/object/public/";
   const idx = url.indexOf(marker);
   if (idx === -1) return url;
+  // El endpoint de transformación /render/image/ solo existe en Supabase Cloud
+  // (*.supabase.co). En self-hosted (dev: supabase-dev.sozu.com) 404ea y rompe
+  // las imágenes → devolver la URL pública original sin transformar.
+  if (!url.includes(".supabase.co/")) return url;
   const base = url.slice(0, idx) + "/storage/v1/render/image/public/" + url.slice(idx + marker.length);
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}quality=${quality}&format=webp`;
@@ -283,7 +288,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     oferta.email_creador
       ? supabase
           .from("usuarios")
-          .select("id_persona, foto_perfil_url, frase_perfil, personas:id_persona(id, nombre_legal, email, telefono, clave_pais_telefono)")
+          .select("nombre, id_persona, foto_perfil_url, frase_perfil")
           .eq("email", oferta.email_creador)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -316,8 +321,19 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     .filter((m) => m.ver_como_imagen_de_propiedad && m.url)
     .map((m) => toOptimizedUrl(m.url, 1200, 80));
 
-  // Construir agentId y datos del agente a partir del resultado paralelo
-  const agentPersona = (agentUser as any)?.personas ?? null;
+  // Construir agentId y datos del agente a partir del resultado paralelo.
+  // personas se trae en query APARTE (no embed) para no depender del schema-cache
+  // de PostgREST: en dev el embed falla y dejaba al agente null. Solo se consulta
+  // si el creador tiene persona vinculada (los super admin no la tienen).
+  let agentPersona: any = null;
+  if ((agentUser as any)?.id_persona) {
+    const { data: ap } = await supabase
+      .from("personas")
+      .select("id, nombre_legal, email, telefono, clave_pais_telefono")
+      .eq("id", (agentUser as any).id_persona)
+      .maybeSingle();
+    agentPersona = ap ?? null;
+  }
   let agentId = "AGT-SOZU";
   if ((agentUser as any)?.id_persona) agentId = `AGT-${(agentUser as any).id_persona}`;
 
@@ -494,7 +510,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       unitNumber:     propiedad.numero_propiedad ?? "",
       level:          oferta.mostrar_piso_en_oferta ? (propiedad.numero_piso ?? undefined) : undefined,
       view:           (vista as any)?.nombre ?? undefined,
-      area:           area > 0 ? `${area.toFixed(1)} m²` : undefined,
+      // Metraje a precisión completa (hasta 2 decimales, sin redondear): así el
+      // metraje mostrado coincide con el divisor real usado en pricePerM2.
+      area:           area > 0 ? `${area.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²` : undefined,
       bedrooms:       Number(modelo?.numero_recamaras ?? 0),
       bathrooms:      Number(modelo?.numero_completo_banos ?? 0),
       halfBathrooms:  Number(modelo?.numero_medio_bano ?? 0),
@@ -587,24 +605,25 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   } as unknown as OfertaComercial;
 
   // Construir Agent inline — datos ya disponibles — datos ya disponibles del batch paralelo
-  const agent: Agent | null = agentPersona
+  const agent: Agent | null = agentUser
     ? (() => {
-        const firstName = (agentPersona.nombre_legal ?? "").split(" ")[0];
-        const phone = agentPersona.telefono
-          ? `${agentPersona.clave_pais_telefono ?? "+52"} ${agentPersona.telefono}`
-          : "";
-        const whatsapp = agentPersona.telefono
-          ? buildWhatsapp(agentPersona.clave_pais_telefono, agentPersona.telefono)
-          : "";
+        // personas es enriquecimiento OPCIONAL (nombre legal, teléfono). Si el
+        // creador no tiene persona vinculada (ej. super admin sin id_persona),
+        // se arma igual desde usuarios: nombre + foto + frase + email del creador.
+        const nombre = ((agentPersona?.nombre_legal ?? (agentUser as any)?.nombre) ?? "").trim();
+        const tel = agentPersona?.telefono ?? null;
+        const firstName = nombre.split(" ")[0];
+        const phone = tel ? `${agentPersona?.clave_pais_telefono ?? "+52"} ${tel}` : "";
+        const whatsapp = tel ? buildWhatsapp(agentPersona?.clave_pais_telefono, tel) : "";
         return {
           id: agentId,
-          fullName: agentPersona.nombre_legal ?? "",
+          fullName: nombre,
           firstName,
           title: "Asesor SOZU",
-          photoUrl: (agentUser as any)?.foto_perfil_url ?? "",
+          photoUrl: normalizeAvatarUrl((agentUser as any)?.foto_perfil_url),
           bio: (agentUser as any)?.frase_perfil ?? "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!",
           phone,
-          email: agentPersona.email ?? "",
+          email: agentPersona?.email ?? oferta.email_creador ?? "",
           whatsapp,
           brokerage: "SOZU",
           isAllied: false,
