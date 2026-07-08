@@ -10,13 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import {
   ArrowLeft, Loader2, AlertTriangle, Scale, Upload, Plus, X, Pencil,
-  FileText, UploadCloud, FileCheck,
+  UploadCloud, FileCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  todayIso, isImage, fmtCurrency, fmtDate, ValidacionBadge, SelectSearch,
+  todayIso, isImage, fmtCurrency, fmtDate, SelectSearch,
   type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
+import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
+import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
 import { CuentaDetallePropiedad } from './CuentaDetallePropiedad';
 import { CuentaDetalleProducto } from './CuentaDetalleProducto';
@@ -371,6 +373,10 @@ async function fetchCuentaDetalle(cuentaId: number) {
 
   // 9. Totals
   const totalPagado = acuerdos.reduce((s: number, a: any) => s + a.montoAplicado, 0);
+  // Suma de TODAS las aplicaciones (incluye multas) → para detectar dinero recibido
+  // que aún no se dispersa. Comparar contra totalPagado (sin multas) daría falsos
+  // positivos en cuentas con multas pagadas.
+  const totalAplicacionesAll = (aplicacionesRaw ?? []).reduce((s: number, ap: any) => s + Number(ap.monto), 0);
   const saldoPendiente = precioFinal - totalPagado;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const vencidos = acuerdos.filter((a: any) => !a.pago_completado && a.fecha_pago && new Date(a.fecha_pago + 'T00:00:00') < today);
@@ -403,6 +409,7 @@ async function fetchCuentaDetalle(cuentaId: number) {
     precioM2,
     estatusPropiedad,
     totalPagado,
+    totalAplicacionesAll,
     saldoPendiente,
     montoVencido,
     parcialidadesVencidas,
@@ -457,6 +464,13 @@ export default function CobranzaCuentaDetalle() {
   const [pagoDialog, setPagoDialog] = useState(false);
   const [pagoForm, setPagoForm] = useState({ fecha: todayIso(), monto: '', id_metodo: '', clave: '' });
   const [pagoSaving, setPagoSaving] = useState(false);
+  // Evidencia opcional al registrar el pago (mismo destino que el modal de carga:
+  // validado → bucket ceps / col url_cep ; no validado → evidencias_efectivo / url_recibo).
+  const [apFile, setApFile] = useState<File | null>(null);
+  const [apDragging, setApDragging] = useState(false);
+  const [apEsValido, setApEsValido] = useState(false);
+  const [apEsCep, setApEsCep] = useState(false);
+  const [recalculandoAplic, setRecalculandoAplic] = useState(false);
 
   const [multaDialog, setMultaDialog] = useState(false);
   const [multaAcuerdoId, setMultaAcuerdoId] = useState<number | null>(null);
@@ -495,8 +509,6 @@ export default function CobranzaCuentaDetalle() {
   const [expandedAcuerdos, setExpandedAcuerdos] = useState<Set<number>>(new Set());
   const [acuerdosPage, setAcuerdosPage] = useState(0);
   const [pagoEvidenciaModal, setPagoEvidenciaModal] = useState<any | null>(null);
-  const [pagoValidacionSaving, setPagoValidacionSaving] = useState(false);
-  const [pagoMetodoSaving, setPagoMetodoSaving] = useState(false);
   const [downloadingOferta, setDownloadingOferta] = useState(false);
   const [transferDialog, setTransferDialog] = useState(false);
 
@@ -536,6 +548,11 @@ export default function CobranzaCuentaDetalle() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
+  function apResetForm() {
+    setPagoForm({ fecha: todayIso(), monto: '', id_metodo: '', clave: '' });
+    setApFile(null); setApEsValido(false); setApEsCep(false);
+  }
+
   async function handlePagoSubmit() {
     if (!pagoForm.fecha || !pagoForm.monto || !pagoForm.id_metodo) {
       toast.error('Completa fecha, monto y metodo');
@@ -543,18 +560,34 @@ export default function CobranzaCuentaDetalle() {
     }
     setPagoSaving(true);
     try {
-      const { error: e } = await (supabase as any).from('pagos').insert({
+      // 1) Registrar el pago (RETURNING id para poder adjuntar la evidencia).
+      const { data: nuevoPago, error: e } = await (supabase as any).from('pagos').insert({
         id_cuenta_cobranza: cuentaId,
         fecha_pago: pagoForm.fecha,
         monto: parseFloat(pagoForm.monto),
         id_metodos_pago: parseInt(pagoForm.id_metodo),
         clave_rastreo: pagoForm.clave || null,
         activo: true,
-      });
+      }).select('id').single();
       if (e) throw e;
-      toast.success('Pago registrado');
+
+      // 2) Evidencia opcional → bucket + columna según validado/CEP.
+      if (apFile && nuevoPago?.id) {
+        const bucket = apEsCep ? 'ceps' : 'evidencias_efectivo';
+        const columna = apEsValido ? 'url_cep' : 'url_recibo';
+        const ext = apFile.name.split('.').pop() ?? 'bin';
+        const path = `${cuentaId}/${nuevoPago.id}/${Date.now()}.${ext}`;
+        const { error: se } = await supabase.storage.from(bucket).upload(path, apFile, { upsert: true });
+        if (se) throw se;
+        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+        const { error: ue } = await (supabase as any).from('pagos')
+          .update({ [columna]: pub.publicUrl }).eq('id', nuevoPago.id);
+        if (ue) throw ue;
+      }
+
+      toast.success(apFile ? 'Pago y evidencia registrados' : 'Pago registrado');
       setPagoDialog(false);
-      setPagoForm({ fecha: todayIso(), monto: '', id_metodo: '', clave: '' });
+      apResetForm();
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
@@ -731,6 +764,29 @@ export default function CobranzaCuentaDetalle() {
     }
   }
 
+  // Recalcular dispersión de pagos: reparte los pagos crudos en aplicaciones_pago.
+  // Misma edge function que usa el detalle de cuenta del admin panel — un solo
+  // algoritmo canónico para pagos manuales y automáticos (STP).
+  async function handleRecalcularAplicaciones() {
+    setRecalculandoAplic(true);
+    try {
+      const { error } = await supabase.functions.invoke('recalcular-aplicaciones', {
+        body: { id_cuenta_cobranza: cuentaId },
+      });
+      if (error) throw error;
+      toast.success('Dispersión recalculada; los pagos se redistribuyeron.');
+      // La función corre async del lado servidor: refrescar tras un breve delay.
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+        queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
+        setRecalculandoAplic(false);
+      }, 2000);
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al recalcular la dispersión');
+      setRecalculandoAplic(false);
+    }
+  }
+
   async function handleEstadoCuenta() {
     setGeneratingPDF(true);
     try {
@@ -747,6 +803,9 @@ export default function CobranzaCuentaDetalle() {
       const url = resp?.url_estado_cuenta ?? resp?.url;
       if (!url) throw new Error(resp?.error ?? 'Error al generar');
       setPdfPreviewModal({ url, title: 'Estado de Cuenta' });
+      // El PDF se genera desde la BD en vivo; refrescar el detalle para que la
+      // página en pantalla quede consistente con lo que muestra el estado de cuenta.
+      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error al generar estado de cuenta');
     } finally {
@@ -800,50 +859,8 @@ export default function CobranzaCuentaDetalle() {
     }
   }
 
-  async function handleUpdatePagoValidacion(pagoId: number, nuevoEstado: string) {
-    setPagoValidacionSaving(true);
-    try {
-      const { data: updated } = await (supabase as any)
-        .from('pago_validaciones').update({ estado: nuevoEstado }).eq('id_pago', pagoId).select('id');
-      if (!updated || updated.length === 0) {
-        const { error: ie } = await (supabase as any)
-          .from('pago_validaciones').insert({ id_pago: pagoId, estado: nuevoEstado });
-        if (ie) throw ie;
-      }
-      toast.success('Estado de validación actualizado');
-      setPagoEvidenciaModal((prev: any) => prev ? { ...prev, validacion: { ...(prev.validacion ?? {}), estado: nuevoEstado } } : null);
-      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
-      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al actualizar');
-    } finally {
-      setPagoValidacionSaving(false);
-    }
-  }
-
-  async function handleUpdatePagoMetodo(pagoId: number, newMetodoId: number) {
-    setPagoMetodoSaving(true);
-    try {
-      const { error: e } = await (supabase as any)
-        .from('pagos')
-        .update({ id_metodos_pago: newMetodoId })
-        .eq('id', pagoId);
-      if (e) throw e;
-      const metodoNombre = metodosPago.find(m => m.id === newMetodoId)?.nombre ?? 'Sin método';
-      toast.success('Método de pago actualizado');
-      setPagoEvidenciaModal((prev: any) => prev ? {
-        ...prev,
-        metodo: metodoNombre,
-        id_metodos_pago: newMetodoId,
-      } : null);
-      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
-      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al actualizar');
-    } finally {
-      setPagoMetodoSaving(false);
-    }
-  }
+  // La edición de validación/método vive ahora en PaymentDetailDialog (modal
+  // compartido con Relación de Pagos); ya no se maneja aquí.
 
   // ── Loading / error guards ──────────────────────────────────────────────────
 
@@ -869,7 +886,7 @@ export default function CobranzaCuentaDetalle() {
     esquemaNombre, esquemaPct,
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad, productoNombre, tipo,
     m2Interiores, m2Exteriores, precioM2, estatusPropiedad,
-    totalPagado, saldoPendiente, montoVencido, parcialidadesVencidas, pagadoEfectivo,
+    totalPagado, totalAplicacionesAll, saldoPendiente, montoVencido, parcialidadesVencidas, pagadoEfectivo,
     acuerdos, pagos, aplicacionesList, esMantenimiento,
   } = data;
 
@@ -901,6 +918,11 @@ export default function CobranzaCuentaDetalle() {
 
   const sumaAcuerdos = acuerdos.reduce((s: number, a: any) => s + a.monto, 0);
   const hayDiscrepancia = Math.abs(precio_final - sumaAcuerdos) > 0.01;
+  // Discrepancia dinero-recibido vs dinero-dispersado: si hay pagos crudos cuyo
+  // monto no está aplicado en aplicaciones_pago (ej. pago manual sin dispersar),
+  // se ofrece "Recalcular dispersión" (edge function recalcular-aplicaciones).
+  const sumaPagosReales = pagos.reduce((s: number, p: any) => s + (p.monto ?? 0), 0);
+  const hayDiscrepanciaAplicaciones = pagos.length > 0 && Math.abs(sumaPagosReales - totalAplicacionesAll) > 0.01;
   const ultimoPagoSTP = pagos.find((p: any) => p.clave_rastreo) ?? null;
   const selectedPago = pagos.find((p: any) => p.id === selectedPagoId) ?? null;
 
@@ -1019,6 +1041,7 @@ export default function CobranzaCuentaDetalle() {
     setPagoEvidenciaModal,
     setPdfPreviewModal,
     hayDiscrepancia, sumaAcuerdos,
+    hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
     generatingPDF, handleEstadoCuenta,
     downloadingOferta, handleDownloadOferta,
     setTransferDialog: (v) => setTransferDialog(v),
@@ -1069,42 +1092,94 @@ export default function CobranzaCuentaDetalle() {
 
       {/* ── Dialogs (shell-only) ─────────────────────────────────────────────── */}
 
-      {/* Dialog: Agregar Pago */}
-      <Dialog open={pagoDialog} onOpenChange={setPagoDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="text-[15px]">Registrar Pago</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-1">
-            {([
-              { label: 'Fecha de pago *', type: 'date', value: pagoForm.fecha, key: 'fecha' },
-              { label: 'Monto (MXN) *', type: 'number', placeholder: 'ej. 15000', value: pagoForm.monto, key: 'monto' },
-              { label: 'Clave de rastreo', type: 'text', placeholder: 'ej. 2024060912345678', value: pagoForm.clave, key: 'clave' },
-            ] as const).map(f => (
-              <div key={f.key} className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground px-0.5">{f.label}</label>
-                <Input
-                  type={f.type}
-                  placeholder={'placeholder' in f ? f.placeholder : undefined}
-                  value={f.value}
-                  onChange={e => setPagoForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="h-9 text-sm"
-                />
-              </div>
-            ))}
+      {/* Dialog: Agregar Pago (con evidencia opcional) */}
+      <Dialog open={pagoDialog} onOpenChange={(o) => { setPagoDialog(o); if (!o) apResetForm(); }}>
+        <DialogContent className="p-0 gap-0 flex flex-col overflow-hidden max-sm:left-0 max-sm:right-0 max-sm:bottom-0 max-sm:top-auto max-sm:translate-x-0 max-sm:translate-y-0 max-sm:w-full max-sm:max-w-none max-sm:max-h-[92vh] max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:data-[state=open]:slide-in-from-bottom sm:max-w-md sm:max-h-[88vh]">
+          <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+            <DialogTitle className="text-[15px]">Registrar pago</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-3">
+            {/* Método */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground px-0.5">Metodo de pago *</label>
+              <label className="text-xs font-medium text-muted-foreground px-0.5">Método de pago *</label>
               <SelectSearch
                 value={pagoForm.id_metodo}
                 onValueChange={v => setPagoForm(f => ({ ...f, id_metodo: v }))}
                 options={metodosPago.map(m => ({ value: String(m.id), label: m.nombre }))}
               />
             </div>
+
+            {/* Fecha + Monto */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground px-0.5">Fecha de pago *</label>
+                <Input type="date" value={pagoForm.fecha}
+                  onChange={e => setPagoForm(p => ({ ...p, fecha: e.target.value }))} className="h-9 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground px-0.5">Monto (MXN) *</label>
+                <Input type="number" inputMode="decimal" placeholder="ej. 15000" value={pagoForm.monto}
+                  onChange={e => setPagoForm(p => ({ ...p, monto: e.target.value }))} className="h-9 text-sm" />
+              </div>
+            </div>
+
+            {/* Clave */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground px-0.5">Clave de rastreo</label>
+              <Input type="text" placeholder="ej. 2024060912345678" value={pagoForm.clave}
+                onChange={e => setPagoForm(p => ({ ...p, clave: e.target.value }))} className="h-9 text-sm" />
+            </div>
+
+            {/* Evidencia opcional */}
+            <div className="flex flex-col gap-1.5 pt-1">
+              <label className="text-xs font-medium text-muted-foreground px-0.5">Evidencia del pago (opcional)</label>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setApDragging(true); }}
+                onDragLeave={() => setApDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setApDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setApFile(f); }}
+                className={`relative rounded-lg border-2 border-dashed transition-colors ${apDragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'}`}
+              >
+                <input id="ap-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.xml"
+                  onChange={(e) => setApFile(e.target.files?.[0] ?? null)}
+                  className="absolute inset-0 opacity-0 cursor-pointer" />
+                <div className="flex flex-col items-center justify-center gap-1.5 py-5 px-4 text-center pointer-events-none">
+                  {apFile ? (
+                    <>
+                      <FileCheck className="size-6 text-primary" />
+                      <p className="text-[13px] font-medium text-foreground break-all">{apFile.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{(apFile.size / 1024).toFixed(0)} KB · clic para cambiar</p>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="size-6 text-muted-foreground" />
+                      <p className="text-[13px] font-medium text-foreground">Arrastra el archivo aquí</p>
+                      <p className="text-[11px] text-muted-foreground">o haz clic · PDF, imagen o XML</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              {apFile && (
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2 hover:bg-muted/50 transition-colors">
+                    <input type="checkbox" checked={apEsValido} onChange={(e) => setApEsValido(e.target.checked)} className="size-4 accent-primary" />
+                    <span className="text-[13px] font-medium text-foreground">Pago validado</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2 hover:bg-muted/50 transition-colors">
+                    <input type="checkbox" checked={apEsCep} onChange={(e) => setApEsCep(e.target.checked)} className="size-4 accent-primary" />
+                    <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
-          <DialogFooter>
-            <button onClick={() => setPagoDialog(false)}
+
+          <DialogFooter className="px-5 py-4 border-t border-border shrink-0">
+            <button onClick={() => { setPagoDialog(false); apResetForm(); }}
               className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancelar</button>
             <button onClick={handlePagoSubmit} disabled={pagoSaving}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {pagoSaving && <Loader2 className="size-3.5 animate-spin" />}Registrar
+              {pagoSaving && <Loader2 className="size-3.5 animate-spin" />}Registrar pago
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1489,116 +1564,18 @@ export default function CobranzaCuentaDetalle() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Evidencia Pago */}
-      <Dialog open={!!pagoEvidenciaModal} onOpenChange={open => !open && setPagoEvidenciaModal(null)}>
-        <DialogContent className="sm:max-w-5xl h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
-          {pagoEvidenciaModal && (() => {
-            const p = pagoEvidenciaModal;
-            const conceptoLabel = p.concepto?.toLowerCase().includes('contra entrega') ? 'Pago Final' : (p.concepto ?? 'Pago');
-            const evidUrl = p.url_cep ?? p.url_recibo ?? null;
-            return (
-              <div className="flex h-full min-h-0">
-                {/* Evidence — 65% */}
-                <div className="flex-[65] min-w-0 min-h-0 bg-muted/10">
-                  {evidUrl ? (
-                    isImage(evidUrl)
-                      ? <div className="flex items-center justify-center h-full overflow-auto p-4">
-                          <img src={evidUrl} alt="Evidencia" className="max-w-full max-h-full object-contain" />
-                        </div>
-                      : <iframe src={evidUrl} title="Evidencia" className="w-full h-full border-0" />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <FileText className="size-10 text-muted-foreground/20 mb-3" />
-                      <p className="text-[13px] text-muted-foreground">Sin evidencia adjunta</p>
-                    </div>
-                  )}
-                </div>
-                {/* Metadata — 35% */}
-                <div className="flex-[35] shrink-0 border-l border-border flex flex-col bg-card min-w-[240px]">
-                  <div className="px-4 py-3 border-b border-border shrink-0">
-                    <p className="text-[13px] font-semibold leading-tight">{conceptoLabel} · {fmtDate(p.fecha_pago)}</p>
-                    <ValidacionBadge estado={p.validacion?.estado} />
-                  </div>
-                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Detalle del pago</p>
-                      <div className="space-y-1.5 text-[12px]">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Concepto</span>
-                          <span className="font-medium">{conceptoLabel}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">F. límite</span>
-                          <span className="tabular-nums">{p.fechaLimite ? fmtDate(p.fechaLimite) : 'Sin registro'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">F. pagado</span>
-                          <span className="font-medium tabular-nums text-emerald-600">{fmtDate(p.fecha_pago)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Monto aplicado</span>
-                          <span className="font-bold tabular-nums text-emerald-600">{fmtCurrency(p.monto)}</span>
-                        </div>
-                        {p.clave_rastreo && (
-                          <div className="flex flex-col gap-0.5 pt-0.5">
-                            <span className="text-muted-foreground">Clave rastreo</span>
-                            <span className="font-mono text-[11px] break-all text-foreground">{p.clave_rastreo}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {p.id_pago && (
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Método de pago</p>
-                        <SelectSearch
-                          value={String(p.id_metodos_pago ?? '')}
-                          onValueChange={v => {
-                            const n = parseInt(v);
-                            if (n && n !== p.id_metodos_pago) handleUpdatePagoMetodo(p.id_pago!, n);
-                          }}
-                          options={metodosPago.map(m => ({ value: String(m.id), label: m.nombre }))}
-                          disabled={pagoMetodoSaving}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Validación</p>
-                      {p.id_pago ? (
-                        <SelectSearch
-                          value={p.validacion?.estado ?? ''}
-                          onValueChange={v => v && handleUpdatePagoValidacion(p.id_pago!, v)}
-                          options={[
-                            { value: 'coincide', label: 'Válido' },
-                            { value: 'no_coincide', label: 'No coincide' },
-                            { value: 'error', label: 'Error' },
-                          ]}
-                          placeholder="Sin validar"
-                          disabled={pagoValidacionSaving}
-                        />
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground/60">Sin pago vinculado - no editable</p>
-                      )}
-                      {(p.validacion?.estado ?? 'sin_validar') !== 'coincide' && (
-                        <div className="mt-2 space-y-1">
-                          {p.validacion?.motivo && (
-                            <p className="text-[11px] text-muted-foreground">{p.validacion.motivo}</p>
-                          )}
-                          {p.validacion && (p.validacion.monto_esperado > 0 || p.validacion.monto_real > 0) && (
-                            <div className="flex gap-3 text-[11px]">
-                              <span className="text-muted-foreground">Esperado: <span className="font-medium text-foreground">{fmtCurrency(p.validacion.monto_esperado)}</span></span>
-                              <span className="text-muted-foreground">Real: <span className="font-medium text-foreground">{fmtCurrency(p.validacion.monto_real)}</span></span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      {/* Detalle del pago — modal compartido con Relación de Pagos */}
+      <PaymentDetailDialog
+        payment={pagoEvidenciaModal && pagoEvidenciaModal.id_pago ? ({
+          pago_id: pagoEvidenciaModal.id_pago,
+          fecha_pago: pagoEvidenciaModal.fecha_pago,
+          clave_rastreo: pagoEvidenciaModal.clave_rastreo ?? null,
+          url_cep: pagoEvidenciaModal.url_cep ?? null,
+          url_recibo: pagoEvidenciaModal.url_recibo ?? null,
+        } as PagoRecord) : null}
+        onClose={() => setPagoEvidenciaModal(null)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] })}
+      />
 
       {editCuentaDialog && (
         <EditCuentaCobranzaDialog
