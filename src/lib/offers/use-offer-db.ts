@@ -10,9 +10,12 @@ import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 const COUNTRY_DIAL: Record<string, string> = { MX: "52", US: "1", IN: "91" };
 
 function toDialCode(clave: string | null | undefined): string {
-  if (!clave) return "52";
-  if (/^\+?\d+$/.test(clave)) return clave.replace("+", "");
-  return COUNTRY_DIAL[clave.toUpperCase()] ?? "52";
+  // clave_pais_telefono es CHAR(n): puede venir con espacios de relleno ("MX   ")
+  // o como dial ("+52"/"52") o código de país ("MX"). Normalizar con trim.
+  const c = (clave ?? "").trim();
+  if (!c) return "52";
+  if (/^\+?\d+$/.test(c)) return c.replace("+", "");
+  return COUNTRY_DIAL[c.toUpperCase()] ?? "52";
 }
 
 function buildWhatsapp(clave: string | null | undefined, telefono: string): string {
@@ -733,7 +736,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const tel =
     finAgente?.telefono ??
     (agentUser as any)?.telefono ?? agentPersona?.telefono ?? null;
-  const phone = tel ? `${clavePais ?? "+52"} ${tel}` : "";
+  const phone = tel ? `+${toDialCode(clavePais)} ${tel}` : "";
   const whatsapp = tel ? buildWhatsapp(clavePais, tel) : "";
   const nombre = (
     finAgente?.nombre_legal ?? finAgente?.nombre ??
