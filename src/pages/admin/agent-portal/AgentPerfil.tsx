@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
 const ACTIVATION_BLOCKS = [
   { 
@@ -70,7 +71,7 @@ const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'>
 };
 
 const AgentPerfil = () => {
-  const { profile, user } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { impersonatedAgentPersonaId, impersonatedAgentName, impersonatedAgentEmail, isImpersonating } = useAgentImpersonation();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
@@ -159,14 +160,24 @@ const AgentPerfil = () => {
       // Strip ?t=timestamp that Supabase JS adds for cache-busting on upsert
       const cleanUrl = urlData.publicUrl.split('?')[0];
 
-      await (supabase as any)
+      // .select() para detectar 0 filas (RLS/filtro) y capturar error real.
+      const { data: updated, error: updErr } = await (supabase as any)
         .from('usuarios')
         .update({ foto_perfil_url: cleanUrl })
-        .eq('email', agentEmail);
+        .eq('email', agentEmail)
+        .select('email');
+      if (updErr) throw updErr;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se pudo guardar la foto: no tienes permiso para editar este perfil.');
+      }
+
       queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
+      await refreshProfile(); // refresca el perfil global → header/avatar se actualiza
+      toast.success('Foto de perfil actualizada');
       closePhotoModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error subiendo foto:', err);
+      toast.error(err?.message || 'No se pudo subir la foto. Intenta de nuevo.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -199,14 +210,19 @@ const AgentPerfil = () => {
           }
         }
       }
-      await (supabase as any)
+      const { error: updErr } = await (supabase as any)
         .from('usuarios')
         .update({ foto_perfil_url: null })
-        .eq('email', agentEmail);
+        .eq('email', agentEmail)
+        .select('email');
+      if (updErr) throw updErr;
       queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
+      await refreshProfile();
+      toast.success('Foto de perfil eliminada');
       setShowPhotoModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error eliminando foto:', err);
+      toast.error(err?.message || 'No se pudo eliminar la foto.');
     } finally {
       setDeletingPhoto(false);
     }
@@ -216,14 +232,22 @@ const AgentPerfil = () => {
     if (!agentEmail) return;
     setSavingFrase(true);
     try {
-      await (supabase as any)
+      const { data: updated, error: updErr } = await (supabase as any)
         .from('usuarios')
         .update({ frase_perfil: fraseValue.trim() || null })
-        .eq('email', agentEmail);
+        .eq('email', agentEmail)
+        .select('email');
+      if (updErr) throw updErr;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se pudo guardar la presentación: no tienes permiso para editar este perfil.');
+      }
       queryClient.invalidateQueries({ queryKey: ['agent-perfil-extra', agentEmail] });
+      await refreshProfile();
+      toast.success('Presentación guardada');
       setEditingFrase(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error guardando frase:', err);
+      toast.error(err?.message || 'No se pudo guardar la presentación.');
     } finally {
       setSavingFrase(false);
     }
@@ -614,7 +638,7 @@ const AgentPerfil = () => {
         >
           {perfilExtra?.foto_perfil_url ? (
             <img
-              src={perfilExtra.foto_perfil_url}
+              src={normalizeAvatarUrl(perfilExtra.foto_perfil_url)}
               alt={displayName || "Avatar"}
               className="h-[72px] w-[72px] rounded-full object-cover"
             />
@@ -684,7 +708,7 @@ const AgentPerfil = () => {
                     <span className="flex items-center gap-2.5 shrink-0">
                       <span className="text-[10.5px] font-medium tabular-nums text-[#B7BEC5]">{fraseValue.length}/280</span>
                       <button
-                        onClick={() => { handleFraseSave(); setEditingFrase(false); }}
+                        onClick={handleFraseSave}
                         disabled={savingFrase}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A45E] px-3.5 py-1.5 text-[11.5px] font-bold text-white disabled:opacity-50 transition-opacity hover:opacity-90"
                       >
