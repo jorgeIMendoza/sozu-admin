@@ -1,7 +1,7 @@
 import { useState, useRef, type ReactNode } from 'react';
 import {
   Copy, ChevronsUpDown, Search, Check, Download, ExternalLink, X,
-  LayoutDashboard, Users, Calendar, FileText,
+  LayoutDashboard, Users, Calendar, FileText, RefreshCw, Loader2,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -296,6 +296,28 @@ export function TabBar<T extends string>({
   );
 }
 
+// ── Botón "Recalcular dispersión" (compartido por los 3 tipos de detalle) ──────
+// Aparece SOLO cuando hay dinero recibido (pagos) que aún no está distribuido en
+// aplicaciones_pago (`show`). Dispara la edge function `recalcular-aplicaciones`.
+export function RecalcularDispersionButton({ show, loading, onClick }: {
+  show: boolean;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  if (!show) return null;
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      title="Hay pagos registrados que aún no se han distribuido en los acuerdos. Recalcula la dispersión."
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60"
+    >
+      {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+      Recalcular dispersión
+    </button>
+  );
+}
+
 // ── CuentaDetalleCtx ───────────────────────────────────────────────────────────
 
 export interface CuentaDetalleCtx {
@@ -374,6 +396,9 @@ export interface CuentaDetalleCtx {
   setPdfPreviewModal: (v: { url: string; title: string } | null) => void;
   hayDiscrepancia: boolean;
   sumaAcuerdos: number;
+  hayDiscrepanciaAplicaciones: boolean;
+  recalculandoAplic: boolean;
+  handleRecalcularAplicaciones: () => void;
   generatingPDF: boolean;
   downloadingOferta: boolean;
   handleEstadoCuenta: () => void;

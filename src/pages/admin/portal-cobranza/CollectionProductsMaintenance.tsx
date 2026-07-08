@@ -134,7 +134,8 @@ export default function CollectionProductsMaintenance() {
   if (isLoading && !data) return <CollectionLoading label="Cargando complementos..." />;
   if (isError || !data) return <CollectionError title="No pudimos cargar complementos" onRetry={() => refetch()} />;
 
-  const carteraTotal = (data.cobrado_total ?? 0) + (data.pendiente_total ?? 0);
+  // Cartera = cobrado + saldo. Saldo = por vencer (pendiente_total) + vencido.
+  const carteraTotal = (data.cobrado_total ?? 0) + (data.pendiente_total ?? 0) + (data.vencido_total ?? 0);
   const cumplimiento = Math.round(data.recovery_rate ?? 0);
   const enMora = overdue.length;
   // Morosidad por # de cargos vencidos (para "Cartera y acciones").
@@ -206,10 +207,10 @@ export default function CollectionProductsMaintenance() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales generales</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Cartera total" value={formatCurrency(carteraTotal)} sublabel="cobrado + pendiente" />
-              <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="aplicado a complementos" />
-              <StatCard label="Pendiente total" labelClass={data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground'} value={formatCurrency(data.pendiente_total)} sublabel="saldo por cobrar" />
-              <StatCard label="Vencido total" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="con atraso" />
+              <StatCard label="Cartera total" value={formatCurrency(carteraTotal)} sublabel="meta total" />
+              <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
+              <StatCard label="Por vencer" labelClass={data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground'} value={formatCurrency(data.pendiente_total)} sublabel="aún no vence" />
+              <StatCard label="Vencido" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="pagos atrasados" />
             </div>
           </section>
 
@@ -217,9 +218,9 @@ export default function CollectionProductsMaintenance() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 capitalize">{periodLabel}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence en el mes" />
+              <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence este mes" />
               <StatCard label="Cobrado en el mes" labelClass="text-success" value={formatCurrency(data.cobrado_mes)} sublabel={periodLabel} />
-              <StatCard label="Por cobrar" labelClass="text-warning" value={formatCurrency(data.por_cobrar_mes)} sublabel="pendiente del mes" />
+              <StatCard label="Por cobrar" labelClass="text-warning" value={formatCurrency(data.por_cobrar_mes)} sublabel="falta este mes" />
               <StatCard label="Cumplimiento" labelClass={cumplimiento >= 90 ? 'text-success' : 'text-danger'} variant="count" valueClass={cumplimiento >= 90 ? 'text-success' : 'text-danger'} value={`${cumplimiento}%`} sublabel={cumplimiento >= 90 ? 'En meta' : 'Bajo meta'} />
             </div>
           </section>
@@ -234,7 +235,7 @@ export default function CollectionProductsMaintenance() {
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="total vencido" />
+              <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="monto atrasado total" />
               <StatCard label="Cuentas críticas" labelClass="text-danger" variant="count" valueClass={criticos3 > 0 ? 'text-danger' : 'text-foreground'} value={criticos3} sublabel="3 o más cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })} arrowClass="group-hover:text-danger" />
               <StatCard label="En riesgo" labelClass="text-warning" variant="count" valueClass={riesgo2 > 0 ? 'text-warning' : 'text-foreground'} value={riesgo2} sublabel="2 cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' })} arrowClass="group-hover:text-warning" />
               <StatCard label="Meta del mes" labelClass="text-primary" valueClass="text-primary" value={formatCurrency(metaMes)} sublabel="falta para cumplir" />

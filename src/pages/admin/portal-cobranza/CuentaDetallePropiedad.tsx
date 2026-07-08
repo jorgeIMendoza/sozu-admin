@@ -13,7 +13,7 @@ import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
-  DocEstatusBadge, InfoRow,
+  DocEstatusBadge, InfoRow, RecalcularDispersionButton,
   INFO_TABS, ACTIVITY_TABS,
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
@@ -37,6 +37,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     setMultaAcuerdoId, setMultaDialog, setMultaGestionAcuerdoId, setMultaGestionDialog,
     setPagoEvidenciaModal, setPdfPreviewModal,
     hayDiscrepancia, sumaAcuerdos,
+    hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
     generatingPDF, handleEstadoCuenta, downloadingOferta, handleDownloadOferta,
     setTransferDialog,
     clabe_stp, fecha_compra, ofertaId,
@@ -174,6 +175,11 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <CreditCard className="size-3.5" />Agregar Pago
           </button>
         )}
+        <RecalcularDispersionButton
+          show={!isEnDemanda && hayDiscrepanciaAplicaciones}
+          loading={recalculandoAplic}
+          onClick={handleRecalcularAplicaciones}
+        />
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
           onClick={handleEstadoCuenta}
@@ -425,11 +431,12 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="sozu-thead">
-                      {['Concepto', 'Aplic.', 'F. límite', 'F. pagado', 'Metodo', 'Clave rastreo', 'Monto', 'Aplicado', '%', 'Estado', 'Valido', ''].map((h, i) => (
+                      {['Concepto', 'Aplic.', 'F. límite', 'F. pagado', 'Metodo', 'Clave rastreo', 'Monto', 'Aplicado', '%', 'Estado', 'Valido', '', ''].map((h, i) => (
                         <th key={i} className={cn(
                           'px-3 py-2.5 text-[10px] whitespace-nowrap',
                           i === 1 && 'w-10',
-                          i === 10 && 'w-20'
+                          i === 10 && 'w-20',
+                          i === 11 && 'w-8 text-center'
                         )}>{h}</th>
                       ))}
                     </tr>
@@ -517,20 +524,54 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                             <td className="px-3 py-2.5 text-center">
                               <ValidacionBadge estado={a.validacion?.estado} />
                             </td>
+                            {/* Evidencia (columna propia): estado del comprobante */}
+                            <td className="px-0 py-2.5 text-center w-8">
+                              <IconTip label={a.ultimoPago?.url_cep ? (a.numAplicaciones >= 2 ? 'Ver en parcialidades' : 'Pago validado') : a.ultimoPago?.url_recibo ? (a.numAplicaciones >= 2 ? 'Ver en parcialidades' : 'Pago sin validar') : 'Sin evidencia'}>
+                                <span className="p-1.5 inline-flex shrink-0">
+                                  {a.ultimoPago?.url_cep ? (
+                                    <FileCheck className={cn('size-4 shrink-0', a.numAplicaciones >= 2 ? 'text-muted-foreground/25' : 'text-emerald-500')} />
+                                  ) : a.ultimoPago?.url_recibo ? (
+                                    <FileWarning className={cn('size-4 shrink-0', a.numAplicaciones >= 2 ? 'text-muted-foreground/25' : 'text-amber-500')} />
+                                  ) : (
+                                    <FileText className="size-4 shrink-0 text-muted-foreground/25" />
+                                  )}
+                                </span>
+                              </IconTip>
+                            </td>
+                            {/* Acciones (juntas): ver, cargar, multa */}
                             <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-2">
-                                {/* Estado de evidencia (3 estados) */}
-                                <IconTip label={a.ultimoPago?.url_cep ? (a.numAplicaciones >= 2 ? 'Ver en parcialidades' : 'Pago validado') : a.ultimoPago?.url_recibo ? (a.numAplicaciones >= 2 ? 'Ver en parcialidades' : 'Pago sin validar') : 'Sin evidencia'}>
-                                  <span className="p-1.5 inline-flex shrink-0">
-                                    {a.ultimoPago?.url_cep ? (
-                                      <FileCheck className={cn('size-4 shrink-0', a.numAplicaciones >= 2 ? 'text-muted-foreground/25' : 'text-emerald-500')} />
-                                    ) : a.ultimoPago?.url_recibo ? (
-                                      <FileWarning className={cn('size-4 shrink-0', a.numAplicaciones >= 2 ? 'text-muted-foreground/25' : 'text-amber-500')} />
-                                    ) : (
-                                      <FileText className="size-4 shrink-0 text-muted-foreground/25" />
-                                    )}
-                                  </span>
+                                {/* Ver evidencia (ojo) */}
+                                <IconTip label={a.numAplicaciones >= 2 ? 'Ver en parcialidades expandidas' : 'Ver evidencia y validación'}>
+                                  <button
+                                    onClick={() => {
+                                      if (a.numAplicaciones >= 2) return;
+                                      const listItem = aplicacionesList.find((x: any) => x.id_pago === a.ultimoPago?.id);
+                                      if (listItem) setPagoEvidenciaModal(listItem);
+                                    }}
+                                    disabled={a.numAplicaciones >= 2 || !a.ultimoPago?.id}
+                                    className={cn('p-1.5 rounded transition-colors', a.numAplicaciones >= 2 || !a.ultimoPago?.id ? 'text-muted-foreground/25 cursor-not-allowed' : 'text-foreground hover:bg-muted')}
+                                  >
+                                    <Eye className="size-4" />
+                                  </button>
                                 </IconTip>
+                                {/* Cargar evidencia (activo solo en pago único; en acumulados va en las internas) */}
+                                {a.numAplicaciones < 2 && a.ultimoPago?.id ? (
+                                  <IconTip label="Cargar evidencia de pago">
+                                    <button
+                                      onClick={() => openCargarEvidencia(a.ultimoPago)}
+                                      className="p-1.5 rounded transition-colors text-foreground hover:bg-muted"
+                                    >
+                                      <Upload className="size-4" />
+                                    </button>
+                                  </IconTip>
+                                ) : (
+                                  <IconTip label={a.numAplicaciones >= 2 ? 'Cargar en cada parcialidad' : 'Sin pago registrado'}>
+                                    <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed">
+                                      <Upload className="size-4" />
+                                    </span>
+                                  </IconTip>
+                                )}
                                 {/* Multa (por acuerdo) */}
                                 {isEnDemanda ? (
                                   <IconTip label="En demanda">
@@ -549,37 +590,6 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                     </button>
                                   </IconTip>
                                 )}
-                                {/* Cargar evidencia (activo solo en pago único; en acumulados va en las internas) */}
-                                {a.numAplicaciones < 2 && a.ultimoPago?.id ? (
-                                  <IconTip label="Cargar evidencia de pago">
-                                    <button
-                                      onClick={() => openCargarEvidencia(a.ultimoPago)}
-                                      className="p-1.5 rounded transition-colors text-foreground hover:bg-muted"
-                                    >
-                                      <Upload className="size-4" />
-                                    </button>
-                                  </IconTip>
-                                ) : (
-                                  <IconTip label={a.numAplicaciones >= 2 ? 'Cargar en cada parcialidad' : 'Sin pago registrado'}>
-                                    <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed">
-                                      <Upload className="size-4" />
-                                    </span>
-                                  </IconTip>
-                                )}
-                                {/* Ver evidencia */}
-                                <IconTip label={a.numAplicaciones >= 2 ? 'Ver en parcialidades expandidas' : 'Ver evidencia y validación'}>
-                                  <button
-                                    onClick={() => {
-                                      if (a.numAplicaciones >= 2) return;
-                                      const listItem = aplicacionesList.find((x: any) => x.id_pago === a.ultimoPago?.id);
-                                      if (listItem) setPagoEvidenciaModal(listItem);
-                                    }}
-                                    disabled={a.numAplicaciones >= 2 || !a.ultimoPago?.id}
-                                    className={cn('p-1.5 rounded transition-colors', a.numAplicaciones >= 2 || !a.ultimoPago?.id ? 'text-muted-foreground/25 cursor-not-allowed' : 'text-foreground hover:bg-muted')}
-                                  >
-                                    <Eye className="size-4" />
-                                  </button>
-                                </IconTip>
                               </div>
                             </td>
                           </tr>
@@ -614,23 +624,36 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                               <td className="px-3 py-1.5 text-center">
                                 <ValidacionBadge estado={ap.validacion?.estado} />
                               </td>
+                              {/* Evidencia (columna propia) */}
+                              <td className="px-0 py-1.5 text-center w-8">
+                                <IconTip label={ap.url_cep ? 'Pago validado' : ap.url_recibo ? 'Pago sin validar' : 'Sin evidencia'}>
+                                  <span className="p-1.5 inline-flex shrink-0">
+                                    {ap.url_cep ? (
+                                      <FileCheck className="size-4 shrink-0 text-emerald-500" />
+                                    ) : ap.url_recibo ? (
+                                      <FileWarning className="size-4 shrink-0 text-amber-500" />
+                                    ) : (
+                                      <FileText className="size-4 shrink-0 text-muted-foreground/25" />
+                                    )}
+                                  </span>
+                                </IconTip>
+                              </td>
+                              {/* Acciones (juntas): ver, cargar, multa */}
                               <td className="px-3 py-1.5" onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center justify-end gap-2">
-                                  {/* Estado de evidencia (3 estados) */}
-                                  <IconTip label={ap.url_cep ? 'Pago validado' : ap.url_recibo ? 'Pago sin validar' : 'Sin evidencia'}>
-                                    <span className="p-1.5 inline-flex shrink-0">
-                                      {ap.url_cep ? (
-                                        <FileCheck className="size-4 shrink-0 text-emerald-500" />
-                                      ) : ap.url_recibo ? (
-                                        <FileWarning className="size-4 shrink-0 text-amber-500" />
-                                      ) : (
-                                        <FileText className="size-4 shrink-0 text-muted-foreground/25" />
-                                      )}
-                                    </span>
-                                  </IconTip>
-                                  {/* Multa: por acuerdo (en la fila superior) */}
-                                  <IconTip label="Multa en la parcialidad (fila superior)">
-                                    <span className="p-1.5 inline-flex shrink-0"><FileClock className="size-4 text-muted-foreground/25" /></span>
+                                  {/* Ver evidencia (ojo) */}
+                                  <IconTip label="Ver evidencia y validación">
+                                    <button
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        const listItem = aplicacionesList.find((x: any) => x.id === ap.id);
+                                        if (listItem) setPagoEvidenciaModal(listItem);
+                                      }}
+                                      disabled={!ap.id_pago}
+                                      className={cn('p-1.5 rounded transition-colors', ap.id_pago ? 'text-foreground hover:bg-muted' : 'text-muted-foreground/25 cursor-not-allowed')}
+                                    >
+                                      <Eye className="size-4" />
+                                    </button>
                                   </IconTip>
                                   {/* Cargar evidencia */}
                                   {ap.id_pago ? (
@@ -650,19 +673,9 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                       <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Upload className="size-4" /></span>
                                     </IconTip>
                                   )}
-                                  {/* Ver evidencia */}
-                                  <IconTip label="Ver evidencia y validación">
-                                    <button
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        const listItem = aplicacionesList.find((x: any) => x.id === ap.id);
-                                        if (listItem) setPagoEvidenciaModal(listItem);
-                                      }}
-                                      disabled={!ap.id_pago}
-                                      className={cn('p-1.5 rounded transition-colors', ap.id_pago ? 'text-foreground hover:bg-muted' : 'text-muted-foreground/25 cursor-not-allowed')}
-                                    >
-                                      <Eye className="size-4" />
-                                    </button>
+                                  {/* Multa: por acuerdo (en la fila superior) */}
+                                  <IconTip label="Multa en la parcialidad (fila superior)">
+                                    <span className="p-1.5 inline-flex shrink-0"><FileClock className="size-4 text-muted-foreground/25" /></span>
                                   </IconTip>
                                 </div>
                               </td>

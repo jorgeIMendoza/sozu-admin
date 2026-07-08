@@ -146,8 +146,10 @@ export default function CollectionDashboard() {
     ? Math.round((data.cobrado_mes / data.programado_mes) * 100)
     : 0;
   const toCollectMonth = data?.por_cobrar_mes ?? 0;
-  const toCollectMonthNoCE = data?.por_cobrar_mes_sin_ce ?? 0;
-  const totalPortfolio = (data?.cobrado_total ?? 0) + (data?.pendiente_total ?? 0);
+  // Cartera = cobrado + saldo. Saldo = por vencer (pendiente_total) + vencido (todos
+  // los conceptos, incl. contra-entrega). Así Cartera = Σ precio_final.
+  const saldoPorCobrar = (data?.pendiente_total ?? 0) + (data?.vencido_total ?? 0);
+  const totalPortfolio = (data?.cobrado_total ?? 0) + saldoPorCobrar;
 
   const riskLevel = arrears3Plus > 0 ? 'Crítico' : totalInArrears > 0 ? 'Riesgo activo' : 'Controlado';
   const riskColor = arrears3Plus > 0 ? 'text-danger' : totalInArrears > 0 ? 'text-warning' : 'text-success';
@@ -260,10 +262,10 @@ export default function CollectionDashboard() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales del proyecto</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Cartera total" value={formatCurrency(totalPortfolio)} sublabel="precio final acumulado" />
-              <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="pagos registrados" />
-              <StatCard label="Pendiente total" labelClass={data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground'} value={formatCurrency(data.pendiente_total)} sublabel="saldo por cobrar" />
-              <StatCard label="Vencido total" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total_sin_ce)} sublabel="excl. contraentrega" />
+              <StatCard label="Cartera total" value={formatCurrency(totalPortfolio)} sublabel="meta total de venta" />
+              <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
+              <StatCard label="Por vencer" labelClass={data.pendiente_total > 0 ? 'text-warning' : 'text-muted-foreground'} value={formatCurrency(data.pendiente_total)} sublabel="aún no vence" />
+              <StatCard label="Vencido" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="pagos atrasados" />
             </div>
           </section>
 
@@ -271,9 +273,9 @@ export default function CollectionDashboard() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 capitalize">{periodLabel}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Programado" value={formatCurrency(data.programado_mes_sin_ce)} sublabel="excl. contraentrega" />
+              <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence este mes" />
               <StatCard label="Cobrado en el mes" labelClass="text-success" value={formatCurrency(data.cobrado_mes)} sublabel={periodLabel} />
-              <StatCard label="Por cobrar" labelClass="text-warning" value={formatCurrency(Math.max(toCollectMonthNoCE, 0))} sublabel="excl. contraentrega" />
+              <StatCard label="Por cobrar" labelClass="text-warning" value={formatCurrency(Math.max(toCollectMonth, 0))} sublabel="falta este mes" />
               <StatCard label="Cumplimiento" labelClass={compliance >= 90 ? 'text-success' : 'text-danger'} variant="count" valueClass={compliance >= 90 ? 'text-success' : 'text-danger'} value={`${compliance}%`} sublabel={compliance >= 90 ? 'En meta' : 'Bajo meta'} />
             </div>
           </section>
@@ -286,7 +288,7 @@ export default function CollectionDashboard() {
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Vendidas" variant="count" value={pipeline?.vendidas ?? 0} sublabel="en cobranza activa" />
-              <StatCard label="Listas p/ escriturar" labelClass="text-success" variant="count" valueClass="text-success" value={pipeline?.listas_escrituracion ?? 0} sublabel="pagos validados, solo resta contra entrega" />
+              <StatCard label="Listas p/ escriturar" labelClass="text-success" variant="count" valueClass="text-success" value={pipeline?.listas_escrituracion ?? 0} sublabel="pagos validados, solo resta el pago a escrituración" />
               <StatCard label="En escrituración" variant="count" value={pipeline?.en_escrituracion ?? 0} sublabel="proceso notarial activo" />
               <StatCard label="Entregadas" variant="count" value={pipeline?.entregadas ?? 0} sublabel="acta de entrega firmada" />
             </div>
@@ -302,7 +304,7 @@ export default function CollectionDashboard() {
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="total incl. contraentrega" />
+              <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="monto atrasado total" />
               <StatCard label="Cuentas críticas" labelClass="text-danger" variant="count" valueClass={arrears3Plus > 0 ? 'text-danger' : 'text-foreground'} value={arrears3Plus} sublabel="3 o más parc. vencidas" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })} arrowClass="group-hover:text-danger" />
               <StatCard label="En riesgo" labelClass="text-warning" variant="count" valueClass={arrears2 > 0 ? 'text-warning' : 'text-foreground'} value={arrears2} sublabel="2 parc. vencidas" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' })} arrowClass="group-hover:text-warning" />
               <StatCard label="Meta del mes" labelClass="text-primary" valueClass="text-primary" value={formatCurrency(Math.max(toCollectMonth, 0))} sublabel="falta para cumplir" />
@@ -314,8 +316,7 @@ export default function CollectionDashboard() {
             data={chartData}
             lines={[
               { key: 'cobrado', name: 'Cobrado', color: '#17c653' },
-              { key: 'programado', name: 'Programado (con contraentrega)', color: '#697280', dashed: true },
-              { key: 'programado_sin_ce', name: 'Programado (sin contraentrega)', color: '#f59f0a', dashed: true },
+              { key: 'programado', name: 'Programado', color: '#697280', dashed: true },
             ]}
           />
 
@@ -332,7 +333,7 @@ export default function CollectionDashboard() {
           ]} />
 
           <AgingYRiesgo
-            aging={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto_sin_ce }))}
+            aging={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto }))}
             projectRows={riskByProject}
             onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
           />
