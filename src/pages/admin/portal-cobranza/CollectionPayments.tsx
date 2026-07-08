@@ -441,16 +441,16 @@ export default function CollectionPayments() {
                   </td>
                   <td className="px-2">
                     <div className="flex items-center justify-center gap-1">
-                      <IconTip label="Cargar evidencia (CEP / recibo)">
-                        <button onClick={() => setLoadPayment(r)} disabled={r.id_cuenta_cobranza == null}
-                          className={cn('p-1.5 rounded transition-colors', r.id_cuenta_cobranza == null ? 'text-muted-foreground/25 cursor-not-allowed' : 'text-foreground hover:bg-muted')}>
-                          <Upload className="size-4" />
-                        </button>
-                      </IconTip>
                       <IconTip label="Detalle del pago">
                         <button onClick={() => setDetailPayment(r)}
                           className="p-1.5 rounded transition-colors text-foreground hover:bg-muted">
                           <Eye className="size-4" />
+                        </button>
+                      </IconTip>
+                      <IconTip label="Cargar evidencia (CEP / recibo)">
+                        <button onClick={() => setLoadPayment(r)} disabled={r.id_cuenta_cobranza == null}
+                          className={cn('p-1.5 rounded transition-colors', r.id_cuenta_cobranza == null ? 'text-muted-foreground/25 cursor-not-allowed' : 'text-foreground hover:bg-muted')}>
+                          <Upload className="size-4" />
                         </button>
                       </IconTip>
                     </div>

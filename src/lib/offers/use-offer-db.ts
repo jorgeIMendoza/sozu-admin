@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
-import { mesesEntreFechas, calcDynamicScheme, calcEscalonadoScheme } from "@/utils/escalonadoUtils";
+import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -10,9 +10,12 @@ import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 const COUNTRY_DIAL: Record<string, string> = { MX: "52", US: "1", IN: "91" };
 
 function toDialCode(clave: string | null | undefined): string {
-  if (!clave) return "52";
-  if (/^\+?\d+$/.test(clave)) return clave.replace("+", "");
-  return COUNTRY_DIAL[clave.toUpperCase()] ?? "52";
+  // clave_pais_telefono es CHAR(n): puede venir con espacios de relleno ("MX   ")
+  // o como dial ("+52"/"52") o código de país ("MX"). Normalizar con trim.
+  const c = (clave ?? "").trim();
+  if (!c) return "52";
+  if (/^\+?\d+$/.test(c)) return c.replace("+", "");
+  return COUNTRY_DIAL[c.toUpperCase()] ?? "52";
 }
 
 function buildWhatsapp(clave: string | null | undefined, telefono: string): string {
@@ -81,10 +84,11 @@ function calcPaymentPlans(
   fechaGeneracion?: string,
   fechaEntrega?: string | null,
 ): PaymentPlan[] {
-  const mesesEfectivos =
-    fechaGeneracion && fechaEntrega
-      ? mesesEntreFechas(fechaGeneracion, fechaEntrega)
-      : 0;
+  // Meses de mensualidades RESTANTES: de hoy a la entrega MENOS 1 mes (el mes de
+  // entrega es el Pago a escrituración, no mensualidad). Si ya estamos en/después
+  // del mes de entrega → 0 mensualidades → todo el saldo va a escrituración.
+  // (fechaGeneracion se ignora: el conteo baja conforme pasan los días).
+  const mesesEfectivos = mesesMensualidadesRestantes(fechaEntrega);
 
   return esquemas.map((e) => {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
@@ -109,11 +113,11 @@ function calcPaymentPlans(
       // Los esquemas dinámicos (no manuales) recalculan meses y fecha final contra
       // la fecha de entrega ACTUAL del proyecto. Los manuales conservan sus tramos.
       // Cálculo compartido con el diálogo de inventario de agentes (calcEscalonadoScheme).
-      const recomputeVsEntrega = e.es_manual !== true && !!fechaEntrega && !!fechaGeneracion;
+      const recomputeVsEntrega = e.es_manual !== true && !!fechaEntrega;
       const esc = calcEscalonadoScheme(
         e,
         listPrice,
-        recomputeVsEntrega ? mesesEntreFechas(fechaGeneracion!, fechaEntrega!) : 0
+        recomputeVsEntrega ? mesesEfectivos : 0
       );
       nMensual           = esc.meses;
       monthlyAmount      = esc.mensualidad;
@@ -185,7 +189,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // 2. Propiedad
   const { data: propiedad } = await supabase
     .from("propiedades")
-    .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, id_vista, url_imagen_portada")
+    .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, id_vista, url_imagen_portada, clabe_stp_tmp_apartado")
     .eq("id", propiedadId)
     .maybeSingle();
 
@@ -263,6 +267,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: agentUser },
     { data: leadPersona },
     { data: multimediasModelo },
+    { data: bodegasRows },
+    { data: estacionamientosRows },
+    { data: tiposEstacionamiento },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -278,7 +285,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       : Promise.resolve({ data: null }),
     supabase
       .from("showrooms_proyecto")
-      .select("nombre, descripcion_direccion, horarios, latitud, longitud")
+      .select("nombre, descripcion_direccion, latitud, longitud")
       .eq("id_proyecto", proyectoId)
       .eq("activo", true)
       .order("fecha_actualizacion", { ascending: false })
@@ -288,7 +295,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     oferta.email_creador
       ? supabase
           .from("usuarios")
-          .select("nombre, id_persona, foto_perfil_url, frase_perfil")
+          .select("nombre, id_persona, foto_perfil_url, frase_perfil, telefono, clave_pais_telefono")
           .eq("email", oferta.email_creador)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -309,6 +316,25 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           .eq("activo", true)
           .order("id", { ascending: true })
       : Promise.resolve({ data: [] }),
+    // Bodegas de la propiedad (extras vinculados a la unidad de la oferta)
+    (supabase as any)
+      .from("bodegas")
+      .select("id, nombre, ubicacion, m2, es_incluido")
+      .eq("id_propiedad", propiedadId)
+      .eq("activo", true)
+      .order("id", { ascending: true }),
+    // Estacionamientos de la propiedad (con id_tipo → tipos_estacionamiento)
+    (supabase as any)
+      .from("estacionamientos")
+      .select("id, nombre, ubicacion, m2, es_incluido, id_tipo")
+      .eq("id_propiedad", propiedadId)
+      .eq("activo", true)
+      .order("id", { ascending: true }),
+    // Catálogo de tipos de estacionamiento (Normal, Tandem, Doble, Carlift)
+    (supabase as any)
+      .from("tipos_estacionamiento")
+      .select("id, nombre")
+      .eq("activo", true),
   ]);
 
   // Model media: floor plan + property images
@@ -492,12 +518,98 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     }
   }
 
-  // 10. Expiración (7 días desde generación)
-  // Vigencia siempre 7 días — calculado en código, sin campo en DB
-  const validUntilDate = new Date(oferta.fecha_generacion);
-  validUntilDate.setDate(validUntilDate.getDate() + 7);
+  // 9c. Desglose financiero AUTORITATIVO server-side (RPC get_oferta_financials).
+  //     Fuente de verdad no manipulable desde consola: apartado $20k, enganche neto,
+  //     parcialidades (hoy→entrega−1 mes), pago a escrituración y vigencia.
+  //     Si el RPC aún no existe en la BD (DDL pendiente) → se conservan los montos
+  //     calculados en TS arriba (fallback graceful).
+  let vigenciaHasta: string | null = null;
+  let mesesRestantes: number | null = null;
+  let finAgente: any = null;
+  try {
+    const { data: fin, error: finErr } = await (supabase as any).rpc("get_oferta_financials", {
+      p_oferta_id: numId,
+    });
+    if (!finErr && fin) {
+      // Datos del creador vía RPC (usuarios tiene RLS que bloquea anon en la oferta pública)
+      finAgente = fin.agente ?? null;
+    }
+    if (!finErr && fin && Array.isArray(fin.planes)) {
+      const finById = new Map<string, any>(fin.planes.map((p: any) => [String(p.esquema_id), p]));
+      for (let i = 0; i < paymentPlans.length; i++) {
+        const pl = paymentPlans[i];
+        const f = finById.get(pl.id);
+        if (!f) continue;
+        paymentPlans[i] = {
+          ...pl,
+          finalPrice:            Number(f.precio_final),
+          downPaymentPct:        Number(f.pct_enganche),
+          downPaymentAmount:     Number(f.enganche_total),
+          apartado:              Number(f.apartado),
+          downPaymentNetAmount:  Number(f.enganche_neto),
+          installments: Number(f.meses) > 0
+            ? { count: Number(f.meses), monthlyAmount: Number(f.mensualidad_monto), endDate: pl.installments?.endDate ?? "" }
+            : undefined,
+          installmentsPct:       Number(f.pct_mensualidades),
+          finalPaymentPct:       Number(f.pct_escrituracion),
+          finalPaymentAmount:    Number(f.escrituracion_monto),
+        };
+      }
+      vigenciaHasta  = fin.vigencia_hasta ?? null;
+      mesesRestantes = fin.meses_restantes != null ? Number(fin.meses_restantes) : null;
+    }
+  } catch {
+    /* RPC ausente o error → fallback a montos calculados en TS */
+  }
+
+  // 9d. Normalizar porcentajes a enteros que SIEMPRE sumen 100% (UI/comprensión).
+  //     Enganche + Mensualidades se redondean; Escrituración absorbe el resto para
+  //     garantizar exactamente 100. Los MONTOS quedan intactos (precisión completa).
+  for (let i = 0; i < paymentPlans.length; i++) {
+    const pl = paymentPlans[i];
+    const eng = Math.round(pl.downPaymentPct ?? 0);
+    const mens = pl.installmentsPct > 0 ? Math.round(pl.installmentsPct) : 0;
+    const esc = Math.max(0, 100 - eng - mens);
+    paymentPlans[i] = {
+      ...pl,
+      downPaymentPct: eng,
+      installmentsPct: mens,
+      finalPaymentPct: esc,
+    };
+  }
+
+  // 10. Expiración (7 días desde generación).
+  // Autoritativa del RPC (vigencia_hasta) si disponible; si no, fallback en código.
+  const validUntilDate = vigenciaHasta
+    ? new Date(vigenciaHasta)
+    : (() => {
+        const d = new Date(oferta.fecha_generacion);
+        d.setDate(d.getDate() + 7);
+        return d;
+      })();
 
   const area = Number(propiedad.m2_interiores ?? 0) + Number(propiedad.m2_exteriores ?? 0);
+
+  // ── Extras reales de la unidad: bodegas + estacionamientos ──
+  const tipoEstacMap = new Map<number, string>(
+    ((tiposEstacionamiento as any[]) ?? []).map((t) => [t.id, t.nombre])
+  );
+  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
+    id: b.id,
+    nombre: b.nombre ?? "",
+    ubicacion: b.ubicacion ?? undefined,
+    m2: b.m2 != null ? Number(b.m2) : undefined,
+    incluido: !!b.es_incluido,
+  }));
+  const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
+    id: e.id,
+    nombre: e.nombre ?? "",
+    ubicacion: e.ubicacion ?? undefined,
+    m2: e.m2 != null ? Number(e.m2) : undefined,
+    incluido: !!e.es_incluido,
+    tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
+  }));
+  const clabeStp = (propiedad as any).clabe_stp_tmp_apartado || undefined;
 
   const offer = {
     id: String(numId),
@@ -516,8 +628,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       bedrooms:       Number(modelo?.numero_recamaras ?? 0),
       bathrooms:      Number(modelo?.numero_completo_banos ?? 0),
       halfBathrooms:  Number(modelo?.numero_medio_bano ?? 0),
-      parkingSpots:   1,
-      parkingType:    "incluido",
+      // Conteo y tipo reales desde la tabla estacionamientos (antes hardcode 1/incluido)
+      parkingSpots:   estacionamientos.length,
+      parkingType:    estacionamientos.every((e) => e.incluido) ? "incluido" : "no incluido",
       hasBalcony:     false,
       listPrice,
       // $/m² = precio_lista / m² total (interiores + exteriores), consistente
@@ -602,34 +715,48 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       : undefined,
     parkingSlots:        [],
     parkingLevelLayouts: [],
+    bodegas,
+    estacionamientos,
+    clabeStp,
+    ...(mesesRestantes != null ? { mesesRestantes } : {}),
   } as unknown as OfertaComercial;
 
-  // Construir Agent inline — datos ya disponibles — datos ya disponibles del batch paralelo
-  const agent: Agent | null = agentUser
-    ? (() => {
-        // personas es enriquecimiento OPCIONAL (nombre legal, teléfono). Si el
-        // creador no tiene persona vinculada (ej. super admin sin id_persona),
-        // se arma igual desde usuarios: nombre + foto + frase + email del creador.
-        const nombre = ((agentPersona?.nombre_legal ?? (agentUser as any)?.nombre) ?? "").trim();
-        const tel = agentPersona?.telefono ?? null;
-        const firstName = nombre.split(" ")[0];
-        const phone = tel ? `${agentPersona?.clave_pais_telefono ?? "+52"} ${tel}` : "";
-        const whatsapp = tel ? buildWhatsapp(agentPersona?.clave_pais_telefono, tel) : "";
-        return {
-          id: agentId,
-          fullName: nombre,
-          firstName,
-          title: "Asesor SOZU",
-          photoUrl: normalizeAvatarUrl((agentUser as any)?.foto_perfil_url),
-          bio: (agentUser as any)?.frase_perfil ?? "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!",
-          phone,
-          email: agentPersona?.email ?? oferta.email_creador ?? "",
-          whatsapp,
-          brokerage: "SOZU",
-          isAllied: false,
-        } as Agent;
-      })()
-    : null;
+  // Construir Agent inline. SIEMPRE se arma una tarjeta (nunca null) con los datos
+  // REALES del creador de la oferta (es el responsable): nombre, email y teléfono.
+  // Lo ÚNICO que cambia sin perfil es la foto → si no subió foto_perfil_url se usa
+  // el logo SOZU (AgentCard pinta AGENT_PHOTO_FALLBACK cuando photoUrl está vacío).
+  // Fuente preferida = RPC (finAgente, bypassa RLS de usuarios en la oferta pública).
+  // Fallback = agentUser/agentPersona del batch (solo visible con sesión interna).
+  const DEFAULT_BIO =
+    "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!";
+  // Teléfono: RPC ya hace COALESCE(usuarios, personas). Fallback al batch con sesión.
+  const clavePais =
+    finAgente?.clave_pais ??
+    (agentUser as any)?.clave_pais_telefono ?? agentPersona?.clave_pais_telefono;
+  const tel =
+    finAgente?.telefono ??
+    (agentUser as any)?.telefono ?? agentPersona?.telefono ?? null;
+  const phone = tel ? `+${toDialCode(clavePais)} ${tel}` : "";
+  const whatsapp = tel ? buildWhatsapp(clavePais, tel) : "";
+  const nombre = (
+    finAgente?.nombre_legal ?? finAgente?.nombre ??
+    agentPersona?.nombre_legal ?? (agentUser as any)?.nombre ?? ""
+  ).trim();
+  const fotoUrl = finAgente?.foto_perfil_url ?? (agentUser as any)?.foto_perfil_url;
+
+  const agent: Agent = {
+    id: agentId,
+    fullName: nombre || "Asesor SOZU",
+    firstName: nombre ? nombre.split(" ")[0] : "equipo SOZU",
+    title: "Asesor SOZU",
+    photoUrl: fotoUrl ? normalizeAvatarUrl(fotoUrl) : "",
+    bio: finAgente?.frase_perfil ?? (agentUser as any)?.frase_perfil ?? DEFAULT_BIO,
+    phone,
+    email: finAgente?.email ?? agentPersona?.email ?? oferta.email_creador ?? "",
+    whatsapp,
+    brokerage: "SOZU",
+    isAllied: false,
+  } as Agent;
 
   return { offer, agent };
 }

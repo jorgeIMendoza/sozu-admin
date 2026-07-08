@@ -479,8 +479,9 @@ const OfferPage = () => {
             <div id="details" className={sectionClass("details")}>
               <OfferPropertyDetails
                 property={offer.property}
-                parkingSlots={offer.parkingSlots}
-                materialsPaletteUrl={offer.materialsPaletteUrl}
+                bodegas={offer.bodegas}
+                estacionamientos={offer.estacionamientos}
+                clabeStp={offer.clabeStp}
               />
             </div>
 
@@ -787,6 +788,7 @@ const OfferPage = () => {
                       <span>
                         Entrega{" "}
                         {new Date(offer.estimatedDelivery).toLocaleDateString("es-MX", {
+                          day: "numeric",
                           month: "long",
                           year: "numeric",
                         })}
