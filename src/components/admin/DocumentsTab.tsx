@@ -17,6 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
 import {
+  TIPO_DOC_FACTURA_COMISION_EXTERNA,
+  sincronizarFacturaComisionEnCuenta,
+} from "@/utils/facturaComisionExterna";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -472,9 +476,24 @@ export function DocumentsTab({
           .from('cuentas_cobranza')
           .update({ numero_escritura: numeroValue })
           .eq('id', idCuentaCobranza);
-        
+
         if (updateError) {
           console.error('Error actualizando numero_escritura:', updateError);
+        }
+      }
+
+      // Factura de comisión externa: sincronizar cuentas_cobranza para que la
+      // cuenta entre al pipeline de cobro al desarrollador (habilita el botón
+      // "Ejecutar pago" en Pagos a externos)
+      if (parseInt(selectedTipoDocumento) === TIPO_DOC_FACTURA_COMISION_EXTERNA && idCuentaCobranza) {
+        const esXml = selectedFile.name.toLowerCase().endsWith('.xml');
+        try {
+          await sincronizarFacturaComisionEnCuenta(
+            idCuentaCobranza,
+            esXml ? { xml: urlData.publicUrl } : { pdf: urlData.publicUrl },
+          );
+        } catch (syncError) {
+          console.error('Error sincronizando factura de comisión en cuenta:', syncError);
         }
       }
 
