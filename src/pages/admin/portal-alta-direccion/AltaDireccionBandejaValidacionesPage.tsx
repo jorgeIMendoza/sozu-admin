@@ -69,6 +69,10 @@ type ValidacionPagoExterno = {
   folio_factura: string;
   agente_nombre: string;
   agente_tipo: "inmobiliaria" | "broker" | "aliado_comercial" | "agente_externo";
+  proyecto: string;
+  modelo: string;
+  producto: string;
+  numero_propiedad: string;
   venta_referencia: string;
   porcentaje_comision: number;
   monto: number;
@@ -566,6 +570,7 @@ type ComisionistaEnriched = {
   numero_propiedad: string;
   edificio_nombre: string;
   modelo_nombre: string;
+  producto_nombre: string;
   // Propiedad
   id_estatus_disponibilidad: number | null;
   // Tipo de la cuenta (Propiedad/Producto/Servicio) — para formato CC-/CCP-
@@ -676,8 +681,11 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
   const prodsRaw = await fetchInBatches<any>(productoIds as number[], (batch) =>
     (supabase as any)
       .from("productos_servicios")
-      .select("id, id_categoria")
+      .select("id, nombre, id_categoria")
       .in("id", batch as number[]),
+  );
+  const productoNombreById = new Map<number, string>(
+    (prodsRaw || []).map((p: any) => [p.id, (p.nombre as string) ?? ""]),
   );
   const catIds = Array.from(
     new Set((prodsRaw || []).map((p: any) => p.id_categoria).filter(Boolean)),
@@ -853,6 +861,9 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
     const tipoTransaccion: "Propiedad" | "Producto" | "Servicio" = oferta?.id_producto
       ? productoTipoById.get(oferta.id_producto) ?? "Producto"
       : "Propiedad";
+    const productoNombre = oferta?.id_producto
+      ? productoNombreById.get(oferta.id_producto) ?? ""
+      : "";
     const precio = Number(cc?.precio_final ?? 0);
     const pct = Number(c.porcentaje_comision ?? 0);
     const fechaDev = c.fecha_creacion ? new Date(c.fecha_creacion) : null;
@@ -881,6 +892,7 @@ async function fetchComisionistasPendientes(): Promise<ComisionistaEnriched[]> {
       numero_propiedad: prop?.numero_propiedad || "—",
       edificio_nombre: edificioNombre,
       modelo_nombre: modeloNombre,
+      producto_nombre: productoNombre,
       id_estatus_disponibilidad: estatusDispProp,
       tipo_transaccion: tipoTransaccion,
       nombre_usuario: usuario?.nombre ?? null,
@@ -1250,6 +1262,10 @@ export default function AltaDireccionBandejaValidacionesPage() {
       folio_factura: formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo_transaccion),
       agente_nombre: c.nombre_legal || c.nombre_usuario || c.email_usuario,
       agente_tipo: clasificarTipoExterno(c),
+      proyecto: c.proyecto,
+      modelo: c.modelo_nombre,
+      producto: c.producto_nombre,
+      numero_propiedad: c.numero_propiedad,
       venta_referencia: `${formatCuentaCobranzaId(c.id_cuenta_cobranza, c.tipo_transaccion)} · ${c.proyecto}`,
       porcentaje_comision: c.porcentaje_comision,
       monto: c.monto,
@@ -1621,6 +1637,10 @@ export default function AltaDireccionBandejaValidacionesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">ID Cuenta</TableHead>
+                    <TableHead className="text-xs">Proyecto</TableHead>
+                    <TableHead className="text-xs">Modelo</TableHead>
+                    <TableHead className="text-xs">Producto</TableHead>
+                    <TableHead className="text-xs">No. Depa</TableHead>
                     <TableHead className="text-xs">Nombre Comisionista</TableHead>
                     <TableHead className="text-xs">Tipo</TableHead>
                     <TableHead className="text-xs text-right">% Comisión</TableHead>
@@ -1640,6 +1660,14 @@ export default function AltaDireccionBandejaValidacionesPage() {
                       <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
                         {p.folio_factura}
                       </TableCell>
+                      <TableCell className="text-sm">{p.proyecto || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {p.modelo || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {p.producto || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">{p.numero_propiedad || "—"}</TableCell>
                       <TableCell className="text-sm">{p.agente_nombre}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap">
