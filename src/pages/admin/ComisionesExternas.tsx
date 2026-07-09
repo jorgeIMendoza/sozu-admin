@@ -17,6 +17,7 @@ import { format, parseISO, endOfMonth, subMonths, isBefore, isEqual } from "date
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { sincronizarFacturaComisionEnCuenta } from "@/utils/facturaComisionExterna";
 
 // ID del rol "Agente Inmobiliario"
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -116,6 +117,7 @@ export default function ComisionesExternas() {
   const [selectedComision, setSelectedComision] = useState<{ email: string; idCuenta: number } | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [facturaFile, setFacturaFile] = useState<File | null>(null);
+  const [facturaXmlFile, setFacturaXmlFile] = useState<File | null>(null);
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false);
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null);
   const [currentPagePorPagar, setCurrentPagePorPagar] = useState(1);
@@ -478,23 +480,29 @@ export default function ComisionesExternas() {
 
   // Mutación para subir factura
   const subirFacturaMutation = useMutation({
-    mutationFn: async ({ email, idCuenta, file }: { email: string; idCuenta: number; file: File }) => {
+    mutationFn: async ({ email, idCuenta, file, xmlFile }: { email: string; idCuenta: number; file: File; xmlFile?: File | null }) => {
       const tipoDocFactura = await getTipoDocumentoFactura();
       if (!tipoDocFactura) throw new Error("Tipo de documento no encontrado");
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `factura_comision_${email.replace(/[^a-zA-Z0-9]/g, '_')}_${idCuenta}_${Date.now()}.${fileExt}`;
-      const filePath = `facturas-comision-externa/${fileName}`;
+      const subirArchivo = async (archivo: File, sufijo: string) => {
+        const fileExt = archivo.name.split('.').pop();
+        const fileName = `factura_comision_${email.replace(/[^a-zA-Z0-9]/g, '_')}_${idCuenta}_${Date.now()}${sufijo}.${fileExt}`;
+        const filePath = `facturas-comision-externa/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, archivo);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+        return urlData.publicUrl;
+      };
+
+      const publicUrl = await subirArchivo(file, '');
+      const xmlUrl = xmlFile ? await subirArchivo(xmlFile, '_xml') : null;
 
       // Opción B: resolver id_persona de la empresa (pm) para vincular la factura
       // a nivel de persona/empresa, no solo por email
@@ -510,7 +518,7 @@ export default function ComisionesExternas() {
         .insert({
           id_cuenta_cobranza: idCuenta,
           id_tipo_documento: tipoDocFactura,
-          url: urlData.publicUrl,
+          url: publicUrl,
           numero: email,
           id_persona: personaData?.id ?? null,
           activo: true
@@ -518,18 +526,26 @@ export default function ComisionesExternas() {
 
       if (docError) throw docError;
 
-      return { email, idCuenta, url: urlData.publicUrl };
+      // Habilita el pipeline de cobro al desarrollador → pago al externo:
+      // sin es_draft_factura_comision=false + url_factura_comision la cuenta
+      // nunca aparece en "Cobros por gestionar" y el pago queda bloqueado.
+      await sincronizarFacturaComisionEnCuenta(idCuenta, { pdf: publicUrl, xml: xmlUrl });
+
+      return { email, idCuenta, url: publicUrl };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comisiones-externas"] });
       queryClient.invalidateQueries({ queryKey: ["pagar-comisiones"] });
-      
+      queryClient.invalidateQueries({ queryKey: ["cobros_por_gestionar"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones_externas_alta_direccion"] });
+
       toast({
         title: "Factura cargada",
         description: "La factura ha sido cargada exitosamente."
       });
       setUploadDialogOpen(false);
       setFacturaFile(null);
+      setFacturaXmlFile(null);
       setSelectedComision(null);
     },
     onError: (error) => {
@@ -1128,6 +1144,15 @@ export default function ComisionesExternas() {
                 onChange={(e) => setFacturaFile(e.target.files?.[0] || null)}
               />
             </div>
+            <div>
+              <Label htmlFor="factura-xml">Archivo XML de la Factura (opcional)</Label>
+              <Input
+                id="factura-xml"
+                type="file"
+                accept=".xml"
+                onChange={(e) => setFacturaXmlFile(e.target.files?.[0] || null)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
@@ -1139,7 +1164,8 @@ export default function ComisionesExternas() {
                   subirFacturaMutation.mutate({
                     email: selectedComision.email,
                     idCuenta: selectedComision.idCuenta,
-                    file: facturaFile
+                    file: facturaFile,
+                    xmlFile: facturaXmlFile
                   });
                 }
               }}
