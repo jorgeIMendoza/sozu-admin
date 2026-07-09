@@ -3763,7 +3763,41 @@ const Propiedades = () => {
 
       // Determine if this is a product offer
       const isProductOffer = !!currentOffer.id_producto;
-      
+
+      // Pre-check: una propiedad solo puede tener UNA cuenta de cobranza activa de propiedad.
+      // El workflow de n8n rechaza silenciosamente (HTTP 200 sin crear nada) cuando ya existe,
+      // por lo que hay que detectarlo aquí y avisar al usuario en lugar de reportar falso éxito.
+      if (!isProductOffer) {
+        const { data: ofertasPropiedad } = await supabase
+          .from('ofertas')
+          .select('id')
+          .eq('id_propiedad', propertyId)
+          .is('id_producto', null)
+          .eq('activo', true);
+
+        const ofertaIds = (ofertasPropiedad || []).map(o => o.id);
+        if (ofertaIds.length > 0) {
+          const { data: cuentaExistente } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .limit(1)
+            .maybeSingle();
+
+          if (cuentaExistente) {
+            toast({
+              title: "La propiedad ya tiene cuenta de cobranza",
+              description: `Existe la cuenta CC-${String(cuentaExistente.id).padStart(6, '0')} activa (oferta OP-${String(cuentaExistente.id_oferta).padStart(6, '0')}). Cancela o cede esa cuenta antes de generar una nueva.`,
+              variant: "destructive",
+            });
+            setConfirmGenerateAccountOpen(false);
+            setSelectedOfferForAccount(null);
+            return;
+          }
+        }
+      }
+
       // Get property details to get id_entidad_relacionada_dueno
       const allProperties = [...sortedActiveProperties, ...sortedDraftProperties, ...sortedInactiveProperties];
       const property = allProperties?.find(p => p.id === propertyId);
@@ -3902,6 +3936,27 @@ const Propiedades = () => {
 
       const responseData = notifData?.n8nResponse ?? {};
 
+      // Post-verify: n8n puede responder 200 sin haber creado la cuenta (rechazo silencioso).
+      // Confirmar contra la BD que la cuenta realmente existe antes de reportar éxito.
+      let cuentaCreada: { id: number } | null = null;
+      for (let intento = 0; intento < 3 && !cuentaCreada; intento++) {
+        if (intento > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        const { data: cuentaVerificada } = await supabase
+          .from('cuentas_cobranza')
+          .select('id')
+          .eq('id_oferta', offerId)
+          .eq('activo', true)
+          .limit(1)
+          .maybeSingle();
+        cuentaCreada = cuentaVerificada;
+      }
+
+      if (!cuentaCreada) {
+        throw new Error('El servidor respondió pero la cuenta de cobranza no se creó. Revisa el workflow de n8n (aplicaPago).');
+      }
+
       // Si es oferta de propiedad (no producto), actualizar estatus a "Apartado" (4)
       if (!isProductOffer && propertyId) {
         const { error: updateError } = await supabase
@@ -3958,7 +4013,7 @@ const Propiedades = () => {
 
       toast({
         title: "Error",
-        description: "No se pudo generar la cuenta de cobranza",
+        description: error?.message || "No se pudo generar la cuenta de cobranza",
         variant: "destructive",
       });
       return; // Exit early on error
