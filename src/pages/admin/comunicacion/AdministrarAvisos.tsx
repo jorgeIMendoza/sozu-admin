@@ -43,6 +43,7 @@ interface Aviso {
   payload_postmark?: any;
   tipos_pago_notificables?: number[] | null;
   filtros_destinatario?: { modelos?: string[]; pisos?: string[] } | null;
+  canal?: 'email' | 'whatsapp' | 'ambos' | null;
 }
 
 interface AvisoProyectoRow {
@@ -338,7 +339,9 @@ export default function AdministrarAvisos() {
   const [eventoFuenteId, setEventoFuenteId] = useState<string>('');
   const [eventoOffsets, setEventoOffsets] = useState<string>('-5,-3,-1');
   const [eventoHora, setEventoHora] = useState<string>('10:00');
-  const [eventoCanal, setEventoCanal] = useState<'email' | 'whatsapp' | 'ambos'>('email');
+  // Canal de envío del aviso (aplica a manual, cron y evento). En modo evento
+  // también se persiste en avisos_triggers_evento.canal.
+  const [canalEnvio, setCanalEnvio] = useState<'email' | 'whatsapp' | 'ambos'>('email');
   const [eventoActivo, setEventoActivo] = useState<boolean>(true);
   const [tiposPagoNotificables, setTiposPagoNotificables] = useState<number[]>(DEFAULT_TIPOS_PAGO);
   const [personalizado, setPersonalizado] = useState<boolean>(false);
@@ -459,7 +462,7 @@ export default function AdministrarAvisos() {
     setModoTrigger('cron');
     setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
     setEventoOffsets('-5,-3,-1');
-    setEventoHora('10:00'); setEventoCanal('email'); setEventoActivo(true);
+    setEventoHora('10:00'); setCanalEnvio('email'); setEventoActivo(true);
     setTiposPagoNotificables(DEFAULT_TIPOS_PAGO);
     setPersonalizado(false);
     setPayloadEnabled(false);
@@ -533,12 +536,12 @@ export default function AdministrarAvisos() {
       setEventoFuenteId(String((trigData as any).id_fuente));
       setEventoOffsets(((trigData as any).offsets_dias || []).join(','));
       setEventoHora(((trigData as any).hora_envio || '10:00:00').substring(0, 5));
-      setEventoCanal(((trigData as any).canal as any) || 'email');
+      setCanalEnvio((aviso.canal as any) || ((trigData as any).canal as any) || 'email');
       setEventoActivo(!!(trigData as any).activo);
     } else {
       setEventoFuenteId(fuentesTrigger[0] ? String(fuentesTrigger[0].id) : '');
       setEventoOffsets('-5,-3,-1'); setEventoHora('10:00');
-      setEventoCanal('email'); setEventoActivo(true);
+      setCanalEnvio((aviso.canal as any) || 'email'); setEventoActivo(true);
     }
     setDialogOpen(true);
   };
@@ -644,8 +647,20 @@ export default function AdministrarAvisos() {
       }
     }
 
+    // La columna avisos.canal llega por migración; si aún no existe en el
+    // ambiente, se omite del payload para no romper el guardado (patrón DDL probe).
+    const canalProbe = await (supabase as any).from('avisos').select('canal').limit(0);
+    const canalDisponible = !canalProbe.error;
+    if (!canalDisponible) {
+      toast({
+        title: "Canal no persistido en el aviso",
+        description: "La columna avisos.canal aún no existe en esta base (migración pendiente). El resto del aviso se guardará normal.",
+      });
+    }
+
     const payload = {
       nombre, asunto, mensaje_html: mensajeHtml, tipo_envio: tipoEnvio,
+      ...(canalDisponible ? { canal: canalEnvio } : {}),
       mensajes_whatsapp: whatsappLimpios,
       personalizado,
       cron_expression:
@@ -727,7 +742,7 @@ export default function AdministrarAvisos() {
         id_fuente: parseInt(eventoFuenteId, 10),
         offsets_dias: parsedOffsets,
         hora_envio: horaParaGuardar,
-        canal: eventoCanal,
+        canal: canalEnvio,
         activo: eventoActivo,
       });
       if (trigErr) {
@@ -1020,6 +1035,20 @@ export default function AdministrarAvisos() {
                   <p className="text-[10px] text-muted-foreground mt-1">Default: 36978552</p>
                 </div>
               </div>
+              <div>
+                <Label>Canal</Label>
+                <Select value={canalEnvio} onValueChange={(v) => setCanalEnvio(v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="ambos">Ambos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Aplica también al envío manual desde "Enviar Avisos": Email envía solo correo, WhatsApp solo mensajes (requiere teléfono del destinatario), Ambos envía por los dos.
+                </p>
+              </div>
               {tipoEnvio === 'automatico' && (
                 <>
                   <div>
@@ -1154,24 +1183,13 @@ export default function AdministrarAvisos() {
                           })}
                         </div>
                       </div>
-                      <div>
-                        <Label>Canal</Label>
-                        <Select value={eventoCanal} onValueChange={(v) => setEventoCanal(v as any)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                            <SelectItem value="ambos">Ambos</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
                       <div className="flex items-center gap-2">
                         <Switch checked={eventoActivo} onCheckedChange={setEventoActivo} />
                         <Label>Trigger evento activo</Label>
                       </div>
                       {eventoFuenteId && eventoOffsets && (
                         <p className="text-xs font-medium text-primary">
-                          Se enviará por {eventoCanal} a las {eventoHora}, en los offsets ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a <code>acuerdos_pago.fecha_pago</code>.
+                          Se enviará por {canalEnvio} a las {eventoHora}, en los offsets ({eventoOffsets.split(',').map(s => s.trim()).filter(Boolean).join(', ')}) días respecto a <code>acuerdos_pago.fecha_pago</code>.
                         </p>
                       )}
                       <p className="text-[11px] text-muted-foreground">
