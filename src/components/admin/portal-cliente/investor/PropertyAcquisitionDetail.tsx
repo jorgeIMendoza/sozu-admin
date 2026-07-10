@@ -19,6 +19,8 @@ import {
   Mail,
   Eye,
   Download,
+  AlertTriangle,
+  Landmark,
 } from "lucide-react";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { fmtMXN } from "@/lib/utils";
@@ -32,6 +34,7 @@ import ConstructionProgressSection from "@/components/admin/portal-cliente/detai
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
 import PagoFinalSheet from "@/components/admin/portal-cliente/detail/PagoFinalSheet";
+import PaymentMethodBadge from "@/components/admin/portal-cliente/PaymentMethodBadge";
 
 interface Props {
   investment: InvestmentProperty;
@@ -72,20 +75,40 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const [showPaySheet, setShowPaySheet] = useState(false);
   const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
+  const enDemanda = !!property.enDemanda;
 
   const handlePay = () => {
+    if (enDemanda) return; // propiedad en proceso legal → solo lectura
+    const tipoFin = investment.property.tipoFinanciamiento;
+    // Crédito hipotecario: SOZU no cobra, paga el banco → flujo de banco/estado, nunca datos de pago (STP)
+    if (tipoFin === "CREDITO_HIPOTECARIO") {
+      setShowPagoFinalSheet(true);
+      return;
+    }
+    // Recursos propios: instrucciones de pago (STP)
+    if (tipoFin === "RECURSOS_PROPIOS") {
+      setShowPaySheet(true);
+      return;
+    }
+    // Aún sin forma de pago: si es el último → elegir forma; si no → pago normal
     const pendingPayments = investment.payments.filter(p => p.status !== "pagado");
     const isLastPayment = pendingPayments.length === 1;
-    const sinForma = investment.property.tipoFinanciamiento == null;
-    if (isLastPayment && sinForma) {
-      setShowPagoFinalSheet(true);
-    } else {
-      setShowPaySheet(true);
-    }
+    if (isLastPayment) setShowPagoFinalSheet(true);
+    else setShowPaySheet(true);
   };
 
   return (
-    <div className="pb-24 space-y-5">
+    <div className="pb-24 space-y-5 relative">
+      {/* ── En demanda: overlay de solo lectura ── */}
+      {enDemanda && (
+        <div className="absolute inset-0 z-40 bg-neutral-500/20 dark:bg-neutral-900/45 backdrop-grayscale cursor-not-allowed flex justify-center">
+          <div className="sticky top-6 h-fit inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-400 text-yellow-950 shadow-lg border border-yellow-500">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-semibold">En demanda · Modo solo lectura</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Full-width title ── */}
       <div>
         <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-muted-foreground">
@@ -114,6 +137,9 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
         {/* ── Left column ── */}
         <div className="space-y-4">
+          {/* 0 · Confirmación de forma de pago final elegida */}
+          <PaymentMethodBadge cuentaId={Number(property.id)} tipo={property.tipoFinanciamiento} />
+
           {/* 1 · Imagen */}
           <PropertyImage investment={investment} />
 
@@ -220,8 +246,8 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
         </div>
       </div>
 
-      {/* Mobile-only sticky CTA */}
-      <AcquisitionStickyCTA investment={investment} onPay={handlePay} />
+      {/* Mobile-only sticky CTA (oculto en modo solo lectura por demanda) */}
+      {!enDemanda && <AcquisitionStickyCTA investment={investment} onPay={handlePay} />}
 
       <AcquisitionPaymentSheet
         open={showPaySheet}
@@ -785,6 +811,9 @@ function getContextualCTA(investment: InvestmentProperty, onPay: () => void) {
   const active = stages.find((s) => s.status === "active");
 
   if (active?.id === "pago_final" && financials.pendingBalance > 0) {
+    if (investment.property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
+      return { label: "Ver crédito hipotecario", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <Landmark className="w-4 h-4" />, onClick: onPay };
+    }
     return { label: `Pagar ${fmtMXN(financials.pendingBalance)}`, classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
   }
   if (active?.id === "escrituracion") {
@@ -794,7 +823,7 @@ function getContextualCTA(investment: InvestmentProperty, onPay: () => void) {
     return { label: "Agendar visita de entrega", classes: "bg-success text-success-foreground hover:bg-success/90", icon: <Calendar className="w-4 h-4" />, onClick: () => console.log("entrega") };
   }
   if (active?.id === "preventa") {
-    return { label: "Confirmar plan de pagos", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <CreditCard className="w-4 h-4" />, onClick: () => console.log("preventa") };
+    return { label: "Confirmar plan de pagos", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
   }
   return { label: "Hablar con mi agente", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <User className="w-4 h-4" />, onClick: () => console.log("agente") };
 }

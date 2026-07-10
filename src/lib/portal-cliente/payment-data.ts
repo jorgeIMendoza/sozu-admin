@@ -6,6 +6,22 @@ import { supabase } from "@/integrations/supabase/client";
 export type InstallmentStatus = "proximo" | "cercano" | "vencido" | "pagado";
 export type PaymentConfirmationStatus = "recibido" | "validando" | "confirmado";
 
+/**
+ * Un pago (dispersión) aplicado a un acuerdo/concepto. Un mismo concepto puede
+ * recibir varias aplicaciones (los pagos son dispersados, no montos exactos),
+ * por eso `Installment.applications` es un arreglo.
+ */
+export interface PaymentApplication {
+  pagoId: number;
+  amount: number; // aplicaciones_pago.monto (lo aplicado por este pago a este concepto)
+  date: string; // ISO YYYY-MM-DD (pago.fecha_pago)
+  dateDisplay: string;
+  trackingKey?: string;
+  cepUrl?: string;
+  evidenceUrl?: string;
+  methodName?: string;
+}
+
 export interface Installment {
   id: string;
   number: number;
@@ -19,6 +35,7 @@ export interface Installment {
   confirmationStatus?: PaymentConfirmationStatus;
   confirmationTimestamp?: string;
   constructionMilestone?: string;
+  applications?: PaymentApplication[]; // pagos dispersados que componen este concepto
 }
 
 export interface STPPaymentInfo {
@@ -71,7 +88,12 @@ interface AcuerdoRow {
   conceptos_pago: { nombre: string } | null;
 }
 
-function buildPlan(cuentaId: string, rows: AcuerdoRow[], clabeStp?: string | null): PropertyPaymentPlan {
+function buildPlan(
+  cuentaId: string,
+  rows: AcuerdoRow[],
+  clabeStp?: string | null,
+  appsByAcuerdo: Record<number, PaymentApplication[]> = {},
+): PropertyPaymentPlan {
   const today = Date.now();
   let parcialidadCount = 0;
 
@@ -84,6 +106,7 @@ function buildPlan(cuentaId: string, rows: AcuerdoRow[], clabeStp?: string | nul
     const due = new Date(isoDate + "T12:00:00").getTime();
     const daysUntilDue = Math.ceil((due - today) / 86_400_000);
     const isPaid = row.pago_completado;
+    const applications = (appsByAcuerdo[row.id] ?? []).sort((a, b) => a.date.localeCompare(b.date));
 
     return {
       id: String(row.id),
@@ -97,6 +120,7 @@ function buildPlan(cuentaId: string, rows: AcuerdoRow[], clabeStp?: string | nul
       status: computeStatus(isPaid, isoDate),
       concepto,
       paidAt: isPaid ? isoDate : undefined,
+      applications: applications.length ? applications : undefined,
     };
   });
 
@@ -138,11 +162,77 @@ export function usePaymentSchedule(cuentaId: string | undefined) {
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
-      return buildPlan(cuentaId!, (rows ?? []) as unknown as AcuerdoRow[], cuenta?.clabe_stp);
+
+      const acuerdoRows = (rows ?? []) as unknown as AcuerdoRow[];
+      const appsByAcuerdo = await fetchApplicationsByAcuerdo(acuerdoRows.map((r) => r.id));
+      return buildPlan(cuentaId!, acuerdoRows, cuenta?.clabe_stp, appsByAcuerdo);
     },
     enabled: !!cuentaId,
     staleTime: 60_000,
   });
+}
+
+/**
+ * Aplicaciones de pago (pagos dispersados) por acuerdo. Un acuerdo puede tener
+ * varias filas en `aplicaciones_pago`, cada una ligada a un `pago` distinto.
+ * Excluye multas (`es_multa=true`) — esas no cuentan como abono al concepto.
+ */
+async function fetchApplicationsByAcuerdo(
+  acuerdoIds: number[],
+): Promise<Record<number, PaymentApplication[]>> {
+  const map: Record<number, PaymentApplication[]> = {};
+  if (!acuerdoIds.length) return map;
+
+  try {
+  const { data: aplicaciones } = await supabase
+    .from("aplicaciones_pago")
+    .select("id_acuerdo_pago, id_pago, monto, es_multa")
+    .in("id_acuerdo_pago", acuerdoIds)
+    .eq("activo", true);
+  if (!aplicaciones?.length) return map;
+
+  const realApps = (aplicaciones as any[]).filter((a) => !a.es_multa);
+  const pagoIds = [...new Set(realApps.map((a) => Number(a.id_pago)).filter(Boolean))];
+  if (!pagoIds.length) return map;
+
+  const { data: pagos } = await supabase
+    .from("pagos")
+    .select("id, clave_rastreo, fecha_pago, url_cep, url_recibo, id_metodos_pago")
+    .in("id", pagoIds)
+    .eq("activo", true);
+  const pagoById: Record<number, any> = Object.fromEntries((pagos ?? []).map((p: any) => [p.id, p]));
+
+  const metodoIds = [...new Set((pagos ?? []).map((p: any) => p.id_metodos_pago).filter(Boolean))];
+  const { data: metodos } = metodoIds.length
+    ? await supabase.from("metodos_pago").select("id, nombre").in("id", metodoIds)
+    : { data: [] as any[] };
+  const metodoNombre: Record<number, string> = Object.fromEntries(
+    (metodos ?? []).map((m: any) => [m.id, String(m.nombre)]),
+  );
+
+  for (const ap of realApps) {
+    const pago = pagoById[Number(ap.id_pago)];
+    if (!pago) continue;
+    const date = pago.fecha_pago ? String(pago.fecha_pago).slice(0, 10) : "";
+    const app: PaymentApplication = {
+      pagoId: Number(pago.id),
+      amount: Number(ap.monto),
+      date,
+      dateDisplay: date
+        ? new Date(date + "T12:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })
+        : "—",
+      trackingKey: pago.clave_rastreo ? String(pago.clave_rastreo) : undefined,
+      cepUrl: pago.url_cep ? String(pago.url_cep) : undefined,
+      evidenceUrl: pago.url_recibo ? String(pago.url_recibo) : undefined,
+      methodName: pago.id_metodos_pago ? metodoNombre[Number(pago.id_metodos_pago)] : undefined,
+    };
+    (map[Number(ap.id_acuerdo_pago)] ??= []).push(app);
+  }
+  return map;
+  } catch {
+    // Nunca romper el calendario de pagos por un fallo al traer aplicaciones
+    return map;
+  }
 }
 
 // ── Backward-compat alias (usePaymentPlan → usePaymentSchedule) ──

@@ -49,6 +49,7 @@ export interface PropertyData {
   clientRFC?: string;
   notary?: NotaryData;
   tipoFinanciamiento?: 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null;
+  enDemanda?: boolean; // id_estatus_disponibilidad = 11 (proceso legal) → modo solo lectura
 }
 
 export interface FinancialData {

@@ -28,7 +28,6 @@ import {
   saveMortgageProcess,
   clearMortgageProcess,
   getPreValidationStatusInfo,
-  getOtherBankStatusInfo,
   type MortgageChoice,
   type MortgageProcess,
   type StatusInfo,
@@ -38,6 +37,12 @@ import {
 import PreQualificationFlow from "./PreQualificationFlow";
 import SupportLauncher from "@/components/admin/portal-cliente/support/SupportLauncher";
 import type { SupportContext } from "@/lib/portal-cliente/advisor-data";
+import { toast } from "sonner";
+import {
+  useSolicitudCreditoVigente,
+  useCrearSolicitudCredito,
+  puedeCambiarBanco,
+} from "@/hooks/usePortalBancos/useSolicitudesCredito";
 
 interface PagoFinalSheetProps {
   stage: StageInfo;
@@ -97,8 +102,6 @@ const toneIcon = (tone: StatusTone) => {
 
 import MortgageBankSelector from "./MortgageBankSelector";
 
-const PREFERRED_BANK_IDS: Record<string, number> = { BBVA: 1, Santander: 2, Banorte: 3 };
-
 const PagoFinalSheet = ({
   stage,
   investment,
@@ -109,6 +112,8 @@ const PagoFinalSheet = ({
   const { financials, property } = investment;
   const cuentaId = Number(property.id);
   const queryClient = useQueryClient();
+  const { data: solicitudVigente } = useSolicitudCreditoVigente(cuentaId);
+  const crearSolicitud = useCrearSolicitudCredito();
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<PaymentMethod>(null);
   const [process, setProcess] = useState<MortgageProcess | null>(null);
@@ -131,12 +136,17 @@ const PagoFinalSheet = ({
       setProcess(existing);
       setStep("status");
       setMethod("credito");
+    } else if (property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
+      // Ya eligió crédito (persistido): mostrar flujo de banco, nunca datos de pago
+      setProcess(null);
+      setMethod("credito");
+      setStep("mortgage-select");
     } else {
       setProcess(null);
       setStep("method");
       setMethod(null);
     }
-  }, [open, property.id]);
+  }, [open, property.id, property.tipoFinanciamiento]);
 
   const handleClose = () => {
     onClose();
@@ -159,8 +169,7 @@ const PagoFinalSheet = ({
       propertyId: property.id,
       declaredAt: new Date().toISOString(),
       choice,
-      preferredStatus: choice.type === "preferred" ? "not_started" : undefined,
-      otherStatus: choice.type === "other" ? "registered" : undefined,
+      preferredStatus: "not_started",
     };
     saveMortgageProcess(newProcess);
     setProcess(newProcess);
@@ -170,20 +179,15 @@ const PagoFinalSheet = ({
       .update({ tipo_financiamiento: 'CREDITO_HIPOTECARIO' })
       .eq('id', cuentaId);
 
-    if (choice.type === 'preferred') {
-      const bankId = PREFERRED_BANK_IDS[choice.bankId];
-      if (bankId) {
-        await (supabase as any)
-          .from('creditos_hipotecarios')
-          .upsert(
-            { id_cuenta_cobranza: cuentaId, id_banco: bankId, monto_credito: 0 },
-            { onConflict: 'id_cuenta_cobranza' },
-          );
-      }
-    }
+    await (supabase as any)
+      .from('creditos_hipotecarios')
+      .upsert(
+        { id_cuenta_cobranza: cuentaId, id_banco: choice.bank.idBanco, monto_credito: 0 },
+        { onConflict: 'id_cuenta_cobranza' },
+      );
 
     queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
-    setStep(choice.type === "preferred" ? "prequalification" : "status");
+    setStep("prequalification");
   };
 
   const handlePrequalificationComplete = (data: PrequalificationData) => {
@@ -198,10 +202,24 @@ const PagoFinalSheet = ({
       saveMortgageProcess(updated);
       return updated;
     });
+
+    // Persistir el lead en BD (graceful: si la tabla no existe, sigue en memoria)
+    crearSolicitud.mutate({ cuentaId, idBanco: data.idBanco, data });
+
     setStep("status");
   };
 
   const handleChangeBank = () => {
+    // El banco es dueño del cambio: solo se permite si la solicitud expiró
+    // (SLA cumplido) o fue rechazada. SLA null/<1 → selección definitiva.
+    if (!puedeCambiarBanco(solicitudVigente)) {
+      toast.info(
+        solicitudVigente?.fecha_expiracion
+          ? "Tu solicitud sigue vigente con el banco. Podrás cambiar cuando el banco responda o venza el plazo."
+          : "La selección de banco es definitiva y no puede cambiarse.",
+      );
+      return;
+    }
     clearMortgageProcess(property.id);
     setProcess(null);
     setStep("mortgage-select");
@@ -245,18 +263,13 @@ const PagoFinalSheet = ({
   // ── Status card renderer ──
   const renderStatus = () => {
     if (!process) return null;
-    const isPreferred = process.choice.type === "preferred";
-    const bankName =
-      process.choice.type === "preferred"
-        ? process.choice.bankId
-        : process.choice.details.institution;
-    const statusInfo: StatusInfo = isPreferred
-      ? getPreValidationStatusInfo(process.preferredStatus || "not_started")
-      : getOtherBankStatusInfo(process.otherStatus || "registered");
+    const bankName = process.choice.bank.nombre;
+    const statusInfo: StatusInfo = getPreValidationStatusInfo(process.preferredStatus || "not_started");
     const tone = toneStyles[statusInfo.tone];
     const StatusIcon = toneIcon(statusInfo.tone);
 
     const preq = process.prequalification;
+    const hasEstimate = preq?.estimatedMonthlyMin != null;
     const formattedSubmitted = preq
       ? new Date(preq.submittedAt).toLocaleDateString("es-MX", {
           day: "numeric",
@@ -267,19 +280,17 @@ const PagoFinalSheet = ({
     const fmtN = (n: number) =>
       n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
 
-    const nextSteps = isPreferred
-      ? [
-          preq
-            ? `Tu intención de crédito fue enviada a ${bankName} el ${formattedSubmitted}.`
-            : `Abre la app de ${bankName} para iniciar tu pre-validación.`,
-          `El banco revisará tu solicitud y te contactará con un broker dedicado.`,
-          `SOZU coordinará con ${bankName} y el notario para tu escrituración.`,
-        ]
-      : [
-          "SOZU se pondrá en contacto con tu institución en los próximos días.",
-          "Coordinaremos el proceso de pago y la asignación de notario.",
-          "Te notificaremos cuando todo esté listo para escriturar.",
-        ];
+    // Solo se puede cambiar de banco si existe una solicitud persistida cuyo
+    // SLA venció o fue rechazada. Sin SLA definido (o sin persistencia) → definitivo.
+    const canChangeBank = !!solicitudVigente && puedeCambiarBanco(solicitudVigente);
+
+    const nextSteps = [
+      preq
+        ? `Tu solicitud de crédito fue enviada a ${bankName} el ${formattedSubmitted}.`
+        : `Envía tu solicitud a ${bankName} para iniciar tu crédito.`,
+      `El banco revisará tu solicitud y te contactará con un broker dedicado.`,
+      `SOZU coordinará con ${bankName} y el notario para tu escrituración.`,
+    ];
 
     return (
       <div className="mt-5 space-y-4 animate-fade-in">
@@ -298,7 +309,7 @@ const PagoFinalSheet = ({
                 {statusInfo.label}
               </p>
               <p className="font-display font-semibold text-sm text-foreground mt-1">
-                {isPreferred ? `Pre-validación con ${bankName}` : `Banco: ${bankName}`}
+                Crédito hipotecario · {bankName}
               </p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                 {statusInfo.description}
@@ -307,33 +318,8 @@ const PagoFinalSheet = ({
           </div>
         </div>
 
-        {/* Other-bank registered details */}
-        {!isPreferred && process.choice.type === "other" && (
-          <div className="p-4 rounded-xl border border-border space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
-              Datos registrados
-            </p>
-            {[
-              ["Institución", process.choice.details.institution],
-              ["Ejecutivo", process.choice.details.contactName],
-              ["Teléfono", process.choice.details.contactPhone],
-              ...(process.choice.details.contactEmail
-                ? [["Correo", process.choice.details.contactEmail]]
-                : []),
-              ["Sucursal", process.choice.details.branch],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-3 text-xs">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="text-foreground font-medium text-right truncate">
-                  {value}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Pre-calificación enviada */}
-        {isPreferred && preq && (
+        {/* Solicitud enviada - resumen con estimación (solo si el banco tiene tasas) */}
+        {preq && hasEstimate && (
           <div className="p-4 rounded-xl border border-border space-y-3">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -346,7 +332,7 @@ const PagoFinalSheet = ({
                 Mensualidad estimada
               </p>
               <p className="font-display font-bold text-lg text-foreground tabular-nums mt-0.5">
-                ${fmtN(preq.estimatedMonthlyMin)} – ${fmtN(preq.estimatedMonthlyMax)}{" "}
+                ${fmtN(preq.estimatedMonthlyMin!)} - ${fmtN(preq.estimatedMonthlyMax!)}{" "}
                 <span className="text-xs font-normal text-muted-foreground">MXN/mes</span>
               </p>
             </div>
@@ -364,13 +350,15 @@ const PagoFinalSheet = ({
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tasa</p>
                 <p className="text-xs font-medium text-foreground tabular-nums mt-0.5">
-                  {preq.estimatedRateMin}% – {preq.estimatedRateMax}%
+                  {preq.estimatedRateMin}% - {preq.estimatedRateMax}%
                 </p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground">CAT</p>
                 <p className="text-xs font-medium text-foreground tabular-nums mt-0.5">
-                  {preq.estimatedCatMin}% – {preq.estimatedCatMax}%
+                  {preq.estimatedCatMin != null && preq.estimatedCatMax != null
+                    ? `${preq.estimatedCatMin}% - ${preq.estimatedCatMax}%`
+                    : "-"}
                 </p>
               </div>
             </div>
@@ -396,31 +384,33 @@ const PagoFinalSheet = ({
 
         {/* Actions */}
         <div className="space-y-2 pt-1">
-          {isPreferred && !preq && (
+          {!preq && (
             <Button
               className="w-full rounded-xl h-12 text-sm font-semibold gap-2"
               onClick={() => setStep("prequalification")}
             >
               <Landmark className="w-4 h-4" />
-              Iniciar pre-calificación con {bankName}
+              Enviar solicitud a {bankName}
             </Button>
           )}
-          {isPreferred && preq && (
+          {preq && (
             <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-xs text-foreground/80 leading-relaxed">
-                Tu intención fue enviada el {formattedSubmitted}. El broker te contactará en menos de 24 horas.
+                Tu solicitud fue enviada el {formattedSubmitted}. El broker se pondrá en contacto contigo lo antes posible.
               </p>
             </div>
           )}
-          <Button
-            variant="outline"
-            className="w-full rounded-xl h-11 text-sm font-medium gap-2"
-            onClick={handleChangeBank}
-          >
-            <RefreshCcw className="w-3.5 h-3.5" />
-            Cambiar banco
-          </Button>
+          {canChangeBank && (
+            <Button
+              variant="outline"
+              className="w-full rounded-xl h-11 text-sm font-medium gap-2"
+              onClick={handleChangeBank}
+            >
+              <RefreshCcw className="w-3.5 h-3.5" />
+              Cambiar banco
+            </Button>
+          )}
           <button
             onClick={handleClose}
             className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
@@ -578,10 +568,8 @@ const PagoFinalSheet = ({
         {step === "prequalification" && process?.choice.type === "preferred" && (
           <div className="mt-5">
             <PreQualificationFlow
-              bankId={process.choice.bankId}
+              bank={process.choice.bank}
               pendingBalance={financials.pendingBalance}
-              propertyValue={financials.initialPrice}
-              propertyLabel={`${property.projectName} ${property.unitNumber}`}
               onComplete={handlePrequalificationComplete}
               onCancel={() => {
                 clearMortgageProcess(property.id);
@@ -603,10 +591,8 @@ const PagoFinalSheet = ({
               method === "credito"
                 ? `Crédito hipotecario${
                     process?.choice.type === "preferred"
-                      ? ` (${process.choice.bankId} seleccionado)`
-                      : process?.choice.type === "other"
-                        ? ` (${process.choice.details.institution} seleccionado)`
-                        : ""
+                      ? ` (${process.choice.bank.nombre} seleccionado)`
+                      : ""
                   }`
                 : method === "propios"
                   ? "Financiamiento propio"
