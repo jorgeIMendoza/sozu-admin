@@ -18,6 +18,7 @@ interface UserProfile {
   id_notario: number | null;
   notaria_nombre: string | null;
   id_perfil_juridico: number | null;
+  puede_impersonar: boolean;
   foto_perfil_url: string | null;
   frase_perfil: string | null;
 }

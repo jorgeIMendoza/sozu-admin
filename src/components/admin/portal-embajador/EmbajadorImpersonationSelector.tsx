@@ -20,8 +20,8 @@ export function EmbajadorImpersonationSelector() {
   const { ambassadors } = useAmbassadors();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
+  const canImpersonate = profile?.puede_impersonar === true;
+  if (!canImpersonate) return null;
 
   const embajadores = ambassadors.filter(e => e.status !== "inactivo");
 

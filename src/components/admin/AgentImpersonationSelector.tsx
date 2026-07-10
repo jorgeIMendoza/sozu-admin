@@ -15,8 +15,8 @@ export function AgentImpersonationSelector() {
   const { impersonatedAgentEmail, impersonatedAgentName, setImpersonatedAgent, clearImpersonation, isImpersonating } = useAgentImpersonation();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
+  const canImpersonate = profile?.puede_impersonar === true;
+  if (!canImpersonate) return null;
 
   const { data: agents = [], isLoading } = useQuery({
     queryKey: ["all-agents-for-impersonation"],
@@ -36,7 +36,7 @@ export function AgentImpersonationSelector() {
         rolId: u.rol_id,
       })).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: isSuperAdmin,
+    enabled: canImpersonate,
   });
 
   return (

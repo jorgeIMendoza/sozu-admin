@@ -28,10 +28,10 @@ export function ProjectAdminImpersonationSelector() {
   const [users, setUsers] = useState<ProjectAdminUser[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1;
+  const canImpersonate = profile?.puede_impersonar === true;
 
   useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!canImpersonate) return;
     setLoading(true);
     (async () => {
       const { data } = await supabase
@@ -52,9 +52,9 @@ export function ProjectAdminImpersonationSelector() {
       }
       setLoading(false);
     })();
-  }, [isSuperAdmin]);
+  }, [canImpersonate]);
 
-  if (!isSuperAdmin) return null;
+  if (!canImpersonate) return null;
 
   return (
     <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-primary/20 bg-primary/5">
