@@ -21,7 +21,7 @@ export function CobranzaImpersonationSelector() {
   } = useCobranzaImpersonation();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const canImpersonate = profile?.puede_impersonar === true;
 
   // First get roles that have permissions on Portal Cobranza submenus
   const { data: allowedRoles = [] } = useQuery({
@@ -55,7 +55,7 @@ export function CobranzaImpersonationSelector() {
       const roleIds = [...new Set((permData || []).map((r: any) => r.rol_id))];
       return roleIds as number[];
     },
-    enabled: isSuperAdmin,
+    enabled: canImpersonate,
   });
 
   const { data: usuarios = [] } = useQuery({
@@ -83,10 +83,10 @@ export function CobranzaImpersonationSelector() {
         }))
         .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: isSuperAdmin && allowedRoles.length > 0,
+    enabled: canImpersonate && allowedRoles.length > 0,
   });
 
-  if (!isSuperAdmin) return null;
+  if (!canImpersonate) return null;
 
   return (
     <div className="flex items-center gap-2">

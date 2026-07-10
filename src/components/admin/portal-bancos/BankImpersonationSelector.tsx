@@ -22,8 +22,8 @@ export function BankImpersonationSelector() {
   const { data: convenios = [] } = useBancosConvenio();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
+  const canImpersonate = profile?.puede_impersonar === true;
+  if (!canImpersonate) return null;
   if (convenios.length === 0) return null;
 
   return (
