@@ -20,8 +20,8 @@ export function InmobiliariaImpersonationSelector() {
   } = useInmobiliariaImpersonation();
   const [open, setOpen] = useState(false);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
-  if (!isSuperAdmin) return null;
+  const canImpersonate = profile?.puede_impersonar === true;
+  if (!canImpersonate) return null;
 
   const { data: inmobiliarias = [] } = useQuery({
     queryKey: ["all-inmobiliarias-for-impersonation"],
@@ -42,7 +42,7 @@ export function InmobiliariaImpersonationSelector() {
         }))
         .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
-    enabled: isSuperAdmin,
+    enabled: canImpersonate,
   });
 
   return (
