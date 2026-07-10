@@ -30,6 +30,7 @@ interface Role {
   ver_filtros_avanzados_eliminados: boolean;
   ver_todos_duenos: boolean;
   configurar_citas: boolean;
+  puede_impersonar: boolean;
 }
 
 interface Permiso {
@@ -522,7 +523,7 @@ export default function RolesPermisos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas')
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar')
         .eq('es_rol_interno', true)
         .order('id');
       
@@ -856,6 +857,29 @@ export default function RolesPermisos() {
         })
         .eq('id', id);
       
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
+      toast.success('Configuración actualizada');
+    },
+    onError: (error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  // Update puede_impersonar mutation
+  const updatePuedeImpersonarMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
+      const { error } = await supabase
+        .from('roles')
+        .update({
+          puede_impersonar: value,
+          fecha_actualizacion: new Date().toISOString()
+        })
+        .eq('id', id);
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -1506,7 +1530,25 @@ export default function RolesPermisos() {
                           </p>
                         </div>
                       </label>
-                      
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.puede_impersonar || false}
+                          onCheckedChange={(checked) => {
+                            updatePuedeImpersonarMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updatePuedeImpersonarMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Impersonar usuarios en portales</span>
+                          <p className="text-xs text-muted-foreground">
+                            Muestra el selector "Ver como" en los portales (agentes, cobranza, CRM, bancos, etc.) para navegar como otro usuario
+                          </p>
+                        </div>
+                      </label>
+
                       {/* Estatus de disponibilidad visibles */}
                       <EstatusDisponibilidadSelector 
                         rolId={selectedRole.id}

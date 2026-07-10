@@ -10813,6 +10813,7 @@ export type Database = {
           fecha_creacion: string | null
           id: number
           nombre: string
+          puede_impersonar: boolean
           ver_filtros_avanzados_eliminados: boolean
           ver_todos_duenos: boolean
           ver_todos_prospectos_compradores: boolean | null
@@ -10826,6 +10827,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre: string
+          puede_impersonar?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
@@ -10839,6 +10841,7 @@ export type Database = {
           fecha_creacion?: string | null
           id?: never
           nombre?: string
+          puede_impersonar?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
