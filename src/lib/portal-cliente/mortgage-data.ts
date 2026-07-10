@@ -1,47 +1,28 @@
 // ── Mortgage / Crédito hipotecario data layer ──
-// In-memory store of the mortgage decision per property used by Pago Final.
+// Store en memoria de la decisión de crédito por propiedad, usado por Pago Final.
+// Solo bancos con convenio real (BBVA / Santander / Banorte) desde `bancos_convenio`.
+// No se recaba perfil ni contacto del cliente: ya lo tenemos en la BD.
 
-export type PreferredBankId = "BBVA" | "Santander" | "Banorte";
+// ── Banco seleccionado (viene de bancos_convenio) ──
 
-export interface PreferredBank {
-  id: PreferredBankId;
-  name: string;
-  shortDescription: string;
-  benefits: string[];
+export interface BankRateInfo {
+  tasaMin: number | null;
+  tasaMax: number | null;
+  catMin: number | null;
+  catMax: number | null;
 }
 
-export const PREFERRED_BANKS: PreferredBank[] = [
-  {
-    id: "BBVA",
-    name: "BBVA",
-    shortDescription: "Pre-validación digital",
-    benefits: ["Notario integrado", "Broker dedicado", "Proceso ágil"],
-  },
-  {
-    id: "Santander",
-    name: "Santander",
-    shortDescription: "Pre-validación digital",
-    benefits: ["Notario integrado", "Broker dedicado", "Proceso ágil"],
-  },
-  {
-    id: "Banorte",
-    name: "Banorte",
-    shortDescription: "Pre-validación digital",
-    benefits: ["Notario integrado", "Broker dedicado", "Proceso ágil"],
-  },
-];
-
-export interface OtherBankDetails {
-  institution: string;
-  contactName: string;
-  contactPhone: string;
-  contactEmail?: string;
-  branch: string;
+export interface SelectedBank {
+  idBanco: number;
+  nombre: string;
+  rates: BankRateInfo;
 }
 
-export type MortgageChoice =
-  | { type: "preferred"; bankId: PreferredBankId }
-  | { type: "other"; details: OtherBankDetails };
+/** ¿El banco tiene tasas configuradas para poder mostrar estimación? */
+export const hasRates = (r: BankRateInfo): boolean =>
+  r.tasaMin != null && r.tasaMax != null;
+
+export type MortgageChoice = { type: "preferred"; bank: SelectedBank };
 
 export type PreValidationStatus =
   | "not_started"
@@ -50,93 +31,34 @@ export type PreValidationStatus =
   | "rejected"
   | "completed";
 
-export type OtherBankStatus =
-  | "registered"
-  | "contacted"
-  | "in_coordination"
-  | "completed";
-
 export interface MortgageProcess {
   propertyId: string;
   declaredAt: string;
   choice: MortgageChoice;
   preferredStatus?: PreValidationStatus;
-  otherStatus?: OtherBankStatus;
   lastUpdate?: string;
   prequalification?: PrequalificationData;
 }
 
-// ── Pre-calificación: tipos ──
-
-export type IngresoRange = "15k-30k" | "30k-60k" | "60k-120k" | "120k+";
-
-export type SituacionLaboral =
-  | "asalariado"
-  | "independiente"
-  | "empresario"
-  | "mixto";
-
-export type LeadScore = "verde" | "amarillo" | "rojo";
-
-export interface ContactInfo {
-  nombre: string;
-  email: string;
-  telefono: string;
-}
-
-export interface BankRateRange {
-  rateMin: number;
-  rateMax: number;
-  catMin: number;
-  catMax: number;
-  effectiveDate: string;
-}
+// ── Pre-calificación: datos enviados al banco ──
+// Solo lo que el cliente elige (monto/plazo) + estimación derivada de las tasas
+// del banco (si las hay). Sin ingreso/situación/contacto: ya está en la BD.
 
 export interface PrequalificationData {
+  idBanco: number;
+  bankName: string;
   montoFinanciar: number;
-  plazoAnios: 10 | 15 | 20;
-  ingresoRange: IngresoRange;
-  situacionLaboral: SituacionLaboral;
-  esClienteActual: boolean;
-  contacto: ContactInfo;
+  plazoAnios: number;
+  // Estimacion - solo presente si el banco tiene tasas configuradas
+  estimatedMonthlyMin?: number;
+  estimatedMonthlyMax?: number;
+  estimatedRateMin?: number;
+  estimatedRateMax?: number;
+  estimatedCatMin?: number;
+  estimatedCatMax?: number;
   consentimientoCompartirDatos: boolean;
-  estimatedMonthlyMin: number;
-  estimatedMonthlyMax: number;
-  estimatedRateMin: number;
-  estimatedRateMax: number;
-  estimatedCatMin: number;
-  estimatedCatMax: number;
-  ltv: number;
-  score: LeadScore;
   submittedAt: string;
 }
-
-export const BANK_RATES: Record<PreferredBankId, BankRateRange> = {
-  BBVA: { rateMin: 9.15, rateMax: 11.20, catMin: 13.0, catMax: 13.4, effectiveDate: "2026-Q1" },
-  Santander: { rateMin: 8.85, rateMax: 10.65, catMin: 10.7, catMax: 12.6, effectiveDate: "2026-Q1" },
-  Banorte: { rateMin: 9.15, rateMax: 11.20, catMin: 12.4, catMax: 13.1, effectiveDate: "2026-Q1" },
-};
-
-export const INGRESO_MIDPOINTS: Record<IngresoRange, number> = {
-  "15k-30k": 22500,
-  "30k-60k": 45000,
-  "60k-120k": 90000,
-  "120k+": 150000,
-};
-
-export const INGRESO_LABELS: Record<IngresoRange, string> = {
-  "15k-30k": "$15,000 – $30,000",
-  "30k-60k": "$30,000 – $60,000",
-  "60k-120k": "$60,000 – $120,000",
-  "120k+": "Más de $120,000",
-};
-
-export const SITUACION_LABORAL_LABELS: Record<SituacionLaboral, string> = {
-  asalariado: "Asalariado (con recibo de nómina)",
-  independiente: "Independiente / honorarios",
-  empresario: "Empresario / accionista",
-  mixto: "Ingresos mixtos",
-};
 
 export function calculateMonthlyPayment(
   principal: number,
@@ -146,44 +68,38 @@ export function calculateMonthlyPayment(
   if (principal <= 0 || years <= 0) return 0;
   const i = annualRatePercent / 100 / 12;
   const n = years * 12;
+  if (i === 0) return principal / n;
   const factor = Math.pow(1 + i, n);
   return (principal * i * factor) / (factor - 1);
 }
 
-export function calculateEstimateRange(
-  bankId: PreferredBankId,
+export interface EstimateResult {
+  monthlyMin: number;
+  monthlyMax: number;
+  rateMin: number;
+  rateMax: number;
+  catMin: number | null;
+  catMax: number | null;
+}
+
+/** Estimación a partir de las tasas del banco. Null si el banco no tiene tasas. */
+export function calculateEstimateFromRates(
   principal: number,
   years: number,
-) {
-  const rates = BANK_RATES[bankId];
+  rates: BankRateInfo,
+): EstimateResult | null {
+  if (rates.tasaMin == null || rates.tasaMax == null) return null;
   return {
-    monthlyMin: calculateMonthlyPayment(principal, rates.rateMin, years),
-    monthlyMax: calculateMonthlyPayment(principal, rates.rateMax, years),
-    rateMin: rates.rateMin,
-    rateMax: rates.rateMax,
+    monthlyMin: calculateMonthlyPayment(principal, rates.tasaMin, years),
+    monthlyMax: calculateMonthlyPayment(principal, rates.tasaMax, years),
+    rateMin: rates.tasaMin,
+    rateMax: rates.tasaMax,
     catMin: rates.catMin,
     catMax: rates.catMax,
   };
 }
 
-export function calculateLTV(montoFinanciar: number, propertyValue: number): number {
-  if (propertyValue <= 0) return 0;
-  return Math.min(montoFinanciar / propertyValue, 1);
-}
-
-export function calculateLeadScore(
-  ltv: number,
-  ingresoRange: IngresoRange,
-  estimatedMonthlyMax: number,
-): LeadScore {
-  const ingresoMidpoint = INGRESO_MIDPOINTS[ingresoRange];
-  if (ltv <= 0.5) return "verde";
-  if (ltv <= 0.8 && ingresoMidpoint * 3.5 >= estimatedMonthlyMax) return "verde";
-  if (ltv <= 0.9 && ingresoMidpoint * 3 >= estimatedMonthlyMax) return "amarillo";
-  return "rojo";
-}
-
-// ── In-memory store ──
+// ── Store en memoria ──
 const store: Record<string, MortgageProcess> = {};
 
 export const getMortgageProcess = (propertyId: string): MortgageProcess | undefined =>
@@ -195,16 +111,6 @@ export const saveMortgageProcess = (process: MortgageProcess): void => {
 
 export const clearMortgageProcess = (propertyId: string): void => {
   delete store[propertyId];
-};
-
-// ── Validation ──
-export const isValidOtherBank = (details: Partial<OtherBankDetails>): boolean => {
-  return Boolean(
-    details.institution?.trim() &&
-      details.contactName?.trim() &&
-      details.contactPhone?.trim() &&
-      details.branch?.trim(),
-  );
 };
 
 // ── Status info ──
@@ -220,14 +126,14 @@ export const getPreValidationStatusInfo = (status: PreValidationStatus): StatusI
   switch (status) {
     case "not_started":
       return {
-        label: "Pre-validación pendiente",
-        description: "Abre la app del banco para iniciar tu pre-validación digital.",
+        label: "Selección registrada",
+        description: "Envía tu solicitud al banco para iniciar tu crédito hipotecario.",
         tone: "info",
       };
     case "in_progress":
       return {
-        label: "Pre-validación en curso",
-        description: "El banco está revisando tu solicitud. Recibirás respuesta pronto.",
+        label: "Solicitud enviada",
+        description: "El banco está revisando tu solicitud. Un broker te contactará pronto.",
         tone: "warning",
       };
     case "pre_approved":
@@ -239,42 +145,13 @@ export const getPreValidationStatusInfo = (status: PreValidationStatus): StatusI
     case "rejected":
       return {
         label: "Solicitud rechazada",
-        description: "Comunícate con SOZU para evaluar otras opciones de financiamiento.",
+        description: "Puedes elegir otro banco o comunicarte con SOZU.",
         tone: "destructive",
       };
     case "completed":
       return {
         label: "Crédito formalizado",
         description: "Listo para coordinar firma de escrituración con el notario.",
-        tone: "success",
-      };
-  }
-};
-
-export const getOtherBankStatusInfo = (status: OtherBankStatus): StatusInfo => {
-  switch (status) {
-    case "registered":
-      return {
-        label: "Banco registrado",
-        description: "SOZU se pondrá en contacto con tu institución en los próximos días.",
-        tone: "info",
-      };
-    case "contacted":
-      return {
-        label: "En contacto con tu banco",
-        description: "Iniciamos la coordinación con el ejecutivo que registraste.",
-        tone: "warning",
-      };
-    case "in_coordination":
-      return {
-        label: "Coordinación en curso",
-        description: "Estamos alineando notario y fecha de firma con tu banco.",
-        tone: "warning",
-      };
-    case "completed":
-      return {
-        label: "Crédito coordinado",
-        description: "Todo listo para escriturar. Te notificaremos la fecha de firma.",
         tone: "success",
       };
   }

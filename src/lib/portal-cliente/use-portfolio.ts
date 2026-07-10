@@ -49,20 +49,23 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
     { id: "post_entrega", label: "Post-Entrega" },
   ];
 
+  // Etapa según avance de pago (Vendida, En demanda, o estatus no mapeado):
+  // parcialidades pendientes → preventa; saldo > 0 → pago_final; liquidado → escrituración
+  const byPaymentProgress = () =>
+    hasPendingParcialidades ? 0 : pendingBalance > 0 ? 1 : 2;
+
   // Map estatus_disponibilidad id to the currently active stage index
   let activeIdx: number;
   switch (estatusId) {
     case 4: activeIdx = 0; break;  // Apartado → preventa
-    case 5:
-      // Vendida: if parcialidades still pending → stay in preventa; else pago_final or escrituracion
-      if (hasPendingParcialidades) activeIdx = 0;
-      else if (pendingBalance > 0) activeIdx = 1;
-      else activeIdx = 2;
-      break;
     case 7: activeIdx = 2; break;  // Escrituración
     case 9: activeIdx = 3; break;  // Pagada completamente → entrega
     case 8: activeIdx = 4; break;  // Entregado → post_entrega
-    default: activeIdx = 0;
+    case 5:                        // Vendida
+    case 11:                       // En demanda (legal) — no bloquear el flujo de pago
+    default:                       // Cualquier otro estatus: derivar del saldo, no asumir preventa
+      activeIdx = byPaymentProgress();
+      break;
   }
 
   return ALL.map((s, i): StageInfo => {
@@ -516,6 +519,7 @@ function buildFromData(
         tipoFinanciamiento: cc.tipo_financiamiento
           ? (String(cc.tipo_financiamiento) as 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO')
           : null,
+        enDemanda: estatusId === 11,
       },
       financials: {
         initialPrice: Number(cc.precio_final),
