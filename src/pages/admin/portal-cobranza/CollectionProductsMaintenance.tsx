@@ -188,6 +188,11 @@ export default function CollectionProductsMaintenance() {
         </div>
       </div>
 
+      {/* Aclaración de alcance de filtros */}
+      <p className="text-[11px] text-muted-foreground/70 leading-snug -mt-1">
+        Proyecto y Dueño filtran todas las secciones. Año/Mes solo afectan la sección "Por mes" y la gráfica de tendencia; las secciones marcadas como <span className="font-medium">acumulado</span> no dependen de Año/Mes.
+      </p>
+
       {/* Tabs */}
       <div className="flex border-b border-border">
         {TABS.map(t => (
@@ -205,7 +210,7 @@ export default function CollectionProductsMaintenance() {
         <div className="space-y-10">
           {/* Totales generales */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales generales</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales generales <span className="normal-case tracking-normal font-normal text-muted-foreground/50">· acumulado</span></h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Cartera total" value={formatCurrency(carteraTotal)} sublabel="meta total" />
               <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
@@ -230,7 +235,7 @@ export default function CollectionProductsMaintenance() {
             <div className="flex items-center gap-3 mb-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cartera y acciones
+                Cartera y acciones <span className="normal-case tracking-normal font-normal text-muted-foreground/50">· acumulado</span>
               </h3>
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>

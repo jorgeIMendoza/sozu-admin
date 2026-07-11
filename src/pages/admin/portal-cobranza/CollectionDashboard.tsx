@@ -242,6 +242,11 @@ export default function CollectionDashboard() {
         </div>
       </div>
 
+      {/* Aclaración de alcance de filtros */}
+      <p className="text-[11px] text-muted-foreground/70 leading-snug -mt-1">
+        Proyecto y Dueño filtran todas las secciones. Año/Mes solo afectan la sección "Mes seleccionado" y la gráfica de tendencia; las secciones marcadas como <span className="font-medium">acumulado</span> no dependen de Año/Mes.
+      </p>
+
       {/* Tab Navigation */}
       <div className="flex border-b border-border">
         {tabs.map(tab => (
@@ -260,7 +265,7 @@ export default function CollectionDashboard() {
 
           {/* ── Sección: Totales del proyecto ── */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales del proyecto</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales del proyecto <span className="normal-case tracking-normal font-normal text-muted-foreground/50">· acumulado</span></h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Cartera total" value={formatCurrency(totalPortfolio)} sublabel="meta total de venta" />
               <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
@@ -284,7 +289,7 @@ export default function CollectionDashboard() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
               <Stamp className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Ruta a Escrituración
+              Ruta a Escrituración <span className="normal-case tracking-normal font-normal text-muted-foreground/50">· acumulado</span>
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Vendidas" variant="count" value={pipeline?.vendidas ?? 0} sublabel="en cobranza activa" />
@@ -299,7 +304,7 @@ export default function CollectionDashboard() {
             <div className="flex items-center gap-3 mb-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cartera y acciones
+                Cartera y acciones <span className="normal-case tracking-normal font-normal text-muted-foreground/50">· acumulado</span>
               </h3>
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
