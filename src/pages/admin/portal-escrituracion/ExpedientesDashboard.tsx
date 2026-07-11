@@ -11,6 +11,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { type TipoComprador, deriveTipoComprador } from '@/utils/tipo-persona';
+import {
+  OBLIGATORIO_GRUPOS,
+  ALL_OBLIGATORIO_IDS,
+  ID_TO_GROUP_KEY,
+  buildLatestDocByKey,
+  countValidatedGroups,
+  calcCuentaDocStats,
+  fetchObligatoriosDocs,
+} from '@/utils/expediente-grupos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EstatusExpediente = 'LISTO' | 'PENDIENTE' | 'EN_REVISION' | 'CON_OBSERVACIONES' | 'VENCIDO';
@@ -72,99 +81,6 @@ const TIPO_META: Record<TipoComprador, { label: string; cls: string }> = {
   COPROPIEDAD:    { label: 'Copropiedad',    cls: 'bg-blue-50 text-blue-700' },
   EXTRANJERO:     { label: 'Extranjero',     cls: 'bg-amber-50 text-amber-700' },
 };
-
-// ─── Documentos obligatorios persona física ───────────────────────────────────
-
-// Grupos de documentos obligatorios.
-// Cada grupo lista todos los id_tipo_documento equivalentes en BD:
-//   6 = Constancia de situación fiscal
-//   8 = Comprobante de domicilio
-//   2 = Frente INE  |  59 = Identificación oficial  (mismo grupo)
-//   5 = CURP
-//   1 = Acta de nacimiento
-const OBLIGATORIO_GRUPOS = [
-  { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
-  { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
-  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59] },
-  { key: 'curp',      label: 'CURP',                           ids: [5] },
-  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
-] as const;
-
-const ALL_OBLIGATORIO_IDS: number[] = OBLIGATORIO_GRUPOS.flatMap(g => [...g.ids]);
-
-// id_tipo_documento → group key
-const ID_TO_GROUP_KEY: Record<number, string> = {};
-OBLIGATORIO_GRUPOS.forEach(g => g.ids.forEach(id => { ID_TO_GROUP_KEY[id] = g.key; }));
-
-// ─── Funciones centralizadas de documentación ─────────────────────────────────
-
-// Construye el mapa "personaId__grupoKey" → doc más reciente
-// NULL fecha_creacion → sentinel '9999' (NULLS FIRST, igual que PostgreSQL DESC)
-function buildLatestDocByKey(
-  docs: Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>
-): Record<string, { id: number; estatusId: number; fecha: string }> {
-  const map: Record<string, { id: number; estatusId: number; fecha: string }> = {};
-  docs.forEach(d => {
-    if (!d.id_persona) return;
-    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
-    if (!groupKey) return;
-    const key = `${d.id_persona}__${groupKey}`;
-    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-    const ex = map[key];
-    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
-    }
-  });
-  return map;
-}
-
-// Cuenta grupos obligatorios validados (id_estatus_verificacion === 2) para una sola persona
-function countValidatedGroups(
-  personaId: number,
-  latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }>
-): number {
-  let count = 0;
-  for (const grupo of OBLIGATORIO_GRUPOS) {
-    const latest = latestDocByKey[`${personaId}__${grupo.key}`];
-    if (latest && latest.estatusId === 2) count++;
-  }
-  return count;
-}
-
-// Calcula el avance documental de una cuenta: mínimo entre todos sus compradores
-// (conservador para copropiedad — todos deben tener sus docs validados)
-function calcCuentaDocStats(
-  compradorPersonaIds: number[],
-  latestDocByKey: Record<string, { id: number; estatusId: number; fecha: string }>
-): { completos: number; total: number } {
-  const total = OBLIGATORIO_GRUPOS.length;
-  if (!compradorPersonaIds.length) return { completos: 0, total };
-  const counts = compradorPersonaIds.map(pid => countValidatedGroups(pid, latestDocByKey));
-  return { completos: Math.min(...counts), total };
-}
-
-// Fetchea documentos obligatorios en chunks de 100 para evitar truncación silenciosa
-// de Supabase/PostgREST (max_rows default = 1000 filas por respuesta REST)
-async function fetchObligatoriosDocs(
-  personaIds: number[]
-): Promise<Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>> {
-  if (!personaIds.length) return [];
-  const CHUNK = 100;
-  const results: Array<{ id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }> = [];
-  for (let i = 0; i < personaIds.length; i += CHUNK) {
-    const chunk = personaIds.slice(i, i + CHUNK);
-    const { data } = await (supabase as any)
-      .from('documentos')
-      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
-      .in('id_persona', chunk)
-      .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
-      .eq('activo', true)
-      .eq('es_draft', false)
-      .limit(5000);
-    if (data) results.push(...data);
-  }
-  return results;
-}
 
 // Normalización de nombres para display (panel de detalle)
 function normTipoDoc(s: string): string {
