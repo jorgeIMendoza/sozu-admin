@@ -1,12 +1,12 @@
-import { useState, useMemo, useEffect } from "react";
-import { Copy, CheckCircle2, Clock, Shield, FileText, ChevronDown, ChevronUp, Receipt, Eye, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect, Fragment } from "react";
+import { Copy, CheckCircle2, Clock, Shield, FileText, ChevronDown, ChevronUp, Receipt, Eye, Loader2, Layers } from "lucide-react";
 import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { getPropertyStatus } from "@/lib/portal-cliente/mock-data";
-import { usePaymentPlan, type PropertyPaymentPlan } from "@/lib/portal-cliente/payment-data";
+import { usePaymentPlan, type PropertyPaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/payment-data";
 import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptModal";
 import { buildReceiptFromInstallment, buildReceiptFromPaymentRecord } from "@/lib/portal-cliente/receipt-utils";
-import { fmtMXN as fmt } from "@/lib/utils";
+import { fmtMXNDecimals as fmt } from "@/lib/utils";
 import { toast } from "sonner";
 const sozuLogo = "/sozu-logo.png";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
@@ -15,17 +15,24 @@ interface AccountStatementViewProps {
   investment: InvestmentProperty;
 }
 
+type MovementStatus = "pagado" | "pendiente" | "parcial";
+
 interface Movement {
   date: string;
   concept: string;
   referenceSTP: string;
-  amount: number;
-  status: "pagado" | "pendiente";
+  amount: number;   // monto planeado del concepto
+  applied: number;  // suma de pagos aplicados
+  status: MovementStatus;
   sourceIndex: number;
+  rowKey: string;
   pagoId?: number;
   cepUrl?: string;
   evidenceUrl?: string;
+  applications?: PaymentApplication[];
 }
+
+const statusLabel = (s: MovementStatus) => s === "pagado" ? "Pagado" : s === "parcial" ? "Parcial" : "Pendiente";
 
 type PdfModal = { url: string; concept: string; date: string; amount: number } | null;
 
@@ -43,29 +50,60 @@ const MONTHS_SHORT_MAP: Record<string, string> = {
 
 function buildMovements(inv: InvestmentProperty, plan: PropertyPaymentPlan | undefined): Movement[] {
   if (plan) {
-    return plan.installments.map((inst, i) => ({
-      date: inst.dueDate,
-      concept: inst.number === 1 ? "Enganche" : `Parcialidad ${inst.number}`,
-      referenceSTP: inst.status === "pagado"
-        ? `NU39${Math.random().toString(36).substring(2, 12).toUpperCase()}`
-        : "Pendiente",
-      amount: inst.amount,
-      status: inst.status === "pagado" ? "pagado" : "pendiente",
-      sourceIndex: i,
-    }));
+    return plan.installments.map((inst, i) => {
+      const apps = inst.applications ?? [];
+      const applied = inst.appliedAmount;
+      const status: MovementStatus = inst.status === "pagado" ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
+      const single = apps.length === 1 ? apps[0] : undefined;
+      // Referencia real: la clave de rastreo del pago (o "Varios" si son múltiples). Nunca fabricar.
+      const referenceSTP = apps.length > 1
+        ? "Varios"
+        : single?.trackingKey ?? (status === "pagado" ? "—" : "Pendiente");
+      return {
+        date: inst.dueDate,
+        concept: inst.concepto,
+        referenceSTP,
+        amount: inst.amount,
+        applied,
+        status,
+        sourceIndex: i,
+        rowKey: `inv-${inst.id}`,
+        pagoId: single?.pagoId,
+        cepUrl: single?.cepUrl,
+        evidenceUrl: single?.evidenceUrl,
+        applications: apps,
+      };
+    });
   }
   return inv.payments.map((p, i) => ({
     date: p.date,
     concept: p.concept,
     referenceSTP: p.trackingKey ?? "—",
     amount: p.amount,
+    applied: p.status === "pagado" ? p.amount : 0,
     status: p.status,
     sourceIndex: i,
+    rowKey: `inv-${i}`,
     pagoId: p.pagoId,
     cepUrl: p.cepUrl,
     evidenceUrl: p.evidenceUrl,
   }));
 }
+
+// Monto por fila: parcial muestra aplicado de total + faltante.
+const MontoCell = ({ m, className = "" }: { m: Movement; className?: string }) => {
+  if (m.status === "parcial") {
+    return (
+      <div className="flex flex-col items-end leading-tight">
+        <span className="text-[13px] font-semibold tabular-nums text-foreground whitespace-nowrap">{fmt(m.applied)}</span>
+        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">de {fmt(m.amount)}</span>
+        <span className="text-[10px] font-medium text-warning tabular-nums whitespace-nowrap">Faltan {fmt(Math.max(0, m.amount - m.applied))}</span>
+      </div>
+    );
+  }
+  const amt = m.status === "pagado" ? (m.applied || m.amount) : m.amount;
+  return <span className={`tabular-nums whitespace-nowrap ${className}`}>{fmt(amt)}</span>;
+};
 
 function groupByMonth(movements: Movement[]): MonthGroup[] {
   const map = new Map<string, MonthGroup>();
@@ -130,38 +168,57 @@ function IconBtn({ onClick, disabled, title, children }: { onClick?: () => void;
 }
 
 // ── Mobile movement row ──
-const MovementRow = ({ mov, onReceiptClick, onEyeClick, onCepClick, generatingId }: {
+const MovementRow = ({ mov, onReceiptClick, onEyeClick, onCepClick, generatingId, multiCount = 0, expanded = false, onToggle }: {
   mov: Movement;
   onReceiptClick: (m: Movement) => void;
   onEyeClick: (m: Movement) => void;
   onCepClick: (m: Movement) => void;
   generatingId: number | null;
+  multiCount?: number;
+  expanded?: boolean;
+  onToggle?: () => void;
 }) => {
   const isGenerating = !!mov.pagoId && generatingId === mov.pagoId;
   const hasCep = !!(mov.cepUrl || mov.evidenceUrl);
+  const multi = multiCount > 1;
   return (
     <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
       <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${mov.status === "pagado" ? "bg-success/10" : "bg-warning/10"}`}>
         {mov.status === "pagado" ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Clock className="w-3.5 h-3.5 text-warning" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-foreground">{mov.concept}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-medium text-foreground">{mov.concept}</p>
+          {multi && (
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+              <Layers className="w-2.5 h-2.5" />{multiCount} pagos
+            </span>
+          )}
+        </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">{fmtShortDate(mov.date)}</p>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <div className="text-right mr-1">
-          <p className={`text-sm font-semibold tabular-nums ${mov.status === "pagado" ? "text-foreground" : "text-warning"}`}>{fmt(mov.amount)}</p>
-          <p className={`text-[10px] font-medium ${mov.status === "pagado" ? "text-success" : "text-warning"}`}>{mov.status === "pagado" ? "Pagado" : "Pendiente"}</p>
+          <MontoCell m={mov} className={`text-sm font-semibold ${mov.status === "pagado" ? "text-foreground" : "text-warning"}`} />
+          <p className={`text-[10px] font-medium ${mov.status === "pagado" ? "text-success" : "text-warning"}`}>{statusLabel(mov.status)}</p>
         </div>
-        <IconBtn onClick={() => onReceiptClick(mov)} disabled={mov.status !== "pagado"} title={mov.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-          <FileText className="w-4 h-4" />
-        </IconBtn>
-        <IconBtn onClick={() => !isGenerating && mov.pagoId && onEyeClick(mov)} disabled={!mov.pagoId || mov.status !== "pagado" || isGenerating} title={mov.status !== "pagado" ? "Pago pendiente" : mov.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
-          {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-        </IconBtn>
-        <IconBtn onClick={() => hasCep && onCepClick(mov)} disabled={mov.status !== "pagado" || !hasCep} title={mov.status !== "pagado" ? "Pago pendiente" : mov.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
-          <Receipt className="w-4 h-4" />
-        </IconBtn>
+        {multi ? (
+          <IconBtn onClick={onToggle} title="Ver pagos aplicados">
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </IconBtn>
+        ) : (
+          <>
+            <IconBtn onClick={() => onReceiptClick(mov)} disabled={mov.status !== "pagado"} title={mov.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+              <FileText className="w-4 h-4" />
+            </IconBtn>
+            <IconBtn onClick={() => !isGenerating && mov.pagoId && onEyeClick(mov)} disabled={!mov.pagoId || mov.status !== "pagado" || isGenerating} title={mov.status !== "pagado" ? "Pago pendiente" : mov.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+            </IconBtn>
+            <IconBtn onClick={() => hasCep && onCepClick(mov)} disabled={mov.status !== "pagado" || !hasCep} title={mov.status !== "pagado" ? "Pago pendiente" : mov.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
+              <Receipt className="w-4 h-4" />
+            </IconBtn>
+          </>
+        )}
       </div>
     </div>
   );
@@ -174,9 +231,14 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
   const [filterStatus, setFilterStatus] = useState<"todos" | "pagado" | "pendiente">("todos");
   const [filterYear, setFilterYear] = useState<string>("todos");
   const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [pdfModal, setPdfModal] = useState<PdfModal>(null);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
+
+  const toggleRow = (key: string) =>
+    setExpandedRows(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  const appCount = (m: Movement) => m.applications?.length ?? 0;
 
   useEffect(() => {
     if (!pdfModal) return;
@@ -197,7 +259,7 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
     let r = allMovements;
     if (filterYear !== "todos") r = r.filter(m => m.date.includes(filterYear));
     if (filterStatus === "pagado") r = r.filter(m => m.status === "pagado");
-    if (filterStatus === "pendiente") r = r.filter(m => m.status === "pendiente");
+    if (filterStatus === "pendiente") r = r.filter(m => m.status !== "pagado");
     return r;
   }, [allMovements, filterYear, filterStatus]);
 
@@ -264,6 +326,33 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
     } finally {
       setGeneratingId(null);
     }
+  };
+
+  // Sub-fila: un pago dispersado individual dentro de un concepto con varios pagos
+  const AppRow = ({ app, concept }: { app: PaymentApplication; concept: string }) => {
+    const isGenerating = generatingId === app.pagoId;
+    const hasCep = !!(app.cepUrl || app.evidenceUrl);
+    const synthetic = { concept, date: app.date, amount: app.amount, pagoId: app.pagoId } as Movement;
+    return (
+      <div className="flex items-center gap-2 py-2 pl-3 border-l-2 border-primary/20">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-medium text-foreground truncate">
+            {app.methodName ?? "Pago"} · <span className="tabular-nums">{fmt(app.amount)}</span>
+          </p>
+          <p className="text-[10px] text-muted-foreground truncate">
+            {app.dateDisplay}{app.trackingKey ? ` · Clave ${app.trackingKey}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <IconBtn onClick={() => !isGenerating && app.pagoId && handleEyeClick(synthetic)} disabled={!app.pagoId || isGenerating} title={app.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          </IconBtn>
+          <IconBtn onClick={() => { const url = app.cepUrl ?? app.evidenceUrl; if (url) openPdf(url, synthetic); }} disabled={!hasCep} title={app.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
+            <Receipt className="w-4 h-4" />
+          </IconBtn>
+        </div>
+      </div>
+    );
   };
 
   // ── Shared blocks ──────────────────────────────────────────────
@@ -398,34 +487,69 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
               </tr>
             </thead>
             <tbody>
-              {sortedForTable.map((mov, i) => (
-                <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="px-5 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDate(mov.date)}</td>
-                  <td className="px-3 py-3 text-[13px] font-medium text-foreground">{mov.concept}</td>
-                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-[13px] text-foreground">{fmt(mov.amount)}</td>
-                  <td className="px-3 py-3 text-center">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                      mov.status === "pagado" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                    }`}>
-                      {mov.status === "pagado" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                      {mov.status === "pagado" ? "Pagado" : "Pendiente"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <IconBtn onClick={() => handleViewReceipt(mov)} disabled={mov.status !== "pagado"} title={mov.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-                        <FileText className="w-4 h-4" />
-                      </IconBtn>
-                      <IconBtn onClick={() => handleEyeClick(mov)} disabled={!mov.pagoId || mov.status !== "pagado" || generatingId === mov.pagoId} title={mov.status !== "pagado" ? "Pago pendiente" : mov.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
-                        {generatingId === mov.pagoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                      </IconBtn>
-                      <IconBtn onClick={() => { const url = mov.cepUrl ?? mov.evidenceUrl; if (url) openPdf(url, mov); }} disabled={mov.status !== "pagado" || (!mov.cepUrl && !mov.evidenceUrl)} title={mov.status !== "pagado" ? "Pago pendiente" : mov.cepUrl ? "CEP electrónico" : mov.evidenceUrl ? "Comprobante de pago" : "Sin comprobante"}>
-                        <Receipt className="w-4 h-4" />
-                      </IconBtn>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {sortedForTable.map((mov) => {
+                const multi = appCount(mov) > 1;
+                const isExpanded = expandedRows.has(mov.rowKey);
+                return (
+                  <Fragment key={mov.rowKey}>
+                    <tr className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                      <td className="px-5 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDate(mov.date)}</td>
+                      <td className="px-3 py-3 text-[13px] font-medium text-foreground">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{mov.concept}</span>
+                          {multi && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                              <Layers className="w-3 h-3" />{appCount(mov)} pagos
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-[13px] text-foreground"><div className="flex justify-end"><MontoCell m={mov} className="font-semibold" /></div></td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                          mov.status === "pagado" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                        }`}>
+                          {mov.status === "pagado" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          {statusLabel(mov.status)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-center gap-0.5">
+                          {multi ? (
+                            <IconBtn onClick={() => toggleRow(mov.rowKey)} title="Ver pagos aplicados">
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </IconBtn>
+                          ) : (
+                            <>
+                              <IconBtn onClick={() => handleViewReceipt(mov)} disabled={mov.status !== "pagado"} title={mov.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+                                <FileText className="w-4 h-4" />
+                              </IconBtn>
+                              <IconBtn onClick={() => handleEyeClick(mov)} disabled={!mov.pagoId || mov.status !== "pagado" || generatingId === mov.pagoId} title={mov.status !== "pagado" ? "Pago pendiente" : mov.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+                                {generatingId === mov.pagoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                              </IconBtn>
+                              <IconBtn onClick={() => { const url = mov.cepUrl ?? mov.evidenceUrl; if (url) openPdf(url, mov); }} disabled={mov.status !== "pagado" || (!mov.cepUrl && !mov.evidenceUrl)} title={mov.status !== "pagado" ? "Pago pendiente" : mov.cepUrl ? "CEP electrónico" : mov.evidenceUrl ? "Comprobante de pago" : "Sin comprobante"}>
+                                <Receipt className="w-4 h-4" />
+                              </IconBtn>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {multi && isExpanded && (
+                      <tr className="bg-muted/10">
+                        <td colSpan={5} className="px-5 py-2">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            {appCount(mov)} pagos aplicados a {mov.concept}
+                          </p>
+                          <div className="space-y-0.5">
+                            {mov.applications!.map((app, ai) => <AppRow key={ai} app={app} concept={mov.concept} />)}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -462,16 +586,29 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
               </button>
               {isGroupExpanded(group.sortKey) && (
                 <div className="px-4">
-                  {group.movements.map((mov, i) => (
-                    <MovementRow
-                      key={i}
-                      mov={mov}
-                      onReceiptClick={handleViewReceipt}
-                      onEyeClick={handleEyeClick}
-                      onCepClick={(m) => { const url = m.cepUrl ?? m.evidenceUrl; if (url) openPdf(url, m); }}
-                      generatingId={generatingId}
-                    />
-                  ))}
+                  {group.movements.map((mov) => {
+                    const multi = appCount(mov) > 1;
+                    const rowExpanded = expandedRows.has(mov.rowKey);
+                    return (
+                      <Fragment key={mov.rowKey}>
+                        <MovementRow
+                          mov={mov}
+                          onReceiptClick={handleViewReceipt}
+                          onEyeClick={handleEyeClick}
+                          onCepClick={(m) => { const url = m.cepUrl ?? m.evidenceUrl; if (url) openPdf(url, m); }}
+                          generatingId={generatingId}
+                          multiCount={appCount(mov)}
+                          expanded={rowExpanded}
+                          onToggle={() => toggleRow(mov.rowKey)}
+                        />
+                        {multi && rowExpanded && (
+                          <div className="pb-3 pl-10 space-y-0.5">
+                            {mov.applications!.map((app, ai) => <AppRow key={ai} app={app} concept={mov.concept} />)}
+                          </div>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -493,8 +630,8 @@ const AccountStatementView = ({ investment }: AccountStatementViewProps) => {
       </div>
 
       {/* Desktop: 2-col */}
-      <div className="hidden md:grid md:grid-cols-[1fr_300px] md:gap-6 md:items-start">
-        <div className="space-y-4">
+      <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_300px] md:gap-6 md:items-start">
+        <div className="space-y-4 min-w-0">
           {filterBar}
           {desktopMovementsTable}
         </div>

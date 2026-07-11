@@ -57,6 +57,7 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
   // Map estatus_disponibilidad id to the currently active stage index
   let activeIdx: number;
   switch (estatusId) {
+    case 10: activeIdx = 0; break; // Asignado → preventa
     case 4: activeIdx = 0; break;  // Apartado → preventa
     case 7: activeIdx = 2; break;  // Escrituración
     case 9: activeIdx = 3; break;  // Pagada completamente → entrega
@@ -133,6 +134,15 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   if (!cuentas?.length) return [];
 
   const cuentaIds = cuentas.map((c) => c.id as number);
+
+  // Cuentas legacy sin id_propiedad: recuperar la propiedad desde la oferta (ofertas.id_propiedad)
+  const ofertaPropMap: Record<number, number | null> = Object.fromEntries(
+    offers.map((o) => [o.id as number, (o.id_propiedad as number | null) ?? null]),
+  );
+  for (const c of cuentas as Record<string, unknown>[]) {
+    if (c.id_propiedad == null) c.id_propiedad = ofertaPropMap[c.id_oferta as number] ?? null;
+  }
+
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
   // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
@@ -247,7 +257,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const [propiedadesRes, pagosRes, acuerdosRes, personaRes, notariosRes] = await Promise.all([
     supabase
       .from("propiedades")
-      .select("id, numero_propiedad, numero_piso, m2_interiores, id_estatus_disponibilidad, id_edificio_modelo, id_tipo_propiedad, url_imagen_portada")
+      .select("id, numero_propiedad, numero_piso, m2_interiores, precio_lista, id_estatus_disponibilidad, id_edificio_modelo, id_tipo_propiedad, url_imagen_portada")
       .in("id", propiedadIds),
     supabase
       .from("pagos")
@@ -408,7 +418,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 const CONCEPTO_NAMES: Record<number, string> = {
   1: "Apartado",
   2: "Enganche",
-  3: "Pago a contra entrega",
+  3: "Pago a escrituración",
   4: "Mensualidad",
   5: "Parcialidad",
 };
@@ -447,12 +457,15 @@ function buildFromData(
 
     const cuentaPagos = pagos.filter((p) => p.id_cuenta_cobranza === cc.id);
     const totalPaid = cuentaPagos.reduce((sum, p) => sum + Number(p.monto), 0);
-    const pendingBalance = Math.max(0, Number(cc.precio_final) - totalPaid);
+    // Cuentas legacy/incompletas con precio_final=0 → usar precio_lista de la propiedad
+    const precioFinal = Number(cc.precio_final);
+    const initialPrice = precioFinal > 0 ? precioFinal : Number(prop?.precio_lista ?? 0);
+    const pendingBalance = Math.max(0, initialPrice - totalPaid);
 
     const m2 = Number(prop?.m2_interiores ?? 0);
-    const pricePerM2Initial = m2 > 0 ? Number(cc.precio_final) / m2 : 0;
+    const pricePerM2Initial = m2 > 0 ? initialPrice / m2 : 0;
     const pricePerM2Current = Number(proyecto?.precio_m2_actual ?? 0);
-    const currentEstimatedValue = m2 > 0 && pricePerM2Current > 0 ? m2 * pricePerM2Current : Number(cc.precio_final);
+    const currentEstimatedValue = m2 > 0 && pricePerM2Current > 0 ? m2 * pricePerM2Current : initialPrice;
     const estimatedAppreciation =
       pricePerM2Initial > 0 && pricePerM2Current > 0
         ? Math.round(((pricePerM2Current - pricePerM2Initial) / pricePerM2Initial) * 1000) / 10
@@ -522,7 +535,7 @@ function buildFromData(
         enDemanda: estatusId === 11,
       },
       financials: {
-        initialPrice: Number(cc.precio_final),
+        initialPrice,
         totalPaid,
         pendingBalance,
         estimatedAppreciation,
