@@ -1,6 +1,7 @@
 import { Shield, AlertTriangle, ArrowRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { GlobalTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 import { cn } from '@/lib/utils';
 
 // Secciones compartidas de la pestaña "Riesgo y Cartera" (Inmuebles y Complementos).
@@ -20,11 +21,12 @@ export interface MorosidadItem {
   arrowClass?: string;
 }
 
-export function NivelMorosidad({ items }: { items: MorosidadItem[] }) {
+export function NivelMorosidad({ items, global }: { items: MorosidadItem[]; global?: boolean }) {
   return (
     <section>
       <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
         <Shield className="w-3.5 h-3.5" strokeWidth={1.75} />Nivel de morosidad
+        {global && <GlobalTag />}
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {items.map((it, i) => {
@@ -55,10 +57,11 @@ export function NivelMorosidad({ items }: { items: MorosidadItem[] }) {
 // ─── Antigüedad de cartera + Riesgo por proyecto (grid 2col) ───
 export interface RiskProjectRow { proyecto: string; proyecto_id: number; cobrado: number; pendiente: number; vencido: number }
 
-export function AgingYRiesgo({ aging, projectRows, onSelectProject }: {
+export function AgingYRiesgo({ aging, projectRows, onSelectProject, global }: {
   aging?: { range: string; amount: number }[] | null;
   projectRows: RiskProjectRow[];
   onSelectProject?: (proyectoId: number) => void;
+  global?: boolean;
 }) {
   const top = [...projectRows].filter(p => p.vencido > 0).sort((a, b) => b.vencido - a.vencido).slice(0, 3);
   return (
@@ -66,7 +69,7 @@ export function AgingYRiesgo({ aging, projectRows, onSelectProject }: {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {aging && aging.length > 0 && (
           <div className="sozu-kpi-card">
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">Antigüedad de cartera</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4 flex items-center gap-1.5">Antigüedad de cartera{global && <GlobalTag />}</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={aging} barSize={32}>
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="1 5" strokeLinecap="round" />
@@ -80,7 +83,7 @@ export function AgingYRiesgo({ aging, projectRows, onSelectProject }: {
         )}
 
         <div className="sozu-kpi-card">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4">Riesgo por proyecto</h3>
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-4 flex items-center gap-1.5">Riesgo por proyecto{global && <GlobalTag />}</h3>
           {top.length > 0 ? (
             <div className="space-y-1">
               {top.map((p, i) => {
@@ -132,19 +135,21 @@ export interface CriticoCard {
   parcLabel: string;        // "3 parc." / "3 venc."
 }
 
-export function ClientesCriticos({ title, badgeSuffix, count, accounts, onSelect, onSeeAll }: {
+export function ClientesCriticos({ title, badgeSuffix, count, accounts, onSelect, onSeeAll, global }: {
   title: string;            // "Clientes críticos" / "Cuentas críticas"
   badgeSuffix: string;      // "3+ parc." / "3+ cargos"
   count: number;
   accounts: CriticoCard[];
   onSelect?: (card: CriticoCard) => void;
   onSeeAll?: () => void;
+  global?: boolean;
 }) {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.75} />{title}
+          {global && <GlobalTag />}
         </h3>
         <div className="flex items-center gap-3">
           {count > 0 && (

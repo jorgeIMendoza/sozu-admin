@@ -1,6 +1,7 @@
 import { Building2, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { GlobalTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 import { cn } from '@/lib/utils';
 
 // Pestaña "Cobranza por Proyecto" — DISEÑO compartido (manda Inmuebles).
@@ -8,9 +9,10 @@ import { cn } from '@/lib/utils';
 
 export interface ProjectRow { proyecto: string; proyecto_id: number; cobrado: number; pendiente: number; vencido: number }
 
-export function CobranzaPorProyecto({ rows, onSelectProject }: {
+export function CobranzaPorProyecto({ rows, onSelectProject, global }: {
   rows: ProjectRow[];
   onSelectProject?: (proyectoId: number) => void;
+  global?: boolean;
 }) {
   const sorted = [...rows].sort((a, b) => b.cobrado - a.cobrado);
   return (
@@ -20,6 +22,7 @@ export function CobranzaPorProyecto({ rows, onSelectProject }: {
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           Cobranza por proyecto
+          {global && <GlobalTag />}
         </h3>
         <div className="sozu-kpi-card !p-0 overflow-hidden">
           <div className="overflow-x-auto">
