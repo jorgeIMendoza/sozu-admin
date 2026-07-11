@@ -198,15 +198,14 @@ export function CompradorDetalleSheet({
               </TabsList>
 
               <TabsContent value="basica" className="pt-4 space-y-4">
-                {!readOnly && (
-                  <SectionValidationBar
-                    state={getValidationState(bitacora, 'comprador_basica', { idPersona: safeSelectedId })}
-                    busy={appendMutation.isPending}
-                    disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
-                    onValidate={() => validate('comprador_basica', 'Información básica del comprador')}
-                    onReject={() => setRejectFor({ scope: 'comprador_basica', label: 'Información básica' })}
-                  />
-                )}
+                <SectionValidationBar
+                  readOnly={readOnly}
+                  state={getValidationState(bitacora, 'comprador_basica', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
+                  onValidate={() => validate('comprador_basica', 'Información básica del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_basica', label: 'Información básica' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Tipo de persona" value={full.basica.tipoPersonaLabel} />
                   <DrawerKv label="Nombre" value={full.basica.nombreLegal || full.basica.nombreComercial} />
@@ -223,15 +222,14 @@ export function CompradorDetalleSheet({
               </TabsContent>
 
               <TabsContent value="direccion" className="pt-4 space-y-4">
-                {!readOnly && (
-                  <SectionValidationBar
-                    state={getValidationState(bitacora, 'comprador_direccion', { idPersona: safeSelectedId })}
-                    busy={appendMutation.isPending}
-                    disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
-                    onValidate={() => validate('comprador_direccion', 'Dirección del comprador')}
-                    onReject={() => setRejectFor({ scope: 'comprador_direccion', label: 'Dirección' })}
-                  />
-                )}
+                <SectionValidationBar
+                  readOnly={readOnly}
+                  state={getValidationState(bitacora, 'comprador_direccion', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
+                  onValidate={() => validate('comprador_direccion', 'Dirección del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_direccion', label: 'Dirección' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Calle" value={full.direccion.calle} />
                   <DrawerKv label="Núm. exterior" value={full.direccion.numExterior} />
@@ -245,15 +243,14 @@ export function CompradorDetalleSheet({
               </TabsContent>
 
               <TabsContent value="fiscal" className="pt-4 space-y-4">
-                {!readOnly && (
-                  <SectionValidationBar
-                    state={getValidationState(bitacora, 'comprador_fiscal', { idPersona: safeSelectedId })}
-                    busy={appendMutation.isPending}
-                    disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
-                    onValidate={() => validate('comprador_fiscal', 'Información fiscal del comprador')}
-                    onReject={() => setRejectFor({ scope: 'comprador_fiscal', label: 'Información fiscal' })}
-                  />
-                )}
+                <SectionValidationBar
+                  readOnly={readOnly}
+                  state={getValidationState(bitacora, 'comprador_fiscal', { idPersona: safeSelectedId })}
+                  busy={appendMutation.isPending}
+                  disabledReason={columnaFaltante ? 'Bitácora no habilitada en BD.' : undefined}
+                  onValidate={() => validate('comprador_fiscal', 'Información fiscal del comprador')}
+                  onReject={() => setRejectFor({ scope: 'comprador_fiscal', label: 'Información fiscal' })}
+                />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <DrawerKv label="Régimen" value={full.fiscal.regimenNombre ?? full.fiscal.regimenCodigo} />
                   <DrawerKv label="Uso de CFDI" value={full.fiscal.usoCfdiNombre ?? full.fiscal.usoCfdiCodigo} />
@@ -289,7 +286,11 @@ export function CompradorDetalleSheet({
                             </a>
                             <ValidationStatusBadge status={docState.status} />
                           </div>
-                          {!readOnly && (
+                          {readOnly
+                            ? docState.lastEntry?.tipo === 'rechazo' && (
+                                <p className="text-[11px] text-destructive mt-2 truncate">Rechazo: {docState.lastEntry.mensaje}</p>
+                              )
+                            : (
                             <div className="flex items-center justify-between mt-2 gap-2">
                               {docState.lastEntry?.tipo === 'rechazo' && (
                                 <p className="text-[11px] text-destructive flex-1 min-w-0 truncate">Rechazo: {docState.lastEntry.mensaje}</p>
@@ -396,13 +397,14 @@ export function CompradorDetalleSheet({
 }
 
 function SectionValidationBar({
-  state, busy, disabledReason, onValidate, onReject,
+  state, busy, disabledReason, onValidate, onReject, readOnly = false,
 }: {
   state: ReturnType<typeof getValidationState>;
   busy: boolean;
   disabledReason?: string;
   onValidate: () => void;
   onReject: () => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="rounded-lg border bg-muted/20 px-3 py-2 flex items-center justify-between gap-2">
@@ -412,28 +414,30 @@ function SectionValidationBar({
           <p className="text-[11px] text-destructive truncate">Rechazo: {state.lastEntry.mensaje}</p>
         )}
       </div>
-      <div className="flex gap-1.5 shrink-0">
-        <Button
-          size="sm"
-          variant={state.status === 'validado' ? 'outline' : 'default'}
-          className="h-7 px-2 text-[11px] gap-1"
-          disabled={busy || !!disabledReason}
-          title={disabledReason}
-          onClick={onValidate}
-        >
-          <CheckCircle className="h-3 w-3" /> Validar
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
-          disabled={busy || !!disabledReason}
-          title={disabledReason}
-          onClick={onReject}
-        >
-          <XCircle className="h-3 w-3" /> Rechazar
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            variant={state.status === 'validado' ? 'outline' : 'default'}
+            className="h-7 px-2 text-[11px] gap-1"
+            disabled={busy || !!disabledReason}
+            title={disabledReason}
+            onClick={onValidate}
+          >
+            <CheckCircle className="h-3 w-3" /> Validar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px] gap-1 border-destructive/40 text-destructive hover:bg-destructive/5"
+            disabled={busy || !!disabledReason}
+            title={disabledReason}
+            onClick={onReject}
+          >
+            <XCircle className="h-3 w-3" /> Rechazar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -177,6 +177,26 @@ export interface ActivityEntry {
   note?: string;
 }
 
+/**
+ * Datos comerciales reales de la venta asociada a la solicitud (cuenta de
+ * cobranza). Se muestran en el detalle de la Bandeja para que el banco conozca
+ * el avance de pago del cliente. Opcional: si la solicitud no resuelve una
+ * cuenta de cobranza (o la BD no está disponible), queda `undefined` y la UI
+ * degrada sin romperse.
+ */
+export interface SaleData {
+  /** cuentas_cobranza.fecha_compra */
+  fechaVenta: string | null;
+  /** cuentas_cobranza.precio_final */
+  valorEscrituracion: number;
+  /** Σ aplicaciones_pago.monto WHERE es_multa = false (vía acuerdos de la cuenta) */
+  totalPagado: number;
+  /** valorEscrituracion − totalPagado (mínimo 0) */
+  saldoPendiente: number;
+  /** Copropietarios de la cuenta (tabla `compradores`). */
+  compradores: Array<{ idPersona: number; nombre: string; porcentaje: number }>;
+}
+
 export interface BankLead {
   id: string;
   bankId: BankId;
@@ -187,6 +207,13 @@ export interface BankLead {
   credit: CreditRequest;
   property: PropertyData;
   sozu: SozuMeta;
+  sale?: SaleData;
+  /** Cuenta de cobranza asociada a la solicitud — clave para el detalle de
+   *  cliente(s) (validación / documentos). `null` si la solicitud no resuelve. */
+  idCuentaCobranza?: number | null;
+  /** Cliente(s) de la solicitud para el visor de datos personales (solo vista).
+   *  Prefiere los copropietarios de `compradores`; si no hay, usa la persona-lead. */
+  clientes?: Array<{ idPersona: number; nombre: string }>;
   activity: ActivityEntry[];
   createdAt: string;
   lastUpdate: string;
