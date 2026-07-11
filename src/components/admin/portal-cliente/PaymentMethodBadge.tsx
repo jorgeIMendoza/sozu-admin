@@ -1,4 +1,4 @@
-import { CheckCircle2, Landmark, Wallet, Clock } from "lucide-react";
+import { Landmark, Wallet, Clock } from "lucide-react";
 import {
   useSolicitudCreditoVigente,
   puedeCambiarBanco,
@@ -48,10 +48,7 @@ const PaymentMethodBadge = ({ cuentaId, tipo, className = "" }: PaymentMethodBad
             <Wallet className="w-4 h-4 text-success" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
-              <p className="text-[11px] uppercase tracking-wider font-semibold text-success">Forma de pago final elegida</p>
-            </div>
+            <p className="text-[11px] uppercase tracking-wider font-semibold text-success">Forma de pago final elegida</p>
             <p className="text-sm font-semibold text-foreground mt-0.5">Recursos propios</p>
             <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
               Liquidarás el saldo restante con transferencia. Tu selección quedó registrada. Todo listo.
@@ -67,7 +64,7 @@ const PaymentMethodBadge = ({ cuentaId, tipo, className = "" }: PaymentMethodBad
     solicitud != null
       ? convenios?.find((c) => c.id_banco === solicitud.id_banco)?.nombre ?? "tu banco"
       : "tu banco";
-  const linea = solicitud ? ESTATUS_LINEA[solicitud.estatus] : "Selección registrada. Completa tu pre-calificación con el banco.";
+  const linea = solicitud ? ESTATUS_LINEA[solicitud.estatus] : "El banco dará seguimiento y te contactará para continuar con el proceso.";
   const cambiable = puedeCambiarBanco(solicitud);
 
   return (
@@ -77,10 +74,7 @@ const PaymentMethodBadge = ({ cuentaId, tipo, className = "" }: PaymentMethodBad
           <Landmark className="w-4 h-4 text-primary" />
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
-            <p className="text-[11px] uppercase tracking-wider font-semibold text-primary">Forma de pago final elegida</p>
-          </div>
+          <p className="text-[11px] uppercase tracking-wider font-semibold text-primary">Forma de pago final elegida</p>
           <p className="text-sm font-semibold text-foreground mt-0.5">
             Crédito hipotecario{solicitud ? ` · ${bancoNombre}` : ""}
           </p>

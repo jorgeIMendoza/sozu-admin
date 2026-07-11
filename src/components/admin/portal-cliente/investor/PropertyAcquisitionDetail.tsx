@@ -18,12 +18,15 @@ import {
   Phone,
   Mail,
   Eye,
-  Download,
   AlertTriangle,
   Landmark,
+  Layers,
+  Receipt,
 } from "lucide-react";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
-import { fmtMXN } from "@/lib/utils";
+import { usePaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/payment-data";
+import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
+import { fmtMXN, fmtMXNDecimals } from "@/lib/utils";
 import { getPropertyImage } from "@/lib/portal-cliente/property-images";
 import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
@@ -423,29 +426,20 @@ const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
 
 // ── Cronograma de pagos ──
 
-interface PaymentRow {
+type ScheduleStatus = "pagado" | "parcial" | "pendiente";
+
+interface ScheduleRow {
   id: string;
   label: string;
-  amount: number;
+  planned: number;   // monto total del concepto (acuerdos_pago.monto)
+  applied: number;   // suma de pagos aplicados (aplicaciones_pago)
+  pending: number;   // planned - applied
   date: string;
-  status: "paid" | "current";
-  receiptUrl?: string;
+  status: ScheduleStatus;
+  applications: PaymentApplication[];
 }
 
-async function downloadReceipt(url: string, filename: string) {
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(objectUrl);
-  } catch {
-    window.open(url, "_blank");
-  }
-}
+type SchedulePreview = { url: string; label: string; date: string; amount: number };
 
 function fmtScheduleDate(dateStr: string): string {
   if (!dateStr || dateStr.length < 8) return dateStr;
@@ -454,26 +448,101 @@ function fmtScheduleDate(dateStr: string): string {
   return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
 }
 
-const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => {
-  const { payments } = investment;
-  const [expanded, setExpanded] = useState(false);
-  const [preview, setPreview] = useState<PaymentRow | null>(null);
+// Sub-lista: cada pago (dispersión) aplicado a un concepto
+const AppliedPaymentRow = ({ app, onView }: { app: PaymentApplication; onView: (p: SchedulePreview) => void }) => {
+  const url = app.cepUrl ?? app.evidenceUrl;
+  return (
+    <div className="flex items-center gap-2 py-1.5 pl-3 border-l-2 border-primary/20">
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-medium text-foreground truncate">
+          {app.methodName ?? "Pago"} · <span className="tabular-nums">{fmtMXNDecimals(app.amount)}</span>
+        </p>
+        <p className="text-[10px] text-muted-foreground truncate">
+          {app.dateDisplay}{app.trackingKey ? ` · Clave ${app.trackingKey}` : ""}
+        </p>
+      </div>
+      {url && (
+        <button
+          onClick={() => onView({ url, label: app.methodName ?? "Pago", date: app.date, amount: app.amount })}
+          className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          title={app.cepUrl ? "CEP electrónico" : "Comprobante de pago"}
+        >
+          <Receipt className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+};
 
-  const allRows: PaymentRow[] = payments.map((p, i) => ({
-    id: `p-${i}`,
-    label: p.concept,
-    amount: p.amount,
-    date: p.date,
-    status: p.status === "pagado" ? "paid" : "current",
-    receiptUrl: p.receiptUrl,
-  }));
+const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => {
+  const plan = usePaymentPlan(investment.property.id);
+  const [listExpanded, setListExpanded] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<SchedulePreview | null>(null);
+
+  const toggleRow = (id: string) =>
+    setExpandedRows((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // Fuente de verdad: pagos aplicados (aplicaciones_pago) por concepto, no el monto planeado.
+  const allRows: ScheduleRow[] = plan
+    ? plan.installments.map((inst) => {
+        const applied = inst.appliedAmount;
+        const planned = inst.amount;
+        const isPaid = inst.status === "pagado";
+        const status: ScheduleStatus = isPaid ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
+        return {
+          id: inst.id,
+          label: inst.concepto,
+          planned,
+          applied,
+          pending: Math.max(0, planned - applied),
+          date: inst.dueDate,
+          status,
+          applications: inst.applications ?? [],
+        };
+      })
+    : investment.payments.map((p, i) => {
+        const paid = p.status === "pagado";
+        return {
+          id: `p-${i}`,
+          label: p.concept,
+          planned: p.amount,
+          applied: paid ? p.amount : 0,
+          pending: paid ? 0 : p.amount,
+          date: p.date,
+          status: (paid ? "pagado" : "pendiente") as ScheduleStatus,
+          applications: [] as PaymentApplication[],
+        };
+      });
 
   allRows.sort((a, b) => b.date.localeCompare(a.date));
 
-  const paidCount = allRows.filter((r) => r.status === "paid").length;
+  const paidCount = allRows.filter((r) => r.status === "pagado").length;
   const LIMIT = 5;
-  const rows = expanded ? allRows : allRows.slice(0, LIMIT);
+  const rows = listExpanded ? allRows : allRows.slice(0, LIMIT);
   const hasMore = allRows.length > LIMIT;
+
+  const statusMeta: Record<ScheduleStatus, { pill: string; icon: string; label: string; box: string }> = {
+    pagado:    { pill: "bg-success/10 text-success", icon: "bg-success/15 text-success", label: "Pagado", box: "" },
+    parcial:   { pill: "bg-warning/10 text-warning", icon: "bg-warning/20 text-warning", label: "Parcial", box: "bg-warning/[0.04] border border-warning/20" },
+    pendiente: { pill: "bg-warning/10 text-warning", icon: "bg-warning/20 text-warning", label: "Pendiente", box: "bg-warning/[0.04] border border-warning/20" },
+  };
+
+  // Celda de monto según estatus
+  const amountCell = (row: ScheduleRow, align: "right" | "left") => {
+    const alignCls = align === "right" ? "text-right items-end" : "text-left items-start";
+    if (row.status === "parcial") {
+      return (
+        <div className={`flex flex-col leading-tight ${alignCls}`}>
+          <span className="text-[13px] font-semibold tabular-nums text-foreground whitespace-nowrap">{fmtMXNDecimals(row.applied)}</span>
+          <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">de {fmtMXNDecimals(row.planned)}</span>
+          <span className="text-[10px] font-medium text-warning tabular-nums whitespace-nowrap">Faltan {fmtMXNDecimals(row.pending)}</span>
+        </div>
+      );
+    }
+    const amt = row.status === "pagado" ? (row.applied || row.planned) : row.planned;
+    return <p className={`text-[13px] font-semibold tabular-nums whitespace-nowrap ${align === "right" ? "text-right" : ""}`}>{fmtMXNDecimals(amt)}</p>;
+  };
 
   return (
     <section className="rounded-2xl bg-card border border-border p-5">
@@ -489,7 +558,7 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
         </span>
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[1fr_110px_82px_36px] text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-2 border-b border-border mb-1 gap-2">
+      <div className="hidden md:grid md:grid-cols-[1fr_170px_92px_32px] text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-2 border-b border-border mb-1 gap-2">
         <span>Concepto</span>
         <span className="text-right">Monto</span>
         <span className="text-right">Estatus</span>
@@ -498,59 +567,81 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
 
       <div className="space-y-1">
         {rows.map((row) => {
-          const isPaid = row.status === "paid";
-          const iconCls = isPaid ? "bg-success/15 text-success" : "bg-warning/20 text-warning";
-          const pillCls = isPaid ? "bg-success/10 text-success" : "bg-warning/10 text-warning";
-          const pillLabel = isPaid ? "Pagado" : "Pendiente";
-          const hasReceipt = isPaid && !!row.receiptUrl;
+          const meta = statusMeta[row.status];
+          const appCount = row.applications.length;
+          const canExpand = appCount >= 1;
+          const isOpen = expandedRows.has(row.id);
+          const countChip = appCount > 1 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary shrink-0">
+              <Layers className="w-2.5 h-2.5" />{appCount} pagos
+            </span>
+          );
 
           return (
-            <div key={row.id} className={`rounded-xl ${!isPaid ? "bg-warning/[0.04] border border-warning/20" : ""}`}>
+            <div key={row.id} className={`rounded-xl ${meta.box}`}>
               {/* Mobile */}
               <div className="md:hidden flex items-center gap-2.5 p-2.5">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${iconCls}`}>
-                  {isPaid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${meta.icon}`}>
+                  {row.status === "pagado" ? <CheckCircle2 className="w-3.5 h-3.5" /> : row.status === "parcial" ? <Layers className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium text-foreground truncate">{row.label}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12px] font-medium text-foreground truncate">{row.label}</p>
+                    {countChip}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">{fmtScheduleDate(row.date)}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <p className="text-[12px] font-semibold tabular-nums">{fmtMXN(row.amount)}</p>
-                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${pillCls}`}>{pillLabel}</span>
-                  {hasReceipt && (
+                  {amountCell(row, "right")}
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${meta.pill}`}>{meta.label}</span>
+                  {canExpand && (
                     <button
-                      onClick={() => setPreview(row)}
+                      onClick={() => toggleRow(row.id)}
                       className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Ver recibo"
+                      aria-label="Ver pagos aplicados"
                     >
-                      <Eye className="w-3 h-3" />
+                      {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     </button>
                   )}
                 </div>
               </div>
               {/* Desktop */}
-              <div className="hidden md:grid md:grid-cols-[1fr_110px_82px_36px] items-center px-2 py-2 gap-2">
+              <div className="hidden md:grid md:grid-cols-[1fr_170px_92px_32px] items-center px-2 py-2 gap-2">
                 <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-foreground truncate">{row.label}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[13px] font-medium text-foreground truncate">{row.label}</p>
+                    {countChip}
+                  </div>
                   <p className="text-[11px] text-muted-foreground">{fmtScheduleDate(row.date)}</p>
                 </div>
-                <p className="text-[13px] font-semibold tabular-nums text-right">{fmtMXN(row.amount)}</p>
+                <div className="flex justify-end">{amountCell(row, "right")}</div>
                 <div className="flex justify-end">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${pillCls}`}>{pillLabel}</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.pill}`}>{meta.label}</span>
                 </div>
                 <div className="flex justify-end">
-                  {hasReceipt && (
+                  {canExpand && (
                     <button
-                      onClick={() => setPreview(row)}
+                      onClick={() => toggleRow(row.id)}
                       className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Ver recibo"
+                      aria-label="Ver pagos aplicados"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                   )}
                 </div>
               </div>
+
+              {/* Sub-lista de pagos aplicados */}
+              {canExpand && isOpen && (
+                <div className="px-3 pb-2.5 pt-0.5 space-y-0.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 pl-3">
+                    {appCount} pago{appCount !== 1 ? "s" : ""} aplicado{appCount !== 1 ? "s" : ""} a {row.label}
+                  </p>
+                  {row.applications.map((app, ai) => (
+                    <AppliedPaymentRow key={ai} app={app} onView={setPreview} />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -558,60 +649,24 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
 
       {hasMore && (
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => setListExpanded(!listExpanded)}
           className="mt-3 w-full flex items-center justify-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors py-2 border-t border-border"
         >
-          {expanded
+          {listExpanded
             ? <><ChevronUp className="w-3.5 h-3.5" /> Mostrar menos</>
             : <><ChevronDown className="w-3.5 h-3.5" /> Ver {allRows.length - LIMIT} más</>}
         </button>
       )}
 
-      {/* PDF preview modal */}
-      {preview && preview.receiptUrl && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] bg-black/80 flex flex-col"
-          onClick={() => setPreview(null)}
-        >
-          {/* Header */}
-          <div
-            className="flex items-center justify-between gap-4 px-4 py-3 bg-card border-b border-border"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-foreground truncate">{preview.label}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {fmtScheduleDate(preview.date)} · {fmtMXN(preview.amount)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => downloadReceipt(preview.receiptUrl!, `recibo-${preview.label}-${preview.date}.pdf`)}
-                className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-primary/90 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Descargar
-              </button>
-              <button
-                onClick={() => setPreview(null)}
-                className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Cerrar"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          {/* PDF iframe */}
-          <div className="flex-1 min-h-0" onClick={(e) => e.stopPropagation()}>
-            <iframe
-              src={preview.receiptUrl}
-              className="w-full h-full"
-              title="Recibo de pago"
-            />
-          </div>
-        </div>,
-        document.body,
-      )}
+      {/* Comprobante / CEP — misma modal chica que en Pagos */}
+      <DocViewerPortal
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        url={preview?.url ?? ""}
+        title={preview?.label ?? ""}
+        subtitle={preview ? `${fmtScheduleDate(preview.date)} · ${fmtMXNDecimals(preview.amount)}` : undefined}
+        downloadFilename={preview ? `SOZU-Comprobante-${preview.label}-${preview.date}.pdf` : undefined}
+      />
     </section>
   );
 };

@@ -7,7 +7,7 @@ import { usePaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/pa
 import PaymentMethodBadge from "./PaymentMethodBadge";
 import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptModal";
 import { buildReceiptFromPaymentRecord, buildReceiptFromInstallment, buildReceiptFromMaintenance } from "@/lib/portal-cliente/receipt-utils";
-import { fmtMXN as fmt } from "@/lib/utils";
+import { fmtMXNDecimals as fmt } from "@/lib/utils";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
 
 const sozuLogo = "/sozu-logo.png";
@@ -18,11 +18,14 @@ interface PaymentHistoryViewProps {
   investment: InvestmentProperty;
 }
 
+type PaymentStatus = "pagado" | "pendiente" | "parcial";
+
 type UnifiedPayment = {
   date: string;
   concept: string;
-  amount: number;
-  status: "pagado" | "pendiente";
+  amount: number;   // monto planeado del concepto
+  applied: number;  // suma de pagos aplicados
+  status: PaymentStatus;
   type: "Inversión" | "Mantenimiento";
   sourceIndex: number;
   pagoId?: number;
@@ -30,6 +33,23 @@ type UnifiedPayment = {
   evidenceUrl?: string;
   rowKey: string;
   applications?: PaymentApplication[]; // pagos dispersados que componen el concepto
+};
+
+const statusLabel = (s: PaymentStatus) => s === "pagado" ? "Pagado" : s === "parcial" ? "Parcial" : "Pendiente";
+
+// Monto por fila: parcial muestra aplicado de total + faltante; resto, el monto tal cual.
+const MontoCell = ({ p, className = "" }: { p: UnifiedPayment; className?: string }) => {
+  if (p.status === "parcial") {
+    return (
+      <div className="flex flex-col items-end leading-tight">
+        <span className="text-[13px] font-semibold tabular-nums text-foreground whitespace-nowrap">{fmt(p.applied)}</span>
+        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">de {fmt(p.amount)}</span>
+        <span className="text-[10px] font-medium text-warning tabular-nums whitespace-nowrap">Faltan {fmt(Math.max(0, p.amount - p.applied))}</span>
+      </div>
+    );
+  }
+  const amt = p.status === "pagado" ? (p.applied || p.amount) : p.amount;
+  return <span className={`tabular-nums whitespace-nowrap ${className}`}>{fmt(amt)}</span>;
 };
 
 type PdfModal = { url: string; concept: string; date: string; amount: number } | null;
@@ -137,18 +157,18 @@ const MobilePaymentRow = ({ payment, onReceiptClick, onEyeClick, onCepClick, gen
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <div className="text-right mr-1">
-          <p className={`text-sm font-semibold tabular-nums ${payment.status === "pagado" ? "text-foreground" : "text-warning"}`}>{fmt(payment.amount)}</p>
-          <p className={`text-[10px] font-medium ${payment.status === "pagado" ? "text-success" : "text-warning"}`}>{payment.status === "pagado" ? "Pagado" : "Pendiente"}</p>
+          <MontoCell p={payment} className={`text-sm font-semibold ${payment.status === "pagado" ? "text-foreground" : "text-warning"}`} />
+          <p className={`text-[10px] font-medium ${payment.status === "pagado" ? "text-success" : "text-warning"}`}>{statusLabel(payment.status)}</p>
         </div>
-        <IconBtn onClick={() => onReceiptClick(payment)} disabled={payment.status !== "pagado"} title={payment.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-          <FileText className="w-4 h-4" />
-        </IconBtn>
         {multi ? (
           <IconBtn onClick={onToggle} title="Ver pagos aplicados">
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </IconBtn>
         ) : (
           <>
+            <IconBtn onClick={() => onReceiptClick(payment)} disabled={payment.status !== "pagado"} title={payment.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+              <FileText className="w-4 h-4" />
+            </IconBtn>
             <IconBtn onClick={() => !isGenerating && payment.pagoId && onEyeClick(payment)} disabled={!payment.pagoId || payment.status !== "pagado" || isGenerating} title={payment.status !== "pagado" ? "Pago pendiente" : payment.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
             </IconBtn>
@@ -230,11 +250,14 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
         // Con una sola aplicación, cablear los botones a ese pago; con varias,
         // la fila se expande y cada aplicación trae sus propios botones.
         const single = apps && apps.length === 1 ? apps[0] : undefined;
+        const applied = inst.appliedAmount;
+        const status: PaymentStatus = inst.status === "pagado" ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
         result.push({
           date: inst.dueDate,
           concept: inst.concepto,
           amount: inst.amount,
-          status: inst.status === "pagado" ? "pagado" : "pendiente",
+          applied,
+          status,
           type: "Inversión",
           sourceIndex: i,
           rowKey: `inv-${inst.id}`,
@@ -249,6 +272,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
         date: p.date,
         concept: p.concept,
         amount: p.amount,
+        applied: p.status === "pagado" ? p.amount : 0,
         status: p.status,
         type: "Inversión",
         sourceIndex: i,
@@ -262,6 +286,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
       date: m.month,
       concept: "Mantenimiento",
       amount: m.amount,
+      applied: m.status === "pagado" ? m.amount : 0,
       status: m.status,
       type: "Mantenimiento",
       sourceIndex: i,
@@ -280,7 +305,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
     let r = allPayments;
     if (filterYear !== "todos") r = r.filter(p => p.date.includes(filterYear));
     if (filterStatus === "pagado") r = r.filter(p => p.status === "pagado");
-    if (filterStatus === "pendiente") r = r.filter(p => p.status === "pendiente");
+    if (filterStatus === "pendiente") r = r.filter(p => p.status !== "pagado");
     if (filterType !== "todos") r = r.filter(p => p.type === filterType);
     return r;
   }, [allPayments, filterYear, filterStatus, filterType]);
@@ -293,7 +318,8 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
   const paidPayments = allPayments.filter(p => p.status === "pagado");
-  const totalPaid = paidPayments.reduce((s, p) => s + p.amount, 0);
+  // Total pagado autoritativo = suma real de pagos de la cuenta (incluye abonos parciales)
+  const totalPaid = financials.totalPaid;
   const lastPaid = [...paidPayments].sort((a, b) => b.date.localeCompare(a.date))[0];
   const progressPct = Math.min(100, Math.round((financials.totalPaid / financials.initialPrice) * 100));
 
@@ -478,17 +504,14 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
                     <tr className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
                       <td className="px-5 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDate(p.date)}</td>
                       <td className="px-3 py-3 text-[13px] font-medium text-foreground">
-                        {multi ? (
-                          <button onClick={() => toggleRow(p.rowKey)} className="inline-flex items-center gap-1.5 hover:text-primary transition-colors">
-                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            {p.concept}
-                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{p.concept}</span>
+                          {multi && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
                               <Layers className="w-3 h-3" />{appCount(p)} pagos
                             </span>
-                          </button>
-                        ) : (
-                          p.concept
-                        )}
+                          )}
+                        </div>
                       </td>
                       {hasMaintenance && (
                         <td className="px-3 py-3">
@@ -497,26 +520,26 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
                           </span>
                         </td>
                       )}
-                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-[13px] text-foreground">{fmt(p.amount)}</td>
+                      <td className="px-3 py-3 text-[13px] text-foreground"><div className="flex justify-end"><MontoCell p={p} className="font-semibold" /></div></td>
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
                           p.status === "pagado" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
                         }`}>
                           {p.status === "pagado" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                          {p.status === "pagado" ? "Pagado" : "Pendiente"}
+                          {statusLabel(p.status)}
                         </span>
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-center gap-0.5">
-                          <IconBtn onClick={() => handleViewReceipt(p)} disabled={p.status !== "pagado"} title={p.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-                            <FileText className="w-4 h-4" />
-                          </IconBtn>
                           {multi ? (
                             <IconBtn onClick={() => toggleRow(p.rowKey)} title="Ver pagos aplicados">
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </IconBtn>
                           ) : (
                             <>
+                              <IconBtn onClick={() => handleViewReceipt(p)} disabled={p.status !== "pagado"} title={p.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+                                <FileText className="w-4 h-4" />
+                              </IconBtn>
                               <IconBtn onClick={() => handleEyeClick(p)} disabled={!p.pagoId || p.status !== "pagado" || generatingId === p.pagoId} title={p.status !== "pagado" ? "Pago pendiente" : p.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
                                 {generatingId === p.pagoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                               </IconBtn>
@@ -619,8 +642,8 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
       </div>
 
       {/* Desktop: 2-col */}
-      <div className="hidden md:grid md:grid-cols-[1fr_280px] md:gap-6 md:items-start">
-        <div className="space-y-4">
+      <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 md:items-start">
+        <div className="space-y-4 min-w-0">
           {filterBar}
           {desktopPaymentsTable}
         </div>
