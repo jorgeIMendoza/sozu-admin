@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
+import { fetchAllChunked } from "@/lib/postgrest-batch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -361,13 +362,18 @@ export default function Usuarios() {
       const inmobiliariaPersonaIds = new Set<number>();
       
       if (personaIdsForLookup.length > 0) {
-        // Query for agents (tipo 19)
-        const { data: agentEntidadesData } = await supabase
-          .from('entidades_relacionadas')
-          .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
-          .eq('id_tipo_entidad', 19) // Agente Inmobiliario
-          .eq('activo', true)
-          .in('id_persona', personaIdsForLookup);
+        // Query for agents (tipo 19). Lotes: miles de ids en un solo .in()
+        // exceden el límite de URL del gateway (400) o las 1000 filas de PostgREST.
+        const agentEntidadesData = await fetchAllChunked(personaIdsForLookup, (chunk, from, to) =>
+          supabase
+            .from('entidades_relacionadas')
+            .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
+            .eq('id_tipo_entidad', 19) // Agente Inmobiliario
+            .eq('activo', true)
+            .in('id_persona', chunk)
+            .order('id')
+            .range(from, to)
+        );
         
         (agentEntidadesData || []).forEach((e: any) => {
           if (e.id_persona && e.personas) {
@@ -382,24 +388,33 @@ export default function Usuarios() {
           .map(u => u.email);
 
         if (secondaryInmobEmails.length > 0) {
-          // Get proyectos_acceso records for these users
-          const { data: proyectosAcceso } = await supabase
-            .from('proyectos_acceso')
-            .select('usuario_id, id_entidad_relacionada_dueno')
-            .in('usuario_id', secondaryInmobEmails)
-            .eq('activo', true)
-            .not('id_entidad_relacionada_dueno', 'is', null);
+          // Get proyectos_acceso records for these users. Lotes: cientos de
+          // emails en un .in() generan URLs >32KB que el gateway rechaza con 400.
+          const proyectosAcceso = await fetchAllChunked(secondaryInmobEmails, (chunk, from, to) =>
+            supabase
+              .from('proyectos_acceso')
+              .select('usuario_id, id_entidad_relacionada_dueno')
+              .in('usuario_id', chunk)
+              .eq('activo', true)
+              .not('id_entidad_relacionada_dueno', 'is', null)
+              .order('id')
+              .range(from, to)
+          );
 
           if (proyectosAcceso && proyectosAcceso.length > 0) {
             // Get unique entidad IDs
             const entidadIds = [...new Set(proyectosAcceso.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))];
 
-            // Fetch inmobiliaria names from these entidades
-            const { data: entidadesData } = await supabase
-              .from('entidades_relacionadas')
-              .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
-              .in('id', entidadIds)
-              .eq('activo', true);
+            // Fetch inmobiliaria names from these entidades (por lotes)
+            const entidadesData = await fetchAllChunked(entidadIds as number[], (chunk, from, to) =>
+              supabase
+                .from('entidades_relacionadas')
+                .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+                .in('id', chunk)
+                .eq('activo', true)
+                .order('id')
+                .range(from, to)
+            );
 
             // Create map of entidad_id -> nombre and map of email -> nombre for users without persona
             const entidadNombres = new Map<number, string>();
@@ -451,13 +466,17 @@ export default function Usuarios() {
           .map(u => u.id_persona as number);
 
         if (inmobiliariaUserPersonaIds.length > 0) {
-          // Check which of these personas are inmobiliarias themselves
-          const { data: inmobPersonas } = await supabase
-            .from('entidades_relacionadas')
-            .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
-            .eq('id_tipo_entidad', 5) // Inmobiliaria
-            .eq('activo', true)
-            .in('id_persona', inmobiliariaUserPersonaIds);
+          // Check which of these personas are inmobiliarias themselves (por lotes)
+          const inmobPersonas = await fetchAllChunked(inmobiliariaUserPersonaIds, (chunk, from, to) =>
+            supabase
+              .from('entidades_relacionadas')
+              .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+              .eq('id_tipo_entidad', 5) // Inmobiliaria
+              .eq('activo', true)
+              .in('id_persona', chunk)
+              .order('id')
+              .range(from, to)
+          );
 
           (inmobPersonas || []).forEach((e: any) => {
             if (e.id_persona && e.personas) {
