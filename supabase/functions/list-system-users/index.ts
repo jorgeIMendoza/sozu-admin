@@ -102,6 +102,8 @@ Deno.serve(async (req) => {
           id_persona,
           debe_cambiar_password,
           email_confirmado,
+          id_notario,
+          notarios (notaria),
           roles!inner (nombre, es_rol_interno),
           personas (nombre_legal, email)
         `)

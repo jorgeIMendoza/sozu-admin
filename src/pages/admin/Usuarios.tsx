@@ -38,6 +38,8 @@ type Usuario = {
   personas?: { nombre_legal: string; email?: string | null } | null;
   inmobiliaria_nombre?: string | null;
   es_usuario_principal?: boolean;
+  id_notario?: number | null;
+  notarios?: { notaria: string | null } | null;
 };
 
 type Role = {
@@ -152,6 +154,10 @@ function UsersTable({
                       ) : usuario.rol_id === ROLE_AGENTE_INMOBILIARIO && !usuario.inmobiliaria_nombre ? (
                         <p className="text-xs text-amber-600">
                           Agente independiente
+                        </p>
+                      ) : usuario.rol_id === ROLE_NOTARIO && usuario.notarios?.notaria ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Notaría: {usuario.notarios.notaria}
                         </p>
                       ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INTERNO) && (
                         <p className="text-xs text-muted-foreground">
