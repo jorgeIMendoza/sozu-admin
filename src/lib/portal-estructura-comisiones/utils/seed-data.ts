@@ -37,6 +37,22 @@ export const defaultProjects: Project[] = [
     channelMix: { 'ch-inmobiliaria': 35, 'ch-broker': 20, 'ch-embajador': 15, 'ch-referido': 10, 'ch-interno': 20 },
     monthlyForecast: [2, 3, 4, 4, 5, 4, 4, 4, 5, 4, 3, 3],
   },
+  {
+    id: 'proj-bottura', name: 'Bottura', totalUnits: 203, averagePrice: 2900000,
+    stage: 'Preventa', startDate: '2021-02-01', endDate: '2026-07-31',
+    salesStartDate: '2021-02-01', deliveryDate: '2026-07-31',
+    monthlyAbsorption: 5, totalCommissionPct: 5,
+    channelMix: { 'ch-inmobiliaria': 30, 'ch-broker': 25, 'ch-embajador': 15, 'ch-referido': 10, 'ch-interno': 20 },
+    monthlyForecast: [3, 4, 5, 5, 6, 5, 4, 5, 6, 5, 4, 4],
+  },
+  {
+    id: 'proj-margot', name: 'Margot', totalUnits: 322, averagePrice: 2600000,
+    stage: 'Preventa', startDate: '2019-06-01', endDate: '2024-06-30',
+    salesStartDate: '2019-06-01', deliveryDate: '2024-06-30',
+    monthlyAbsorption: 5, totalCommissionPct: 5,
+    channelMix: { 'ch-inmobiliaria': 30, 'ch-broker': 25, 'ch-embajador': 15, 'ch-referido': 10, 'ch-interno': 20 },
+    monthlyForecast: [3, 4, 5, 5, 6, 5, 4, 5, 6, 5, 4, 4],
+  },
 ];
 
 export const defaultRoleAssignments: RoleAssignment[] = [
