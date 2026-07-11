@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PersonForm } from '@/components/admin/PersonForm';
+import { NotariaExpedienteModal } from '@/components/admin/portal-notaria/NotariaExpedienteModal';
+import { NotariaPagosModal } from '@/components/admin/portal-notaria/NotariaPagosModal';
 import { toast } from 'sonner';
 import {
   Search, Download, RefreshCw, X, CheckCircle2, Clock,
@@ -180,6 +182,44 @@ export function AppNotariaDashboard() {
   const qc = useQueryClient();
 
   const isAdmin = (profile?.rol_id ?? 99) <= 2;
+
+  // ── Modal Expediente ────────────────────────────────────────────────────────
+  const [expedienteModal, setExpedienteModal] = useState<{
+    open: boolean;
+    cuentaId: number;
+    proyecto: string;
+    unidad: string;
+    cuentaCode: string;
+  } | null>(null);
+
+  const handleOpenExpediente = (row: NotaryRow) => {
+    setExpedienteModal({
+      open: true,
+      cuentaId: row.cuentaId,
+      proyecto: row.proyectoNombre,
+      unidad: row.unitCode,
+      cuentaCode: row.cuentaCode,
+    });
+  };
+
+  // ── Modal Pagos ─────────────────────────────────────────────────────────────
+  const [pagosModal, setPagosModal] = useState<{
+    open: boolean;
+    cuentaId: number;
+    proyecto: string;
+    unidad: string;
+    cuentaCode: string;
+  } | null>(null);
+
+  const handleOpenPagos = (row: NotaryRow) => {
+    setPagosModal({
+      open: true,
+      cuentaId: row.cuentaId,
+      proyecto: row.proyectoNombre,
+      unidad: row.unitCode,
+      cuentaCode: row.cuentaCode,
+    });
+  };
 
   // ── Dialog "Editar Comprador" ──────────────────────────────────────────────
   const [editPersonaId, setEditPersonaId]     = useState<number | null>(null);
@@ -712,14 +752,7 @@ export function AppNotariaDashboard() {
     }
   };
 
-  const handleDownloadExp = (row: NotaryRow) => {
-    navigate(`/admin/portal-escrituracion/expedientes?cuenta=${row.cuentaId}`);
-    (supabase as any).from('app_notaria_actividad').insert({
-      id_cuenta_cobranza: row.cuentaId,
-      evento: 'EXPEDIENTE_DOWNLOADED',
-      usuario_email: profile?.email,
-    }).then(() => {}).catch(() => {});
-  };
+  const handleDownloadExp = (row: NotaryRow) => handleOpenExpediente(row);
 
   const handleSendVoboDev = async (row: NotaryRow) => {
     if (!row.urlProyectoEscrit) { toast.error('Primero sube el proyecto de escritura'); return; }
@@ -1101,9 +1134,9 @@ export function AppNotariaDashboard() {
                             <Download className="h-3.5 w-3.5" />
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); navigate(`/admin/portal-escrituracion/relacion-pagos?wf_num=${row.unitCode}&wf_cuenta=${row.cuentaId}`); }}
+                            onClick={e => { e.stopPropagation(); handleOpenPagos(row); }}
                             className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-primary transition-colors"
-                            title="Ver relación de pagos"
+                            title="Descargar comprobantes de pago"
                           >
                             <Receipt className="h-3.5 w-3.5" />
                           </button>
@@ -1227,7 +1260,7 @@ export function AppNotariaDashboard() {
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { label: 'Descargar expediente',   icon: Download,     action: () => handleDownloadExp(selectedRow) },
-                        { label: 'Descargar rel. pagos',   icon: Receipt,      action: () => navigate(`/admin/portal-escrituracion/relacion-pagos?cuenta=${selectedRow.cuentaId}`) },
+                        { label: 'Descargar rel. pagos',   icon: Receipt,      action: () => handleOpenPagos(selectedRow) },
                         { label: 'Subir proy. escritura',  icon: Upload,       action: () => toast.info('Ejecuta el DDL en modulo_app_notaria.md') },
                         { label: 'Enviar VoBo dev.',        icon: Send,         action: () => handleSendVoboDev(selectedRow) },
                         { label: 'Enviar VoBo banco',       icon: Landmark,     action: () => handleSendVoboBank(selectedRow) },
@@ -1466,25 +1499,15 @@ export function AppNotariaDashboard() {
                   <div className="space-y-1.5 pt-2 border-t border-border">
                     <p className="text-xs font-semibold text-slate-700">Expediente completo</p>
                     <button
-                      onClick={() => handleDownloadExp(selectedRow)}
+                      onClick={() => handleOpenExpediente(selectedRow)}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Descargar expediente de {selectedRow.cuentaCode}
+                      Ver y descargar expediente de {selectedRow.cuentaCode}
                     </button>
                   </div>
                 </section>
               )}
-            </div>
-
-            {/* Panel CTA */}
-            <div className="p-4 border-t border-border shrink-0">
-              <Button
-                className="w-full gap-2"
-                onClick={() => navigate(`/admin/cuentas-cobranza/${selectedRow!.cuentaId}/detalle`)}
-              >
-                Ir a detalle del expediente <ChevronRight className="h-4 w-4" />
-              </Button>
             </div>
           </div>
         )}
@@ -1515,6 +1538,35 @@ export function AppNotariaDashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Modal Expediente ────────────────────────────────────────────────── */}
+      <NotariaExpedienteModal
+        open={!!expedienteModal?.open}
+        onOpenChange={(open) => {
+          if (!open) setExpedienteModal(null);
+        }}
+        idCuentaCobranza={expedienteModal?.cuentaId ?? null}
+        notarioId={notarioId}
+        proyecto={expedienteModal?.proyecto ?? ''}
+        unidad={expedienteModal?.unidad ?? ''}
+        cuentaCode={expedienteModal?.cuentaCode ?? ''}
+        usuarioEmail={profile?.email ?? null}
+      />
+
+      {/* ── Modal Pagos ─────────────────────────────────────────────────────── */}
+      <NotariaPagosModal
+        open={!!pagosModal?.open}
+        onOpenChange={(open) => {
+          if (!open) setPagosModal(null);
+        }}
+        idCuentaCobranza={pagosModal?.cuentaId ?? null}
+        notarioId={notarioId}
+        proyecto={pagosModal?.proyecto ?? ''}
+        unidad={pagosModal?.unidad ?? ''}
+        cuentaCode={pagosModal?.cuentaCode ?? ''}
+        notariaNombre={notariaNombre}
+        usuarioEmail={profile?.email ?? null}
+      />
     </div>
   );
 }
