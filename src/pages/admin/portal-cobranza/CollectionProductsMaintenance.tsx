@@ -13,7 +13,6 @@ import { CollectionLoading, CollectionError } from '@/components/admin/portal-co
 import { SelectCombobox, OwnerMultiSelect, FilterLabel as FLabel } from '@/components/admin/portal-cobranza/CollectionFilterControls';
 import { StatCard } from '@/components/admin/portal-cobranza/CollectionStatCard';
 import { NivelMorosidad, AgingYRiesgo, ClientesCriticos } from '@/components/admin/portal-cobranza/CollectionRiskSections';
-import { FilterScopeInfo, AcumuladoTag, AnioMesTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 import { TrendChart } from '@/components/admin/portal-cobranza/CollectionTrendChart';
 import { CobranzaPorProyecto } from '@/components/admin/portal-cobranza/CollectionProjectTab';
 import { Button } from '@/components/ui/button';
@@ -190,7 +189,7 @@ export default function CollectionProductsMaintenance() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center border-b border-border">
+      <div className="flex border-b border-border">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             className={cn('flex items-center justify-start gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors duration-100 flex-1 min-w-0',
@@ -199,9 +198,6 @@ export default function CollectionProductsMaintenance() {
             <span className="truncate">{t.label}</span>
           </button>
         ))}
-        <div className="flex shrink-0 items-center pl-2 pr-1">
-          <FilterScopeInfo />
-        </div>
       </div>
 
       {/* ════ TAB: RESUMEN EJECUTIVO ════ */}
@@ -209,7 +205,7 @@ export default function CollectionProductsMaintenance() {
         <div className="space-y-10">
           {/* Totales generales */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">Totales generales <AcumuladoTag /></h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales generales</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Cartera total" value={formatCurrency(carteraTotal)} sublabel="meta total" />
               <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
@@ -220,7 +216,7 @@ export default function CollectionProductsMaintenance() {
 
           {/* Por mes */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5"><span className="capitalize">{periodLabel}</span> <AnioMesTag /></h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 capitalize">{periodLabel}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence este mes" />
               <StatCard label="Cobrado en el mes" labelClass="text-success" value={formatCurrency(data.cobrado_mes)} sublabel={periodLabel} />
@@ -234,7 +230,7 @@ export default function CollectionProductsMaintenance() {
             <div className="flex items-center gap-3 mb-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cartera y acciones <AcumuladoTag />
+                Cartera y acciones
               </h3>
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
@@ -260,21 +256,19 @@ export default function CollectionProductsMaintenance() {
       {/* ════ TAB: RIESGO Y CARTERA (espejo de Inmuebles) ════ */}
       {activeTab === 'riesgo' && (
         <div className="space-y-10">
-          <NivelMorosidad acumulado items={[
+          <NivelMorosidad items={[
             { label: 'Alerta temprana', labelClass: 'text-warning', count: alerta1, valueClass: 'text-warning', title: '1 cargo vencido', desc: 'Intervención preventiva - aún se recuperan fácil', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Alerta' }), arrowClass: 'group-hover:text-warning' },
             { label: 'Riesgo activo', labelClass: 'text-danger', count: riesgo2, valueClass: 'text-danger', title: '2 cargos vencidos', desc: 'Patrón de incumplimiento - gestión urgente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }), arrowClass: 'group-hover:text-danger' },
             { label: 'Crítico', labelClass: 'text-danger', count: criticos3, valueClass: 'text-danger', title: '3+ cargos vencidos', desc: 'Requieren acción inmediata', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }), arrowClass: 'group-hover:text-danger' },
           ]} />
 
           <AgingYRiesgo
-            acumulado
             aging={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto }))}
             projectRows={riskByProject}
             onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
           />
 
           <ClientesCriticos
-            acumulado
             title="Cuentas críticas"
             badgeSuffix="3+ cargos"
             count={criticos3}
@@ -297,7 +291,6 @@ export default function CollectionProductsMaintenance() {
       {/* ════ TAB: COBRANZA POR PROYECTO ════ */}
       {activeTab === 'cobranza' && (
         <CobranzaPorProyecto
-          acumulado
           rows={byProject}
           onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
         />
@@ -311,7 +304,7 @@ export default function CollectionProductsMaintenance() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
               <Package className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Detalle por categoría <AcumuladoTag />
+              Detalle por categoría
             </h3>
             {byCategory.length === 0 ? (
               <div className="sozu-kpi-card text-[13px] text-muted-foreground text-center py-8">Sin cargos para los filtros seleccionados.</div>

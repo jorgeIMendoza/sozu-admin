@@ -1,7 +1,6 @@
 import { Building2, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
-import { AcumuladoTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 import { cn } from '@/lib/utils';
 
 // Pestaña "Cobranza por Proyecto" — DISEÑO compartido (manda Inmuebles).
@@ -9,10 +8,9 @@ import { cn } from '@/lib/utils';
 
 export interface ProjectRow { proyecto: string; proyecto_id: number; cobrado: number; pendiente: number; vencido: number }
 
-export function CobranzaPorProyecto({ rows, onSelectProject, acumulado }: {
+export function CobranzaPorProyecto({ rows, onSelectProject }: {
   rows: ProjectRow[];
   onSelectProject?: (proyectoId: number) => void;
-  acumulado?: boolean;
 }) {
   const sorted = [...rows].sort((a, b) => b.cobrado - a.cobrado);
   return (
@@ -22,7 +20,6 @@ export function CobranzaPorProyecto({ rows, onSelectProject, acumulado }: {
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           Cobranza por proyecto
-          {acumulado && <AcumuladoTag />}
         </h3>
         <div className="sozu-kpi-card !p-0 overflow-hidden">
           <div className="overflow-x-auto">

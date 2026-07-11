@@ -8,7 +8,6 @@ import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/Cobran
 import { SelectCombobox, OwnerMultiSelect } from '@/components/admin/portal-cobranza/CollectionFilterControls';
 import { StatCard } from '@/components/admin/portal-cobranza/CollectionStatCard';
 import { NivelMorosidad, AgingYRiesgo, ClientesCriticos } from '@/components/admin/portal-cobranza/CollectionRiskSections';
-import { FilterScopeInfo, AcumuladoTag, AnioMesTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 import { TrendChart } from '@/components/admin/portal-cobranza/CollectionTrendChart';
 import { CobranzaPorProyecto } from '@/components/admin/portal-cobranza/CollectionProjectTab';
 import { Button } from '@/components/ui/button';
@@ -244,7 +243,7 @@ export default function CollectionDashboard() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center border-b border-border">
+      <div className="flex border-b border-border">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={cn('flex items-center justify-start gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors duration-100 flex-1 min-w-0',
@@ -253,9 +252,6 @@ export default function CollectionDashboard() {
             <span className="truncate">{tab.label}</span>
           </button>
         ))}
-        <div className="flex shrink-0 items-center pl-2 pr-1">
-          <FilterScopeInfo />
-        </div>
       </div>
 
       {/* ════ TAB: RESUMEN EJECUTIVO ════ */}
@@ -264,7 +260,7 @@ export default function CollectionDashboard() {
 
           {/* ── Sección: Totales del proyecto ── */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">Totales del proyecto <AcumuladoTag /></h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">Totales del proyecto</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Cartera total" value={formatCurrency(totalPortfolio)} sublabel="meta total de venta" />
               <StatCard label="Cobrado total" labelClass="text-success" value={formatCurrency(data.cobrado_total)} sublabel="ya pagado" />
@@ -275,7 +271,7 @@ export default function CollectionDashboard() {
 
           {/* ── Sección: Mes seleccionado ── */}
           <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5"><span className="capitalize">{periodLabel}</span> <AnioMesTag /></h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 capitalize">{periodLabel}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Programado" value={formatCurrency(data.programado_mes)} sublabel="vence este mes" />
               <StatCard label="Cobrado en el mes" labelClass="text-success" value={formatCurrency(data.cobrado_mes)} sublabel={periodLabel} />
@@ -288,7 +284,7 @@ export default function CollectionDashboard() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
               <Stamp className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Ruta a Escrituración <AcumuladoTag />
+              Ruta a Escrituración
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Vendidas" variant="count" value={pipeline?.vendidas ?? 0} sublabel="en cobranza activa" />
@@ -303,7 +299,7 @@ export default function CollectionDashboard() {
             <div className="flex items-center gap-3 mb-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cartera y acciones <AcumuladoTag />
+                Cartera y acciones
               </h3>
               <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', riskBadgeCls)}>{riskLevel}</span>
             </div>
@@ -330,21 +326,19 @@ export default function CollectionDashboard() {
       {/* ════ TAB: RIESGO Y CARTERA ════ */}
       {activeTab === 'riesgo' && (
         <div className="space-y-10">
-          <NivelMorosidad acumulado items={[
+          <NivelMorosidad items={[
             { label: 'Alerta temprana', labelClass: 'text-warning', count: arrears1, valueClass: 'text-warning', title: '1 parcialidad vencida', desc: 'Intervención preventiva - aún se pueden recuperar fácilmente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Alerta' }), arrowClass: 'group-hover:text-warning' },
             { label: 'Riesgo activo', labelClass: 'text-danger', count: arrears2, valueClass: 'text-danger', title: '2 parcialidades vencidas', desc: 'Patrón de incumplimiento detectado - gestión urgente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }), arrowClass: 'group-hover:text-danger' },
             { label: 'Crítico / prelegal', labelClass: 'text-danger', count: arrears3Plus, valueClass: 'text-danger', title: '3+ parcialidades vencidas', desc: 'Candidatos a proceso legal - requieren acción inmediata', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }), arrowClass: 'group-hover:text-danger' },
           ]} />
 
           <AgingYRiesgo
-            acumulado
             aging={(data.aging ?? []).map(a => ({ range: `${a.rango} días`, amount: a.monto }))}
             projectRows={riskByProject}
             onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
           />
 
           <ClientesCriticos
-            acumulado
             title="Clientes críticos"
             badgeSuffix="3+ parc."
             count={criticalClients.length}
@@ -367,7 +361,6 @@ export default function CollectionDashboard() {
       {/* ════ TAB: COBRANZA POR PROYECTO ════ */}
       {activeTab === 'cobranza' && (
         <CobranzaPorProyecto
-          acumulado
           rows={filteredByProject}
           onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
         />
@@ -381,7 +374,7 @@ export default function CollectionDashboard() {
           <section>
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Tareas pendientes <AcumuladoTag />
+              Tareas pendientes
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
