@@ -85,7 +85,11 @@ const Dashboard = () => {
         .ilike('personas.nombre_legal', '%Real Estate Ventures%');
 
       if (error) throw error;
-      return data?.map(er => er.id_proyecto) || [];
+      // Hay registros tipo 5 sin proyecto asignado; un null dentro de .in('id', ...)
+      // provoca 22P02 (invalid input syntax for type integer: "null") en PostgREST.
+      return (data || [])
+        .map(er => er.id_proyecto)
+        .filter((id): id is number => id != null);
     }
   });
 

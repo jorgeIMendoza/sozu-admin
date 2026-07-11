@@ -13,12 +13,17 @@ import {
   FileText, Stamp, CalendarDays, Loader2, Receipt, Upload,
   ChevronRight, MoreHorizontal, Send, MessageSquare,
   Landmark, ExternalLink, ArrowRight, LogIn, AlertTriangle,
+  Check, ChevronsUpDown,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -181,7 +186,9 @@ export function AppNotariaDashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const isAdmin = (profile?.rol_id ?? 99) <= 2;
+  // Puede impersonar notarios: admins (rol 1-2) o cualquier rol con el flag
+  // roles.puede_impersonar activo (no se amarra a rol_id fijo).
+  const isAdmin = (profile?.rol_id ?? 99) <= 2 || profile?.puede_impersonar === true;
 
   // ── Modal Expediente ────────────────────────────────────────────────────────
   const [expedienteModal, setExpedienteModal] = useState<{
@@ -268,6 +275,7 @@ export function AppNotariaDashboard() {
   const [selectedRow,     setSelectedRow]     = useState<NotaryRow | null>(null);
   const [detailTab,       setDetailTab]       = useState<'resumen' | 'pipeline' | 'vobos' | 'documentos'>('resumen');
   const [adminNotarioId,  setAdminNotarioId]  = useState<number | null>(null);
+  const [notarioPickerOpen, setNotarioPickerOpen] = useState(false);
   const [showRegInfo,     setShowRegInfo]     = useState(false);
 
   // ── Projects ───────────────────────────────────────────────────────────────
@@ -293,19 +301,41 @@ export function AppNotariaDashboard() {
     },
   });
 
-  // ── Notarios list (admin only, for selector) ───────────────────────────────
+  // ── Usuarios con rol Notario (para el selector de impersonación) ──────────
+  // Solo usuarios activos con rol Notario y notaría vinculada (usuarios.id_notario).
+  const ROLE_NOTARIO = 6;
   const { data: notariosList = [] } = useQuery({
-    queryKey: ['app-notaria-notarios-list'],
+    queryKey: ['app-notaria-notario-users'],
     enabled: isAdmin,
     staleTime: 10 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: users } = await (supabase as any)
+        .from('usuarios')
+        .select('email, nombre, id_notario')
+        .eq('rol_id', ROLE_NOTARIO)
+        .eq('activo', true)
+        .not('id_notario', 'is', null);
+
+      const userList = (users ?? []) as { email: string; nombre: string | null; id_notario: number }[];
+      if (!userList.length) return [];
+
+      const notarioIds = [...new Set(userList.map(u => u.id_notario))];
+      const { data: nots } = await supabase
         .from('notarios')
         .select('id, nombre, notaria')
-        .eq('activo', true)
-        .eq('trabaja_con_sozu', true)
-        .order('notaria');
-      return (data ?? []) as { id: number; nombre: string; notaria: string }[];
+        .in('id', notarioIds);
+
+      const notMap: Record<number, { nombre: string; notaria: string }> = {};
+      for (const n of nots ?? []) notMap[n.id] = { nombre: n.nombre ?? '', notaria: n.notaria ?? '' };
+
+      return userList
+        .map(u => ({
+          id: u.id_notario,
+          nombre: u.nombre || u.email,
+          email: u.email,
+          notaria: notMap[u.id_notario]?.notaria || notMap[u.id_notario]?.nombre || `Notaría #${u.id_notario}`,
+        }))
+        .sort((a, b) => a.notaria.localeCompare(b.notaria));
     },
   });
 
@@ -829,26 +859,53 @@ export function AppNotariaDashboard() {
         </div>
       </div>
 
-      {/* ── Admin notaría selector ── */}
+      {/* ── Selector de notario (admins / roles con impersonación) ── */}
       {isAdmin && (
         <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex-wrap">
-          <span className="text-xs font-medium text-amber-800 shrink-0">Vista administrador — Selecciona una notaría:</span>
-          <Select
-            value={adminNotarioId ? String(adminNotarioId) : 'all'}
-            onValueChange={v => setAdminNotarioId(v === 'all' ? null : Number(v))}
-          >
-            <SelectTrigger className="h-8 text-xs w-[280px] bg-white border-amber-300">
-              <SelectValue placeholder="Seleccionar notaría..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">— Seleccionar notaría —</SelectItem>
-              {notariosList.map(n => (
-                <SelectItem key={n.id} value={String(n.id)}>
-                  {n.notaria} · {n.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="text-xs font-medium text-amber-800 shrink-0">Vista administrador — Selecciona un notario:</span>
+          <Popover open={notarioPickerOpen} onOpenChange={setNotarioPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className="h-8 text-xs w-[320px] justify-between bg-white border-amber-300 font-normal"
+              >
+                {adminNotarioId
+                  ? (() => {
+                      const sel = notariosList.find(n => n.id === adminNotarioId);
+                      return sel ? `${sel.notaria} · ${sel.nombre}` : '— Seleccionar notario —';
+                    })()
+                  : '— Seleccionar notario —'}
+                <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[320px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar notario, notaría o correo..." />
+                <CommandList>
+                  <CommandEmpty>No hay usuarios con rol Notario vinculados a una notaría.</CommandEmpty>
+                  <CommandGroup>
+                    {notariosList.map(n => (
+                      <CommandItem
+                        key={n.email}
+                        value={`${n.notaria} ${n.nombre} ${n.email}`}
+                        onSelect={() => {
+                          setAdminNotarioId(prev => prev === n.id ? null : n.id);
+                          setNotarioPickerOpen(false);
+                        }}
+                      >
+                        <Check className={cn('mr-2 h-4 w-4', adminNotarioId === n.id ? 'opacity-100' : 'opacity-0')} />
+                        <span className="flex flex-col">
+                          <span>{n.notaria} · {n.nombre}</span>
+                          <span className="text-xs text-muted-foreground">{n.email}</span>
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
@@ -902,8 +959,8 @@ export function AppNotariaDashboard() {
       {isAdmin && !adminNotarioId && (
         <div className="flex flex-col items-center justify-center py-16 gap-3 border border-dashed border-border rounded-xl">
           <Stamp className="h-10 w-10 text-muted-foreground/30" />
-          <p className="text-sm font-medium text-muted-foreground">Selecciona una notaría para ver sus unidades</p>
-          <p className="text-xs text-muted-foreground">Usa el selector de arriba para elegir una notaría activa.</p>
+          <p className="text-sm font-medium text-muted-foreground">Selecciona un notario para ver sus unidades</p>
+          <p className="text-xs text-muted-foreground">Usa el buscador de arriba para elegir un usuario con rol Notario.</p>
         </div>
       )}
 
@@ -1051,7 +1108,7 @@ export function AppNotariaDashboard() {
             ) : isAdmin && !adminNotarioId ? (
               <div className="flex flex-col items-center justify-center py-16 gap-2">
                 <Stamp className="h-8 w-8 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">Selecciona una notaría en el selector de arriba para ver sus unidades</p>
+                <p className="text-sm text-muted-foreground">Selecciona un notario en el selector de arriba para ver sus unidades</p>
               </div>
             ) : filteredRows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-2">
