@@ -61,6 +61,7 @@ const ROLE_ADMINISTRADOR_PROYECTO = 2;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
+const ROLE_NOTARIO = 6;
 
 // Roles that Administrador de Proyecto can manage
 const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
@@ -305,13 +306,15 @@ export default function Usuarios() {
     rol_id: "",
     id_persona: "",
     id_inmobiliaria: "", // ID de la inmobiliaria para agentes
+    id_notario: "", // ID del notario (tabla notarios) para rol Notario
   });
   const [isFieldsLocked, setIsFieldsLocked] = useState(false);
   const [selectedPersonaTipo, setSelectedPersonaTipo] = useState<string | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  
+
   const [isInmobiliariaLocked, setIsInmobiliariaLocked] = useState(false);
   const [isInmobiliariaPopoverOpen, setIsInmobiliariaPopoverOpen] = useState(false);
+  const [isNotarioPopoverOpen, setIsNotarioPopoverOpen] = useState(false);
   
   // Persona lookup state
   const [matchedPersona, setMatchedPersona] = useState<{
@@ -575,6 +578,21 @@ export default function Usuarios() {
     },
   });
 
+  // Fetch notarios (notarías) for the selector shown when creating a Notario user
+  const { data: notariosOptions = [] } = useQuery({
+    queryKey: ['notarios_options'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notarios')
+        .select('id, nombre, notaria, email')
+        .eq('activo', true)
+        .order('notaria', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string | null; notaria: string | null; email: string | null }[];
+    },
+  });
+
   // Fetch inmobiliarias for the selector
   // Fetch inmobiliarias with info about whether they have a principal user
   const { data: inmobiliariasOptions = [] } = useQuery({
@@ -811,6 +829,35 @@ export default function Usuarios() {
       return;
     }
 
+    // Validate notaría is required for Notario role; email must be the notaría's email
+    if (rolId === ROLE_NOTARIO) {
+      if (!newUserForm.id_notario) {
+        toast({
+          title: "Error",
+          description: "Por favor selecciona la notaría a la que pertenece el usuario.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const selectedNotario = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
+      if (!selectedNotario?.email) {
+        toast({
+          title: "Error",
+          description: "La notaría seleccionada no tiene correo registrado. Captúralo primero en el módulo de Notarías.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (newUserForm.email.toLowerCase().trim() !== selectedNotario.email.toLowerCase().trim()) {
+        toast({
+          title: "Error",
+          description: `El correo del usuario Notario debe ser el de la notaría: ${selectedNotario.email}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     // Validate Inmobiliaria role requires a principal user
     if (rolId === ROLE_INMOBILIARIA && newUserForm.id_inmobiliaria) {
       const selectedInmob = inmobiliariasOptions.find(
@@ -876,6 +923,7 @@ export default function Usuarios() {
           rol_id: rolId,
           id_persona: newUserForm.id_persona ? parseInt(newUserForm.id_persona) : null,
           id_inmobiliaria: newUserForm.id_inmobiliaria ? parseInt(newUserForm.id_inmobiliaria) : null,
+          id_notario: rolId === ROLE_NOTARIO && newUserForm.id_notario ? parseInt(newUserForm.id_notario) : null,
         },
       });
 
@@ -915,7 +963,7 @@ export default function Usuarios() {
   };
 
   const resetNewUserForm = () => {
-    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "" });
+    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "", id_notario: "" });
     setIsFieldsLocked(false);
     setSelectedPersonaTipo(null);
     setIsInmobiliariaLocked(false);
@@ -1026,6 +1074,7 @@ export default function Usuarios() {
         nombre: selectedPersona.nombre_legal || "",
         rol_id: autoRolId,
         id_inmobiliaria: autoInmobiliariaId,
+        id_notario: "",
       });
       setSelectedPersonaTipo(selectedPersona.tipo_entidad);
       setIsFieldsLocked(true);
@@ -1036,29 +1085,45 @@ export default function Usuarios() {
   // Handle role change to auto-set inmobiliaria for Agente Interno
   const handleRoleChange = (roleId: string) => {
     const newRolId = parseInt(roleId);
-    
+
     if (newRolId === ROLE_AGENTE_INTERNO) {
       // Preselect Sozu and LOCK the field
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString()
+        id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString(),
+        id_notario: ""
       }));
       setIsInmobiliariaLocked(true); // Lock for Agente Interno
     } else if (newRolId === ROLE_AGENTE_INMOBILIARIO || newRolId === ROLE_INMOBILIARIA) {
       // Allow selecting inmobiliaria (required for agents and Inmobiliaria secondary users)
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: prev.id_inmobiliaria
+        id_inmobiliaria: prev.id_inmobiliaria,
+        id_notario: ""
       }));
       setIsInmobiliariaLocked(false);
+    } else if (newRolId === ROLE_NOTARIO) {
+      // Notario: email/nombre se toman de la notaría seleccionada
+      setNewUserForm(prev => ({
+        ...prev,
+        rol_id: roleId,
+        id_inmobiliaria: "",
+        id_notario: "",
+        email: "",
+        nombre: ""
+      }));
+      setIsInmobiliariaLocked(false);
+      setMatchedPersona(null);
+      setIsPersonaLinked(false);
     } else {
       // Clear inmobiliaria for other roles
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: ""
+        id_inmobiliaria: "",
+        id_notario: ""
       }));
       setIsInmobiliariaLocked(false);
     }
@@ -1552,7 +1617,87 @@ export default function Usuarios() {
                 )}
               </div>
             )}
-            
+
+            {/* 2b. Notaría - SOLO visible para rol Notario (6) */}
+            {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && (
+              <div className="space-y-2">
+                <Label htmlFor="notaria" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Notaría *
+                </Label>
+                <Popover open={isNotarioPopoverOpen} onOpenChange={setIsNotarioPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !newUserForm.id_notario && "text-muted-foreground"
+                      )}
+                    >
+                      {newUserForm.id_notario
+                        ? (() => {
+                            const n = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
+                            return n ? `${n.notaria || 'Notaría'} · ${n.nombre || ''}` : "Seleccionar notaría...";
+                          })()
+                        : "Seleccionar notaría..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar notaría por nombre, notario o correo..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró la notaría.</CommandEmpty>
+                        <CommandGroup>
+                          {notariosOptions.map((notario) => (
+                            <CommandItem
+                              key={notario.id}
+                              value={`${notario.notaria || ''} ${notario.nombre || ''} ${notario.email || ''}`}
+                              onSelect={() => {
+                                setNewUserForm(prev => ({
+                                  ...prev,
+                                  id_notario: notario.id.toString(),
+                                  email: notario.email || "",
+                                  nombre: prev.nombre || notario.nombre || "",
+                                }));
+                                setMatchedPersona(null);
+                                setIsPersonaLinked(false);
+                                setIsNotarioPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newUserForm.id_notario === notario.id.toString()
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <span className="flex flex-col">
+                                <span>{notario.notaria || 'Sin nombre de notaría'}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {notario.nombre}{notario.email ? ` · ${notario.email}` : ' · Sin correo registrado'}
+                                </span>
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {newUserForm.id_notario && !notariosOptions.find(n => n.id.toString() === newUserForm.id_notario)?.email && (
+                  <p className="text-xs text-destructive">
+                    Esta notaría no tiene correo registrado. Captúralo primero en el módulo de Notarías.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  El correo del usuario será el correo registrado de la notaría.
+                </p>
+              </div>
+            )}
+
             {/* 3. Nombre */}
             <div className="space-y-2">
               <Label htmlFor="nombre">Nombre *</Label>
@@ -1566,10 +1711,14 @@ export default function Usuarios() {
             
             {/* 4. Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email" className="flex items-center gap-2">
+                Email *
+                {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Input
                 id="email"
                 type="email"
+                disabled={parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO}
                 value={newUserForm.email}
                 onChange={(e) => {
                   setNewUserForm(prev => ({ ...prev, email: e.target.value }));
