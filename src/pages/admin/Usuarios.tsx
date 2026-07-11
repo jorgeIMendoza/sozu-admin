@@ -397,7 +397,9 @@ export default function Usuarios() {
               .in('usuario_id', chunk)
               .eq('activo', true)
               .not('id_entidad_relacionada_dueno', 'is', null)
-              .order('id')
+              // proyectos_acceso no tiene columna id (PK compuesta)
+              .order('usuario_id')
+              .order('proyecto_id')
               .range(from, to)
           );
 
