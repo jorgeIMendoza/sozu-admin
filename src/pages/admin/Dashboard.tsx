@@ -8,6 +8,7 @@ import { Building2, Home, DollarSign, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { fetchAllChunked } from "@/lib/postgrest-batch";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface ProjectData {
@@ -19,30 +20,6 @@ interface ProjectData {
   monto_total: number;
   metraje_promedio: number;
   tiene_disponibles: boolean;
-}
-
-// PostgREST corta respuestas en 1000 filas (db-max-rows) y los .in() con miles de
-// ids revientan el límite de la URL; se consulta por lotes de ids y se pagina
-// cada lote hasta recibir página vacía (una página parcial no garantiza fin).
-const IN_CHUNK_SIZE = 300;
-const PAGE_SIZE = 1000;
-
-async function fetchAllChunked<T>(
-  ids: number[],
-  buildQuery: (chunk: number[], from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
-    const chunk = ids.slice(i, i + IN_CHUNK_SIZE);
-    for (let page = 0; ; page++) {
-      const { data, error } = await buildQuery(chunk, page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-      if (error) throw error;
-      const batch = data ?? [];
-      rows.push(...batch);
-      if (batch.length === 0) break;
-    }
-  }
-  return rows;
 }
 
 const Dashboard = () => {
