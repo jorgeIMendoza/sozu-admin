@@ -55,6 +55,7 @@ type InmobiliariaOption = {
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_INMOBILIARIA = 4;
+const ROLE_NOTARIO = 6;
 
 export function EditUserDialog({
   open,
@@ -78,8 +79,24 @@ export function EditUserDialog({
 
   const isAgentRole = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_AGENTE_INTERNO;
   const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
+  const isNotarioRole = userRoleId === ROLE_NOTARIO;
   const needsInmobiliaria = isAgentRole || isInmobiliariaRole;
   const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_INMOBILIARIA;
+
+  // Notaría vinculada (usuarios.id_notario) — su email se sincroniza al cambiar el del usuario
+  const { data: notarioVinculado } = useQuery({
+    queryKey: ['user_notario', userEmail],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('usuarios')
+        .select('id_notario, notarios (id, notaria)')
+        .eq('email', userEmail)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.notarios ? { id: data.notarios.id as number, notaria: (data.notarios.notaria as string | null) ?? null } : null;
+    },
+    enabled: open && isNotarioRole,
+  });
 
   // Fetch email confirmation status
   const { data: emailConfirmado, isLoading: isLoadingConfirmation } = useQuery({
@@ -354,6 +371,21 @@ export function EditUserDialog({
             .from('usuarios')
             .update({ email_confirmado: false })
             .eq('email', newEmail);
+        }
+
+        // Notario: el email de la notaría vinculada debe seguir al del usuario
+        if (isNotarioRole && notarioVinculado?.id) {
+          const { error: notarioError } = await (supabase as any)
+            .from('notarios')
+            .update({
+              email: newEmail,
+              fecha_actualizacion: new Date().toISOString(),
+            })
+            .eq('id', notarioVinculado.id);
+
+          if (notarioError) {
+            throw new Error(`El email del usuario se actualizó, pero falló la sincronización con la notaría: ${notarioError.message}`);
+          }
         }
       }
 
@@ -657,6 +689,11 @@ export function EditUserDialog({
             {email !== userEmail && showEmailConfirmation && (
               <p className="text-xs text-orange-600 dark:text-orange-400">
                 ⚠ Al cambiar el email, se requerirá nueva confirmación por correo.
+              </p>
+            )}
+            {email !== userEmail && isNotarioRole && notarioVinculado && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                ⚠ También se actualizará el correo de la notaría{notarioVinculado.notaria ? ` "${notarioVinculado.notaria}"` : ''}.
               </p>
             )}
           </div>
