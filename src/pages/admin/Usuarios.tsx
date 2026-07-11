@@ -351,6 +351,10 @@ export default function Usuarios() {
   // Fetch users with their inmobiliaria info from entidades_relacionadas
   const { data: usuarios = [], isLoading: isLoadingUsuarios, isError: isUsuariosError, error: usuariosError } = useQuery({
     queryKey: ['usuarios'],
+    // Carga pesada (edge function + lookups por lotes): sin esto, cada regreso
+    // de foco a la ventana relanzaba todo y la vista parecía ciclada.
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const response = await supabase.functions.invoke('list-system-users');
 
