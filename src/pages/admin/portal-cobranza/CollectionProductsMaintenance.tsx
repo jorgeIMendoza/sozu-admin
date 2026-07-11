@@ -186,15 +186,11 @@ export default function CollectionProductsMaintenance() {
               <X className="w-3.5 h-3.5" /><span className="hidden xl:inline">Limpiar</span>
             </Button>
           </div>
-          <div className="flex flex-col gap-1 shrink-0 justify-end">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 invisible select-none">Info</span>
-            <FilterScopeInfo className="h-9" />
-          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex items-center border-b border-border">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             className={cn('flex items-center justify-start gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors duration-100 flex-1 min-w-0',
@@ -203,6 +199,9 @@ export default function CollectionProductsMaintenance() {
             <span className="truncate">{t.label}</span>
           </button>
         ))}
+        <div className="flex shrink-0 items-center pl-2 pr-1">
+          <FilterScopeInfo />
+        </div>
       </div>
 
       {/* ════ TAB: RESUMEN EJECUTIVO ════ */}
