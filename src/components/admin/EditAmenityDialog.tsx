@@ -13,6 +13,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Edit, Wand2, Upload, X, Trash2 } from "lucide-react";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUploadField } from "./ImageUploadField";
 
@@ -200,9 +201,11 @@ export function EditAmenityDialog({
   };
 
   const defaultTrigger = (
-    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-      <Edit className="h-4 w-4" />
-    </Button>
+    <IconTooltip label="Editar amenidad">
+      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Editar amenidad">
+        <Edit className="h-3.5 w-3.5" />
+      </Button>
+    </IconTooltip>
   );
 
   return (

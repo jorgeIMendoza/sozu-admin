@@ -1132,3 +1132,8 @@ All colors MUST be HSL.
   transform: translateY(-1px);
 }
 
+/* Icono del selector de fecha siempre alineado a la derecha del input */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  margin-left: auto;
+}
+

@@ -11,6 +11,7 @@ import { Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { TramosEscalonadosSection, Tramo } from "./TramosEscalonadosSection";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -160,16 +161,40 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated, canUpdate = t
         tramos_mensualidad: tramosMode ? tramos : null,
       };
 
-      const { error } = await supabase
+      // Versionar en lugar de mutar en sitio: desactivamos la fila actual (queda de
+      // historial y CONGELA a las ofertas/clientes que ya la seleccionaron, que la
+      // referencian por ofertas.id_esquema_pago_seleccionado) e insertamos una fila nueva
+      // activa con los valores nuevos. Así editar un plan NO afecta a quien ya lo aceptó;
+      // solo aplica a ofertas nuevas. (Requiere el RPC get_oferta_financials que incluye
+      // el esquema seleccionado aunque esté inactivo — ver Ejecuciones_manuales.)
+      const { error: deactivateError } = await supabase
         .from("esquemas_pago")
-        .update(updateData)
+        .update({ activo: false })
         .eq("id", scheme.id);
 
-      if (error) throw error;
+      if (deactivateError) throw deactivateError;
+
+      const { error: insertError } = await supabase
+        .from("esquemas_pago")
+        .insert({
+          ...updateData,
+          id_proyecto: scheme.id_proyecto ?? null,
+          id_producto: scheme.id_producto ?? null,
+          es_manual: false,
+          activo: true,
+          orden: scheme.orden ?? null,
+          numero_pagos_enganche: scheme.numero_pagos_enganche ?? 1,
+        });
+
+      if (insertError) {
+        // Rollback: si falla el insert, reactivamos la fila vieja para no perder el plan.
+        await supabase.from("esquemas_pago").update({ activo: true }).eq("id", scheme.id);
+        throw insertError;
+      }
 
       toast({
         title: "Esquema de pago actualizado",
-        description: "El esquema de pago se ha actualizado exitosamente.",
+        description: "Se creó una nueva versión del esquema. Las ofertas ya aceptadas conservan la anterior.",
       });
 
       setOpen(false);
@@ -186,16 +211,19 @@ export const EditPaymentSchemeDialog = ({ scheme, onSchemeUpdated, canUpdate = t
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-          disabled={!canUpdate}
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+      <IconTooltip label="Editar esquema">
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Editar esquema de pago"
+            disabled={!canUpdate}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      </IconTooltip>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Editar Esquema de Pago</DialogTitle>

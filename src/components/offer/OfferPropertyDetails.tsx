@@ -182,7 +182,7 @@ const OfferPropertyDetails = ({
               </div>
             </div>
 
-            {/* CLABE STP para apartado */}
+            {/* CLABE STP */}
             {clabeStp && (
               <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-muted/50 border border-border/40">
                 <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -190,7 +190,7 @@ const OfferPropertyDetails = ({
                 </div>
                 <div className="min-w-0">
                   <p className="text-[9px] uppercase tracking-[0.15em] font-bold text-muted-foreground/60">
-                    CLABE STP para apartado
+                    CLABE STP
                   </p>
                   <p className="text-sm font-bold tabular-nums truncate">{clabeStp}</p>
                 </div>

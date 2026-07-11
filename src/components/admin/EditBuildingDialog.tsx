@@ -11,6 +11,7 @@ import { Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -230,11 +231,13 @@ export const EditBuildingDialog = ({ building, projectId, onBuildingUpdated }: E
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-          <Edit className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+      <IconTooltip label="Editar edificio">
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Editar edificio">
+            <Edit className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      </IconTooltip>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Editar Edificio</DialogTitle>
