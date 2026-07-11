@@ -34,8 +34,9 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert,
+  Plus, Save, Power, ShieldAlert, Users,
 } from "lucide-react";
+import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 
 // ------------------------------ Helpers UI ------------------------------
 function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive") {
@@ -106,6 +107,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const actualizar = useActualizarSolicitud();
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
+  const [verCliente, setVerCliente] = useState(false);
 
   if (!lead || !banco) return null;
   const idNum = Number(lead.id);
@@ -182,11 +184,61 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Monto a financiar" value={fmtMXN(lead.credit.montoFinanciar)} />
             <Stat label="Plazo" value={`${lead.credit.plazoAnios} años`} />
-            <Stat label="Mensualidad est." value={`${fmtMXN(lead.credit.estMonthlyMin)} – ${fmtMXN(lead.credit.estMonthlyMax)}`} />
-            <Stat label="Tasa est." value={`${lead.credit.estRateMin}% – ${lead.credit.estRateMax}%`} />
-            <Stat label="Avance obra" value={`${lead.property.avanceObra}% · ${lead.property.etapa}`} />
-            <Stat label="Fecha escrituración" value={fmtDate(lead.property.fechaEscrituracion)} />
+            <Stat
+              label="Fecha de venta"
+              value={lead.sale?.fechaVenta ? fmtDate(lead.sale.fechaVenta) : "—"}
+            />
+            <Stat
+              label="Valor de escrituración"
+              value={lead.sale ? fmtMXN(lead.sale.valorEscrituracion) : "—"}
+            />
+            <Stat
+              label="Total pagado"
+              value={lead.sale ? fmtMXN(lead.sale.totalPagado) : "—"}
+            />
+            <Stat
+              label="Saldo pendiente"
+              value={lead.sale ? fmtMXN(lead.sale.saldoPendiente) : "—"}
+            />
           </div>
+
+          {lead.sale && lead.sale.compradores.length > 1 && (
+            <div className="rounded-md border border-border p-3 space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Compradores
+              </p>
+              {lead.sale.compradores.map((c, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-foreground">{c.nombre}</span>
+                  {c.porcentaje > 0 && (
+                    <span className="tabular-nums text-muted-foreground">{c.porcentaje}%</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {lead.idCuentaCobranza != null && (lead.clientes?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                {(lead.clientes?.length ?? 0) > 1 ? "Datos de los clientes" : "Datos del cliente"}
+              </p>
+              <Button
+                data-cta="bancos.solicitud.ver-datos-cliente"
+                variant="outline"
+                className="w-full justify-start h-9"
+                onClick={() => setVerCliente(true)}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                {(lead.clientes?.length ?? 0) > 1
+                  ? `Ver datos de los ${lead.clientes!.length} clientes`
+                  : "Ver datos personales, dirección, fiscal y documentos"}
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Información validada, solo lectura.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Asignación</p>
@@ -248,6 +300,16 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           </div>
         </div>
       </SheetContent>
+
+      {lead.idCuentaCobranza != null && (lead.clientes?.length ?? 0) > 0 && (
+        <CompradorDetalleSheet
+          open={verCliente}
+          onOpenChange={setVerCliente}
+          idCuentaCobranza={lead.idCuentaCobranza}
+          compradores={lead.clientes!}
+          readOnly
+        />
+      )}
     </Sheet>
   );
 }

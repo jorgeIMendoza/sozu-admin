@@ -135,7 +135,75 @@ async function fetchSolicitudesBanco(idBanco: number): Promise<BankLead[]> {
     : { data: [] };
   const projById = new Map<number, any>((projs || []).map((p: any) => [p.id, p]));
 
-  // 6. Mapear a BankLead.
+  // 6. Datos comerciales de la venta (por cuenta): compradores + total pagado.
+  //    Total pagado = Σ aplicaciones_pago.monto (es_multa=false) de los acuerdos
+  //    de la cuenta; saldo = precio_final − total pagado (ver CLAUDE.md).
+
+  // 6a. Compradores (copropietarios) por cuenta.
+  const { data: compradores } = ccIds.length
+    ? ((await (supabase as any)
+        .from("compradores")
+        .select("id_cuenta_cobranza, id_persona, porcentaje_copropiedad")
+        .in("id_cuenta_cobranza", ccIds)
+        .eq("activo", true)) as any)
+    : { data: [] };
+  const compradorPersonaIds = Array.from(
+    new Set((compradores || []).map((c: any) => c.id_persona).filter(Boolean)),
+  );
+  const { data: personasComp } = compradorPersonaIds.length
+    ? ((await (supabase as any)
+        .from("personas")
+        .select("id, nombre_legal, nombre_comercial")
+        .in("id", compradorPersonaIds)) as any)
+    : { data: [] };
+  const compradorNombreById = new Map<number, string>(
+    (personasComp || []).map((p: any) => [p.id, p.nombre_comercial || p.nombre_legal || ""]),
+  );
+  const compradoresByCc = new Map<
+    number,
+    Array<{ idPersona: number; nombre: string; porcentaje: number }>
+  >();
+  (compradores || []).forEach((c: any) => {
+    const nombre = compradorNombreById.get(c.id_persona) || "";
+    if (!nombre || c.id_persona == null) return;
+    const arr = compradoresByCc.get(c.id_cuenta_cobranza) ?? [];
+    arr.push({
+      idPersona: Number(c.id_persona),
+      nombre,
+      porcentaje: Number(c.porcentaje_copropiedad) || 0,
+    });
+    compradoresByCc.set(c.id_cuenta_cobranza, arr);
+  });
+
+  // 6b. Total pagado por cuenta: acuerdos de la cuenta → aplicaciones_pago.
+  const { data: acuerdos } = ccIds.length
+    ? ((await (supabase as any)
+        .from("acuerdos_pago")
+        .select("id, id_cuenta_cobranza, id_concepto")
+        .in("id_cuenta_cobranza", ccIds)
+        .in("id_concepto", [1, 2, 3, 5])
+        .eq("activo", true)) as any)
+    : { data: [] };
+  const ccByAcuerdo = new Map<number, number>(
+    (acuerdos || []).map((a: any) => [a.id, a.id_cuenta_cobranza]),
+  );
+  const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
+  const { data: aplicaciones } = acuerdoIds.length
+    ? ((await (supabase as any)
+        .from("aplicaciones_pago")
+        .select("id_acuerdo_pago, monto, es_multa")
+        .in("id_acuerdo_pago", acuerdoIds)
+        .eq("activo", true)) as any)
+    : { data: [] };
+  const totalPagadoByCc = new Map<number, number>();
+  (aplicaciones || []).forEach((ap: any) => {
+    if (ap.es_multa) return;
+    const ccId = ccByAcuerdo.get(ap.id_acuerdo_pago);
+    if (ccId == null) return;
+    totalPagadoByCc.set(ccId, (totalPagadoByCc.get(ccId) ?? 0) + (Number(ap.monto) || 0));
+  });
+
+  // 7. Mapear a BankLead.
   return sols.map((s: any): BankLead => {
     const cc = ccById.get(s.id_cuenta_cobranza);
     const of = cc?.id_oferta ? ofertaById.get(cc.id_oferta) : null;
@@ -197,6 +265,31 @@ async function fetchSolicitudesBanco(idBanco: number): Promise<BankLead[]> {
         declaredAt: fechaEnvio,
         agenteComercial: { name: "—", phone: "" },
       },
+      sale: cc
+        ? (() => {
+            const totalPagado = totalPagadoByCc.get(cc.id) ?? 0;
+            return {
+              fechaVenta: cc.fecha_compra ?? null,
+              valorEscrituracion: precio,
+              totalPagado: +totalPagado.toFixed(2),
+              saldoPendiente: +Math.max(0, precio - totalPagado).toFixed(2),
+              compradores: compradoresByCc.get(cc.id) ?? [],
+            };
+          })()
+        : undefined,
+      idCuentaCobranza: cc?.id ?? s.id_cuenta_cobranza ?? null,
+      // Cliente(s) para el visor de datos personales: copropietarios reales;
+      // si aún no hay filas en `compradores`, cae a la persona-lead de la oferta.
+      clientes: (() => {
+        const comps = cc ? compradoresByCc.get(cc.id) ?? [] : [];
+        if (comps.length > 0) {
+          return comps.map((c) => ({ idPersona: c.idPersona, nombre: c.nombre }));
+        }
+        if (persona?.id != null) {
+          return [{ idPersona: Number(persona.id), nombre: persona.nombre_legal || "Cliente" }];
+        }
+        return [];
+      })(),
       activity: [
         {
           id: `${s.id}-creado`,
