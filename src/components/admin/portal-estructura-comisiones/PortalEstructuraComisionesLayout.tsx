@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2, Store, Target, GitBranch, Users, DollarSign, UserCheck,
   SlidersHorizontal, Calculator, TrendingUp, BarChart3, Wallet,
-  ArrowLeftRight, Shield,
+  ArrowLeftRight, Shield, IdCard,
   ArrowLeft, LogOut, ChevronDown, ChevronRight, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -41,6 +41,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Organigrama", path: `${BASE}/org-chart`, icon: GitBranch },
       { label: "Roles y Sueldos", path: `${BASE}/structure`, icon: Users },
+      { label: "Directorio de Personal", path: `${BASE}/directorio`, icon: IdCard },
       { label: "Comisiones", path: `${BASE}/commissions`, icon: DollarSign },
       { label: "Incentivos Dinámicos", path: `${BASE}/broker-incentives`, icon: UserCheck },
     ],
