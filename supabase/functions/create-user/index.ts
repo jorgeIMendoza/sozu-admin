@@ -12,6 +12,7 @@ interface CreateUserRequest {
   rol_id: number;
   id_persona?: number;
   id_inmobiliaria?: number; // ID of the inmobiliaria to link the agent to
+  id_notario?: number; // ID del notario (tabla notarios) para usuarios con rol Notario
   telefono?: string;
   clave_pais_telefono?: string;
   auto_create?: boolean; // Flag for automatic creation (bypasses Super Admin check for Inmobiliaria role)
@@ -99,12 +100,13 @@ serve(async (req) => {
 
     // Parse request body early to check for auto_create flag
     const body: CreateUserRequest = await req.json();
-    const { email: rawEmail, nombre, rol_id, id_persona, id_inmobiliaria, telefono, clave_pais_telefono, auto_create } = body;
+    const { email: rawEmail, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, telefono, clave_pais_telefono, auto_create } = body;
     const email = rawEmail?.toLowerCase()?.trim();
 
     // Check if this is an automatic creation for Inmobiliaria or Agente Inmobiliario role (bypasses Super Admin check)
     const ROLE_INMOBILIARIA = 4;
     const ROLE_AGENTE_INMOBILIARIO = 3;
+    const ROLE_NOTARIO = 6;
     const isAutoCreate = auto_create === true && (rol_id === ROLE_INMOBILIARIA || rol_id === ROLE_AGENTE_INMOBILIARIO);
 
     const rolNombre = (adminCheck.roles as any)?.nombre;
@@ -119,7 +121,7 @@ serve(async (req) => {
       console.log(`Auto-create mode enabled for ${rol_id === ROLE_INMOBILIARIA ? 'Inmobiliaria' : 'Agente Inmobiliario'} user creation`);
     }
 
-    console.log("Creating user:", { email, nombre, rol_id, id_persona, id_inmobiliaria, auto_create });
+    console.log("Creating user:", { email, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, auto_create });
 
     // Validate required fields
     if (!email || !nombre || !rol_id) {
@@ -127,6 +129,27 @@ serve(async (req) => {
         JSON.stringify({ error: "Email, nombre, and rol_id are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Notario users must be linked to a notaría (usuarios.id_notario)
+    if (rol_id === ROLE_NOTARIO) {
+      if (!id_notario) {
+        return new Response(
+          JSON.stringify({ error: "Los usuarios con rol Notario requieren una notaría (id_notario)" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const { data: notarioRecord } = await supabaseAdmin
+        .from("notarios")
+        .select("id, activo")
+        .eq("id", id_notario)
+        .maybeSingle();
+      if (!notarioRecord || notarioRecord.activo === false) {
+        return new Response(
+          JSON.stringify({ error: `No existe una notaría activa con id ${id_notario}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Check if user already exists in usuarios table
@@ -252,6 +275,7 @@ serve(async (req) => {
         nombre,
         rol_id,
         id_persona: finalIdPersona,
+        id_notario: rol_id === ROLE_NOTARIO ? id_notario : null,
         auth_user_id: authUserId,
         debe_cambiar_password: true,
         activo: true,
