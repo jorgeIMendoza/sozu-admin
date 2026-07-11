@@ -184,6 +184,7 @@ const PECProjects = lazyRetry(() => import("./components/admin/portal-estructura
 const PECChannels = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ChannelsTab"));
 const PECOrgChart = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/OrgChartTab"));
 const PECStructure = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/StructureTab"));
+const PECDirectorio = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DirectorioPuestosTab"));
 const PECCommissions = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/CommissionsTab"));
 const PECPaymentPolicies = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/PaymentPoliciesTab"));
 const PECUnitCommission = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/UnitCommissionTab"));
@@ -867,6 +868,7 @@ const App = () => (
                   <Route path="portal-estructura-comisiones/channels" element={<PECChannels />} />
                   <Route path="portal-estructura-comisiones/org-chart" element={<PECOrgChart />} />
                   <Route path="portal-estructura-comisiones/structure" element={<PECStructure />} />
+                  <Route path="portal-estructura-comisiones/directorio" element={<PECDirectorio />} />
                   <Route path="portal-estructura-comisiones/commissions" element={<PECCommissions />} />
                   <Route path="portal-estructura-comisiones/payment-policies" element={<PECPaymentPolicies />} />
                   <Route path="portal-estructura-comisiones/unit-commission" element={<PECUnitCommission />} />

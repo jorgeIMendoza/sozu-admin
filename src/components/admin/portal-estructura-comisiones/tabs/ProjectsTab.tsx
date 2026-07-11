@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
-import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight, TrendingUp, Database } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { useForecastTotalGlobal } from '@/hooks/usePortalAltaDireccion/useForecastIngresos';
+import { useProyectosTallwoodReales, type RealProjectData } from '@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales';
 import type { Project } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import PricingStrategy from '../shared/PricingStrategy';
 export default function ProjectsTab() {
   const { projects, addProject, updateProject, deleteProject } = useSimulator();
   const { total: forecastTotal, isLoading: forecastLoading } = useForecastTotalGlobal();
+  const { getRealData } = useProyectosTallwoodReales();
   const [editing, setEditing] = useState<Project | null>(null);
   const [open, setOpen] = useState(false);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -58,7 +60,12 @@ export default function ProjectsTab() {
             <DialogHeader>
               <DialogTitle>{editing ? 'Editar Proyecto' : 'Nuevo Proyecto'}</DialogTitle>
             </DialogHeader>
-            <ProjectForm project={editing || emptyProject} onSave={handleSave} onCancel={() => setOpen(false)} />
+            <ProjectForm
+              project={editing || emptyProject}
+              real={editing ? getRealData(editing.name) : undefined}
+              onSave={handleSave}
+              onCancel={() => setOpen(false)}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -82,7 +89,18 @@ export default function ProjectsTab() {
       </div>
 
       <div className="space-y-4">
-        {projects.map(project => (
+        {projects.map(project => {
+          const real = getRealData(project.name);
+          const display = {
+            totalUnits: real ? real.totalUnits : project.totalUnits,
+            averagePrice: real ? real.averagePrice : project.averagePrice,
+            monthlyAbsorption: real ? real.monthlyAbsorption : project.monthlyAbsorption,
+            totalCommissionPct: real ? real.totalCommissionPct : project.totalCommissionPct,
+            salesStartDate: real ? real.salesStartDate : project.salesStartDate,
+            deliveryDate: real ? real.deliveryDate : project.deliveryDate,
+            stage: real?.stage ?? project.stage,
+          };
+          return (
           <div key={project.id} className="metric-card">
             {/* Project Header */}
             <div className="flex items-start justify-between">
@@ -92,9 +110,12 @@ export default function ProjectsTab() {
                   : <ChevronRight className="h-4 w-4 mt-1 text-muted-foreground" />
                 }
                 <div>
-                  <h3 className="font-bold text-lg">{project.name}</h3>
+                  <h3 className="font-bold text-lg flex items-center gap-1.5">
+                    {project.name}
+                    {real && <Database className="h-3.5 w-3.5 text-muted-foreground" aria-label="Datos reales de BD" />}
+                  </h3>
                   <span className="inline-block mt-1 rounded-full bg-accent/15 px-2.5 py-0.5 text-[11px] font-semibold text-accent">
-                    {project.stage}
+                    {display.stage}
                   </span>
                 </div>
               </button>
@@ -112,27 +133,31 @@ export default function ProjectsTab() {
             <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-3 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Unidades</p>
-                <p className="font-semibold">{formatNumber(project.totalUnits)}</p>
+                <p className="font-semibold">{formatNumber(display.totalUnits)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Precio Prom.</p>
-                <p className="font-semibold">{formatCurrency(project.averagePrice)}</p>
+                <p className="font-semibold">{formatCurrency(display.averagePrice)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Absorción/mes</p>
-                <p className="font-semibold">{project.monthlyAbsorption} uds</p>
+                <p className="font-semibold">
+                  {display.monthlyAbsorption != null ? `${display.monthlyAbsorption.toFixed(1)} uds` : '—'}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Comisión Total</p>
-                <p className="font-semibold">{project.totalCommissionPct}%</p>
+                <p className="font-semibold">
+                  {display.totalCommissionPct != null ? `${display.totalCommissionPct.toFixed(1)}%` : '—'}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Inicio de Venta</p>
-                <p className="font-semibold text-xs">{project.salesStartDate || '—'}</p>
+                <p className="font-semibold text-xs">{display.salesStartDate || '—'}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Entrega</p>
-                <p className="font-semibold text-xs">{project.deliveryDate || '—'}</p>
+                <p className="font-semibold text-xs">{display.deliveryDate || '—'}</p>
               </div>
             </div>
 
@@ -168,17 +193,20 @@ export default function ProjectsTab() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function ProjectForm({ project, onSave, onCancel }: { project: Project; onSave: (p: Project) => void; onCancel: () => void }) {
+function ProjectForm({ project, real, onSave, onCancel }: { project: Project; real?: RealProjectData; onSave: (p: Project) => void; onCancel: () => void }) {
   const [form, setForm] = useState(project);
   const set = (key: keyof Project, value: any) => setForm(prev => ({ ...prev, [key]: value }));
 
-  const dateError = form.deliveryDate && form.salesStartDate && form.deliveryDate <= form.salesStartDate;
+  const dateError = !real && form.deliveryDate && form.salesStartDate && form.deliveryDate <= form.salesStartDate;
+
+  const realHint = real ? <p className="mt-1 text-[11px] text-muted-foreground">Dato real de BD — no editable</p> : null;
 
   return (
     <div className="space-y-4">
@@ -189,36 +217,59 @@ function ProjectForm({ project, onSave, onCancel }: { project: Project; onSave: 
         </div>
         <div>
           <Label>Total Unidades</Label>
-          <Input type="number" value={form.totalUnits} onChange={e => set('totalUnits', +e.target.value)} />
+          {real
+            ? <Input disabled value={formatNumber(real.totalUnits)} />
+            : <Input type="number" value={form.totalUnits} onChange={e => set('totalUnits', +e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Precio Promedio ($)</Label>
-          <Input type="number" value={form.averagePrice} onChange={e => set('averagePrice', +e.target.value)} />
+          {real
+            ? <Input disabled value={formatCurrency(real.averagePrice)} />
+            : <Input type="number" value={form.averagePrice} onChange={e => set('averagePrice', +e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Etapa</Label>
-          <Input value={form.stage} onChange={e => set('stage', e.target.value)} />
+          {real
+            ? <Input disabled value={real.stage ?? '—'} />
+            : <Input value={form.stage} onChange={e => set('stage', e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Absorción Mensual</Label>
-          <Input type="number" value={form.monthlyAbsorption} onChange={e => set('monthlyAbsorption', +e.target.value)} />
+          {real
+            ? <Input disabled value={real.monthlyAbsorption != null ? `${real.monthlyAbsorption.toFixed(1)} uds` : '—'} />
+            : <Input type="number" value={form.monthlyAbsorption} onChange={e => set('monthlyAbsorption', +e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Comisión Total (%)</Label>
-          <Input type="number" step="0.1" value={form.totalCommissionPct} onChange={e => set('totalCommissionPct', +e.target.value)} />
+          {real
+            ? <Input disabled value={real.totalCommissionPct != null ? `${real.totalCommissionPct.toFixed(1)}%` : '—'} />
+            : <Input type="number" step="0.1" value={form.totalCommissionPct} onChange={e => set('totalCommissionPct', +e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Inicio de Venta</Label>
-          <Input type="date" value={form.salesStartDate} onChange={e => set('salesStartDate', e.target.value)} />
+          {real
+            ? <Input disabled value={real.salesStartDate ?? '—'} />
+            : <Input type="date" value={form.salesStartDate} onChange={e => set('salesStartDate', e.target.value)} />}
+          {realHint}
         </div>
         <div>
           <Label>Entrega / Escrituración</Label>
-          <Input
-            type="date"
-            value={form.deliveryDate}
-            onChange={e => set('deliveryDate', e.target.value)}
-            className={dateError ? 'border-destructive' : ''}
-          />
+          {real
+            ? <Input disabled value={real.deliveryDate ?? '—'} />
+            : (
+              <Input
+                type="date"
+                value={form.deliveryDate}
+                onChange={e => set('deliveryDate', e.target.value)}
+                className={dateError ? 'border-destructive' : ''}
+              />
+            )}
+          {realHint}
           {dateError && (
             <p className="text-xs text-destructive mt-1 flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />

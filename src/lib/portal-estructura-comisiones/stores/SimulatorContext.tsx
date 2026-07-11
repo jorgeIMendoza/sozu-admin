@@ -55,6 +55,9 @@ function loadState(): AppState {
           salesStartDate: p.salesStartDate || p.startDate || '',
           deliveryDate: p.deliveryDate || p.endDate || '',
         }));
+        const existingIds = new Set(parsed.projects.map((p: any) => p.id));
+        const missingDefaults = defaultProjects.filter((p) => !existingIds.has(p.id));
+        parsed.projects = [...parsed.projects, ...missingDefaults];
       }
       return parsed;
     }
