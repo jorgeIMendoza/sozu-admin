@@ -25,7 +25,8 @@ export interface PaymentApplication {
 export interface Installment {
   id: string;
   number: number;
-  amount: number;
+  amount: number; // monto planeado del concepto (acuerdos_pago.monto)
+  appliedAmount: number; // suma de aplicaciones_pago (pagos dispersados) a este concepto
   dueDate: string; // ISO YYYY-MM-DD
   dueDateDisplay: string;
   daysUntilDue: number; // negative = overdue
@@ -100,6 +101,8 @@ function buildPlan(
   const installments: Installment[] = rows.map((row) => {
     const idConcepto = row.id_concepto;
     let concepto = row.conceptos_pago?.nombre ?? "Pago";
+    // Concepto 3 = "Pago a contra entrega" en BD → se muestra como "Pago a escrituración"
+    if (idConcepto === 3) concepto = "Pago a escrituración";
     if (idConcepto === 5) { parcialidadCount++; concepto = `Parcialidad ${parcialidadCount}`; }
 
     const isoDate = String(row.fecha_pago).slice(0, 10);
@@ -107,11 +110,13 @@ function buildPlan(
     const daysUntilDue = Math.ceil((due - today) / 86_400_000);
     const isPaid = row.pago_completado;
     const applications = (appsByAcuerdo[row.id] ?? []).sort((a, b) => a.date.localeCompare(b.date));
+    const appliedAmount = applications.reduce((s, a) => s + a.amount, 0);
 
     return {
       id: String(row.id),
       number: Number(row.orden),
       amount: Number(row.monto),
+      appliedAmount,
       dueDate: isoDate,
       dueDateDisplay: new Date(isoDate + "T12:00:00").toLocaleDateString("es-MX", {
         day: "numeric", month: "short", year: "numeric",
@@ -151,7 +156,8 @@ export function usePaymentSchedule(cuentaId: string | undefined) {
       const [{ data: rows, error: e1 }, { data: cuenta, error: e2 }] = await Promise.all([
         supabase
           .from("acuerdos_pago")
-          .select("id, id_cuenta_cobranza, id_concepto, fecha_pago, monto, pago_completado, orden, conceptos_pago(nombre)")
+          // FK hint explícito: acuerdos_pago tiene 2 FKs a conceptos_pago → embed ambiguo sin él
+          .select("id, id_cuenta_cobranza, id_concepto, fecha_pago, monto, pago_completado, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
           .eq("id_cuenta_cobranza", Number(cuentaId))
           .order("orden"),
         supabase
