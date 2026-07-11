@@ -23,6 +23,9 @@ export interface ComisionExterna {
   beneficiario_nombre: string;
   beneficiario_rfc: string;
   beneficiario_tipo: TipoBeneficiarioComExt;
+  /** Email del comisionista — clave natural (junto con id_cuenta_cobranza) para
+   *  marcar la fila como pagada en `comisionistas`. */
+  email_usuario: string;
   id_cuenta_cobranza: number;
   venta_referencia: string;
   porcentaje_comision: number;
@@ -443,6 +446,7 @@ export function useComisionesExternas() {
           beneficiario_nombre: persona?.nombre || usuario?.nombre || c.email_usuario || "Sin beneficiario",
           beneficiario_rfc: persona?.rfc || "",
           beneficiario_tipo: tipoBeneficiario,
+          email_usuario: c.email_usuario ?? "",
           id_cuenta_cobranza: cuentaIdRef,
           venta_referencia: ventaRef,
           porcentaje_comision: pct,

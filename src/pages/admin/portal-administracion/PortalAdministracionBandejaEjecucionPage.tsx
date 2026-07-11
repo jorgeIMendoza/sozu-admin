@@ -1379,6 +1379,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
             monto: p.monto_comision,
             clabe_destino: "—",
             dias_desde_autorizacion: p.dias_desde_devengo,
+            id_cuenta_cobranza: p.id_cuenta_cobranza,
+            email_usuario: p.email_usuario,
           };
           const propiedadLabel =
             [p.proyecto_nombre, p.modelo_nombre, p.numero_departamento ? `Depto ${p.numero_departamento}` : null]
