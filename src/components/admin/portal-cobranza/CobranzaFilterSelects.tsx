@@ -118,7 +118,7 @@ export const EstatusMultiSelect = ({ value, onChange, className }: { value: stri
 // (sin excluir ningún estatus); este filtro decide qué mostrar. Se comparan
 // contra `estatus_propiedad` (nombre) que devuelve el RPC.
 export const ESTATUS_PROPIEDAD: string[] = [
-  'Inventario', 'Disponible', 'Apartada', 'Vendido', 'Escrituración', 'Entregada', 'Pagada completamente',
+  'Inventario', 'Disponible', 'Apartada', 'Vendido', 'Escrituración', 'Entregada', 'Pagada completamente', 'Cancelada',
 ];
 // `options` viene de la DB (distinct de los datos cargados). Si no se pasa,
 // cae al catálogo fijo como respaldo.
