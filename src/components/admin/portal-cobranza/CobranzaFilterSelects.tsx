@@ -18,8 +18,8 @@ export function nivelDeParcialidades(n: number): NivelPrioridad {
   return 'Crítico';
 }
 
-export type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento';
-export const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento'];
+export type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional';
+export const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento', 'Adicional'];
 
 // Multi-select con typeahead + navegación por teclado.
 // - Muestra ~6 opciones visibles; el resto queda tras scroll.
@@ -76,7 +76,7 @@ export function NivelMultiSelect({
       >
         <Command>
           <CommandInput placeholder="Buscar..." />
-          <CommandList>
+          <CommandList className="!max-h-[228px]">
             <CommandEmpty>Sin coincidencias.</CommandEmpty>
             <CommandGroup>
               {niveles.map((nivel) => (
@@ -131,3 +131,7 @@ export const TipoMultiSelect = ({ value, onChange, className, options }: { value
 // Modelos: 100% dinámico desde la DB (no hay catálogo fijo).
 export const ModeloMultiSelect = ({ value, onChange, className, options }: { value: string[]; onChange: (v: string[]) => void; className?: string; options: string[] }) =>
   <NivelMultiSelect value={value} onChange={onChange} niveles={options} className={className} noun="modelos" />;
+
+// Método de pago: dinámico desde los pagos cargados (Relación de Pagos).
+export const MetodoMultiSelect = ({ value, onChange, className, options }: { value: string[]; onChange: (v: string[]) => void; className?: string; options: string[] }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={options} className={className} noun="métodos" />;

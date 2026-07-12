@@ -59,7 +59,7 @@ export function CobranzaProjectFilter({
       >
         <Command>
           <CommandInput placeholder="Buscar proyecto..." />
-          <CommandList>
+          <CommandList className="!max-h-[228px]">
             <CommandEmpty>No se encontró el proyecto.</CommandEmpty>
             <CommandGroup>
               <CommandItem

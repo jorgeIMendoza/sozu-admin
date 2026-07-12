@@ -95,7 +95,7 @@ export function CollectionAdvancedFilters({
             <Input
               value={searchAccount}
               onChange={e => setSearchAccount(e.target.value)}
-              placeholder="CC-000842"
+              placeholder="842"
               className="h-9 w-full text-sm font-mono"
             />
           </Field>

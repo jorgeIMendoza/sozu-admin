@@ -24,7 +24,7 @@ export interface PagoRecord {
   monto_aplicado: number | null;
   estado_acuerdo: 'pagado' | 'vencido' | 'proximo' | 'pendiente' | null;
   tipo_cuenta: 'propiedad' | 'producto' | null;
-  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | null;
+  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   estatus: 'valido' | 'invalido' | 'error' | 'sin_revisar';
   atraso: number;
   proyecto: string | null;

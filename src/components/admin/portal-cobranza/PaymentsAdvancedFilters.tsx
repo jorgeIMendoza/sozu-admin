@@ -4,18 +4,21 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
-import { TipoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { TipoMultiSelect, EstatusMultiSelect, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 
 // Panel lateral de filtros avanzados de Relación de Pagos.
-// Default (barra principal): Proyecto, Cliente, Unidad, Estatus.
-// Avanzados (aquí): Tipo, Cuenta, CLABE. Un filtro nuevo = un <Field> más.
+// Barra principal: Proyecto, Cliente, Unidad.
+// Avanzados (aquí, en orden): Estatus, Tipo, Cuenta, Método, CLABE.
 
 export interface PaymentsAdvancedFiltersProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
+  filterStatus: string[]; setFilterStatus: (v: string[]) => void;
   filterType: string[];   setFilterType: (v: string[]) => void;
   searchAccount: string;  setSearchAccount: (v: string) => void;
+  filterMetodo: string[]; setFilterMetodo: (v: string[]) => void;
+  metodoOptions: string[];
   searchClabe: string;    setSearchClabe: (v: string) => void;
 
   activeCount: number;
@@ -33,8 +36,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function PaymentsAdvancedFilters({
   open, onOpenChange,
+  filterStatus, setFilterStatus,
   filterType, setFilterType,
   searchAccount, setSearchAccount,
+  filterMetodo, setFilterMetodo, metodoOptions,
   searchClabe, setSearchClabe,
   activeCount, onClearAdvanced,
 }: PaymentsAdvancedFiltersProps) {
@@ -55,6 +60,10 @@ export function PaymentsAdvancedFilters({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <Field label="Estatus">
+            <EstatusMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
+          </Field>
+
           <Field label="Tipo">
             <TipoMultiSelect value={filterType} onChange={setFilterType} className="w-full" />
           </Field>
@@ -63,9 +72,13 @@ export function PaymentsAdvancedFilters({
             <Input
               value={searchAccount}
               onChange={e => setSearchAccount(e.target.value)}
-              placeholder="CC-000842"
+              placeholder="842"
               className="h-9 w-full text-sm font-mono"
             />
+          </Field>
+
+          <Field label="Método">
+            <MetodoMultiSelect value={filterMetodo} onChange={setFilterMetodo} options={metodoOptions} className="w-full" />
           </Field>
 
           <Field label="CLABE">
