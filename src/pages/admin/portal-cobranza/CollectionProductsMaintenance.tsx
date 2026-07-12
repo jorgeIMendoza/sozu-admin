@@ -363,7 +363,7 @@ export default function CollectionProductsMaintenance() {
             <section>
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
                 <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-                Cobranza por categoría
+                Cobranza por categoría <GlobalTag />
               </h3>
               <div className="sozu-kpi-card">
                 <div style={{ width: '100%', height: Math.max(180, byCategory.length * 52) }}>
