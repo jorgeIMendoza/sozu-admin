@@ -364,7 +364,6 @@ export default function CollectionDashboard() {
       {/* ════ TAB: COBRANZA POR PROYECTO ════ */}
       {activeTab === 'cobranza' && (
         <CobranzaPorProyecto
-          global
           rows={filteredByProject}
           onSelectProject={(id) => drill(navigate, '/cuentas-cobranza', { proyecto: String(id) })}
         />
