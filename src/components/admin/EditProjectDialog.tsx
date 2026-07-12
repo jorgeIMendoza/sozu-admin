@@ -4,12 +4,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Search, CheckCircle, Grid3x3, Eye, Building2, Plus, Info, SlidersHorizontal, Images, CalendarClock, Tag, BookOpen, ClipboardList, Calendar, Store, DollarSign, Package, PenLine, Globe, Image as ImageIcon } from "lucide-react";
+import { Edit, Trash2, MapPin, Search, CheckCircle, Grid3x3, Eye, Building2, Plus, Info, SlidersHorizontal, Images, CalendarClock, Tag, BookOpen, ClipboardList, Calendar, Store, DollarSign, Package, PenLine, Globe, Image as ImageIcon, Check, ChevronsUpDown, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,6 +34,7 @@ import { FormSection } from "@/components/admin/project-form/FormSection";
 import { FieldGrid } from "@/components/admin/project-form/FieldGrid";
 import { MapLink } from "@/components/admin/project-form/MapLink";
 import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
+import { optimizedImage } from "@/lib/image-transform";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -73,12 +77,14 @@ interface EditProjectDialogProps {
   projectId: number;
   onProjectUpdated: () => void;
   trigger?: React.ReactNode;
+  /** Texto del tooltip rápido sobre el trigger (nested asChild sobre DialogTrigger). */
+  triggerTooltip?: string;
   canCreate?: boolean;
   canUpdate?: boolean;
   canDelete?: boolean;
 }
 
-export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCreate = true, canUpdate = true, canDelete = true }: EditProjectDialogProps) => {
+export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, triggerTooltip, canCreate = true, canUpdate = true, canDelete = true }: EditProjectDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [showrooms, setShowrooms] = useState<Array<{ id?: number; nombre: string; descripcion_direccion: string; latitud: number | null; longitud: number | null }>>([]);
@@ -86,6 +92,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [firmanteOpen, setFirmanteOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -334,10 +341,27 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         .select("*")
         .eq("activo", true)
         .order("nombre");
-      
+
       if (error) throw error;
       return data;
     },
+  });
+
+  // Usuarios internos para elegir el firmante de recibos: se excluyen externos (4 Inmobiliaria,
+  // 23 Cliente). Correo derivado del usuario (solo lectura).
+  const { data: usuariosFirmante } = useQuery({
+    queryKey: ["usuarios-firmante"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("usuarios")
+        .select("nombre, email")
+        .eq("activo", true)
+        .not("rol_id", "in", "(4,23)")
+        .order("nombre");
+      if (error) throw error;
+      return (data as Array<{ nombre: string; email: string | null }>) ?? [];
+    },
+    enabled: open,
   });
 
   const { data: paises } = useQuery({
@@ -605,9 +629,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         </DialogTrigger>
       )}
       {trigger && (
-        <DialogTrigger asChild>
-          {trigger}
-        </DialogTrigger>
+        triggerTooltip ? (
+          <IconTooltip label={triggerTooltip}>
+            <DialogTrigger asChild>
+              {trigger}
+            </DialogTrigger>
+          </IconTooltip>
+        ) : (
+          <DialogTrigger asChild>
+            {trigger}
+          </DialogTrigger>
+        )
       )}
       <DialogContent className="max-w-[min(1140px,96vw)] w-full h-[85vh] p-0 gap-0 flex flex-col overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b shrink-0">
@@ -1158,6 +1190,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
 
                 <TabsContent value="images" className="mt-0 space-y-5">
                   <FormSection title="Identidad" icon={ImageIcon}>
+                    <FieldGrid cols={2}>
                     <FormField
                       control={form.control}
                       name="url_logo"
@@ -1166,6 +1199,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           <FormControl>
                             <ImageUploadField
                               label="Logo del Proyecto"
+                              variant="card"
                               value={field.value}
                               onChange={field.onChange}
                               accept="image/*"
@@ -1184,6 +1218,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           <FormControl>
                             <ImageUploadField
                               label="Imagen de Portada"
+                              variant="card"
                               value={field.value}
                               onChange={field.onChange}
                               accept="image/*"
@@ -1193,10 +1228,71 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                         </FormItem>
                       )}
                     />
+                    </FieldGrid>
                   </FormSection>
 
                   <FormSection title="Firma de recibos" icon={PenLine}>
-                    <FieldGrid cols={2}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                      {/* Izquierda: firmante (usuario interno). Correo/tel derivados, no editables. */}
+                      <FormField
+                        control={form.control}
+                        name="nombre_firmante_recibos"
+                        render={({ field }) => {
+                          const sel = (usuariosFirmante ?? []).find((u) => u.nombre === field.value);
+                          return (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Firmante (usuario interno)</FormLabel>
+                              <Popover open={firmanteOpen} onOpenChange={setFirmanteOpen}>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      role="combobox"
+                                      className={cn("w-full justify-between font-normal", !field.value && "text-muted-foreground")}
+                                    >
+                                      <span className="truncate">{field.value || "Buscar firmante..."}</span>
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder="Buscar por nombre..." />
+                                    <CommandList className="max-h-64 overflow-y-auto">
+                                      <CommandEmpty>Sin usuarios.</CommandEmpty>
+                                      <CommandGroup>
+                                        {(usuariosFirmante ?? []).map((u) => (
+                                          <CommandItem
+                                            key={u.email}
+                                            value={u.nombre}
+                                            onSelect={() => { field.onChange(u.nombre); setFirmanteOpen(false); }}
+                                          >
+                                            <Check className={cn("mr-2 h-4 w-4", field.value === u.nombre ? "opacity-100" : "opacity-0")} />
+                                            <span className="truncate">{u.nombre}</span>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+
+                              {/* Correo derivado del usuario, solo lectura */}
+                              <div className="mt-2 space-y-1.5">
+                                <label className="text-sm font-medium">Correo</label>
+                                <div className="relative">
+                                  <Mail className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                  <Input readOnly value={sel ? (sel.email || "Sin dato") : ""} placeholder="Se toma del usuario" className={cn("pl-8 bg-muted cursor-default", sel && !sel.email && "text-muted-foreground")} />
+                                </div>
+                              </div>
+                            </FormItem>
+                          );
+                        }}
+                      />
+
+                      {/* Derecha: imagen de la firma como card */}
                       <FormField
                         control={form.control}
                         name="url_firma_recibos"
@@ -1204,7 +1300,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           <FormItem>
                             <FormControl>
                               <ImageUploadField
-                                label="Imagen de Firma para Recibos"
+                                label="Firma para recibos"
+                                variant="card"
                                 value={field.value}
                                 onChange={field.onChange}
                                 accept="image/*"
@@ -1214,21 +1311,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           </FormItem>
                         )}
                       />
-
-                      <FormField
-                        control={form.control}
-                        name="nombre_firmante_recibos"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nombre del Firmante</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Nombre completo del firmante" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </FieldGrid>
+                    </div>
                   </FormSection>
 
                   <FormSection title="Costos" icon={DollarSign}>
@@ -1361,23 +1444,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                       />
                     </FieldGrid>
                   </FormSection>
-
-                  <div className="flex justify-end space-x-2">
-                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                      Cancelar
-                    </Button>
-                  </div>
                 </TabsContent>
-                
-                <TabsContent value="multimedia" className="mt-6">
+
+                <TabsContent value="multimedia" className="mt-0 space-y-5">
                   <ProjectMultimediaSection projectId={projectId} />
                 </TabsContent>
-                
-                <TabsContent value="legal-entities" className="mt-6">
+
+                <TabsContent value="legal-entities" className="mt-0 space-y-5">
                   <ProjectLegalEntitiesSection projectId={projectId} isProductosOrServicios={isSpecialProject} />
                 </TabsContent>
-                
-                <TabsContent value="reservable-spaces" className="mt-6">
+
+                <TabsContent value="reservable-spaces" className="mt-0 space-y-5">
                   <ProjectReservableSpacesSection projectId={projectId} />
                 </TabsContent>
                 
@@ -1454,23 +1531,23 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                     {vistas && vistas.length > 0 ? (
                       <FieldGrid cols={3}>
                         {vistas.map((vista: any) => (
-                          <div key={vista.id} className="border rounded-lg p-4 space-y-2">
-                            <div className="font-medium">{vista.nombre}</div>
-                            {vista.url && (
-                              <img 
-                                src={vista.url} 
+                          <div key={vista.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
+                            {vista.url ? (
+                              <img
+                                src={optimizedImage(vista.url, { width: 480, height: 256, resize: "cover" })}
                                 alt={vista.nombre}
-                                className="w-full h-32 object-cover rounded-md"
+                                loading="lazy"
+                                className="h-32 w-full object-cover"
                                 onError={(e) => {
                                   e.currentTarget.src = '/placeholder.svg';
                                 }}
                               />
-                            )}
-                            {!vista.url && (
-                              <div className="w-full h-32 bg-muted rounded-md flex items-center justify-center text-muted-foreground text-sm">
+                            ) : (
+                              <div className="flex h-32 w-full items-center justify-center bg-muted text-sm text-muted-foreground">
                                 Sin imagen
                               </div>
                             )}
+                            <div className="truncate px-3 py-2 text-sm font-medium">{vista.nombre}</div>
                           </div>
                         ))}
                       </FieldGrid>
@@ -1484,18 +1561,18 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                   </FormSection>
                 </TabsContent>
 
-                <TabsContent value="brochures" className="mt-6">
+                <TabsContent value="brochures" className="mt-0 space-y-5">
                   <ProjectBrochuresSection projectId={projectId} />
                 </TabsContent>
 
                 {!isSpecialProject && (
-                  <TabsContent value="ficha-tecnica" className="mt-6">
+                  <TabsContent value="ficha-tecnica" className="mt-0 space-y-5">
                     <ProjectFichaTecnicaSection projectId={projectId} />
                   </TabsContent>
                 )}
 
                 {!isSpecialProject && (
-                  <TabsContent value="puntos-interes" className="mt-6">
+                  <TabsContent value="puntos-interes" className="mt-0 space-y-5">
                     <ProjectPuntosInteresSection projectId={projectId} />
                   </TabsContent>
                 )}

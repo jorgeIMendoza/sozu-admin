@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, GripVertical, Edit } from "lucide-react";
+import { Plus, Trash2, GripVertical, Edit, Scale } from "lucide-react";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -64,42 +66,34 @@ const SortableCard = ({ notice, onEdit, onDelete }: {
   };
 
   return (
-    <Card ref={setNodeRef} style={style} className="touch-none" onClick={(e) => e.stopPropagation()}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-sm">Orden {notice.orden}</CardTitle>
+    <div ref={setNodeRef} style={style} className="touch-none rounded-lg border border-border bg-card transition-colors hover:border-primary/40" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <div {...attributes} {...listeners} className="cursor-grab rounded p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing" aria-label="Reordenar">
+            <GripVertical className="h-4 w-4" />
           </div>
-          <div className="flex space-x-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(e) => onEdit(e, notice)}
-            >
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary/10 px-1.5 text-xs font-semibold tabular-nums text-primary">
+            {notice.orden}
+          </span>
+          <span className="text-sm font-medium">Aviso legal</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <IconTooltip label="Editar aviso">
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Editar aviso" onClick={(e) => onEdit(e, notice)}>
               <Edit className="h-4 w-4" />
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(e) => onDelete(e, notice.id)}
-              className="text-red-600 hover:text-red-700"
-            >
+          </IconTooltip>
+          <IconTooltip label="Eliminar aviso">
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label="Eliminar aviso" onClick={(e) => onDelete(e, notice.id)}>
               <Trash2 className="h-4 w-4" />
             </Button>
-          </div>
+          </IconTooltip>
         </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-          {notice.contenido}
-        </p>
-      </CardContent>
-    </Card>
+      </div>
+      <p className="whitespace-pre-wrap px-3 py-3 text-sm text-muted-foreground">
+        {notice.contenido}
+      </p>
+    </div>
   );
 };
 
@@ -395,19 +389,22 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
   }
 
   return (
-    <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">Avisos Legales del Proyecto</h3>
-        <Button 
+    <div onClick={(e) => e.stopPropagation()}>
+    <FormSection
+      title={`Avisos Legales del Proyecto (${legalNotices.length}/5)`}
+      icon={Scale}
+      actions={
+        <Button
           type="button"
+          size="sm"
           onClick={handleAddClick}
           disabled={legalNotices.length >= 5}
         >
-          <Plus className="h-4 w-4 mr-2" />
-          Agregar Aviso Legal
+          <Plus className="h-4 w-4 mr-1" />
+          Agregar
         </Button>
-      </div>
-
+      }
+    >
       {isFormOpen && (
         <div onClick={(e) => e.stopPropagation()}>
           <Card>
@@ -508,11 +505,10 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
 
       <div className="space-y-2">
         {legalNotices.length === 0 ? (
-          <Card>
-            <CardContent className="p-6 text-center text-muted-foreground">
-              No hay avisos legales configurados para este proyecto.
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+            <Scale className="mx-auto mb-2 h-10 w-10 opacity-40" />
+            <p className="text-sm">No hay avisos legales configurados para este proyecto.</p>
+          </div>
         ) : (
           <DndContext
             sensors={sensors}
@@ -532,6 +528,7 @@ export const ProjectLegalNoticesSection = ({ projectId }: ProjectLegalNoticesSec
           </DndContext>
         )}
       </div>
+    </FormSection>
     </div>
   );
 };
