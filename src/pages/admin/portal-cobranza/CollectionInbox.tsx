@@ -388,7 +388,7 @@ export default function CollectionInboxPage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo</span>
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Tipo unidad</span>
           <TipoMultiSelect value={filterType} onChange={v => { setFilterType(v); resetPage(); }} options={options.types} className="h-9 w-full sm:w-[148px]" />
         </div>
 

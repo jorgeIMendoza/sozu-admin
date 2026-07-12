@@ -4,22 +4,22 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
-import { TipoMultiSelect, EstatusMultiSelect, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { TipoMultiSelect, EstatusMultiSelect, EstatusPropiedadMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 
 // Panel lateral de filtros avanzados de Relación de Pagos.
-// Barra principal: Proyecto, Cliente, Unidad.
-// Avanzados (aquí, en orden): Estatus, Tipo, Cuenta, Método, CLABE.
+// Barra principal: Proyecto, Cliente, No. Unidad, Método.
+// Avanzados (aquí, en orden): Estatus pago, Tipo unidad, Estatus propiedad, Cuenta, CLABE.
 
 export interface PaymentsAdvancedFiltersProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
-  filterStatus: string[]; setFilterStatus: (v: string[]) => void;
-  filterType: string[];   setFilterType: (v: string[]) => void;
-  searchAccount: string;  setSearchAccount: (v: string) => void;
-  filterMetodo: string[]; setFilterMetodo: (v: string[]) => void;
-  metodoOptions: string[];
-  searchClabe: string;    setSearchClabe: (v: string) => void;
+  filterStatus: string[];      setFilterStatus: (v: string[]) => void;
+  filterType: string[];        setFilterType: (v: string[]) => void;
+  filterEstatusProp: string[]; setFilterEstatusProp: (v: string[]) => void;
+  estatusPropOptions: string[];
+  searchAccount: string;       setSearchAccount: (v: string) => void;
+  searchClabe: string;         setSearchClabe: (v: string) => void;
 
   activeCount: number;
   onClearAdvanced: () => void;
@@ -38,8 +38,8 @@ export function PaymentsAdvancedFilters({
   open, onOpenChange,
   filterStatus, setFilterStatus,
   filterType, setFilterType,
+  filterEstatusProp, setFilterEstatusProp, estatusPropOptions,
   searchAccount, setSearchAccount,
-  filterMetodo, setFilterMetodo, metodoOptions,
   searchClabe, setSearchClabe,
   activeCount, onClearAdvanced,
 }: PaymentsAdvancedFiltersProps) {
@@ -60,12 +60,16 @@ export function PaymentsAdvancedFilters({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <Field label="Estatus">
+          <Field label="Estatus pago">
             <EstatusMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
           </Field>
 
-          <Field label="Tipo">
+          <Field label="Tipo unidad">
             <TipoMultiSelect value={filterType} onChange={setFilterType} className="w-full" />
+          </Field>
+
+          <Field label="Estatus propiedad">
+            <EstatusPropiedadMultiSelect value={filterEstatusProp} onChange={setFilterEstatusProp} options={estatusPropOptions} className="w-full" />
           </Field>
 
           <Field label="Cuenta">
@@ -75,10 +79,6 @@ export function PaymentsAdvancedFilters({
               placeholder="842"
               className="h-9 w-full text-sm font-mono"
             />
-          </Field>
-
-          <Field label="Método">
-            <MetodoMultiSelect value={filterMetodo} onChange={setFilterMetodo} options={metodoOptions} className="w-full" />
           </Field>
 
           <Field label="CLABE">
