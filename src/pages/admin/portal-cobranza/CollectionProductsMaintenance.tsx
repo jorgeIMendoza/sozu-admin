@@ -139,17 +139,19 @@ export default function CollectionProductsMaintenance() {
   const carteraTotal = (data.cobrado_total ?? 0) + (data.pendiente_total ?? 0) + (data.vencido_total ?? 0);
   const cumplimiento = Math.round(data.recovery_rate ?? 0);
   const enMora = overdue.length;
-  // Morosidad por # de cargos vencidos (para "Cartera y acciones").
-  // Morosidad: usa los buckets server-side (data.morosidad) cuando la RPC los
-  // provee; si no (RPC aún sin desplegar), cae al conteo client desde cuentas_vencidas.
-  const morosidadServer = (grupo: string) => data.morosidad?.find(m => m.grupo === grupo)?.cuentas;
-  const alerta1 = morosidadServer('1_vencida') ?? overdue.filter(a => a.parcialidades_vencidas === 1).length;
-  const riesgo2 = morosidadServer('2_vencidas') ?? overdue.filter(a => a.parcialidades_vencidas === 2).length;
-  const criticos3 = morosidadServer('3_plus') ?? overdue.filter(a => a.parcialidades_vencidas >= 3).length;
+  // Morosidad: SOLO server-side (data.morosidad). Sin cálculo en cliente. Si la RPC
+  // aún no lo provee (P27/Fix#2 sin desplegar) → morOk=false y se muestra un fallback
+  // "sin información" en vez de derivar los conteos en el front.
+  const morBuckets = data.morosidad ?? null;
+  const morOk = morBuckets != null;
+  const bucket = (grupo: string) => morBuckets?.find(m => m.grupo === grupo)?.cuentas ?? 0;
+  const alerta1 = bucket('1_vencida');
+  const riesgo2 = bucket('2_vencidas');
+  const criticos3 = bucket('3_plus');
   const criticalCards = overdue.filter(a => a.parcialidades_vencidas >= 3).slice(0, 3);
   const riskByProject = byProject.filter(p => p.vencido > 0);
   const metaMes = Math.max((data.programado_mes ?? 0) - (data.cobrado_mes ?? 0), 0);
-  const riskLevel = criticos3 > 0 ? 'Crítico' : enMora > 0 ? 'Riesgo activo' : 'Controlado';
+  const riskLevel = !morOk ? 'Sin datos' : criticos3 > 0 ? 'Crítico' : enMora > 0 ? 'Riesgo activo' : 'Controlado';
   const riskBadgeCls = criticos3 > 0
     ? 'bg-danger/10 text-danger border-danger/20'
     : enMora > 0
@@ -240,8 +242,8 @@ export default function CollectionProductsMaintenance() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Cartera vencida" labelClass="text-danger" valueClass="text-danger" value={formatCurrency(data.vencido_total)} sublabel="monto atrasado total" />
-              <StatCard label="Cuentas críticas" labelClass="text-danger" variant="count" valueClass={criticos3 > 0 ? 'text-danger' : 'text-foreground'} value={criticos3} sublabel="3 o más cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' })} arrowClass="group-hover:text-danger" />
-              <StatCard label="En riesgo" labelClass="text-warning" variant="count" valueClass={riesgo2 > 0 ? 'text-warning' : 'text-foreground'} value={riesgo2} sublabel="2 cargos vencidos" onClick={() => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' })} arrowClass="group-hover:text-warning" />
+              <StatCard label="Cuentas críticas" labelClass="text-danger" variant="count" valueClass={morOk && criticos3 > 0 ? 'text-danger' : 'text-foreground'} value={morOk ? criticos3 : '—'} sublabel={morOk ? '3 o más cargos vencidos' : 'sin información'} onClick={morOk ? () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }) : undefined} arrowClass="group-hover:text-danger" />
+              <StatCard label="En riesgo" labelClass="text-warning" variant="count" valueClass={morOk && riesgo2 > 0 ? 'text-warning' : 'text-foreground'} value={morOk ? riesgo2 : '—'} sublabel={morOk ? '2 cargos vencidos' : 'sin información'} onClick={morOk ? () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }) : undefined} arrowClass="group-hover:text-warning" />
               <StatCard label="Meta del mes" labelClass="text-primary" valueClass="text-primary" value={formatCurrency(metaMes)} sublabel="falta para cumplir" />
             </div>
           </section>
@@ -260,11 +262,22 @@ export default function CollectionProductsMaintenance() {
       {/* ════ TAB: RIESGO Y CARTERA (espejo de Inmuebles) ════ */}
       {activeTab === 'riesgo' && (
         <div className="space-y-10">
-          <NivelMorosidad global items={[
-            { label: 'Alerta temprana', labelClass: 'text-warning', count: alerta1, valueClass: 'text-warning', title: '1 cargo vencido', desc: 'Intervención preventiva - aún se recuperan fácil', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Alerta' }), arrowClass: 'group-hover:text-warning' },
-            { label: 'Riesgo activo', labelClass: 'text-danger', count: riesgo2, valueClass: 'text-danger', title: '2 cargos vencidos', desc: 'Patrón de incumplimiento - gestión urgente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }), arrowClass: 'group-hover:text-danger' },
-            { label: 'Crítico', labelClass: 'text-danger', count: criticos3, valueClass: 'text-danger', title: '3+ cargos vencidos', desc: 'Requieren acción inmediata', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }), arrowClass: 'group-hover:text-danger' },
-          ]} />
+          {morOk ? (
+            <NivelMorosidad global items={[
+              { label: 'Alerta temprana', labelClass: 'text-warning', count: alerta1, valueClass: 'text-warning', title: '1 cargo vencido', desc: 'Intervención preventiva - aún se recuperan fácil', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Alerta' }), arrowClass: 'group-hover:text-warning' },
+              { label: 'Riesgo activo', labelClass: 'text-danger', count: riesgo2, valueClass: 'text-danger', title: '2 cargos vencidos', desc: 'Patrón de incumplimiento - gestión urgente', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Urgente' }), arrowClass: 'group-hover:text-danger' },
+              { label: 'Crítico', labelClass: 'text-danger', count: criticos3, valueClass: 'text-danger', title: '3+ cargos vencidos', desc: 'Requieren acción inmediata', onClick: () => drill(navigate, '/cuentas-cobranza', { prioridad: 'Crítico' }), arrowClass: 'group-hover:text-danger' },
+            ]} />
+          ) : (
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" strokeWidth={1.75} />Nivel de morosidad <GlobalTag />
+              </h3>
+              <div className="sozu-kpi-card text-[13px] text-muted-foreground text-center py-8">
+                Sin información de morosidad disponible.
+              </div>
+            </section>
+          )}
 
           <AgingYRiesgo
             global
