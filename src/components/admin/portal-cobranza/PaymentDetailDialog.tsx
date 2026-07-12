@@ -207,6 +207,9 @@ export function PaymentDetailDialog({
                       { value: 'coincide', label: 'Válido' },
                       { value: 'no_coincide', label: 'No coincide' },
                       { value: 'error', label: 'Error' },
+                      { value: 'sin_evidencia', label: 'Sin evidencia' },
+                      { value: 'monto_ilegible', label: 'Monto ilegible' },
+                      { value: 'monto_ausente_db', label: 'Monto ausente' },
                     ]}
                     placeholder="Sin validar"
                   />

@@ -716,12 +716,14 @@ export function RelacionPagos() {
   const rpPagosCuentaConValidacion = useMemo(() => {
     const pagos = rpPagosCuenta ?? [];
     if (!pagos.length || !pagoValidaciones?.length) return pagos;
-    const validMap = new Map<number, 'coincide' | 'error' | 'no_coincide'>();
+    const ESTADOS_VALIDACION = ['coincide', 'error', 'no_coincide', 'sin_evidencia', 'monto_ilegible', 'monto_ausente_db'] as const;
+    type EstadoValidacion = typeof ESTADOS_VALIDACION[number];
+    const validMap = new Map<number, EstadoValidacion>();
     for (const v of pagoValidaciones) {
       const id = Number(v.id_pago);
       if (!validMap.has(id)) {
-        if (v.estado === 'coincide' || v.estado === 'error' || v.estado === 'no_coincide') {
-          validMap.set(id, v.estado as 'coincide' | 'error' | 'no_coincide');
+        if ((ESTADOS_VALIDACION as readonly string[]).includes(v.estado)) {
+          validMap.set(id, v.estado as EstadoValidacion);
         }
       }
     }
