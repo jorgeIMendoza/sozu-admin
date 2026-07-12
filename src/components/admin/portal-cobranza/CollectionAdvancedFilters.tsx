@@ -75,7 +75,7 @@ export function CollectionAdvancedFilters({
             looks clean. Order: Model, Status, Priority, Invalid payments,
             Account, CLABE. A new filter = one more <Field>. */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <Field label="Modelo">
+          <Field label="Modelo propiedad">
             <ModeloMultiSelect value={filterModel} onChange={setFilterModel} options={modelOptions} className="w-full" />
           </Field>
 
@@ -83,7 +83,7 @@ export function CollectionAdvancedFilters({
             <EstatusPropiedadMultiSelect value={filterStatus} onChange={setFilterStatus} options={statusOptions} className="w-full" />
           </Field>
 
-          <Field label="Prioridad">
+          <Field label="Prioridad cuenta">
             <PrioridadMultiSelect value={filterPriority} onChange={setFilterPriority} className="w-full" />
           </Field>
 
@@ -91,7 +91,7 @@ export function CollectionAdvancedFilters({
             <InvalidosMultiSelect value={filterInvalidLevel} onChange={setFilterInvalidLevel} className="w-full" />
           </Field>
 
-          <Field label="Cuenta">
+          <Field label="Cuenta cobranza">
             <Input
               value={searchAccount}
               onChange={e => setSearchAccount(e.target.value)}
@@ -100,7 +100,7 @@ export function CollectionAdvancedFilters({
             />
           </Field>
 
-          <Field label="CLABE">
+          <Field label="Cuenta CLABE">
             <Input
               value={searchClabe}
               onChange={e => setSearchClabe(e.target.value)}

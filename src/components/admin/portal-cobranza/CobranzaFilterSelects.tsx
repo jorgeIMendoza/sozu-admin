@@ -79,7 +79,7 @@ export function NivelMultiSelect({
           <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias.</CommandEmpty>
             <CommandGroup>
-              {niveles.map((nivel) => (
+              {[...niveles].sort((a, b) => a.localeCompare(b, 'es')).map((nivel) => (
                 <CommandItem key={nivel} value={nivel} onSelect={() => toggle(nivel)}>
                   <div className={cn(
                     'mr-2 size-4 rounded-[4px] border flex items-center justify-center shrink-0',

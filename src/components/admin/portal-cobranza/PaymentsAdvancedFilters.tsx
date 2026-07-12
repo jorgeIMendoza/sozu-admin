@@ -64,7 +64,7 @@ export function PaymentsAdvancedFilters({
             <EstatusMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
           </Field>
 
-          <Field label="Tipo unidad">
+          <Field label="Tipo propiedad">
             <TipoMultiSelect value={filterType} onChange={setFilterType} className="w-full" />
           </Field>
 
@@ -72,7 +72,7 @@ export function PaymentsAdvancedFilters({
             <EstatusPropiedadMultiSelect value={filterEstatusProp} onChange={setFilterEstatusProp} options={estatusPropOptions} className="w-full" />
           </Field>
 
-          <Field label="Cuenta">
+          <Field label="Cuenta cobranza">
             <Input
               value={searchAccount}
               onChange={e => setSearchAccount(e.target.value)}
@@ -81,7 +81,7 @@ export function PaymentsAdvancedFilters({
             />
           </Field>
 
-          <Field label="CLABE">
+          <Field label="Cuenta CLABE">
             <Input
               value={searchClabe}
               onChange={e => setSearchClabe(e.target.value)}

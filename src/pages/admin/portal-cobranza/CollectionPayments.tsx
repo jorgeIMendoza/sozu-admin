@@ -295,13 +295,13 @@ export default function CollectionPayments() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">No. Unidad</span>
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Propiedad</span>
           <Input value={searchUnit} onChange={e => { setSearchUnit(e.target.value); resetPage(); }}
             placeholder="203" inputMode="numeric" className="h-9 w-full sm:w-[110px] text-sm" />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Método</span>
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Método pago</span>
           <MetodoMultiSelect value={filterMetodo} onChange={v => { setFilterMetodo(v); resetPage(); }} options={metodoOptions} className="w-full sm:w-[150px]" />
         </div>
 

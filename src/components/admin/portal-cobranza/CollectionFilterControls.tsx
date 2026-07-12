@@ -79,7 +79,7 @@ export function OwnerMultiSelect({ options, value, onChange, placeholder = 'Todo
           <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias</CommandEmpty>
             <CommandGroup>
-              {options.map(n => (
+              {[...options].sort((a, b) => a.localeCompare(b, 'es')).map(n => (
                 <CommandItem key={n} value={n} onSelect={() => toggle(n)}>
                   <div className={cn('mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border',
                     value.includes(n) ? 'bg-primary border-primary text-primary-foreground' : 'border-input')}>

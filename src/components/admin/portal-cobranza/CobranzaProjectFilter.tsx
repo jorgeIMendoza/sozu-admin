@@ -72,7 +72,7 @@ export function CobranzaProjectFilter({
                 <Check className={cn("mr-2 h-4 w-4 shrink-0", value === null ? "opacity-100" : "opacity-0")} />
                 <span className="truncate min-w-0">{allLabel}</span>
               </CommandItem>
-              {projects.map((project) => (
+              {[...projects].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((project) => (
                 <CommandItem
                   key={project.id}
                   value={`${project.nombre} ${project.id}`}
