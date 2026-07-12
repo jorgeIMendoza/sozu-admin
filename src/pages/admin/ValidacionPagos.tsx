@@ -1404,10 +1404,13 @@ export default function ValidacionPagos() {
         {/* Estado de validación — multi-select (sin cambios) */}
         {(() => {
           const ESTADOS = [
-            { key: "coincide",    label: "Coincide",    cls: "text-emerald-700" },
-            { key: "error",       label: "Error",        cls: "text-red-700" },
-            { key: "no_coincide", label: "No coincide", cls: "text-amber-700" },
-            { key: "sin_validar", label: "Sin validar", cls: "text-muted-foreground" },
+            { key: "coincide",         label: "Coincide",      cls: "text-emerald-700" },
+            { key: "error",            label: "Error",         cls: "text-red-700" },
+            { key: "no_coincide",      label: "No coincide",   cls: "text-amber-700" },
+            { key: "sin_evidencia",    label: "Sin evidencia", cls: "text-slate-600" },
+            { key: "monto_ilegible",   label: "Monto ilegible", cls: "text-amber-700" },
+            { key: "monto_ausente_db", label: "Monto ausente", cls: "text-orange-700" },
+            { key: "sin_validar",      label: "Sin validar",   cls: "text-muted-foreground" },
           ];
           const noneSelected = filtroEstados.size === 0;
           const label = noneSelected
