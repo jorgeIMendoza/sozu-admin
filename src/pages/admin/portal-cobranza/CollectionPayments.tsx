@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
@@ -133,13 +133,20 @@ export default function CollectionPayments() {
 
   const resetPage = () => setPage(1);
 
-  // Opciones (desde los pagos cargados) + filtros client-side (Método, Estatus propiedad).
-  // El set ya viene filtrado server-side por proyecto/estatus pago/tipo.
-  const metodoOptions = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of payments) if (p.metodo_pago) s.add(p.metodo_pago);
-    return [...s].sort((a, b) => a.localeCompare(b));
-  }, [payments]);
+  // Métodos: catálogo completo (metodos_pago), no derivado de los pagos cargados
+  // (así salen TODOS aunque el set actual no los incluya).
+  const { data: metodoOptions = [] } = useQuery({
+    queryKey: ['metodos-pago-activos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('metodos_pago').select('nombre').eq('activo', true).order('nombre');
+      if (error) throw error;
+      return (data ?? []).map((m: { nombre: string }) => m.nombre);
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  // Estatus propiedad: opciones desde los pagos cargados (client-side).
   const estatusPropOptions = useMemo(() => {
     const s = new Set<string>();
     for (const p of payments) if (p.estatus_propiedad) s.add(p.estatus_propiedad);
