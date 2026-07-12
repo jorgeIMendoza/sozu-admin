@@ -140,9 +140,12 @@ export default function CollectionProductsMaintenance() {
   const cumplimiento = Math.round(data.recovery_rate ?? 0);
   const enMora = overdue.length;
   // Morosidad por # de cargos vencidos (para "Cartera y acciones").
-  const alerta1 = overdue.filter(a => a.parcialidades_vencidas === 1).length;
-  const criticos3 = overdue.filter(a => a.parcialidades_vencidas >= 3).length;
-  const riesgo2 = overdue.filter(a => a.parcialidades_vencidas === 2).length;
+  // Morosidad: usa los buckets server-side (data.morosidad) cuando la RPC los
+  // provee; si no (RPC aún sin desplegar), cae al conteo client desde cuentas_vencidas.
+  const morosidadServer = (grupo: string) => data.morosidad?.find(m => m.grupo === grupo)?.cuentas;
+  const alerta1 = morosidadServer('1_vencida') ?? overdue.filter(a => a.parcialidades_vencidas === 1).length;
+  const riesgo2 = morosidadServer('2_vencidas') ?? overdue.filter(a => a.parcialidades_vencidas === 2).length;
+  const criticos3 = morosidadServer('3_plus') ?? overdue.filter(a => a.parcialidades_vencidas >= 3).length;
   const criticalCards = overdue.filter(a => a.parcialidades_vencidas >= 3).slice(0, 3);
   const riskByProject = byProject.filter(p => p.vencido > 0);
   const metaMes = Math.max((data.programado_mes ?? 0) - (data.cobrado_mes ?? 0), 0);
