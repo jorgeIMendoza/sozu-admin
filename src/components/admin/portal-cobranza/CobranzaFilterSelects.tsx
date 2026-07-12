@@ -76,7 +76,7 @@ export function NivelMultiSelect({
       >
         <Command>
           <CommandInput placeholder="Buscar..." />
-          <CommandList className="!max-h-[228px]">
+          <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias.</CommandEmpty>
             <CommandGroup>
               {niveles.map((nivel) => (

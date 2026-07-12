@@ -36,7 +36,7 @@ export function SelectCombobox({ options, value, onChange, placeholder, classNam
       <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}>
         <Command>
           <CommandInput placeholder="Buscar..." />
-          <CommandList className="!max-h-[228px]">
+          <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias</CommandEmpty>
             <CommandGroup>
               {options.map(opt => (
@@ -76,7 +76,7 @@ export function OwnerMultiSelect({ options, value, onChange, placeholder = 'Todo
       <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)', minWidth: '160px' }}>
         <Command>
           <CommandInput placeholder="Buscar dueño..." />
-          <CommandList className="!max-h-[228px]">
+          <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias</CommandEmpty>
             <CommandGroup>
               {options.map(n => (
