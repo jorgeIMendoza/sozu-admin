@@ -114,6 +114,19 @@ export const ESTATUS_PAGO_KEY: Record<string, string> = {
 export const EstatusMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
   <NivelMultiSelect value={value} onChange={onChange} niveles={ESTATUS_PAGO} className={className} noun="estatus" />;
 
+// Estados de validación de pago CRUDOS (6 del constraint + Sin validar). P27 §E.2.
+// Reemplaza la clasificación derivada de 4 para que RP muestre "toda la info".
+export const ESTATUS_VALIDACION: string[] = [
+  'Coincide', 'No coincide', 'Error', 'Sin evidencia', 'Monto ilegible', 'Monto ausente', 'Sin validar',
+];
+export const ESTATUS_VALIDACION_KEY: Record<string, string> = {
+  'Coincide': 'coincide', 'No coincide': 'no_coincide', 'Error': 'error',
+  'Sin evidencia': 'sin_evidencia', 'Monto ilegible': 'monto_ilegible',
+  'Monto ausente': 'monto_ausente_db', 'Sin validar': 'sin_validar',
+};
+export const ValidacionEstadoMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={ESTATUS_VALIDACION} className={className} noun="estatus" />;
+
 // Estatus de disponibilidad de la propiedad. El RPC devuelve TODO el universo
 // (sin excluir ningún estatus); este filtro decide qué mostrar. Se comparan
 // contra `estatus_propiedad` (nombre) que devuelve el RPC.

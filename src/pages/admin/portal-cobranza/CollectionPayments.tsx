@@ -4,7 +4,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
-import { ESTATUS_PAGO_KEY, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { ESTATUS_VALIDACION_KEY, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 import { PaymentsAdvancedFilters } from '@/components/admin/portal-cobranza/PaymentsAdvancedFilters';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
@@ -113,7 +113,8 @@ export default function CollectionPayments() {
   const [loadPayment, setLoadPayment] = useState<PagoRecord | null>(null);
   const [detailPayment, setDetailPayment] = useState<PagoRecord | null>(null);
 
-  const statusKeys = filterStatus.map(l => ESTATUS_PAGO_KEY[l]).filter(Boolean);
+  // Estatus pago = 6 estados de validación crudos (P27 §E.2), filtrado client-side por estado_validacion.
+  const statusKeys = filterStatus.map(l => ESTATUS_VALIDACION_KEY[l]).filter(Boolean);
 
   const {
     pagos: payments, total, totalMonto: totalAmount,
@@ -126,7 +127,7 @@ export default function CollectionPayments() {
     unidad: searchUnit,
     cuenta: searchAccount,
     tipos: filterType,
-    estatus: statusKeys,
+    estatus: [], // Estatus pago se filtra client-side por estado_validacion (6 estados).
     page: 1,
     pageSize: LOAD_LIMIT,
   });
@@ -155,9 +156,10 @@ export default function CollectionPayments() {
   const clientFiltered = useMemo(
     () => payments.filter(p =>
       (filterMetodo.length === 0 || filterMetodo.includes(p.metodo_pago ?? '')) &&
-      (filterEstatusProp.length === 0 || filterEstatusProp.includes(p.estatus_propiedad ?? '')),
+      (filterEstatusProp.length === 0 || filterEstatusProp.includes(p.estatus_propiedad ?? '')) &&
+      (statusKeys.length === 0 || statusKeys.includes(p.estado_validacion ?? 'sin_validar')),
     ),
-    [payments, filterMetodo, filterEstatusProp],
+    [payments, filterMetodo, filterEstatusProp, statusKeys],
   );
 
   // Orden + paginación en cliente (fluido, sin viaje al servidor).

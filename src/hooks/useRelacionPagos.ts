@@ -26,6 +26,9 @@ export interface PagoRecord {
   tipo_cuenta: 'propiedad' | 'producto' | null;
   tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   estatus: 'valido' | 'invalido' | 'error' | 'sin_revisar';
+  // Estado de validación CRUDO (P27 §E.2). Mientras la RPC no lo devuelva es undefined;
+  // el filtro "Estatus pago" (6 estados) no recorta hasta que llegue la migración.
+  estado_validacion?: 'coincide' | 'no_coincide' | 'error' | 'sin_evidencia' | 'monto_ilegible' | 'monto_ausente_db' | null;
   atraso: number;
   proyecto: string | null;
   proyecto_id: number | null;

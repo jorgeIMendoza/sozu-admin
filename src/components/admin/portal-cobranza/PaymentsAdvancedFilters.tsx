@@ -4,7 +4,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
-import { TipoMultiSelect, EstatusMultiSelect, EstatusPropiedadMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { TipoMultiSelect, ValidacionEstadoMultiSelect, EstatusPropiedadMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 
 // Panel lateral de filtros avanzados de Relación de Pagos.
 // Barra principal: Proyecto, Cliente, No. Unidad, Método.
@@ -61,7 +61,7 @@ export function PaymentsAdvancedFilters({
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           <Field label="Estatus pago">
-            <EstatusMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
+            <ValidacionEstadoMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
           </Field>
 
           <Field label="Tipo propiedad">

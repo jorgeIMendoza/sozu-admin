@@ -46,6 +46,12 @@ function accountType(row: CollectionAccount): TipoCategoria {
   return 'Producto';
 }
 
+// Tipo canónico: usa tipo_categoria de la RPC (P27 §E.1) cuando exista; si no,
+// cae a la derivación local. Así el front ya queda listo para la data real.
+function typeOf(row: CollectionAccount): TipoCategoria {
+  return (row.tipo_categoria as TipoCategoria) ?? accountType(row);
+}
+
 function typeTextClass(type: TipoCategoria) {
   return {
     Propiedad:       'text-sky-700',
@@ -187,7 +193,7 @@ export default function CollectionInboxPage() {
   const options = useMemo(() => {
     const types = new Set<string>(), statuses = new Set<string>(), models = new Set<string>();
     for (const r of rawData ?? []) {
-      types.add(accountType(r));
+      types.add(typeOf(r));
       if (r.estatus_propiedad) statuses.add(r.estatus_propiedad);
       if (r.modelo) models.add(r.modelo);
     }
@@ -216,7 +222,7 @@ export default function CollectionInboxPage() {
       if (un && !(r.numero_propiedad ?? '').toLowerCase().includes(un)) return false;
       if (cb && !(r.clabe_stp ?? '').toLowerCase().includes(cb)) return false;
       if (filterModel.length > 0 && !filterModel.includes(r.modelo ?? '')) return false;
-      if (filterType.length > 0 && !filterType.includes(accountType(r))) return false;
+      if (filterType.length > 0 && !filterType.includes(typeOf(r))) return false;
       if (filterPriority.length > 0 && !filterPriority.includes(nivelDeParcialidades(r.parcialidades_vencidas))) return false;
       if (filterInvalidLevel.length > 0 && !filterInvalidLevel.includes(nivelDeParcialidades(r.invalidos ?? 0))) return false;
       if (filterStatus.length > 0 && !filterStatus.includes(r.estatus_propiedad ?? '')) return false;
@@ -488,7 +494,7 @@ export default function CollectionInboxPage() {
                   </td>
                 </tr>
               ) : pageRows.map((row, idx) => {
-                const type = accountType(row);
+                const type = typeOf(row);
                 const rowNum = (page - 1) * PAGE_SIZE + idx + 1;
                 const unit = [row.modelo, row.numero_propiedad].filter(Boolean).join(' · ');
                 return (
