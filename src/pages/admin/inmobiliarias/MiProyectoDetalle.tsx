@@ -177,7 +177,7 @@ const MiProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("amenidades_proyectos")
-        .select("id, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
+        .select("id, url_imagen, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
         .eq("id_proyecto", projectId)
         .eq("activo", true);
       if (error) return [];
@@ -424,8 +424,8 @@ const MiProyectoDetalle = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {amenidades.map((ap: any) => (
               <div key={ap.id} className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
-                {ap.amenidades?.url ? (
-                  <img src={ap.amenidades.url} alt={ap.amenidades.nombre} className="h-7 w-7 object-contain" />
+                {(ap.url_imagen || ap.amenidades?.url) ? (
+                  <img src={ap.url_imagen || ap.amenidades.url} alt={ap.amenidades?.nombre} className={ap.url_imagen ? "h-9 w-9 object-cover rounded" : "h-7 w-7 object-contain"} />
                 ) : (
                   <Star className="h-5 w-5 text-muted-foreground" />
                 )}

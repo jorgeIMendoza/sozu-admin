@@ -217,6 +217,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: amenidadesProyecto },
     { data: vista },
     { data: esquemas },
+    { data: categoriasMultimedia },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -225,12 +226,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .maybeSingle(),
     supabase
       .from("multimedias_proyecto")
-      .select("url")
+      .select("url, id_categoria")
       .eq("id_proyecto", proyectoId)
       .eq("es_imagen", true)
       .eq("activo", true)
       .order("id", { ascending: false })
-      .limit(20),
+      .limit(50),
     supabase
       .from("videos_youtube")
       .select("id, nombre, link, fecha_creacion")
@@ -240,7 +241,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .limit(5),
     supabase
       .from("amenidades_proyectos")
-      .select("amenidades:amenidades_proyectos_id_amenidad_fkey(id, nombre, url)")
+      .select("url_imagen, amenidades:amenidades_proyectos_id_amenidad_fkey(id, nombre, url)")
       .eq("id_proyecto", proyectoId)
       .eq("activo", true),
     propiedad.id_vista
@@ -253,6 +254,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .eq("id_proyecto", proyectoId)
       .eq("activo", true)
       .order("orden", { ascending: true }),
+    supabase
+      .from("categorias_multimedia_proyecto")
+      .select("id, nombre")
+      .eq("activo", true),
   ]);
 
   if (!proyecto) return null;
@@ -400,6 +405,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const fotoRows  = (multimedias ?? []) as any[];
   const latestVideo = videoRows[0];
 
+  // Split project photos: "Avances de obra" → construcción; el resto → galería.
+  // (resolver id por nombre; los ids difieren dev/prod)
+  const catRows = (categoriasMultimedia ?? []) as { id: number; nombre: string }[];
+  const avancesId = catRows.find((c) => c.nombre === "Avances de obra")?.id ?? null;
+  const avanceFotos  = fotoRows.filter((f: any) => avancesId != null && f.id_categoria === avancesId);
+  const galleryFotos = fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
+
   const globalProgress = calcProgressFromDates(
     (proyecto as any).fecha_lanzamiento,
     (proyecto as any).fecha_entrega_proyecto ?? (proyecto as any).fecha_entrega,
@@ -407,7 +419,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   const milestones = applyProgressToMilestones(DEFAULT_MILESTONES, globalProgress);
 
-  const constructionPhotos = fotoRows.slice(0, 6).map((f: any) => ({
+  const constructionPhotos = avanceFotos.slice(0, 6).map((f: any) => ({
     src: toOptimizedUrl(f.url, 800, 75),
     alt: `${(proyecto as any).nombre}`,
   }));
@@ -419,7 +431,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const portadaRaw: string | undefined =
     (propiedad as any).url_imagen_portada || (modelo as any)?.url_imagen_portada || undefined;
 
-  const proyectoGalleryUrls: string[] = fotoRows
+  const proyectoGalleryUrls: string[] = galleryFotos
     .map((m: any) => toOptimizedUrl(m.url, 1200, 80))
     .filter(Boolean);
   if (proyectoGalleryUrls.length === 0 && (proyecto as any).url_imagen_portada) {

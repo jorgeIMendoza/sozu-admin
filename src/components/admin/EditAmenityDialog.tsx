@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogFooter
 } from "@/components/ui/dialog";
-import { Edit, Wand2, Upload, X, Trash2 } from "lucide-react";
+import { Edit, Wand2, Trash2, Image as ImageIcon, Camera } from "lucide-react";
 import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUploadField } from "./ImageUploadField";
@@ -23,14 +23,20 @@ interface EditAmenityDialogProps {
   onAmenityUpdated?: () => void;
   onAmenityDeleted?: () => void;
   trigger?: React.ReactNode;
+  /** Foto real de ESTA amenidad en el proyecto actual (por proyecto, no compartida).
+   *  Solo se muestra la sección si se pasa onProjectImageChange. */
+  projectImageUrl?: string;
+  onProjectImageChange?: (url: string) => void;
 }
 
-export function EditAmenityDialog({ 
-  amenityId, 
-  amenityName: initialName, 
-  onAmenityUpdated, 
+export function EditAmenityDialog({
+  amenityId,
+  amenityName: initialName,
+  onAmenityUpdated,
   onAmenityDeleted,
-  trigger 
+  trigger,
+  projectImageUrl,
+  onProjectImageChange,
 }: EditAmenityDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -225,12 +231,12 @@ export function EditAmenityDialog({
         {trigger || defaultTrigger}
       </div>
       
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[760px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Editar Amenidad</DialogTitle>
         </DialogHeader>
-        
-        <div className="space-y-4">
+
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-1">
           <div>
             <Label htmlFor="amenity-name">Nombre de la Amenidad</Label>
             <Input
@@ -242,79 +248,92 @@ export function EditAmenityDialog({
             />
           </div>
 
-          <div>
-            <Label>Icono de la Amenidad</Label>
-            
-            <div className="mt-2 space-y-3">
-              {iconUrl && (
-                <div className="flex items-center space-x-3 p-3 border rounded-lg bg-muted/30">
-                  <img 
-                    src={iconUrl} 
-                    alt="Icono de amenidad" 
-                    className="w-12 h-12 object-contain rounded border bg-white p-1"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm text-muted-foreground">Icono actual</p>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setIconUrl("")}
-                      className="mt-1"
-                    >
-                      <X className="w-3 h-3 mr-1" />
-                      Remover
-                    </Button>
-                  </div>
+          <div className={`grid gap-4 ${onProjectImageChange ? "md:grid-cols-2" : ""}`}>
+            {/* Columna: Icono (catálogo global) */}
+            <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                    <ImageIcon className="h-4 w-4" />
+                  </span>
+                  <h4 className="text-sm font-semibold leading-none">Icono</h4>
                 </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowAiGenerator(!showAiGenerator)}
-                  className="flex items-center gap-2"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  {showAiGenerator ? 'Ocultar' : 'Generar'} con IA
-                </Button>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Símbolo del tipo de amenidad. Compartido en todos los proyectos.
+                </p>
               </div>
 
-               {showAiGenerator && (
-                 <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
-                   <div>
-                     <Label htmlFor="icon-description">Descripción para generar icono</Label>
-                     <Textarea
-                       id="icon-description"
-                       value={iconDescription}
-                       onChange={(e) => setIconDescription(e.target.value)}
-                       placeholder={`Ej: Icono de ${amenityName.toLowerCase()}, estilo minimalista...`}
-                       className="mt-1"
-                       rows={2}
-                       autoFocus
-                     />
-                   </div>
-                   
-                   <Button
-                     type="button"
-                     onClick={handleGenerateIcon}
-                     disabled={isGeneratingIcon || !iconDescription.trim()}
-                     className="w-full"
-                   >
-                     <Wand2 className="w-4 h-4 mr-2" />
-                     {isGeneratingIcon ? "Generando..." : "Generar Icono"}
-                   </Button>
-                 </div>
-               )}
-
               <ImageUploadField
-                label="O sube tu propio icono"
+                label="Icono de la amenidad"
+                variant="card"
                 value={iconUrl}
                 onChange={setIconUrl}
                 accept=".png,.jpg,.jpeg,.gif,.svg,.webp"
               />
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAiGenerator(!showAiGenerator)}
+                className="w-full gap-2"
+              >
+                <Wand2 className="h-4 w-4" />
+                {showAiGenerator ? "Ocultar generador IA" : "Generar con IA"}
+              </Button>
+
+              {showAiGenerator && (
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <div>
+                    <Label htmlFor="icon-description" className="text-xs">Descripción para el icono</Label>
+                    <Textarea
+                      id="icon-description"
+                      value={iconDescription}
+                      onChange={(e) => setIconDescription(e.target.value)}
+                      placeholder={`Ej: Icono de ${amenityName.toLowerCase()}, estilo minimalista...`}
+                      className="mt-1"
+                      rows={2}
+                      autoFocus
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleGenerateIcon}
+                    disabled={isGeneratingIcon || !iconDescription.trim()}
+                    className="w-full gap-2"
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    {isGeneratingIcon ? "Generando..." : "Generar Icono"}
+                  </Button>
+                </div>
+              )}
             </div>
+
+            {/* Columna: Foto real (por proyecto) */}
+            {onProjectImageChange && (
+              <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                      <Camera className="h-4 w-4" />
+                    </span>
+                    <h4 className="text-sm font-semibold leading-none">Foto real</h4>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Foto real de esta amenidad en este proyecto. Se usa en oferta y portales. Opcional; no se comparte con otros proyectos.
+                  </p>
+                </div>
+
+                <ImageUploadField
+                  label="Foto real de esta amenidad"
+                  variant="card"
+                  value={projectImageUrl || ""}
+                  onChange={(url) => onProjectImageChange(url)}
+                  accept="image/*"
+                />
+              </div>
+            )}
           </div>
         </div>
 
