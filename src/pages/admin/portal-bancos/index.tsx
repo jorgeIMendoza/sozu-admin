@@ -3,7 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -17,7 +22,7 @@ import {
   type BankLead, type LeadStatus,
 } from "@/lib/portal-bancos/bank-leads";
 import {
-  useSolicitudesBanco, useActualizarSolicitud,
+  useSolicitudesBanco, useActualizarSolicitud, usePagosCuentaBanco,
 } from "@/hooks/usePortalBancos/useSolicitudesBanco";
 import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
 import { useCurrentBanco } from "@/contexts/BankImpersonationContext";
@@ -34,7 +39,7 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert, Users,
+  Plus, Save, Power, ShieldAlert, Users, Loader2,
 } from "lucide-react";
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 
@@ -85,8 +90,7 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
           {closed ? null : <Badge className={toneClass(hd.tone)} variant="outline">{hd.label}</Badge>}
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>Score: <strong className="text-foreground">{lead.sozu.score}</strong></span>
+      <div className="mt-3 flex items-center justify-end text-[11px] text-muted-foreground">
         <span>Escr. {fmtDate(lead.property.fechaEscrituracion)}</span>
       </div>
     </button>
@@ -108,6 +112,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
   const [verCliente, setVerCliente] = useState(false);
+  const [verPagos, setVerPagos] = useState(false);
 
   if (!lead || !banco) return null;
   const idNum = Number(lead.id);
@@ -177,7 +182,6 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
             <p className="text-xs text-muted-foreground">{lead.property.address}</p>
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge className={toneClass(desc.tone)} variant="secondary">{desc.label}</Badge>
-              <Badge variant="outline">Score {lead.sozu.score}</Badge>
             </div>
           </div>
 
@@ -195,6 +199,12 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
             <Stat
               label="Total pagado"
               value={lead.sale ? fmtMXN(lead.sale.totalPagado) : "—"}
+              onClick={
+                lead.sale && lead.idCuentaCobranza != null
+                  ? () => setVerPagos(true)
+                  : undefined
+              }
+              linkLabel="Ver pagos realizados"
             />
             <Stat
               label="Saldo pendiente"
@@ -310,15 +320,131 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           readOnly
         />
       )}
+
+      {lead.idCuentaCobranza != null && (
+        <PagosRealizadosSheet
+          open={verPagos}
+          onOpenChange={setVerPagos}
+          idCuentaCobranza={lead.idCuentaCobranza}
+          total={lead.sale?.totalPagado ?? 0}
+        />
+      )}
     </Sheet>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/**
+ * Panel lateral (solo lectura) con el desglose de pagos que componen el
+ * "Total pagado" de la solicitud — para que el banco revise montos y formas
+ * de pago. Se apila sobre el detalle: al cerrarlo se regresa a la solicitud.
+ */
+function PagosRealizadosSheet({
+  open,
+  onOpenChange,
+  idCuentaCobranza,
+  total,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  idCuentaCobranza: number;
+  total: number;
+}) {
+  const { data: pagos = [], isLoading } = usePagosCuentaBanco(open ? idCuentaCobranza : null);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Pagos realizados</SheetTitle>
+          <SheetDescription>
+            Aplicaciones de pago que componen el total pagado de la cuenta.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4">
+          {isLoading ? (
+            <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando pagos…
+            </div>
+          ) : pagos.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              Sin pagos registrados para esta cuenta.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {pagos.length} {pagos.length === 1 ? "pago" : "pagos"}
+                </span>
+                <span>
+                  Total: <strong className="text-foreground tabular-nums">{fmtMXN(total)}</strong>
+                </span>
+              </div>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Fecha pago</TableHead>
+                      <TableHead className="text-xs">Método</TableHead>
+                      <TableHead className="text-xs text-right">Monto aplicado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagos.map((p, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {p.fechaPago ? fmtDate(p.fechaPago) : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.metodo}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums font-medium whitespace-nowrap">
+                          {fmtMXN(p.montoAplicado)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2">
+                      <TableCell className="text-sm font-semibold" colSpan={2}>
+                        Total pagado
+                      </TableCell>
+                      <TableCell className="text-sm text-right font-bold tabular-nums whitespace-nowrap">
+                        {fmtMXN(total)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  onClick,
+  linkLabel,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  linkLabel?: string;
+}) {
   return (
     <div className="rounded-md border border-border p-2">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold text-foreground">{value}</p>
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          {linkLabel ?? "Ver detalle"}
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
