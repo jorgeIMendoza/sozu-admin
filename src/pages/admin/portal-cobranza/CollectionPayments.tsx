@@ -10,8 +10,8 @@ import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { AddCepDialog } from '@/components/admin/AddCepDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
-import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
-import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from '@/hooks/useEliminarPago';
+import { EliminarPagoDialog } from '@/components/admin/portal-cobranza/EliminarPagoDialog';
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
 import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -242,10 +242,10 @@ export default function CollectionPayments() {
     fetchPagoImpacto(r.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (motivo: string) => {
     if (!deletePayment) return;
     try {
-      await eliminarPago(deletePayment.pago_id);
+      await eliminarPago(deletePayment.pago_id, motivo);
       toast.success('Pago eliminado');
       setDeletePayment(null);
       setDeleteImpacto(null);
@@ -580,20 +580,16 @@ export default function CollectionPayments() {
         onSaved={refetchPayments}
       />
 
-      {/* Eliminar pago (cascada vía RPC eliminar_pago) */}
-      <DeleteConfirmationDialog
+      {/* Eliminar pago (soft delete vía RPC eliminar_pago) */}
+      <EliminarPagoDialog
         open={!!deletePayment}
-        onOpenChange={(open) => { if (!open && !isDeleting) { setDeletePayment(null); setDeleteImpacto(null); } }}
+        onOpenChange={(open) => { if (!open) { setDeletePayment(null); setDeleteImpacto(null); } }}
         onConfirm={handleConfirmDelete}
         isLoading={isDeleting}
-        title="Eliminar pago"
-        description={
-          deletePayment
-            ? `Se eliminará el pago de ${fmtCurrency(Number(deletePayment.monto))}${deletePayment.cliente ? ` de ${deletePayment.cliente}` : ''}.` +
-              impactoClause(deleteImpacto)
-            : ''
-        }
-        warningMessage={impactoWarning(deleteImpacto)}
+        impacto={deleteImpacto}
+        encabezado={deletePayment
+          ? `pago de ${fmtCurrency(Number(deletePayment.monto))}${deletePayment.cliente ? ` de ${deletePayment.cliente}` : ''}`
+          : undefined}
       />
     </div>
   );
