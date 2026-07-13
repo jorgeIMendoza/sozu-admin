@@ -22,7 +22,7 @@ export async function fetchPagoImpacto(idPago: number): Promise<PagoImpacto> {
     (supabase as any).from('aplicaciones_pago')
       .select('id', { count: 'exact', head: true }).eq('id_pago', idPago).eq('activo', true),
     (supabase as any).from('facturas_mantenimientos')
-      .select('id', { count: 'exact', head: true }).eq('id_pago', idPago),
+      .select('id', { count: 'exact', head: true }).eq('id_pago', idPago).eq('facturado', true),
     (supabase as any).from('pagos')
       .select('metodos_pago!pagos_id_metodos_pago_fkey(nombre)').eq('id', idPago).maybeSingle(),
   ]);
