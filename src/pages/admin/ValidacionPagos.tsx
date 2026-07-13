@@ -1766,10 +1766,17 @@ export default function ValidacionPagos() {
                           </button>
                         )}
                         {canDelete && (
-                          <button onClick={() => openDelete(row)} title="Eliminar pago"
-                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-                            <Trash2 className="size-4" />
-                          </button>
+                          row.metodo_nombre === "STP" ? (
+                            <span title="Pago STP: no se puede eliminar"
+                              className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-not-allowed">
+                              <Trash2 className="size-4" />
+                            </span>
+                          ) : (
+                            <button onClick={() => openDelete(row)} title="Eliminar pago"
+                              className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                              <Trash2 className="size-4" />
+                            </button>
+                          )
                         )}
                       </div>
                     </TableCell>

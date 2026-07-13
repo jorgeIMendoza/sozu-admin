@@ -4437,13 +4437,13 @@ export default function DetalleCuentaCobranza() {
                                                       size="icon"
                                                       className="h-6 w-6"
                                                       onClick={() => handleDeletePayment(aplicacion.pago.id, aplicacion.monto, conceptoDisplay)}
-                                                      disabled={isDeletingPago || esCuentaCancelada || isReadOnly || isEnDemanda}
+                                                      disabled={isDeletingPago || esCuentaCancelada || isReadOnly || isEnDemanda || aplicacion.pago.metodo_pago === 'STP'}
                                                     >
                                                       <Trash2 className="h-3 w-3" />
                                                     </Button>
                                                   </TooltipTrigger>
                                                   <TooltipContent>
-                                                    <p>Eliminar Pago</p>
+                                                    <p>{aplicacion.pago.metodo_pago === 'STP' ? "Pago STP: no se puede eliminar" : "Eliminar Pago"}</p>
                                                   </TooltipContent>
                                                 </Tooltip>
                                               )}

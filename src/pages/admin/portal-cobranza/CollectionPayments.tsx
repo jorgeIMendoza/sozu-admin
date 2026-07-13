@@ -523,12 +523,18 @@ export default function CollectionPayments() {
                         </button>
                       </IconTip>
                       {canDelete && (
-                        <IconTip label="Eliminar pago">
-                          <button onClick={() => openDelete(r)}
-                            className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive">
-                            <Trash2 className="size-4" />
-                          </button>
-                        </IconTip>
+                        r.metodo_pago === 'STP' ? (
+                          <IconTip label="Pago STP: no se puede eliminar">
+                            <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
+                          </IconTip>
+                        ) : (
+                          <IconTip label="Eliminar pago">
+                            <button onClick={() => openDelete(r)}
+                              className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive">
+                              <Trash2 className="size-4" />
+                            </button>
+                          </IconTip>
+                        )
                       )}
                     </div>
                   </td>
