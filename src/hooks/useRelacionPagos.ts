@@ -103,6 +103,9 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
         total_monto: number;
         total_validos: number;
         total_sin_validar: number;
+        // Conteo por estado de validación crudo (P27 §E.3), universo completo.
+        // { coincide, no_coincide, error, sin_evidencia, monto_ilegible, monto_ausente_db, sin_validar }
+        total_por_estado?: Record<string, number> | null;
         pagos: PagoRecord[];
       };
     },
@@ -118,6 +121,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
     totalMonto: Number(data?.total_monto ?? 0),
     totalValidos: Number(data?.total_validos ?? 0),
     totalSinValidar: Number(data?.total_sin_validar ?? 0),
+    totalPorEstado: (data?.total_por_estado ?? null) as Record<string, number> | null,
     isLoading,
     error: error ? (error as Error).message : null,
   };
