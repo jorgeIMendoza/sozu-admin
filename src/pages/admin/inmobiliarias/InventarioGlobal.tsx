@@ -402,7 +402,7 @@ const InventarioGlobal = () => {
             showHeaderBar ? "translate-y-0" : "-translate-y-full"
           }`}
         >
-          {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
+          {profile?.puede_impersonar === true && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
             <span className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
               Hola, <span className="font-medium text-foreground">{profile?.nombre?.split(" ")[0] || "Usuario"}</span>

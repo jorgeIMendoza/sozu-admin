@@ -327,7 +327,7 @@ const InventarioGlobalB = () => {
       {/* === HEADER — identical to Variant A === */}
       {isSimplifiedRole ? (
         <div className={`sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/50 -mx-3 px-3 py-2.5 transition-transform duration-300 ${showHeaderBar ? "translate-y-0" : "-translate-y-full"}`}>
-          {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
+          {profile?.puede_impersonar === true && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
             <button onClick={() => setFiltersDrawerOpen(true)} className="flex-1 flex items-center gap-2 px-4 h-12 rounded-full border border-border/80 bg-card shadow-sm hover:shadow-md transition-shadow">
               <Search className="h-4 w-4 text-primary shrink-0" />

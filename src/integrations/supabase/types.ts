@@ -10807,6 +10807,7 @@ export type Database = {
       roles: {
         Row: {
           activo: boolean | null
+          administrar_app_clientes: boolean
           configurar_citas: boolean
           es_rol_interno: boolean
           fecha_actualizacion: string | null
@@ -10821,6 +10822,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean | null
+          administrar_app_clientes?: boolean
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
@@ -10835,6 +10837,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean | null
+          administrar_app_clientes?: boolean
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
@@ -12671,6 +12674,7 @@ export type Database = {
         Args: never
         Returns: {
           activo: boolean
+          administrar_app_clientes: boolean
           debe_cambiar_password: boolean
           email: string
           id_notario: number
@@ -12679,6 +12683,7 @@ export type Database = {
           nombre: string
           notaria_nombre: string
           perfil_juridico_nombre: string
+          puede_impersonar: boolean
           rol_id: number
           rol_nombre: string
           ver_filtros_avanzados_eliminados: boolean

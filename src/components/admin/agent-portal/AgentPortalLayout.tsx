@@ -71,7 +71,7 @@ export const AgentPortalLayout = () => {
 
   const { profile, signOut } = useAuth();
   const { impersonatedAgentEmail, impersonatedAgentName, isImpersonating } = useAgentImpersonation();
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const canImpersonate = profile?.puede_impersonar === true;
 
   // Usuario "efectivo": el impersonado si aplica, si no el logueado.
   const effectiveEmail = isImpersonating ? impersonatedAgentEmail : profile?.email;
@@ -302,7 +302,7 @@ export const AgentPortalLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            {isSuperAdmin && <AgentPortalImpersonationSelector />}
+            {canImpersonate && <AgentPortalImpersonationSelector />}
             <div className="ml-auto flex items-center gap-3">
               <PresentationToggle />
               {renderProfileMenu()}
@@ -325,7 +325,7 @@ export const AgentPortalLayout = () => {
               <PresentationToggle />
               {renderProfileMenu()}
             </div>
-            {isSuperAdmin && (
+            {canImpersonate && (
               <div className="px-4 pb-3">
                 <AgentPortalImpersonationSelector />
               </div>

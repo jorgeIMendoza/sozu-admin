@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ChevronsUpDown, Check, UserSearch, X, Building2, Home, Eye } from "lucide-react";
@@ -12,18 +11,15 @@ import { cn } from "@/lib/utils";
 export function ClienteImpersonationSelector() {
   const { profile } = useAuth();
   const { impersonatedClienteEmail, impersonatedClienteName, setImpersonatedCliente, clearImpersonation, isImpersonating } = useClienteImpersonation();
-  const { isSuperAdmin, allowedPaths } = useAllowedMenus();
   const [open, setOpen] = useState(false);
   const [proyectoOpen, setProyectoOpen] = useState(false);
   const [proyectoId, setProyectoId] = useState<number | null>(null);
   const [proyectoNombre, setProyectoNombre] = useState<string>("");
   const [numeroPropiedad, setNumeroPropiedad] = useState("");
 
-  let hasPortalClienteAccess = false;
-  for (const p of allowedPaths) {
-    if (p.startsWith('/admin/portal-cliente')) { hasPortalClienteAccess = true; break; }
-  }
-  const canAccessClientPortal = isSuperAdmin || hasPortalClienteAccess;
+  // Homologado con el resto de portales: el selector "Ver como" se muestra
+  // solo a roles con el permiso Impersonar usuarios (roles.puede_impersonar).
+  const canAccessClientPortal = profile?.puede_impersonar === true;
 
   const { data: clients = [] } = useQuery({
     queryKey: ["all-clients-for-impersonation"],
@@ -143,7 +139,7 @@ export function ClienteImpersonationSelector() {
   }, [resolved?.email]);
 
   // Early return DESPUÉS de todos los hooks (Rules of Hooks): canAccessClientPortal
-  // arranca en false mientras allowedPaths carga y luego pasa a true, así que
+  // arranca en false mientras profile carga y luego puede pasar a true, así que
   // retornar antes de los useQuery cambiaba el número de hooks entre renders.
   if (!canAccessClientPortal) return null;
 

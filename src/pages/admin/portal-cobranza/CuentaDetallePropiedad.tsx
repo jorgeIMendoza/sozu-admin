@@ -6,7 +6,7 @@ import {
   Undo2, Layers, Plus,
   Building2, Calendar, Hash, Home, Landmark,
   User, Phone, Mail, ChevronRight, Briefcase,
-  AlertTriangle, Lock,
+  AlertTriangle, Lock, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
@@ -36,6 +36,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     setDemandaDialog, setQuitarDemandaDialog,
     setMultaAcuerdoId, setMultaDialog, setMultaGestionAcuerdoId, setMultaGestionDialog,
     setPagoEvidenciaModal, setPdfPreviewModal,
+    canDeletePago, openEliminarPago,
     hayDiscrepancia, sumaAcuerdos,
     hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
     generatingPDF, handleEstadoCuenta, downloadingOferta, handleDownloadOferta,
@@ -590,6 +591,17 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                     </button>
                                   </IconTip>
                                 )}
+                                {/* Eliminar pago (solo pago único; en acumulados va en cada parcialidad) */}
+                                {canDeletePago && !isEnDemanda && a.numAplicaciones < 2 && a.ultimoPago?.id && (
+                                  <IconTip label="Eliminar pago">
+                                    <button
+                                      onClick={() => openEliminarPago(a.ultimoPago.id)}
+                                      className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </button>
+                                  </IconTip>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -677,6 +689,21 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                   <IconTip label="Multa en la parcialidad (fila superior)">
                                     <span className="p-1.5 inline-flex shrink-0"><FileClock className="size-4 text-muted-foreground/25" /></span>
                                   </IconTip>
+                                  {/* Eliminar este pago (parcialidad) */}
+                                  {canDeletePago && !isEnDemanda && ap.id_pago ? (
+                                    <IconTip label="Eliminar pago">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); openEliminarPago(ap.id_pago); }}
+                                        className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
+                                      >
+                                        <Trash2 className="size-4" />
+                                      </button>
+                                    </IconTip>
+                                  ) : canDeletePago ? (
+                                    <IconTip label="Sin pago">
+                                      <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
+                                    </IconTip>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>

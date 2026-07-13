@@ -88,7 +88,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { impersonatedUser, isImpersonating } = useProjectAdminImpersonation();
-  const isSuperAdmin = profile?.rol_id === 1;
+  const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -243,7 +243,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
                   <span className="text-muted-foreground">{currentSection}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {isSuperAdmin && <ProjectAdminImpersonationSelector />}
+                  {canImpersonate && <ProjectAdminImpersonationSelector />}
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="min-w-0 text-right">
                       <p className="text-sm font-medium text-foreground truncate">{activeUserName}</p>

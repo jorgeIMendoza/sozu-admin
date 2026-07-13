@@ -17,6 +17,9 @@ import {
   todayIso, isImage, fmtCurrency, fmtDate, SelectSearch,
   type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
+import { usePagePermissions } from '@/hooks/usePagePermissions';
+import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from '@/hooks/useEliminarPago';
+import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
 import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
@@ -511,6 +514,32 @@ export default function CobranzaCuentaDetalle() {
   const [pagoEvidenciaModal, setPagoEvidenciaModal] = useState<any | null>(null);
   const [downloadingOferta, setDownloadingOferta] = useState(false);
   const [transferDialog, setTransferDialog] = useState(false);
+
+  // Eliminar pago (cascada vía RPC eliminar_pago). Permiso heredado del submenú Cuentas de Cobranza.
+  const { canDelete } = usePagePermissions('/admin/portal-cobranza/cuentas-cobranza');
+  const { eliminarPago, isDeleting } = useEliminarPago();
+  const [eliminarPagoId, setEliminarPagoId] = useState<number | null>(null);
+  const [eliminarImpacto, setEliminarImpacto] = useState<PagoImpacto | null>(null);
+
+  const openEliminarPago = (idPago: number) => {
+    setEliminarPagoId(idPago);
+    setEliminarImpacto(null);
+    fetchPagoImpacto(idPago).then(setEliminarImpacto).catch(() => setEliminarImpacto(null));
+  };
+
+  const handleConfirmEliminarPago = async () => {
+    if (eliminarPagoId == null) return;
+    try {
+      await eliminarPago(eliminarPagoId);
+      toast.success('Pago eliminado');
+      setEliminarPagoId(null);
+      setEliminarImpacto(null);
+      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo eliminar el pago');
+    }
+  };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cobranza-cuenta-detalle', cuentaId],
@@ -1045,6 +1074,8 @@ export default function CobranzaCuentaDetalle() {
     generatingPDF, handleEstadoCuenta,
     downloadingOferta, handleDownloadOferta,
     setTransferDialog: (v) => setTransferDialog(v),
+    canDeletePago: canDelete,
+    openEliminarPago,
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -1596,6 +1627,17 @@ export default function CobranzaCuentaDetalle() {
           ? { id: ultimoPagoSTP.id, clave_rastreo: ultimoPagoSTP.clave_rastreo, monto: ultimoPagoSTP.monto }
           : null
         }
+      />
+
+      {/* Eliminar pago (cascada vía RPC eliminar_pago) */}
+      <DeleteConfirmationDialog
+        open={eliminarPagoId != null}
+        onOpenChange={(open) => { if (!open && !isDeleting) { setEliminarPagoId(null); setEliminarImpacto(null); } }}
+        onConfirm={handleConfirmEliminarPago}
+        isLoading={isDeleting}
+        title="Eliminar pago"
+        description={'Se eliminará este pago de la cuenta.' + impactoClause(eliminarImpacto)}
+        warningMessage={impactoWarning(eliminarImpacto)}
       />
 
     </div>

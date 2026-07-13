@@ -105,7 +105,7 @@ export const PortalCobranzaLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { impersonatedName, impersonatedEmail, impersonatedRoleId, isImpersonating } = useCobranzaImpersonation();
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -378,7 +378,7 @@ export const PortalCobranzaLayout = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-2.5">
-              {isSuperAdmin && <CobranzaImpersonationSelector />}
+              {canImpersonate && <CobranzaImpersonationSelector />}
 
               <Popover open={profileOpen} onOpenChange={setProfileOpen}>
                 <PopoverTrigger asChild>
