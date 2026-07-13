@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Power, PowerOff, Plus, Upload, Play, X, Images, Youtube, ExternalLink } from "lucide-react";
+import { Power, PowerOff, Plus, Upload, Play, X, Images, Youtube, ExternalLink, Tag, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormSection } from "@/components/admin/project-form/FormSection";
 import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
@@ -35,8 +35,10 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
   const [confirmYoutubeOpen, setConfirmYoutubeOpen] = useState(false);
   const [newMultimedia, setNewMultimedia] = useState({
     es_imagen: true,
-    url: ""
+    url: "",
+    id_categoria: null as number | null
   });
+  const [filterCategoria, setFilterCategoria] = useState<number | "all">("all");
   const [youtubeForm, setYoutubeForm] = useState({
     nombre: '',
     link: ''
@@ -57,6 +59,31 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
       return data || [];
     }
   });
+
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['categoriasMultimediaProyecto'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categorias_multimedia_proyecto')
+        .select('id, nombre, orden')
+        .eq('activo', true)
+        .order('orden');
+
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Default the uploader category to "General" (fallback to first) once loaded.
+  useEffect(() => {
+    if (newMultimedia.id_categoria == null && categorias.length > 0) {
+      const general = categorias.find(c => c.nombre === 'General') ?? categorias[0];
+      setNewMultimedia(prev => ({ ...prev, id_categoria: general.id }));
+    }
+  }, [categorias, newMultimedia.id_categoria]);
+
+  const categoriaNombre = (id: number | null) =>
+    categorias.find(c => c.id === id)?.nombre ?? "Sin categoría";
 
   const { data: youtubeVideos = [] } = useQuery({
     queryKey: ['projectYoutubeVideos', projectId],
@@ -112,7 +139,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
-      setNewMultimedia({ es_imagen: true, url: "" });
+      setNewMultimedia({ es_imagen: true, url: "", id_categoria: null });
       setIsAdding(false);
       toast({ title: "Multimedia agregado exitosamente" });
     },
@@ -249,7 +276,8 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
             .insert([{
               es_imagen: file.type.startsWith('image/'),
               url: data.publicUrl,
-              id_proyecto: projectId
+              id_proyecto: projectId,
+              id_categoria: newMultimedia.id_categoria
             }]);
 
           if (insertError) throw insertError;
@@ -266,7 +294,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
 
       queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
       setSelectedFiles([]);
-      setNewMultimedia({ es_imagen: true, url: "" });
+      setNewMultimedia({ es_imagen: true, url: "", id_categoria: null });
       setIsAdding(false);
       setUploading(false);
 
@@ -338,6 +366,25 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                       <SelectContent>
                         <SelectItem value="imagen">Imagen</SelectItem>
                         <SelectItem value="video">Video</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="categoria">Categoría</Label>
+                    <Select
+                      value={newMultimedia.id_categoria != null ? String(newMultimedia.id_categoria) : undefined}
+                      onValueChange={(value) =>
+                        setNewMultimedia(prev => ({ ...prev, id_categoria: Number(value) }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona categoría" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -467,13 +514,37 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
             </div>
           )}
 
+          <div className="mb-4 flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Select
+              value={filterCategoria === "all" ? "all" : String(filterCategoria)}
+              onValueChange={(value) => setFilterCategoria(value === "all" ? "all" : Number(value))}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {categorias.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {multimedia.map((item) => (
+            {multimedia
+              .filter((item) => filterCategoria === "all" || item.id_categoria === filterCategoria)
+              .map((item) => (
               <div key={item.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
                    <div className="flex items-start justify-between gap-2 p-3">
                      <div className="flex flex-wrap gap-1.5">
                        <Badge variant="outline">
                          {item.es_imagen ? "Imagen" : "Video"}
+                       </Badge>
+                       <Badge variant="secondary" className="gap-1">
+                         <Tag className="h-3 w-3" />
+                         {categoriaNombre(item.id_categoria)}
                        </Badge>
                        <Badge variant={item.activo ? "default" : "secondary"}>
                          {item.activo ? "Activo" : "Inactivo"}

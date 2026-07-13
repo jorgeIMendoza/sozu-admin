@@ -277,6 +277,7 @@ export type Database = {
           id: number
           id_amenidad: number
           id_proyecto: number
+          url_imagen: string | null
         }
         Insert: {
           activo?: boolean
@@ -285,6 +286,7 @@ export type Database = {
           id?: number
           id_amenidad: number
           id_proyecto: number
+          url_imagen?: string | null
         }
         Update: {
           activo?: boolean
@@ -293,6 +295,7 @@ export type Database = {
           id?: number
           id_amenidad?: number
           id_proyecto?: number
+          url_imagen?: string | null
         }
         Relationships: [
           {
@@ -3402,6 +3405,33 @@ export type Database = {
           requiere_validacion_biometrica?: boolean | null
           updated_at?: string | null
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      categorias_multimedia_proyecto: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          orden?: number
         }
         Relationships: []
       }
@@ -7479,6 +7509,7 @@ export type Database = {
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
+          id_categoria: number | null
           id_proyecto: number
           url: string
         }
@@ -7488,6 +7519,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_categoria?: number | null
           id_proyecto: number
           url: string
         }
@@ -7497,6 +7529,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_categoria?: number | null
           id_proyecto?: number
           url?: string
         }
@@ -7506,6 +7539,13 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "multimedias_proyecto_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "categorias_multimedia_proyecto"
             referencedColumns: ["id"]
           },
         ]
