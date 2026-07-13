@@ -1,78 +1,31 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-// Eliminación de pagos en cascada. Un pago no vive solo en `pagos`: tiene abonos en
-// `aplicaciones_pago`, validaciones en `pago_validaciones`, bitácora en `cep_audit_log`
-// y a veces facturas en `facturas_mantenimientos`. El borrado real lo hace el RPC
-// transaccional `eliminar_pago` (ver Ejecuciones_manuales/P29_cobranza_eliminar_pago_rpc.md).
-// Este hook solo lo invoca; NUNCA borra las tablas hijas por separado desde el cliente
-// (no sería transaccional y podría corromper los totales).
+// Eliminación de pagos = SOFT DELETE. Un pago es un registro contable: no se borra
+// físicamente. El RPC transaccional `eliminar_pago` marca pagos.activo=false (+ auditoría
+// quién/cuándo/motivo) y desactiva sus aplicaciones_pago (activo=false), lo que dispara
+// el recálculo de pago_completado y la reversión de estatus de la propiedad. El historial
+// (validaciones, CEP) se conserva. Si el pago tiene factura de mantenimiento timbrada, el
+// RPC BLOQUEA la eliminación (hay que cancelar el CFDI primero).
+// Ver Ejecuciones_manuales/P29_cobranza_eliminar_pago_rpc.md.
 
 export interface PagoImpacto {
-  aplicaciones: number;
-  validaciones: number;
-  cep: number;
-  facturas: number;
+  aplicaciones: number; // abonos que dejarán de aplicarse
+  facturas: number;     // facturas de mantenimiento ligadas → bloquean el borrado
 }
 
-// Cuenta lo que se borrará junto con el pago, para mostrarlo en la confirmación.
+// Cuenta lo relevante para el diálogo: abonos activos + facturas de mantenimiento.
 export async function fetchPagoImpacto(idPago: number): Promise<PagoImpacto> {
-  const head = (tabla: string) =>
-    (supabase as any).from(tabla).select('id', { count: 'exact', head: true }).eq('id_pago', idPago);
-
-  const [apl, val, cep, fac] = await Promise.all([
-    head('aplicaciones_pago'),
-    head('pago_validaciones'),
-    head('cep_audit_log'),
-    head('facturas_mantenimientos'),
+  const [apl, fac] = await Promise.all([
+    (supabase as any).from('aplicaciones_pago')
+      .select('id', { count: 'exact', head: true }).eq('id_pago', idPago).eq('activo', true),
+    (supabase as any).from('facturas_mantenimientos')
+      .select('id', { count: 'exact', head: true }).eq('id_pago', idPago),
   ]);
-
   return {
     aplicaciones: apl.count ?? 0,
-    validaciones: val.count ?? 0,
-    cep: cep.count ?? 0,
     facturas: fac.count ?? 0,
   };
-}
-
-function plural(n: number, sing: string, plu: string): string {
-  return `${n} ${n === 1 ? sing : plu}`;
-}
-
-// Frase legible con SOLO los registros asociados que se borrarán (omite los que están
-// en cero). Ej: "1 aplicación de pago", "2 validaciones y 1 factura de mantenimiento".
-// Devuelve null si no hay nada asociado.
-export function describeImpacto(impacto: PagoImpacto | null): string | null {
-  if (!impacto) return null;
-  const parts: string[] = [];
-  if (impacto.aplicaciones > 0) parts.push(plural(impacto.aplicaciones, 'aplicación de pago', 'aplicaciones de pago'));
-  if (impacto.validaciones > 0) parts.push(plural(impacto.validaciones, 'validación', 'validaciones'));
-  if (impacto.cep > 0) parts.push(plural(impacto.cep, 'registro CEP', 'registros CEP'));
-  if (impacto.facturas > 0) parts.push(plural(impacto.facturas, 'factura de mantenimiento', 'facturas de mantenimiento'));
-  if (parts.length === 0) return null;
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
-}
-
-// Cláusula lista para concatenar a la descripción del diálogo. Incluye los registros
-// asociados (si los hay) y siempre cierra recordando que la acción es definitiva.
-export function impactoClause(impacto: PagoImpacto | null): string {
-  if (impacto === null) return ' Revisando registros asociados…';
-  const desc = describeImpacto(impacto);
-  const asociados = desc ? ` Junto con él se eliminará ${desc}.` : '';
-  return `${asociados} Esta acción no se puede deshacer.`;
-}
-
-// Advertencia (caja destacada) del diálogo. Solo se muestra cuando hay algo que amerita
-// una alerta real: una factura de mantenimiento ligada. En el resto de casos no hay caja.
-export function impactoWarning(impacto: PagoImpacto | null): string | undefined {
-  if (impacto && impacto.facturas > 0) {
-    const n = impacto.facturas;
-    return n === 1
-      ? 'Este pago tiene una factura de mantenimiento ligada que también se eliminará.'
-      : `Este pago tiene ${n} facturas de mantenimiento ligadas que también se eliminarán.`;
-  }
-  return undefined;
 }
 
 // true si el RPC aún no está desplegado en la BD (graceful fallback).
@@ -86,10 +39,13 @@ function isMissingFunction(error: { code?: string; message?: string }): boolean 
 export function useEliminarPago() {
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const eliminarPago = useCallback(async (idPago: number) => {
+  const eliminarPago = useCallback(async (idPago: number, motivo: string) => {
     setIsDeleting(true);
     try {
-      const { data, error } = await (supabase as any).rpc('eliminar_pago', { p_id_pago: idPago });
+      const { data, error } = await (supabase as any).rpc('eliminar_pago', {
+        p_id_pago: idPago,
+        p_motivo: motivo?.trim() || null,
+      });
       if (error) {
         if (isMissingFunction(error)) {
           throw new Error(

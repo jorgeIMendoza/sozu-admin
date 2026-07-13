@@ -18,8 +18,8 @@ import {
   type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
 import { usePagePermissions } from '@/hooks/usePagePermissions';
-import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from '@/hooks/useEliminarPago';
-import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
+import { EliminarPagoDialog } from '@/components/admin/portal-cobranza/EliminarPagoDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
 import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
@@ -527,10 +527,10 @@ export default function CobranzaCuentaDetalle() {
     fetchPagoImpacto(idPago).then(setEliminarImpacto).catch(() => setEliminarImpacto(null));
   };
 
-  const handleConfirmEliminarPago = async () => {
+  const handleConfirmEliminarPago = async (motivo: string) => {
     if (eliminarPagoId == null) return;
     try {
-      await eliminarPago(eliminarPagoId);
+      await eliminarPago(eliminarPagoId, motivo);
       toast.success('Pago eliminado');
       setEliminarPagoId(null);
       setEliminarImpacto(null);
@@ -1629,15 +1629,14 @@ export default function CobranzaCuentaDetalle() {
         }
       />
 
-      {/* Eliminar pago (cascada vía RPC eliminar_pago) */}
-      <DeleteConfirmationDialog
+      {/* Eliminar pago (soft delete vía RPC eliminar_pago) */}
+      <EliminarPagoDialog
         open={eliminarPagoId != null}
-        onOpenChange={(open) => { if (!open && !isDeleting) { setEliminarPagoId(null); setEliminarImpacto(null); } }}
+        onOpenChange={(open) => { if (!open) { setEliminarPagoId(null); setEliminarImpacto(null); } }}
         onConfirm={handleConfirmEliminarPago}
         isLoading={isDeleting}
-        title="Eliminar pago"
-        description={'Se eliminará este pago de la cuenta.' + impactoClause(eliminarImpacto)}
-        warningMessage={impactoWarning(eliminarImpacto)}
+        impacto={eliminarImpacto}
+        encabezado="pago de la cuenta"
       />
 
     </div>

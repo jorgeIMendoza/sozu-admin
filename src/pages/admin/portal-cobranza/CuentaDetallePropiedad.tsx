@@ -3,7 +3,7 @@ import {
   ArrowRightLeft, CreditCard, FileDown, Pencil, Scale,
   Loader2, Upload, FileText, Eye,
   FileClock, FileCheck, FileWarning,
-  Undo2, Layers, Plus,
+  Undo2, Layers, Plus, RefreshCw,
   Building2, Calendar, Hash, Home, Landmark,
   User, Phone, Mail, ChevronRight, Briefcase,
   AlertTriangle, Lock, Trash2,
@@ -13,7 +13,7 @@ import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
-  DocEstatusBadge, InfoRow, RecalcularDispersionButton,
+  DocEstatusBadge, InfoRow,
   INFO_TABS, ACTIVITY_TABS,
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
@@ -176,11 +176,6 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <CreditCard className="size-3.5" />Agregar Pago
           </button>
         )}
-        <RecalcularDispersionButton
-          show={!isEnDemanda && hayDiscrepanciaAplicaciones}
-          loading={recalculandoAplic}
-          onClick={handleRecalcularAplicaciones}
-        />
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
           onClick={handleEstadoCuenta}
@@ -213,6 +208,18 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           >
             <Scale className="size-3.5" />En demanda
           </span>
+        )}
+        {/* Recalcular pagos — fijo y azul (visible siempre por ahora, a la derecha de "Poner en demanda") */}
+        {!isEnDemanda && (
+          <button
+            onClick={handleRecalcularAplicaciones}
+            disabled={recalculandoAplic}
+            title="Recalcular la aplicación de pagos de esta cuenta"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+          >
+            {recalculandoAplic ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            Recalcular pagos
+          </button>
         )}
       </div>
 
