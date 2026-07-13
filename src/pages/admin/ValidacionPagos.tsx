@@ -15,10 +15,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, Building2, ChevronDown, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileCheck, FileSearch, FileText, FileUp, Loader2, Pencil, Upload, UploadCloud, XCircle, Receipt,
+  Clock, Eye, FileCheck, FileSearch, FileText, FileUp, Loader2, Pencil, Trash2, Upload, UploadCloud, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from "@/hooks/useEliminarPago";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -718,7 +720,10 @@ function loadFiltros(): any {
 }
 
 export default function ValidacionPagos() {
-  const { canUpdate } = usePagePermissions("/admin/validacion-pagos");
+  const { canUpdate, canDelete } = usePagePermissions("/admin/validacion-pagos");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { eliminarPago, isDeleting } = useEliminarPago();
   const PF = useMemo(loadFiltros, []);
   const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta ?? "");
   const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente ?? "");
@@ -741,6 +746,28 @@ export default function ValidacionPagos() {
   const [viewerTitle, setViewerTitle] = useState("Comprobante de pago");
   const [editRow, setEditRow] = useState<PagoRow | null>(null);
   const [cargarRow, setCargarRow] = useState<PagoRow | null>(null);
+  const [deleteRow, setDeleteRow] = useState<PagoRow | null>(null);
+  const [deleteImpacto, setDeleteImpacto] = useState<PagoImpacto | null>(null);
+
+  // Abrir confirmación de borrado + precargar el impacto (qué más se eliminará).
+  const openDelete = (row: PagoRow) => {
+    setDeleteRow(row);
+    setDeleteImpacto(null);
+    fetchPagoImpacto(row.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteRow) return;
+    try {
+      await eliminarPago(deleteRow.pago_id);
+      toast({ title: "Pago eliminado", description: "El pago y sus registros asociados fueron eliminados." });
+      setDeleteRow(null);
+      setDeleteImpacto(null);
+      queryClient.invalidateQueries({ queryKey: ["validacion-pagos-all-v2"] });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "No se pudo eliminar", description: err?.message ?? "Error al eliminar el pago." });
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(searchCuenta.trim()); setCurrentPage(1); }, 350);
@@ -1708,6 +1735,12 @@ export default function ValidacionPagos() {
                             <Pencil className="size-4" />
                           </button>
                         )}
+                        {canDelete && (
+                          <button onClick={() => openDelete(row)} title="Eliminar pago"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                            <Trash2 className="size-4" />
+                          </button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1754,6 +1787,20 @@ export default function ValidacionPagos() {
       />
       <EditPagoValidacionModal row={editRow} onClose={() => setEditRow(null)} />
       <CargarEvidenciaModal row={cargarRow} onClose={() => setCargarRow(null)} />
+      <DeleteConfirmationDialog
+        open={!!deleteRow}
+        onOpenChange={(open) => { if (!open && !isDeleting) { setDeleteRow(null); setDeleteImpacto(null); } }}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Eliminar pago"
+        description={
+          deleteRow
+            ? `Se eliminará el pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${formatCuentaCobranzaId(deleteRow.cuenta_id)}).` +
+              impactoClause(deleteImpacto)
+            : ""
+        }
+        warningMessage={impactoWarning(deleteImpacto)}
+      />
     </div>
   );
 }

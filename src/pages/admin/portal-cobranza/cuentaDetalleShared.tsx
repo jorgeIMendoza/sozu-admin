@@ -404,4 +404,7 @@ export interface CuentaDetalleCtx {
   handleEstadoCuenta: () => void;
   handleDownloadOferta: () => void;
   setTransferDialog: (v: boolean) => void;
+  // Eliminar pago (cascada). canDeletePago gatea el botón; openEliminarPago abre la confirmación.
+  canDeletePago: boolean;
+  openEliminarPago: (idPago: number) => void;
 }
