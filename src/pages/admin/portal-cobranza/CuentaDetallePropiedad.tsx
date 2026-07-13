@@ -209,13 +209,13 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <Scale className="size-3.5" />En demanda
           </span>
         )}
-        {/* Recalcular pagos — fijo y azul (visible siempre por ahora, a la derecha de "Poner en demanda") */}
-        {!isEnDemanda && (
+        {/* Recalcular pagos — solo visible cuando hay discrepancia en aplicaciones */}
+        {!isEnDemanda && hayDiscrepanciaAplicaciones && (
           <button
             onClick={handleRecalcularAplicaciones}
             disabled={recalculandoAplic}
             title="Recalcular la aplicación de pagos de esta cuenta"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-300 bg-background text-[12px] font-medium text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-60"
           >
             {recalculandoAplic ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
             Recalcular pagos
