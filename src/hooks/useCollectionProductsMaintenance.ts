@@ -59,6 +59,9 @@ export interface CollectionProductsMaintenanceData {
   por_categoria: ExtraCategoryRow[] | null;
   por_proyecto: ExtraProjectRow[] | null;
   cuentas_vencidas: ExtraOverdueAccount[] | null;
+  // Buckets de morosidad server-side (espejo de Inmuebles). Se agrega en P27/Fix#2;
+  // mientras la RPC no lo devuelva, el front cae al conteo client desde cuentas_vencidas.
+  morosidad?: { grupo: string; cuentas: number }[] | null;
   duenos: { nombre: string; entidad_ids: number[] }[] | null;
 }
 

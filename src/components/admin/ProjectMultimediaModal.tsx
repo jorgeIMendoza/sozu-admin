@@ -1,8 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Image, Video, X, Youtube } from "lucide-react";
+import { Image, Video, Youtube, Images, ExternalLink, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { optimizedImage } from "@/lib/image-transform";
 
 interface MultimediaItem {
   id: number;
@@ -46,20 +47,29 @@ export const ProjectMultimediaModal = ({
     return link;
   };
 
+  const EmptyState = ({ icon: Icon, label }: { icon: typeof Image; label: string }) => (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-14 text-center">
+      <Icon className="mb-3 h-12 w-12 text-muted-foreground/40" />
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
+  );
+
   const renderImage = (item: MultimediaItem) => (
-    <div key={item.id} className="group relative overflow-hidden rounded-lg border bg-card">
+    <div key={item.id} className="group relative overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
       <img
-        src={item.url}
+        src={optimizedImage(item.url, { width: 480, height: 384, resize: "cover" })}
         alt={`Imagen del proyecto ${projectName}`}
-        className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+        loading="lazy"
+        className="h-48 w-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
         <Button
           variant="secondary"
           size="sm"
-          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          className="opacity-0 transition-opacity group-hover:opacity-100"
           onClick={() => window.open(item.url, '_blank')}
         >
+          <ExternalLink className="mr-1 h-4 w-4" />
           Ver completa
         </Button>
       </div>
@@ -67,79 +77,72 @@ export const ProjectMultimediaModal = ({
   );
 
   const renderVideo = (item: MultimediaItem) => (
-    <div key={item.id} className="group relative overflow-hidden rounded-lg border bg-card">
+    <div key={item.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
       <video
         src={item.url}
         controls
-        className="w-full h-48 object-cover"
+        className="h-48 w-full bg-muted object-cover"
         preload="metadata"
       >
         Tu navegador no soporta el elemento de video.
       </video>
-      <div className="p-4">
-        <p className="text-sm text-muted-foreground mb-2">Video del proyecto</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => window.open(item.url, '_blank')}
-        >
-          <Video className="h-4 w-4 mr-2" />
-          Abrir en nueva pestaña
+      <div className="flex items-center justify-between gap-2 p-3">
+        <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <Video className="h-4 w-4" />
+          </span>
+          Video del proyecto
+        </span>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={() => window.open(item.url, '_blank')}>
+          <ExternalLink className="mr-1 h-4 w-4" />
+          Abrir
         </Button>
       </div>
     </div>
   );
 
   const renderYouTubeVideo = (video: YouTubeVideo) => (
-    <div key={video.id} className="overflow-hidden rounded-lg border bg-card">
-      <div className="aspect-video">
+    <div key={video.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
+      <div className="aspect-video bg-muted">
         <iframe
           src={getYouTubeEmbedUrl(video.link)}
           title={video.nombre}
-          className="w-full h-full"
+          className="h-full w-full border-0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
         />
       </div>
-      <div className="p-3">
-        <p className="text-sm font-medium truncate">{video.nombre}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-2"
-          onClick={() => window.open(video.link, '_blank')}
-        >
-          <Youtube className="h-4 w-4 mr-2" />
-          Ver en YouTube
+      <div className="flex items-center justify-between gap-2 p-3">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-red-600/10 text-red-600">
+            <Play className="h-4 w-4" />
+          </span>
+          <span className="truncate text-sm font-medium">{video.nombre}</span>
+        </span>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={() => window.open(video.link, '_blank')}>
+          <ExternalLink className="mr-1 h-4 w-4" />
+          YouTube
         </Button>
       </div>
     </div>
   );
 
-  
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold">
-              Multimedia - {projectName}
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+      <DialogContent className="flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Images className="h-4 w-4" />
+            </span>
+            <span className="truncate">Multimedia de {projectName}</span>
+          </DialogTitle>
         </DialogHeader>
-        
-        <Tabs defaultValue="images" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+
+        <Tabs defaultValue="images" className="flex min-h-0 w-full flex-1 flex-col">
+          <TabsList className="grid w-full shrink-0 grid-cols-3">
             <TabsTrigger value="images" className="flex items-center gap-2">
               <Image className="h-4 w-4" />
               Imágenes
@@ -157,49 +160,34 @@ export const ProjectMultimediaModal = ({
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="images" className="mt-6">
-            <div className="max-h-[400px] overflow-y-auto">
-              {images.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {images.map(renderImage)}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Image className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No hay imágenes disponibles</p>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="videos" className="mt-6">
-            <div className="max-h-[400px] overflow-y-auto">
-              {videos.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {videos.map(renderVideo)}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Video className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No hay videos disponibles</p>
-                </div>
-              )}
-            </div>
+          <TabsContent value="images" className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            {images.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {images.map(renderImage)}
+              </div>
+            ) : (
+              <EmptyState icon={Image} label="No hay imágenes disponibles" />
+            )}
           </TabsContent>
 
-          <TabsContent value="youtube" className="mt-6">
-            <div className="max-h-[400px] overflow-y-auto">
-              {activeYoutubeVideos.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeYoutubeVideos.map(renderYouTubeVideo)}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Youtube className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No hay videos de YouTube disponibles</p>
-                </div>
-              )}
-            </div>
+          <TabsContent value="videos" className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            {videos.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {videos.map(renderVideo)}
+              </div>
+            ) : (
+              <EmptyState icon={Video} label="No hay videos disponibles" />
+            )}
+          </TabsContent>
+
+          <TabsContent value="youtube" className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            {activeYoutubeVideos.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {activeYoutubeVideos.map(renderYouTubeVideo)}
+              </div>
+            ) : (
+              <EmptyState icon={Youtube} label="No hay videos de YouTube disponibles" />
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

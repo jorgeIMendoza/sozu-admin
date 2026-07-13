@@ -21,6 +21,9 @@ export interface CollectionAccount {
   estatus_propiedad: string | null;
   producto_nombre: string | null;
   tipo_cuenta: 'Propiedad' | 'Producto' | 'Servicio' | 'Mantenimiento';
+  // Clasificación canónica por id_categoria (P27 §E.1). Mientras la RPC no la
+  // devuelva, el front cae a la derivación local accountType().
+  tipo_categoria?: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   parcialidades_vencidas: number;
   invalidos: number;
   monto_vencido: number;

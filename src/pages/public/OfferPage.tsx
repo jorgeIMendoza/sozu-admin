@@ -487,7 +487,7 @@ const OfferPage = () => {
 
             {/* FLOOR PLAN */}
             <div id="floor-plan" className={sectionClass("floor-plan")}>
-              {offer.floorPlanUrl ? (
+              {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
                 <OfferFloorPlanLarge
                   imageUrl={offer.floorPlanUrl}
                   unitArea={offer.property.area}
@@ -495,6 +495,10 @@ const OfferPage = () => {
                   bathrooms={offer.property.bathrooms}
                   view={offer.property.view}
                   floor={offer.property.level}
+                  planoUbicacionUrl={offer.planoUbicacionUrl}
+                  planoUbicacionRegiones={offer.planoUbicacionRegiones}
+                  highlightUnit={offer.unitDepto}
+                  fullPropertyNumber={offer.property.unitNumber}
                 />
               ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden">

@@ -8,7 +8,7 @@ const libraries: ("places")[] = ["places"];
 
 const containerStyle = {
   width: "100%",
-  height: "300px"
+  height: "280px"
 };
 
 const defaultCenter = {
@@ -94,21 +94,21 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-[300px] flex items-center justify-center bg-muted rounded-lg border">
-        <p className="text-muted-foreground">Cargando mapa...</p>
+      <div className="w-full h-[280px] flex items-center justify-center rounded-lg border border-border bg-card overflow-hidden">
+        <p className="text-sm text-muted-foreground">Cargando mapa...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full rounded-lg border border-border overflow-hidden bg-card">
       {/* Search bar - only in edit mode */}
       {!readOnly && (
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative border-b border-border p-2">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar dirección..."
-            className="pl-8"
+            className="pl-8 border-0 focus-visible:ring-0 shadow-none"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             onKeyDown={(e) => {
@@ -120,9 +120,9 @@ export function GoogleMapComponent({ onLocationSelect, onAddressSelect, initialL
           />
         </div>
       )}
-      
+
       {/* Map */}
-      <div className="w-full h-[300px] rounded-lg overflow-hidden border">
+      <div className="w-full h-[280px]">
         <GoogleMap
           mapContainerStyle={containerStyle}
           center={markerPosition || defaultCenter}

@@ -18,8 +18,8 @@ export function nivelDeParcialidades(n: number): NivelPrioridad {
   return 'Crítico';
 }
 
-export type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento';
-export const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento'];
+export type TipoCategoria = 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional';
+export const TIPOS: TipoCategoria[] = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento', 'Adicional'];
 
 // Multi-select con typeahead + navegación por teclado.
 // - Muestra ~6 opciones visibles; el resto queda tras scroll.
@@ -55,7 +55,7 @@ export function NivelMultiSelect({
     : `${value.length} ${noun}`;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -76,10 +76,10 @@ export function NivelMultiSelect({
       >
         <Command>
           <CommandInput placeholder="Buscar..." />
-          <CommandList>
+          <CommandList className="!max-h-[200px]">
             <CommandEmpty>Sin coincidencias.</CommandEmpty>
             <CommandGroup>
-              {niveles.map((nivel) => (
+              {[...niveles].sort((a, b) => a.localeCompare(b, 'es')).map((nivel) => (
                 <CommandItem key={nivel} value={nivel} onSelect={() => toggle(nivel)}>
                   <div className={cn(
                     'mr-2 size-4 rounded-[4px] border flex items-center justify-center shrink-0',
@@ -114,11 +114,24 @@ export const ESTATUS_PAGO_KEY: Record<string, string> = {
 export const EstatusMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
   <NivelMultiSelect value={value} onChange={onChange} niveles={ESTATUS_PAGO} className={className} noun="estatus" />;
 
+// Estados de validación de pago CRUDOS (6 del constraint + Sin validar). P27 §E.2.
+// Reemplaza la clasificación derivada de 4 para que RP muestre "toda la info".
+export const ESTATUS_VALIDACION: string[] = [
+  'Coincide', 'No coincide', 'Error', 'Sin evidencia', 'Monto ilegible', 'Monto ausente', 'Sin validar',
+];
+export const ESTATUS_VALIDACION_KEY: Record<string, string> = {
+  'Coincide': 'coincide', 'No coincide': 'no_coincide', 'Error': 'error',
+  'Sin evidencia': 'sin_evidencia', 'Monto ilegible': 'monto_ilegible',
+  'Monto ausente': 'monto_ausente_db', 'Sin validar': 'sin_validar',
+};
+export const ValidacionEstadoMultiSelect = ({ value, onChange, className }: { value: string[]; onChange: (v: string[]) => void; className?: string }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={ESTATUS_VALIDACION} className={className} noun="estatus" />;
+
 // Estatus de disponibilidad de la propiedad. El RPC devuelve TODO el universo
 // (sin excluir ningún estatus); este filtro decide qué mostrar. Se comparan
 // contra `estatus_propiedad` (nombre) que devuelve el RPC.
 export const ESTATUS_PROPIEDAD: string[] = [
-  'Inventario', 'Disponible', 'Apartada', 'Vendido', 'Escrituración', 'Entregada', 'Pagada completamente',
+  'Inventario', 'Disponible', 'Apartada', 'Vendido', 'Escrituración', 'Entregada', 'Pagada completamente', 'Cancelada',
 ];
 // `options` viene de la DB (distinct de los datos cargados). Si no se pasa,
 // cae al catálogo fijo como respaldo.
@@ -131,3 +144,7 @@ export const TipoMultiSelect = ({ value, onChange, className, options }: { value
 // Modelos: 100% dinámico desde la DB (no hay catálogo fijo).
 export const ModeloMultiSelect = ({ value, onChange, className, options }: { value: string[]; onChange: (v: string[]) => void; className?: string; options: string[] }) =>
   <NivelMultiSelect value={value} onChange={onChange} niveles={options} className={className} noun="modelos" />;
+
+// Método de pago: dinámico desde los pagos cargados (Relación de Pagos).
+export const MetodoMultiSelect = ({ value, onChange, className, options }: { value: string[]; onChange: (v: string[]) => void; className?: string; options: string[] }) =>
+  <NivelMultiSelect value={value} onChange={onChange} niveles={options} className={className} noun="métodos" />;
