@@ -37,7 +37,7 @@ export const PortalInmobiliariaLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const isInmobiliariaRole = profile?.rol_nombre === "Inmobiliaria";
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const canImpersonate = profile?.puede_impersonar === true;
   const { personaId } = useInmobiliariaPersonaId();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -213,7 +213,7 @@ export const PortalInmobiliariaLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            {isSuperAdmin && <InmobiliariaImpersonationSelector />}
+            {canImpersonate && <InmobiliariaImpersonationSelector />}
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => navigate("/admin/portal-inmobiliaria/configuracion")}
@@ -246,7 +246,7 @@ export const PortalInmobiliariaLayout = () => {
                 {initials}
               </button>
             </div>
-            {isSuperAdmin && (
+            {canImpersonate && (
               <div className="px-4 pb-3">
                 <InmobiliariaImpersonationSelector />
               </div>
