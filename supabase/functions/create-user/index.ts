@@ -13,6 +13,7 @@ interface CreateUserRequest {
   id_persona?: number;
   id_inmobiliaria?: number; // ID of the inmobiliaria to link the agent to
   id_notario?: number; // ID del notario (tabla notarios) para usuarios con rol Notario
+  id_banco?: number; // ID del banco (tabla bancos) para roles Supervisor/Operador Banco
   telefono?: string;
   clave_pais_telefono?: string;
   auto_create?: boolean; // Flag for automatic creation (bypasses Super Admin check for Inmobiliaria role)
@@ -100,7 +101,7 @@ serve(async (req) => {
 
     // Parse request body early to check for auto_create flag
     const body: CreateUserRequest = await req.json();
-    const { email: rawEmail, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, telefono, clave_pais_telefono, auto_create } = body;
+    const { email: rawEmail, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, id_banco, telefono, clave_pais_telefono, auto_create } = body;
     const email = rawEmail?.toLowerCase()?.trim();
 
     // Check if this is an automatic creation for Inmobiliaria or Agente Inmobiliario role (bypasses Super Admin check)
@@ -121,7 +122,7 @@ serve(async (req) => {
       console.log(`Auto-create mode enabled for ${rol_id === ROLE_INMOBILIARIA ? 'Inmobiliaria' : 'Agente Inmobiliario'} user creation`);
     }
 
-    console.log("Creating user:", { email, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, auto_create });
+    console.log("Creating user:", { email, nombre, rol_id, id_persona, id_inmobiliaria, id_notario, id_banco, auto_create });
 
     // Validate required fields
     if (!email || !nombre || !rol_id) {
@@ -147,6 +148,37 @@ serve(async (req) => {
       if (!notarioRecord || notarioRecord.activo === false) {
         return new Response(
           JSON.stringify({ error: `No existe una notaría activa con id ${id_notario}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Supervisor Banco / Operador Banco users must be linked to a banco
+    // (usuarios.id_banco). Detección por NOMBRE de rol: sus ids pueden diferir
+    // entre ambientes.
+    const BANCO_ROLE_NAMES = ["Supervisor Banco", "Operador Banco"];
+    const { data: targetRole } = await supabaseAdmin
+      .from("roles")
+      .select("nombre")
+      .eq("id", rol_id)
+      .maybeSingle();
+    const isBancoRole = BANCO_ROLE_NAMES.includes(targetRole?.nombre ?? "");
+
+    if (isBancoRole) {
+      if (!id_banco) {
+        return new Response(
+          JSON.stringify({ error: "Los usuarios con rol Supervisor/Operador Banco requieren un banco (id_banco)" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const { data: bancoRecord } = await supabaseAdmin
+        .from("bancos")
+        .select("id, activo")
+        .eq("id", id_banco)
+        .maybeSingle();
+      if (!bancoRecord || bancoRecord.activo === false) {
+        return new Response(
+          JSON.stringify({ error: `No existe un banco activo con id ${id_banco}` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -276,6 +308,7 @@ serve(async (req) => {
         rol_id,
         id_persona: finalIdPersona,
         id_notario: rol_id === ROLE_NOTARIO ? id_notario : null,
+        id_banco: isBancoRole ? id_banco : null,
         auth_user_id: authUserId,
         debe_cambiar_password: true,
         activo: true,
