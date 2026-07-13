@@ -26,9 +26,10 @@ import { CollectionLoading, CollectionError } from '@/components/admin/portal-co
 import { SortHeader, toggleSortState, type SortState } from '@/components/admin/portal-cobranza/CollectionSortHeader';
 
 const PAGE_SIZE = 15;
-// Se cargan todas las filas del filtro (como Cuentas de Cobranza) para ordenar y
-// paginar en cliente = fluido. Cap defensivo del RPC ~5000; con filtros basta.
-const LOAD_LIMIT = 5000;
+// Se cargan todas las filas del filtro y se pagina/filtra en cliente. Cap subido a
+// 25000 (universo ~19k) como INTERIM para "traer todos"; el fix escalable es la
+// paginación server-side real (ver Ejecuciones_manuales/P28 §D.1).
+const LOAD_LIMIT = 25000;
 
 // Columnas ordenables (client-side) y su accessor.
 type PaymentsSortKey = 'account' | 'client' | 'amount' | 'status';
@@ -126,7 +127,7 @@ export default function CollectionPayments() {
 
   const {
     pagos: payments, total, totalMonto: totalAmount,
-    totalValidos: totalValid, totalSinValidar: totalUnverified,
+    totalValidos: totalValid, totalSinValidar: totalUnverified, totalPorEstado,
     isLoading, error,
   } = useRelacionPagos({
     proyectoId: projectId,
@@ -186,6 +187,15 @@ export default function CollectionPayments() {
 
   const shown = sortedRows.length;
   const pageRows = sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Cards por estado de validación (universo completo, P27 §E.3). Fallback a los
+  // totales derivados (4) si la RPC aún no expone total_por_estado.
+  const cardValidos = totalPorEstado ? (totalPorEstado['coincide'] ?? 0) : totalValid;
+  const cardSinValidar = totalPorEstado ? (totalPorEstado['sin_validar'] ?? 0) : totalUnverified;
+  const cardConObs = totalPorEstado
+    ? ['no_coincide', 'error', 'sin_evidencia', 'monto_ilegible', 'monto_ausente_db']
+        .reduce((s, k) => s + (totalPorEstado[k] ?? 0), 0)
+    : Math.max(total - totalValid - totalUnverified, 0);
 
   const hasFilters = projectId !== null || !!searchClabe || !!searchClient || !!searchUnit
     || !!searchAccount || filterType.length > 0 || filterStatus.length > 0
@@ -278,7 +288,7 @@ export default function CollectionPayments() {
     <div className="space-y-4">
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Total pagos</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all" title={total.toLocaleString()}>
@@ -295,15 +305,22 @@ export default function CollectionPayments() {
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Válidos</span>
-          <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-success break-all" title={totalValid.toLocaleString()}>
-            {formatCompactNumber(totalValid)}
+          <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-success break-all" title={cardValidos.toLocaleString()}>
+            {formatCompactNumber(cardValidos)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">comprobante validado</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">coincide</p>
+        </div>
+        <div className="sozu-kpi-card overflow-hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-danger block mb-3">Con observación</span>
+          <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-danger break-all" title={cardConObs.toLocaleString()}>
+            {formatCompactNumber(cardConObs)}
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-snug">no coincide · error · sin evidencia · monto</p>
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-warning block mb-3">Sin validar</span>
-          <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-warning break-all" title={totalUnverified.toLocaleString()}>
-            {formatCompactNumber(totalUnverified)}
+          <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-warning break-all" title={cardSinValidar.toLocaleString()}>
+            {formatCompactNumber(cardSinValidar)}
           </p>
           <p className="text-[11px] text-muted-foreground leading-snug">pendientes de validar</p>
         </div>

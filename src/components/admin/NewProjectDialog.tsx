@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2, Trash2 } from "lucide-react";
+import { Plus, MapPin, Copy, Search, CheckCircle, Grid3x3, Building2, Trash2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -98,6 +98,8 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [showrooms, setShowrooms] = useState<Array<{ nombre: string; descripcion_direccion: string; latitud: number | null; longitud: number | null }>>([]);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  // Foto real de cada amenidad EN ESTE proyecto (id_amenidad → url_imagen)
+  const [amenityImages, setAmenityImages] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -309,6 +311,7 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         const amenityRelations = values.amenidades.map(amenidadId => ({
           id_proyecto: newProject.id,
           id_amenidad: parseInt(amenidadId),
+          url_imagen: amenityImages[amenidadId] || null,
         }));
 
         const { error: amenityError } = await supabase
@@ -1003,22 +1006,36 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                                           <FormLabel className="text-sm font-normal">
                                             {amenidad.nombre}
                                           </FormLabel>
-                                          <div 
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                            }}
-                                            onMouseDown={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                            }}
-                                          >
-                                            <EditAmenityDialog 
-                                              amenityId={amenidad.id}
-                                              amenityName={amenidad.nombre}
-                                              onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                              onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
-                                            />
+                                          <div className="flex items-center gap-1">
+                                            {amenityImages[amenidad.id.toString()] && (
+                                              <ImageIcon className="h-3.5 w-3.5 text-primary" aria-label="Con foto real" />
+                                            )}
+                                            <div
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                              }}
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                              }}
+                                            >
+                                              <EditAmenityDialog
+                                                amenityId={amenidad.id}
+                                                amenityName={amenidad.nombre}
+                                                onAmenityUpdated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                                onAmenityDeleted={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })}
+                                                projectImageUrl={amenityImages[amenidad.id.toString()] || ""}
+                                                onProjectImageChange={(url) =>
+                                                  setAmenityImages((prev) => {
+                                                    const next = { ...prev };
+                                                    if (url) next[amenidad.id.toString()] = url;
+                                                    else delete next[amenidad.id.toString()];
+                                                    return next;
+                                                  })
+                                                }
+                                              />
+                                            </div>
                                           </div>
                                         </div>
                                     </FormItem>

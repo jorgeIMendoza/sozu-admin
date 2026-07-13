@@ -72,6 +72,7 @@ interface VideoRow {
 interface FotoRow {
   id: number;
   url: string;
+  id_categoria: number | null;
 }
 
 interface ProyectoRow {
@@ -153,6 +154,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         { data: proyecto, error: ep },
         { data: videos, error: ev },
         { data: fotos, error: ef },
+        { data: categoriasData, error: ec },
       ] = await Promise.all([
         supabase
           .from("proyectos")
@@ -167,22 +169,33 @@ export function useConstructionProgress(cuentaId: string | undefined) {
           .order("id", { ascending: false }),
         supabase
           .from("multimedias_proyecto")
-          .select("id, url")
+          .select("id, url, id_categoria")
           .eq("id_proyecto", idProy)
           .eq("activo", true)
           .eq("es_imagen", true)
           .order("id", { ascending: false })
-          .limit(6),
+          .limit(50),
+        supabase
+          .from("categorias_multimedia_proyecto")
+          .select("id, nombre")
+          .eq("activo", true),
       ]);
       if (ep) throw ep;
       if (ev) throw ev;
       if (ef) throw ef;
+      if (ec) throw ec;
 
       const p = proyecto as ProyectoRow | null;
       if (!p) return null;
 
+      // "Avances de obra" photos only (resolve id by name — ids differ dev/prod)
+      const cats = (categoriasData ?? []) as { id: number; nombre: string }[];
+      const avancesId = cats.find((c) => c.nombre === "Avances de obra")?.id ?? null;
+
       const videoRows = (videos ?? []) as VideoRow[];
-      const fotoRows = (fotos ?? []) as FotoRow[];
+      const fotoRows = ((fotos ?? []) as FotoRow[])
+        .filter((f) => avancesId == null || f.id_categoria === avancesId)
+        .slice(0, 6);
 
       const latest = videoRows[0];
       const featuredVideoUrl = latest ? toEmbedUrl(latest.link) : undefined;
