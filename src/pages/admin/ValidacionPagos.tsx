@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { EliminarPagoDialog } from "@/components/admin/portal-cobranza/EliminarPagoDialog";
 import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/useEliminarPago";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -1767,15 +1768,24 @@ export default function ValidacionPagos() {
                         )}
                         {canDelete && (
                           row.metodo_nombre === "STP" ? (
-                            <span title="Pago STP: no se puede eliminar"
-                              className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-not-allowed">
-                              <Trash2 className="size-4" />
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-not-allowed">
+                                  <Trash2 className="size-4" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Pago STP: no se puede eliminar</TooltipContent>
+                            </Tooltip>
                           ) : (
-                            <button onClick={() => openDelete(row)} title="Eliminar pago"
-                              className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-                              <Trash2 className="size-4" />
-                            </button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button onClick={() => openDelete(row)}
+                                  className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Eliminar pago</TooltipContent>
+                            </Tooltip>
                           )
                         )}
                       </div>
