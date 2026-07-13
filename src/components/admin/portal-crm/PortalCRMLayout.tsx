@@ -191,6 +191,7 @@ export const PortalCRMLayout = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const { isPathAllowed, allowedPaths, isSuperAdmin, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
+  const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
   const { data: crmSubmenus, isLoading: isLoadingSubmenus } = useCrmSubmenus();
 
@@ -435,8 +436,8 @@ export const PortalCRMLayout = () => {
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
             <CrmOrgSwitcher />
 
-            {/* Impersonation selector — self-guards for superadmin */}
-            {isSuperAdmin && <CrmImpersonationSelector />}
+            {/* Impersonation selector — self-guards via puede_impersonar */}
+            {canImpersonate && <CrmImpersonationSelector />}
 
             {/* Avatar + perfil — pushed to right */}
             <div className="flex items-center gap-2 ml-auto">
@@ -483,7 +484,7 @@ export const PortalCRMLayout = () => {
             <div className="px-4 pb-3">
               <CrmOrgSwitcher className="w-full max-w-none" />
             </div>
-            {isSuperAdmin && (
+            {canImpersonate && (
               <div className="px-4 pb-3">
                 <CrmImpersonationSelector />
               </div>
