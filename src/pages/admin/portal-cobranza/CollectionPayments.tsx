@@ -10,13 +10,16 @@ import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { AddCepDialog } from '@/components/admin/AddCepDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
+import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
+import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from '@/hooks/useEliminarPago';
+import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { IconTip, ClaveCopyable, fmtCurrency, fmtDate, EstadoBadge, ValidacionBadge } from './cuentaDetalleShared';
 import { ActiveFilterBanner } from '@/components/cobranza/ActiveFilterBanner';
 import {
   X, ChevronLeft, ChevronRight, SlidersHorizontal,
-  FileCheck, FileWarning, FileText, DollarSign, Eye, Upload,
+  FileCheck, FileWarning, FileText, DollarSign, Eye, Upload, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
@@ -88,6 +91,8 @@ function propStatusTextClass(status: string | null): string {
 // Correcciones (fecha, estatus, evidencia) inline por pago.
 export default function CollectionPayments() {
   const queryClient = useQueryClient();
+  const { canDelete } = usePagePermissions('/admin/portal-cobranza/relacion-pagos');
+  const { eliminarPago, isDeleting } = useEliminarPago();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: projects } = useProyectosCobranza();
 
@@ -112,6 +117,9 @@ export default function CollectionPayments() {
   // Cargar evidencia (icono Upload) + detalle del pago (icono Eye).
   const [loadPayment, setLoadPayment] = useState<PagoRecord | null>(null);
   const [detailPayment, setDetailPayment] = useState<PagoRecord | null>(null);
+  // Eliminar pago (icono Trash) + impacto (qué más se borrará).
+  const [deletePayment, setDeletePayment] = useState<PagoRecord | null>(null);
+  const [deleteImpacto, setDeleteImpacto] = useState<PagoImpacto | null>(null);
 
   // Estatus pago = 6 estados de validación crudos (P27 §E.2), filtrado client-side por estado_validacion.
   const statusKeys = filterStatus.map(l => ESTATUS_VALIDACION_KEY[l]).filter(Boolean);
@@ -226,6 +234,26 @@ export default function CollectionPayments() {
   }, [projectId, projects]);
 
   const refetchPayments = () => queryClient.invalidateQueries({ queryKey: ['relacion-pagos'] });
+
+  // Abrir confirmación de borrado + precargar impacto.
+  const openDelete = (r: PagoRecord) => {
+    setDeletePayment(r);
+    setDeleteImpacto(null);
+    fetchPagoImpacto(r.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletePayment) return;
+    try {
+      await eliminarPago(deletePayment.pago_id);
+      toast.success('Pago eliminado');
+      setDeletePayment(null);
+      setDeleteImpacto(null);
+      refetchPayments();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo eliminar el pago');
+    }
+  };
 
   const handleLoadClose = () => { setLoadPayment(null); refetchPayments(); };
 
@@ -391,7 +419,7 @@ export default function CollectionPayments() {
                 <th className="w-[100px] text-center">Estado</th>
                 <SortHeader label="Validado" sortKey="status" sort={sort} onSort={toggleSort} thClass="w-[104px]" />
                 <th className="w-[56px]" aria-label="Comprobante" />
-                <th className="w-[80px] text-center">Acciones</th>
+                <th className="w-[116px] pr-4" aria-label="Acciones" />
               </tr>
             </thead>
             <tbody>
@@ -480,8 +508,8 @@ export default function CollectionPayments() {
                       </span>
                     </IconTip>
                   </td>
-                  <td className="px-2">
-                    <div className="flex items-center justify-center gap-1">
+                  <td className="px-2 pr-4">
+                    <div className="flex items-center justify-end gap-1.5">
                       <IconTip label="Detalle del pago">
                         <button onClick={() => setDetailPayment(r)}
                           className="p-1.5 rounded transition-colors text-foreground hover:bg-muted">
@@ -494,6 +522,14 @@ export default function CollectionPayments() {
                           <Upload className="size-4" />
                         </button>
                       </IconTip>
+                      {canDelete && (
+                        <IconTip label="Eliminar pago">
+                          <button onClick={() => openDelete(r)}
+                            className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive">
+                            <Trash2 className="size-4" />
+                          </button>
+                        </IconTip>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -542,6 +578,22 @@ export default function CollectionPayments() {
         payment={detailPayment}
         onClose={() => setDetailPayment(null)}
         onSaved={refetchPayments}
+      />
+
+      {/* Eliminar pago (cascada vía RPC eliminar_pago) */}
+      <DeleteConfirmationDialog
+        open={!!deletePayment}
+        onOpenChange={(open) => { if (!open && !isDeleting) { setDeletePayment(null); setDeleteImpacto(null); } }}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Eliminar pago"
+        description={
+          deletePayment
+            ? `Se eliminará el pago de ${fmtCurrency(Number(deletePayment.monto))}${deletePayment.cliente ? ` de ${deletePayment.cliente}` : ''}.` +
+              impactoClause(deleteImpacto)
+            : ''
+        }
+        warningMessage={impactoWarning(deleteImpacto)}
       />
     </div>
   );

@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,9 +46,10 @@ export function DeleteConfirmationDialog({
             {description}
           </AlertDialogDescription>
           {warningMessage && (
-            <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-              <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
-                ⚠️ {warningMessage}
+            <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" strokeWidth={2} />
+              <p className="text-[13px] leading-relaxed text-amber-800 dark:text-amber-200">
+                {warningMessage}
               </p>
             </div>
           )}
