@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Upload, FileText, ExternalLink, Eye } from "lucide-react";
+import { Trash2, Upload, FileText, ExternalLink, Eye, ClipboardList } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 
 interface ProjectFichaTecnicaSectionProps {
   projectId: number;
@@ -97,42 +99,51 @@ export const ProjectFichaTecnicaSection = ({ projectId }: ProjectFichaTecnicaSec
   if (isLoading) return <div className="flex justify-center py-4">Cargando fichas técnicas...</div>;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Fichas Técnicas del Proyecto</h3>
-        <div>
+    <FormSection
+      title="Fichas Técnicas del Proyecto"
+      icon={ClipboardList}
+      actions={
+        <>
           <input type="file" id="ficha-upload" accept="application/pdf" onChange={handleFileUpload} className="hidden" disabled={isUploading} />
-          <Button type="button" variant="outline" disabled={isUploading} onClick={() => document.getElementById("ficha-upload")?.click()}>
-            <Upload className="h-4 w-4 mr-2" />
+          <Button type="button" variant="outline" size="sm" disabled={isUploading} onClick={() => document.getElementById("ficha-upload")?.click()}>
+            <Upload className="h-4 w-4 mr-1" />
             {isUploading ? "Cargando..." : "Cargar PDF"}
           </Button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {fichas && fichas.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
           {fichas.map((ficha: any) => (
-            <div key={ficha.id} className="border rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FileText className="h-8 w-8 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Ficha Técnica #{ficha.id}</p>
+            <div key={ficha.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/40">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">Ficha Técnica #{ficha.id}</p>
                   <p className="text-xs text-muted-foreground">{new Date(ficha.fecha_creacion).toLocaleDateString('es-MX')}</p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setPreviewUrl(ficha.url)}>
-                  <Eye className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => window.open(ficha.url, "_blank")}>
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-1">
+                <IconTooltip label="Vista previa">
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Vista previa" onClick={() => setPreviewUrl(ficha.url)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </IconTooltip>
+                <IconTooltip label="Abrir en pestaña">
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Abrir en pestaña" onClick={() => window.open(ficha.url, "_blank")}>
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </IconTooltip>
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button type="button" variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
+                  <IconTooltip label="Eliminar ficha">
+                    <AlertDialogTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label="Eliminar ficha">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                  </IconTooltip>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
@@ -140,7 +151,7 @@ export const ProjectFichaTecnicaSection = ({ projectId }: ProjectFichaTecnicaSec
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(ficha.id)}>Eliminar</AlertDialogAction>
+                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(ficha.id)}>Eliminar</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -149,7 +160,10 @@ export const ProjectFichaTecnicaSection = ({ projectId }: ProjectFichaTecnicaSec
           ))}
         </div>
       ) : (
-        <div className="text-center py-8 text-muted-foreground">No hay fichas técnicas cargadas para este proyecto</div>
+        <div className="rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+          <ClipboardList className="mx-auto mb-2 h-10 w-10 opacity-40" />
+          <p className="text-sm">No hay fichas técnicas cargadas para este proyecto</p>
+        </div>
       )}
 
       <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
@@ -160,6 +174,6 @@ export const ProjectFichaTecnicaSection = ({ projectId }: ProjectFichaTecnicaSec
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </FormSection>
   );
 };

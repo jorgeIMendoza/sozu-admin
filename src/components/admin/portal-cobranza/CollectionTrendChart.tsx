@@ -1,6 +1,7 @@
 import { TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { AnioMesTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
 
 // Gráfica de líneas Cobrado vs Programado por mes — DISEÑO compartido por los
 // menús espejo (Inmuebles y Complementos). La data y las líneas cambian por menú,
@@ -28,7 +29,7 @@ export function TrendChart({ data, lines }: {
     <section>
       <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
         <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} />
-        Cobrado vs programado por mes
+        Cobrado vs programado <AnioMesTag />
       </h3>
       <div className="sozu-kpi-card">
         {data.length === 0 ? (

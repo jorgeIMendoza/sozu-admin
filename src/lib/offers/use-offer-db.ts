@@ -4,6 +4,7 @@ import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
 import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { isValidRFC } from "@/utils/fiscalDataValidation";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -303,7 +304,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     (oferta as any).id_persona_lead
       ? supabase
           .from("personas")
-          .select("email")
+          .select("email, rfc")
           .eq("id", (oferta as any).id_persona_lead)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -319,7 +320,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     // Bodegas de la propiedad (extras vinculados a la unidad de la oferta)
     (supabase as any)
       .from("bodegas")
-      .select("id, nombre, ubicacion, m2, es_incluido")
+      .select("id, nombre, ubicacion, m2, es_incluido, id_producto")
       .eq("id_propiedad", propiedadId)
       .eq("activo", true)
       .order("id", { ascending: true }),
@@ -346,6 +347,37 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const modeloPropertyImages: string[] = modeloMediaRows
     .filter((m) => m.ver_como_imagen_de_propiedad && m.url)
     .map((m) => toOptimizedUrl(m.url, 1200, 80));
+
+  // ── Plano de ubicación en el nivel (edificios_niveles_planos) para señalar la unidad ──
+  // Mismo dato que la Ficha Técnica del cliente: imagen del nivel + regiones (polígonos)
+  // que resaltan la unidad. FloorPlanCanvas hace el match del depto sobre estas regiones.
+  const numeroPisoNivel = (propiedad as any).numero_piso != null ? Number((propiedad as any).numero_piso) : null;
+  let planoUbicacionUrl: string | undefined;
+  let planoUbicacionRegiones: any[] = [];
+  if (edificio?.id && numeroPisoNivel) {
+    const { data: nivelPlano } = await (supabase as any)
+      .from("edificios_niveles_planos")
+      .select("imagen_url, regiones")
+      .eq("id_edificio", edificio.id)
+      .eq("nivel", numeroPisoNivel)
+      .eq("activo", true)
+      .maybeSingle();
+    if (nivelPlano) {
+      planoUbicacionUrl = (nivelPlano as any).imagen_url
+        ? toOptimizedUrl((nivelPlano as any).imagen_url, 1200, 85)
+        : undefined;
+      planoUbicacionRegiones = (nivelPlano as any).regiones || [];
+    }
+  }
+  // Depto derivado (numero_propiedad menos dígitos del piso) para el match del resaltado.
+  const rawPropNum = ((propiedad as any).numero_propiedad || "").toString().trim();
+  const propNumDigits = rawPropNum.replace(/\D/g, "");
+  const pisoDigits = (numeroPisoNivel?.toString() || "").replace(/\D/g, "");
+  const extractedDepto =
+    pisoDigits && propNumDigits.startsWith(pisoDigits) && propNumDigits.length > pisoDigits.length
+      ? propNumDigits.slice(pisoDigits.length)
+      : propNumDigits;
+  const unitDepto = extractedDepto.length === 1 ? extractedDepto.padStart(2, "0") : extractedDepto || rawPropNum;
 
   // Construir agentId y datos del agente a partir del resultado paralelo.
   // personas se trae en query APARTE (no embed) para no depender del schema-cache
@@ -413,9 +445,33 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
-  const allEsqs      = (esquemas ?? []).filter((e: any) => !e.es_manual);
+
+  // Si el esquema seleccionado fue VERSIONADO (desactivado al editarlo), no aparece en la
+  // lista activa del proyecto. Lo traemos aparte para que la oferta del cliente siga
+  // mostrando su plan CONGELADO (los porcentajes con los que lo aceptó).
+  let esquemasAug = (esquemas ?? []) as any[];
+  if (selectedId != null && !esquemasAug.some((e: any) => e.id === selectedId)) {
+    const { data: selEsq } = await (supabase as any)
+      .from("esquemas_pago")
+      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden, tramos_mensualidad")
+      .eq("id", selectedId)
+      .maybeSingle();
+    if (selEsq) esquemasAug = [...esquemasAug, selEsq];
+  }
+
+  // ¿La oferta ya está formalizada con cuenta de cobranza (apartado/venta)? Entonces el
+  // plan queda congelado: se muestra SOLO el seleccionado (no el selector completo).
+  const { data: cuentasOferta } = await (supabase as any)
+    .from("cuentas_cobranza")
+    .select("id")
+    .eq("id_oferta", numId)
+    .eq("activo", true)
+    .limit(1);
+  const ofertaTieneCuenta = Array.isArray(cuentasOferta) && cuentasOferta.length > 0;
+
+  const allEsqs      = esquemasAug.filter((e: any) => !e.es_manual);
   const selectedIsManual = selectedId
-    ? (esquemas ?? []).some((e: any) => e.id === selectedId && e.es_manual)
+    ? esquemasAug.some((e: any) => e.id === selectedId && e.es_manual)
     : false;
 
   // Strip internal naming pattern (manual_NNNN_*) and show clean label
@@ -428,7 +484,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   let filteredEsqs: any[];
   if (selectedIsManual && selectedId) {
     // Manual selected: show it first (clean name) + all non-manual for comparison
-    const manualEsq = (esquemas ?? []).find((e: any) => e.id === selectedId);
+    const manualEsq = esquemasAug.find((e: any) => e.id === selectedId);
     filteredEsqs = [
       ...(manualEsq ? [normalizeManualName(manualEsq)] : []),
       ...allEsqs,
@@ -578,6 +634,16 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     };
   }
 
+  // Congelado: si la oferta ya tiene cuenta de cobranza (aceptada/apartada), mostrar SOLO
+  // el plan seleccionado. Sin cuenta, se conserva el selector con los planes activos.
+  if (ofertaTieneCuenta && selectedId != null) {
+    const soloSel = paymentPlans.filter((pl) => pl.id === String(selectedId));
+    if (soloSel.length > 0) {
+      paymentPlans.length = 0;
+      paymentPlans.push(...soloSel);
+    }
+  }
+
   // 10. Expiración (7 días desde generación).
   // Autoritativa del RPC (vigencia_hasta) si disponible; si no, fallback en código.
   const validUntilDate = vigenciaHasta
@@ -594,12 +660,67 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const tipoEstacMap = new Map<number, string>(
     ((tiposEstacionamiento as any[]) ?? []).map((t) => [t.id, t.nombre])
   );
+  // ── Esquema de pago + CLABE por bodega ──
+  // La bodega se vende como "oferta de producto" (ofertas con id_producto). El esquema
+  // y la CLABE reales viven en ESA oferta, no en la bodega ni en la unidad. Tomamos la
+  // oferta de producto del MISMO lead que la oferta de la unidad (misma propiedad),
+  // que es la que corresponde a este comprador. Fuente: id_esquema_pago_seleccionado +
+  // clabe_stp_tmp_producto (ver NewProductOfferDialog).
+  // Gate CLABE: solo se muestra si el lead tiene RFC válido (oferta formalizada con
+  // datos fiscales del cliente). Mismo criterio que el PDF (offerPdfStorageService).
+  const leadRfcValido = isValidRFC((leadPersona as any)?.rfc);
+  const leadIdOferta = (oferta as any).id_persona_lead ?? null;
+  const bodegaPagoByProducto = new Map<
+    number,
+    { pctEnganche: number; pctEntrega: number; pctMensualidades: number; numMensualidades: number; clabeStp?: string }
+  >();
+  const bodegaProductoIds = Array.from(
+    new Set(((bodegasRows as any[]) ?? []).map((b) => b.id_producto).filter((v) => v != null))
+  );
+  if (leadIdOferta && bodegaProductoIds.length > 0) {
+    const { data: prodOfertas } = await (supabase as any)
+      .from("ofertas")
+      .select("id, id_producto, id_esquema_pago_seleccionado, clabe_stp_tmp_producto")
+      .eq("id_propiedad", propiedadId)
+      .eq("id_persona_lead", leadIdOferta)
+      .in("id_producto", bodegaProductoIds)
+      .order("id", { ascending: false });
+    const prodRows = (prodOfertas as any[]) ?? [];
+    const esquemaIds = Array.from(
+      new Set(prodRows.map((o) => o.id_esquema_pago_seleccionado).filter((v) => v != null))
+    );
+    const esqMap = new Map<number, any>();
+    if (esquemaIds.length > 0) {
+      const { data: esquemas } = await (supabase as any)
+        .from("esquemas_pago")
+        .select("id, porcentaje_enganche, porcentaje_entrega, porcentaje_mensualidades, numero_mensualidades")
+        .in("id", esquemaIds);
+      for (const e of (esquemas as any[]) ?? []) esqMap.set(e.id, e);
+    }
+    // Recorremos de más reciente a más antigua (order desc): la primera oferta con
+    // esquema para cada producto es la vigente.
+    for (const o of prodRows) {
+      if (bodegaPagoByProducto.has(o.id_producto)) continue;
+      const esq = o.id_esquema_pago_seleccionado ? esqMap.get(o.id_esquema_pago_seleccionado) : null;
+      if (!esq) continue;
+      bodegaPagoByProducto.set(o.id_producto, {
+        pctEnganche: Number(esq.porcentaje_enganche ?? 0),
+        pctEntrega: Number(esq.porcentaje_entrega ?? 0),
+        pctMensualidades: Number(esq.porcentaje_mensualidades ?? 0),
+        numMensualidades: Number(esq.numero_mensualidades ?? 0),
+        clabeStp: leadRfcValido ? o.clabe_stp_tmp_producto || undefined : undefined,
+      });
+    }
+  }
+
   const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
     id: b.id,
     nombre: b.nombre ?? "",
     ubicacion: b.ubicacion ?? undefined,
     m2: b.m2 != null ? Number(b.m2) : undefined,
     incluido: !!b.es_incluido,
+    idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
+    pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
   }));
   const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
     id: e.id,
@@ -609,7 +730,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     incluido: !!e.es_incluido,
     tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
   }));
-  const clabeStp = (propiedad as any).clabe_stp_tmp_apartado || undefined;
+  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido).
+  const clabeStp = leadRfcValido ? (propiedad as any).clabe_stp_tmp_apartado || undefined : undefined;
 
   const offer = {
     id: String(numId),
@@ -718,6 +840,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     bodegas,
     estacionamientos,
     clabeStp,
+    planoUbicacionUrl,
+    planoUbicacionRegiones,
+    unitDepto,
     ...(mesesRestantes != null ? { mesesRestantes } : {}),
   } as unknown as OfertaComercial;
 

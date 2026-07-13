@@ -1,6 +1,8 @@
 import { Building2, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { formatCurrency } from '@/components/admin/portal-cobranza/StatusBadges';
+import { AnioMesTag } from '@/components/admin/portal-cobranza/FilterScopeHints';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
 // Pestaña "Cobranza por Proyecto" — DISEÑO compartido (manda Inmuebles).
@@ -20,40 +22,39 @@ export function CobranzaPorProyecto({ rows, onSelectProject }: {
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           Cobranza por proyecto
+          <AnioMesTag />
         </h3>
         <div className="sozu-kpi-card !p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="sozu-thead">
-                <tr>
-                  <th className="pl-5 !text-center">Proyecto</th>
-                  <th className="!text-center">Cobrado</th>
-                  <th className="!text-center">Por cobrar</th>
-                  <th className="!text-center pr-5">Vencido</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.length > 0 ? sorted.map(p => (
-                  <tr key={p.proyecto_id}
-                    {...(onSelectProject ? { onClick: () => onSelectProject(p.proyecto_id) } : {})}
-                    className={cn('border-b border-border/60 h-[48px] transition-colors group', onSelectProject && 'hover:bg-muted/40 cursor-pointer')}>
-                    <td className={cn('pl-5 pr-4 text-center text-[13px] font-medium text-foreground transition-colors', onSelectProject && 'group-hover:text-primary')}>{p.proyecto}</td>
-                    <td className="px-4 text-center text-[13px] text-success font-medium tabular-nums">{formatCurrency(p.cobrado)}</td>
-                    <td className="px-4 text-center text-[13px] text-muted-foreground tabular-nums">{formatCurrency(p.pendiente)}</td>
-                    <td className="pl-4 pr-5 text-center text-[13px] tabular-nums">
-                      {p.vencido > 0
-                        ? <span className="text-danger font-semibold">{formatCurrency(p.vencido)}</span>
-                        : <span className="text-muted-foreground/40">-</span>}
-                    </td>
-                  </tr>
-                )) : (
-                  <tr className="h-[64px]">
-                    <td colSpan={4} className="text-center text-[13px] text-muted-foreground">Sin datos de cobranza para los filtros seleccionados.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <Table className="text-sm">
+            <TableHeader className="sozu-thead">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-5 !text-center">Proyecto</TableHead>
+                <TableHead className="!text-center">Cobrado</TableHead>
+                <TableHead className="!text-center">Por cobrar</TableHead>
+                <TableHead className="!text-center pr-5">Vencido</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length > 0 ? sorted.map(p => (
+                <TableRow key={p.proyecto_id}
+                  {...(onSelectProject ? { onClick: () => onSelectProject(p.proyecto_id) } : {})}
+                  className={cn('h-[48px] group', onSelectProject && 'cursor-pointer')}>
+                  <TableCell className={cn('pl-5 pr-4 text-center text-[13px] font-medium text-foreground transition-colors', onSelectProject && 'group-hover:text-primary')}>{p.proyecto}</TableCell>
+                  <TableCell className="px-4 text-center text-[13px] text-success font-medium tabular-nums">{formatCurrency(p.cobrado)}</TableCell>
+                  <TableCell className="px-4 text-center text-[13px] text-muted-foreground tabular-nums">{formatCurrency(p.pendiente)}</TableCell>
+                  <TableCell className="pl-4 pr-5 text-center text-[13px] tabular-nums">
+                    {p.vencido > 0
+                      ? <span className="text-danger font-semibold">{formatCurrency(p.vencido)}</span>
+                      : <span className="text-muted-foreground/40">-</span>}
+                  </TableCell>
+                </TableRow>
+              )) : (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={4} className="h-[64px] text-center text-[13px] text-muted-foreground">Sin datos de cobranza para los filtros seleccionados.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </section>
 
@@ -62,7 +63,7 @@ export function CobranzaPorProyecto({ rows, onSelectProject }: {
         <section>
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-1.5">
             <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-            Cobrado por proyecto
+            Cobrado por proyecto <AnioMesTag />
           </h3>
           <div className="sozu-kpi-card">
             <ResponsiveContainer width="100%" height={Math.max(160, sorted.length * 44)}>

@@ -288,6 +288,26 @@ export interface OfertaComercial {
   clabeStp?: string;
   /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
   mesesRestantes?: number;
+  /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */
+  planoUbicacionUrl?: string;
+  /** Regiones/polígonos del plano de nivel (edificios_niveles_planos.regiones) para resaltar la unidad. */
+  planoUbicacionRegiones?: any[];
+  /** Número de depto derivado (numero_propiedad − piso) para el match del resaltado en el plano. */
+  unitDepto?: string;
+}
+
+/** Esquema de pago de una bodega, tomado de la oferta de producto del mismo lead. */
+export interface OfertaBodegaPago {
+  /** % de enganche (esquemas_pago.porcentaje_enganche). */
+  pctEnganche: number;
+  /** % a la entrega (esquemas_pago.porcentaje_entrega). */
+  pctEntrega: number;
+  /** % en mensualidades (esquemas_pago.porcentaje_mensualidades). */
+  pctMensualidades: number;
+  /** Número de mensualidades (esquemas_pago.numero_mensualidades). */
+  numMensualidades: number;
+  /** CLABE STP de la bodega (ofertas.clabe_stp_tmp_producto). undefined → ocultar. */
+  clabeStp?: string;
 }
 
 /** Bodega vinculada a la propiedad de la oferta (tabla `bodegas`). */
@@ -297,6 +317,10 @@ export interface OfertaBodega {
   ubicacion?: string;
   m2?: number;
   incluido: boolean;
+  /** Producto al que pertenece (bodegas.id_producto) — enlaza con su oferta/esquema. */
+  idProducto?: number;
+  /** Esquema de pago + CLABE de la bodega (oferta de producto del mismo lead). */
+  pago?: OfertaBodegaPago;
 }
 
 /** Estacionamiento vinculado a la propiedad de la oferta (tabla `estacionamientos`). */

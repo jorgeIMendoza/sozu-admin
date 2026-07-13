@@ -80,23 +80,45 @@ export const EditProductPaymentSchemeDialog = ({ scheme, onSchemeUpdated }: Edit
     }
     
     try {
-      const { error } = await supabase
+      const nuevosValores = {
+        nombre: values.nombre,
+        porcentaje_enganche: parseFloat(values.porcentaje_enganche) || 0,
+        porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades) || 0,
+        porcentaje_entrega: parseFloat(values.porcentaje_entrega) || 0,
+        numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
+        porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
+      };
+
+      // Versionar en lugar de mutar en sitio: desactivamos la fila actual (historial +
+      // congela ofertas/clientes que ya la seleccionaron) e insertamos una nueva activa.
+      // Editar un plan NO afecta a quien ya lo aceptó; solo aplica a ofertas nuevas.
+      const { error: deactivateError } = await supabase
         .from("esquemas_pago")
-        .update({
-          nombre: values.nombre,
-          porcentaje_enganche: parseFloat(values.porcentaje_enganche) || 0,
-          porcentaje_mensualidades: parseFloat(values.porcentaje_mensualidades) || 0,
-          porcentaje_entrega: parseFloat(values.porcentaje_entrega) || 0,
-          numero_mensualidades: parseInt(values.numero_mensualidades) || 0,
-          porcentaje_descuento_aumento: parseFloat(values.porcentaje_descuento_aumento) || 0,
-        })
+        .update({ activo: false })
         .eq("id", scheme.id);
 
-      if (error) throw error;
+      if (deactivateError) throw deactivateError;
+
+      const { error: insertError } = await supabase
+        .from("esquemas_pago")
+        .insert({
+          ...nuevosValores,
+          id_proyecto: scheme.id_proyecto ?? null,
+          id_producto: scheme.id_producto ?? null,
+          es_manual: false,
+          activo: true,
+          orden: scheme.orden ?? null,
+          numero_pagos_enganche: scheme.numero_pagos_enganche ?? 1,
+        });
+
+      if (insertError) {
+        await supabase.from("esquemas_pago").update({ activo: true }).eq("id", scheme.id);
+        throw insertError;
+      }
 
       toast({
         title: "Esquema de pago actualizado",
-        description: "El esquema de pago se ha actualizado exitosamente.",
+        description: "Se creó una nueva versión del esquema. Las ofertas ya aceptadas conservan la anterior.",
       });
 
       setOpen(false);

@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
-import { EstatusMultiSelect, ESTATUS_PAGO_KEY } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { ESTATUS_VALIDACION_KEY, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 import { PaymentsAdvancedFilters } from '@/components/admin/portal-cobranza/PaymentsAdvancedFilters';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
@@ -68,6 +68,7 @@ function typeTextClass(tipo: string | null): string {
     Estacionamiento: 'text-emerald-700',
     Producto:        'text-violet-700',
     Mantenimiento:   'text-teal-700',
+    Adicional:       'text-indigo-700',
   } as Record<string, string>)[tipo ?? ''] ?? 'text-foreground';
 }
 
@@ -100,6 +101,8 @@ export default function CollectionPayments() {
   const [searchAccount, setSearchAccount] = useState('');
   const [filterType, setFilterType] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterMetodo, setFilterMetodo] = useState<string[]>([]);
+  const [filterEstatusProp, setFilterEstatusProp] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Orden de la tabla (client-side). key=null → orden del servidor.
@@ -110,7 +113,8 @@ export default function CollectionPayments() {
   const [loadPayment, setLoadPayment] = useState<PagoRecord | null>(null);
   const [detailPayment, setDetailPayment] = useState<PagoRecord | null>(null);
 
-  const statusKeys = filterStatus.map(l => ESTATUS_PAGO_KEY[l]).filter(Boolean);
+  // Estatus pago = 6 estados de validación crudos (P27 §E.2), filtrado client-side por estado_validacion.
+  const statusKeys = filterStatus.map(l => ESTATUS_VALIDACION_KEY[l]).filter(Boolean);
 
   const {
     pagos: payments, total, totalMonto: totalAmount,
@@ -123,36 +127,68 @@ export default function CollectionPayments() {
     unidad: searchUnit,
     cuenta: searchAccount,
     tipos: filterType,
-    estatus: statusKeys,
+    estatus: [], // Estatus pago se filtra client-side por estado_validacion (6 estados).
     page: 1,
     pageSize: LOAD_LIMIT,
   });
 
   const resetPage = () => setPage(1);
 
+  // Métodos: catálogo completo (metodos_pago), no derivado de los pagos cargados
+  // (así salen TODOS aunque el set actual no los incluya).
+  const { data: metodoOptions = [] } = useQuery({
+    queryKey: ['metodos-pago-activos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('metodos_pago').select('nombre').eq('activo', true).order('nombre');
+      if (error) throw error;
+      return (data ?? []).map((m: { nombre: string }) => m.nombre);
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  // Estatus propiedad: opciones desde los pagos cargados (client-side).
+  const estatusPropOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of payments) if (p.estatus_propiedad) s.add(p.estatus_propiedad);
+    return [...s].sort((a, b) => a.localeCompare(b));
+  }, [payments]);
+  const clientFiltered = useMemo(
+    () => payments.filter(p =>
+      (filterMetodo.length === 0 || filterMetodo.includes(p.metodo_pago ?? '')) &&
+      (filterEstatusProp.length === 0 || filterEstatusProp.includes(p.estatus_propiedad ?? '')) &&
+      (statusKeys.length === 0 || statusKeys.includes(p.estado_validacion ?? 'sin_validar')),
+    ),
+    [payments, filterMetodo, filterEstatusProp, statusKeys],
+  );
+
   // Orden + paginación en cliente (fluido, sin viaje al servidor).
   const sortedRows = useMemo(() => {
-    if (!sort.key) return payments;
+    if (!sort.key) return clientFiltered;
     const acc = SORT_ACCESSORS[sort.key];
     const factor = sort.dir === 'asc' ? 1 : -1;
-    return [...payments].sort((a, b) => {
+    return [...clientFiltered].sort((a, b) => {
       const av = acc(a), bv = acc(b);
       const cmp = typeof av === 'string' && typeof bv === 'string'
         ? av.localeCompare(bv)
         : (av as number) - (bv as number);
       return factor * cmp;
     });
-  }, [payments, sort]);
+  }, [clientFiltered, sort]);
 
   const shown = sortedRows.length;
   const pageRows = sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const hasFilters = projectId !== null || !!searchClabe || !!searchClient || !!searchUnit
-    || !!searchAccount || filterType.length > 0 || filterStatus.length > 0;
+    || !!searchAccount || filterType.length > 0 || filterStatus.length > 0
+    || filterMetodo.length > 0 || filterEstatusProp.length > 0;
 
-  // Avanzados = Tipo, Cuenta, CLABE (Proyecto/Cliente/Unidad/Estatus viven en la barra).
+  // Barra principal: Proyecto, Cliente, No. Unidad, Método.
+  // Avanzados (orden): Estatus pago, Tipo unidad, Estatus propiedad, Cuenta, CLABE.
   const advancedActiveCount =
+    (filterStatus.length > 0 ? 1 : 0) +
     (filterType.length > 0 ? 1 : 0) +
+    (filterEstatusProp.length > 0 ? 1 : 0) +
     (searchAccount.trim() ? 1 : 0) +
     (searchClabe.trim() ? 1 : 0);
 
@@ -164,12 +200,14 @@ export default function CollectionPayments() {
     setSearchAccount('');
     setFilterType([]);
     setFilterStatus([]);
+    setFilterMetodo([]);
+    setFilterEstatusProp([]);
     setPage(1);
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
   const clearAdvanced = () => {
-    setFilterType([]); setSearchAccount(''); setSearchClabe(''); setPage(1);
+    setFilterStatus([]); setFilterType([]); setFilterEstatusProp([]); setSearchAccount(''); setSearchClabe(''); setPage(1);
   };
 
   const formatAccount = (id: number | null, tipo: 'propiedad' | 'producto' | null) => {
@@ -266,17 +304,17 @@ export default function CollectionPayments() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">No. Unidad</span>
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Propiedad</span>
           <Input value={searchUnit} onChange={e => { setSearchUnit(e.target.value); resetPage(); }}
             placeholder="203" inputMode="numeric" className="h-9 w-full sm:w-[110px] text-sm" />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Estatus</span>
-          <EstatusMultiSelect value={filterStatus} onChange={v => { setFilterStatus(v); resetPage(); }} className="w-full sm:w-[150px]" />
+          <span className="text-xs font-medium text-muted-foreground px-0.5">Método pago</span>
+          <MetodoMultiSelect value={filterMetodo} onChange={v => { setFilterMetodo(v); resetPage(); }} options={metodoOptions} className="w-full sm:w-[150px]" />
         </div>
 
-        {/* Botón avanzados + limpiar compacto */}
+        {/* Botón avanzados + limpiar compacto (Estatus se movió a Filtros avanzados) */}
         <div className="flex flex-col gap-1.5 col-span-2 sm:col-auto sm:ml-auto">
           <span className="text-xs font-medium text-muted-foreground/0 select-none px-0.5">Avanzados</span>
           <div className="flex items-center gap-2">
@@ -315,9 +353,12 @@ export default function CollectionPayments() {
       <PaymentsAdvancedFilters
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}
-        filterType={filterType}       setFilterType={v => { setFilterType(v); resetPage(); }}
-        searchAccount={searchAccount} setSearchAccount={v => { setSearchAccount(v); resetPage(); }}
-        searchClabe={searchClabe}     setSearchClabe={v => { setSearchClabe(v); resetPage(); }}
+        filterStatus={filterStatus}       setFilterStatus={v => { setFilterStatus(v); resetPage(); }}
+        filterType={filterType}           setFilterType={v => { setFilterType(v); resetPage(); }}
+        filterEstatusProp={filterEstatusProp} setFilterEstatusProp={v => { setFilterEstatusProp(v); resetPage(); }}
+        estatusPropOptions={estatusPropOptions}
+        searchAccount={searchAccount}     setSearchAccount={v => { setSearchAccount(v); resetPage(); }}
+        searchClabe={searchClabe}         setSearchClabe={v => { setSearchClabe(v); resetPage(); }}
         activeCount={advancedActiveCount}
         onClearAdvanced={clearAdvanced}
       />

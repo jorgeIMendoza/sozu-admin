@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -11,12 +10,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Edit, Trash2, Building2, ChevronDown } from "lucide-react";
+import { Plus, Edit, Trash2, Building2, ChevronDown, CalendarClock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ImageUploadField } from "./ImageUploadField";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
+import { optimizedImage } from "@/lib/image-transform";
 
 const formSchema = z.object({
   id_edificio: z.string().min(1, "El edificio es requerido"),
@@ -287,37 +289,25 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
 
   if (!edificios || edificios.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
-            Espacios para Reservar
-          </CardTitle>
-          <CardDescription>
-            No hay edificios registrados para este proyecto. Agrega edificios primero.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <FormSection title="Espacios para Reservar" icon={CalendarClock} description="Gestiona los espacios reservables de cada edificio del proyecto">
+        <div className="rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+          <Building2 className="mx-auto mb-2 h-10 w-10 opacity-40" />
+          <p className="text-sm">No hay edificios registrados para este proyecto. Agrega edificios primero.</p>
+        </div>
+      </FormSection>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Espacios para Reservar
-            </CardTitle>
-            <CardDescription>
-              Gestiona los espacios reservables de cada edificio del proyecto
-            </CardDescription>
-          </div>
-          <Dialog open={open} onOpenChange={handleDialogClose} modal={false}>
+    <FormSection
+      title="Espacios para Reservar"
+      icon={CalendarClock}
+      description="Gestiona los espacios reservables de cada edificio del proyecto"
+      actions={
+        <Dialog open={open} onOpenChange={handleDialogClose} modal={false}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-4 h-4 mr-1" />
                 Agregar Espacio
               </Button>
             </DialogTrigger>
@@ -496,9 +486,9 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
               </Form>
             </DialogContent>
           </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent>
+      }
+    >
+      <div>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando espacios...</p>
         ) : !espaciosReservables || espaciosReservables.length === 0 ? (
@@ -529,75 +519,75 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
                     />
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="p-4 pt-0 space-y-3">
+                    <div className="p-4 pt-0 space-y-2">
                       {spaces.map((space: any) => (
-                        <Card key={space.id}>
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between gap-4">
-                              {space.url_imagen && (
-                                <img 
-                                  src={space.url_imagen} 
-                                  alt={space.tipos_espacio_reservables?.nombre}
-                                  className="w-20 h-20 object-cover rounded-md flex-shrink-0"
-                                />
-                              )}
-                              <div className="flex-1 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <h5 className="font-medium">
-                                    {space.tipos_espacio_reservables?.nombre}
-                                  </h5>
-                                  <span className="text-sm text-muted-foreground">
-                                    ${parseFloat(space.costo_por_hr || 0).toFixed(2)}/hr
-                                  </span>
-                                </div>
-                                {space.descripcion && (
-                                  <p className="text-sm text-muted-foreground">{space.descripcion}</p>
-                                )}
-                                <div className="flex gap-4 text-xs text-muted-foreground">
-                                  {space.duracion_reserva && (
-                                    <span>Duración: {space.duracion_reserva}</span>
-                                  )}
-                                  {space.permitir_reservas_recurrentes && (
-                                    <span className="text-primary">✓ Reservas recurrentes</span>
-                                  )}
-                                </div>
+                        <div key={space.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/40">
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            {space.url_imagen ? (
+                              <img
+                                src={optimizedImage(space.url_imagen, { width: 160, height: 160, resize: "cover" })}
+                                alt={space.tipos_espacio_reservables?.nombre}
+                                loading="lazy"
+                                className="h-16 w-16 shrink-0 rounded-md object-cover"
+                              />
+                            ) : (
+                              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                                <CalendarClock className="h-5 w-5" />
+                              </span>
+                            )}
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h5 className="font-medium">
+                                  {space.tipos_espacio_reservables?.nombre}
+                                </h5>
+                                <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                                  ${parseFloat(space.costo_por_hr || 0).toFixed(2)}/hr
+                                </span>
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => handleEdit(space, e)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="sm" variant="ghost">
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>¿Eliminar espacio?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Esta acción eliminará el espacio reservable. ¿Deseas continuar?
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => deleteMutation.mutate(space.id)}
-                                      >
-                                        Eliminar
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                              {space.descripcion && (
+                                <p className="text-sm text-muted-foreground">{space.descripcion}</p>
+                              )}
+                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                {space.duracion_reserva && (
+                                  <span>Duración: {space.duracion_reserva}</span>
+                                )}
+                                {space.permitir_reservas_recurrentes && (
+                                  <span className="text-primary">✓ Reservas recurrentes</span>
+                                )}
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <IconTooltip label="Editar espacio">
+                              <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Editar espacio" onClick={(e) => handleEdit(space, e)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </IconTooltip>
+                            <AlertDialog>
+                              <IconTooltip label="Eliminar espacio">
+                                <AlertDialogTrigger asChild>
+                                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label="Eliminar espacio">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                              </IconTooltip>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Eliminar espacio?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción eliminará el espacio reservable. ¿Deseas continuar?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteMutation.mutate(space.id)}>
+                                    Eliminar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </CollapsibleContent>
@@ -606,7 +596,7 @@ export const ProjectReservableSpacesSection = ({ projectId }: ProjectReservableS
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </FormSection>
   );
 };
