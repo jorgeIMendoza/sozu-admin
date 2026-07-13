@@ -1114,6 +1114,9 @@ export default function ValidacionPagos() {
     coincide: rowsExceptEstado.filter(r => r.estado_validacion === "coincide").length,
     error: rowsExceptEstado.filter(r => r.estado_validacion === "error").length,
     noCoincide: rowsExceptEstado.filter(r => r.estado_validacion === "no_coincide").length,
+    sinEvidencia: rowsExceptEstado.filter(r => r.estado_validacion === "sin_evidencia").length,
+    montoIlegible: rowsExceptEstado.filter(r => r.estado_validacion === "monto_ilegible").length,
+    montoAusente: rowsExceptEstado.filter(r => r.estado_validacion === "monto_ausente_db").length,
     sinValidar: rowsExceptEstado.filter(r => r.estado_validacion === null).length,
   }), [rowsExceptEstado]);
 
@@ -1238,6 +1241,39 @@ export default function ValidacionPagos() {
           <CardContent>
             <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.noCoincide > 0 ? "text-amber-700" : "text-muted-foreground")}>
               {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.noCoincide.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.sinEvidencia > 0 && "border-slate-200 bg-slate-50/60")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.sinEvidencia > 0 ? "text-slate-700" : "text-muted-foreground")}>Sin evidencia</CardTitle>
+            <AlertCircle className={cn("h-4 w-4", !isLoading && stats.sinEvidencia > 0 ? "text-slate-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.sinEvidencia > 0 ? "text-slate-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.sinEvidencia.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.montoIlegible > 0 && "border-amber-200 bg-amber-50/40")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.montoIlegible > 0 ? "text-amber-700" : "text-muted-foreground")}>Monto ilegible</CardTitle>
+            <XCircle className={cn("h-4 w-4", !isLoading && stats.montoIlegible > 0 ? "text-amber-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.montoIlegible > 0 ? "text-amber-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.montoIlegible.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.montoAusente > 0 && "border-orange-200 bg-orange-50/40")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.montoAusente > 0 ? "text-orange-700" : "text-muted-foreground")}>Monto ausente</CardTitle>
+            <XCircle className={cn("h-4 w-4", !isLoading && stats.montoAusente > 0 ? "text-orange-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.montoAusente > 0 ? "text-orange-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.montoAusente.toLocaleString("es-MX")}
             </div>
           </CardContent>
         </Card>
