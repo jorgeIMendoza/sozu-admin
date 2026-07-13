@@ -4,19 +4,22 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
-import { TipoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
+import { TipoMultiSelect, ValidacionEstadoMultiSelect, EstatusPropiedadMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 
 // Panel lateral de filtros avanzados de Relación de Pagos.
-// Default (barra principal): Proyecto, Cliente, Unidad, Estatus.
-// Avanzados (aquí): Tipo, Cuenta, CLABE. Un filtro nuevo = un <Field> más.
+// Barra principal: Proyecto, Cliente, No. Unidad, Método.
+// Avanzados (aquí, en orden): Estatus pago, Tipo unidad, Estatus propiedad, Cuenta, CLABE.
 
 export interface PaymentsAdvancedFiltersProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
-  filterType: string[];   setFilterType: (v: string[]) => void;
-  searchAccount: string;  setSearchAccount: (v: string) => void;
-  searchClabe: string;    setSearchClabe: (v: string) => void;
+  filterStatus: string[];      setFilterStatus: (v: string[]) => void;
+  filterType: string[];        setFilterType: (v: string[]) => void;
+  filterEstatusProp: string[]; setFilterEstatusProp: (v: string[]) => void;
+  estatusPropOptions: string[];
+  searchAccount: string;       setSearchAccount: (v: string) => void;
+  searchClabe: string;         setSearchClabe: (v: string) => void;
 
   activeCount: number;
   onClearAdvanced: () => void;
@@ -33,7 +36,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function PaymentsAdvancedFilters({
   open, onOpenChange,
+  filterStatus, setFilterStatus,
   filterType, setFilterType,
+  filterEstatusProp, setFilterEstatusProp, estatusPropOptions,
   searchAccount, setSearchAccount,
   searchClabe, setSearchClabe,
   activeCount, onClearAdvanced,
@@ -55,20 +60,28 @@ export function PaymentsAdvancedFilters({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <Field label="Tipo">
+          <Field label="Estatus pago">
+            <ValidacionEstadoMultiSelect value={filterStatus} onChange={setFilterStatus} className="w-full" />
+          </Field>
+
+          <Field label="Tipo propiedad">
             <TipoMultiSelect value={filterType} onChange={setFilterType} className="w-full" />
           </Field>
 
-          <Field label="Cuenta">
+          <Field label="Estatus propiedad">
+            <EstatusPropiedadMultiSelect value={filterEstatusProp} onChange={setFilterEstatusProp} options={estatusPropOptions} className="w-full" />
+          </Field>
+
+          <Field label="Cuenta cobranza">
             <Input
               value={searchAccount}
               onChange={e => setSearchAccount(e.target.value)}
-              placeholder="CC-000842"
+              placeholder="842"
               className="h-9 w-full text-sm font-mono"
             />
           </Field>
 
-          <Field label="CLABE">
+          <Field label="Cuenta CLABE">
             <Input
               value={searchClabe}
               onChange={e => setSearchClabe(e.target.value)}

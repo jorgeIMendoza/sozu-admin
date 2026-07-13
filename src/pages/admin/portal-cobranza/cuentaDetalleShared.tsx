@@ -92,9 +92,12 @@ export function ValidacionBadge({ estado }: { estado: string | null | undefined 
     </span>
   );
   const cfg: Record<string, { label: string; cls: string }> = {
-    coincide:    { label: 'Valido',      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    error:       { label: 'Error',       cls: 'bg-red-50 text-red-700 border-red-200' },
-    no_coincide: { label: 'No coincide', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    coincide:         { label: 'Valido',         cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    error:            { label: 'Error',          cls: 'bg-red-50 text-red-700 border-red-200' },
+    no_coincide:      { label: 'No coincide',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    sin_evidencia:    { label: 'Sin evidencia',  cls: 'bg-slate-50 text-slate-600 border-slate-200' },
+    monto_ilegible:   { label: 'Monto ilegible', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    monto_ausente_db: { label: 'Monto ausente',  cls: 'bg-orange-50 text-orange-700 border-orange-200' },
   };
   const c = cfg[estado] ?? { label: estado, cls: 'bg-muted/40 text-muted-foreground border-border' };
   return (

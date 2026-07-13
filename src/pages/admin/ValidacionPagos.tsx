@@ -45,7 +45,7 @@ interface PagoRow {
   url_recibo: string | null;
   descripcion: string | null;
   validacion_documental_efectivo: boolean;
-  estado_validacion: "coincide" | "error" | "no_coincide" | null;
+  estado_validacion: "coincide" | "error" | "no_coincide" | "sin_evidencia" | "monto_ilegible" | "monto_ausente_db" | null;
   motivo: string | null;
   monto_esperado: number | null;
   monto_real: number | null;
@@ -167,6 +167,24 @@ function EstadoBadge({ estado }: { estado: PagoRow["estado_validacion"] }) {
     return (
       <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[10px] gap-1 whitespace-nowrap">
         <XCircle className="size-3" />No coincide
+      </Badge>
+    );
+  if (estado === "sin_evidencia")
+    return (
+      <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600 text-[10px] gap-1 whitespace-nowrap">
+        <AlertCircle className="size-3" />Sin evidencia
+      </Badge>
+    );
+  if (estado === "monto_ilegible")
+    return (
+      <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[10px] gap-1 whitespace-nowrap">
+        <XCircle className="size-3" />Monto ilegible
+      </Badge>
+    );
+  if (estado === "monto_ausente_db")
+    return (
+      <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700 text-[10px] gap-1 whitespace-nowrap">
+        <XCircle className="size-3" />Monto ausente
       </Badge>
     );
   return (
@@ -474,14 +492,14 @@ function EditPagoValidacionModal({ row, onClose }: {
   row: PagoRow | null;
   onClose: () => void;
 }) {
-  const [estado, setEstado] = useState<"coincide" | "error" | "no_coincide">("error");
+  const [estado, setEstado] = useState<NonNullable<PagoRow["estado_validacion"]>>("error");
   const [motivo, setMotivo] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!row) return;
-    setEstado((row.estado_validacion as "coincide" | "error" | "no_coincide") ?? "error");
+    setEstado((row.estado_validacion as NonNullable<PagoRow["estado_validacion"]>) ?? "error");
     setMotivo(row.motivo ?? "");
   }, [row?.pago_id]);
 
@@ -562,6 +580,15 @@ function EditPagoValidacionModal({ row, onClose }: {
                 </SelectItem>
                 <SelectItem value="no_coincide" className="text-[12px]">
                   <span className="flex items-center gap-2"><XCircle className="size-3 text-amber-600" />No coincide</span>
+                </SelectItem>
+                <SelectItem value="sin_evidencia" className="text-[12px]">
+                  <span className="flex items-center gap-2"><AlertCircle className="size-3 text-slate-500" />Sin evidencia</span>
+                </SelectItem>
+                <SelectItem value="monto_ilegible" className="text-[12px]">
+                  <span className="flex items-center gap-2"><XCircle className="size-3 text-amber-600" />Monto ilegible</span>
+                </SelectItem>
+                <SelectItem value="monto_ausente_db" className="text-[12px]">
+                  <span className="flex items-center gap-2"><XCircle className="size-3 text-orange-600" />Monto ausente</span>
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -1404,10 +1431,13 @@ export default function ValidacionPagos() {
         {/* Estado de validación — multi-select (sin cambios) */}
         {(() => {
           const ESTADOS = [
-            { key: "coincide",    label: "Coincide",    cls: "text-emerald-700" },
-            { key: "error",       label: "Error",        cls: "text-red-700" },
-            { key: "no_coincide", label: "No coincide", cls: "text-amber-700" },
-            { key: "sin_validar", label: "Sin validar", cls: "text-muted-foreground" },
+            { key: "coincide",         label: "Coincide",      cls: "text-emerald-700" },
+            { key: "error",            label: "Error",         cls: "text-red-700" },
+            { key: "no_coincide",      label: "No coincide",   cls: "text-amber-700" },
+            { key: "sin_evidencia",    label: "Sin evidencia", cls: "text-slate-600" },
+            { key: "monto_ilegible",   label: "Monto ilegible", cls: "text-amber-700" },
+            { key: "monto_ausente_db", label: "Monto ausente", cls: "text-orange-700" },
+            { key: "sin_validar",      label: "Sin validar",   cls: "text-muted-foreground" },
           ];
           const noneSelected = filtroEstados.size === 0;
           const label = noneSelected

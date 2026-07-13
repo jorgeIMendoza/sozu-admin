@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
-import { Search, Edit, Trash2, Eye, Image, Video, MapPin, Lock, Building2, Copy, ExternalLink, Map } from "lucide-react";
+import { Search, Edit, Trash2, Eye, Image, Video, MapPin, Lock, Building2, Copy, ExternalLink, Map, X, SlidersHorizontal, FolderX, RotateCcw } from "lucide-react";
 import { Dialog as ShowroomDialog, DialogContent as ShowroomDialogContent, DialogHeader as ShowroomDialogHeader, DialogTitle as ShowroomDialogTitle } from "@/components/ui/dialog";
 import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
 import { toast } from "sonner";
@@ -21,23 +21,50 @@ import { ProjectMultimediaModal } from "@/components/admin/ProjectMultimediaModa
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 
-// Función para formatear moneda en formato corto (M/K)
-const formatCurrencyShort = (value: number): string => {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
-  } else if (value >= 1000) {
-    return `$${(value / 1000).toFixed(2)}K`;
-  }
-  return `$${value.toFixed(2)}`;
-};
-
 // Función para formatear moneda completa
 const formatCurrencyFull = (value: number): string => {
-  return `$${value.toLocaleString('es-MX', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
+  return `$${value.toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   })}`;
 };
+
+// Fallback consistente para celdas sin dato (reemplaza el guión medio suelto).
+const EmptyValue = ({ label = "Sin dato" }: { label?: string }) => (
+  <span className="text-sm text-muted-foreground/60">{label}</span>
+);
+
+// Persistencia de filtros en localStorage (se mantienen entre navegaciones/recargas).
+const FILTERS_KEY = "proyectos:filtros";
+interface ProjectFilters {
+  search: string;
+  desarrollador: string;
+  ciudad: string;
+  estatus: string;
+  sozu: string;
+}
+const DEFAULT_FILTERS: ProjectFilters = {
+  search: "",
+  desarrollador: "",
+  ciudad: "",
+  estatus: "all",
+  sozu: "all",
+};
+const loadFilters = (): ProjectFilters => {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY);
+    if (!raw) return DEFAULT_FILTERS;
+    return { ...DEFAULT_FILTERS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+};
+
+// Nombre del desarrollador (entidad tipo 3) para un proyecto.
+const getDeveloperName = (project: any): string =>
+  project.entidades_relacionadas?.[0]?.personas?.nombre_comercial ||
+  project.entidades_relacionadas?.[0]?.personas?.nombre_legal ||
+  "Por definir";
 
 // ShowroomCell component that fetches showrooms per project
 const ShowroomCell = ({ projectId, projectName, onShowDetail }: { 
@@ -60,7 +87,7 @@ const ShowroomCell = ({ projectId, projectName, onShowDetail }: {
   });
 
   if (showrooms.length === 0) {
-    return <span className="text-muted-foreground text-sm">—</span>;
+    return <EmptyValue />;
   }
 
   return (
@@ -78,8 +105,9 @@ const ShowroomCell = ({ projectId, projectName, onShowDetail }: {
 
 const Proyectos = () => {
   const queryClient = useQueryClient();
-  const [inputValue, setInputValue] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const initialFilters = useMemo(() => loadFilters(), []);
+  const [inputValue, setInputValue] = useState(initialFilters.search);
+  const [searchTerm, setSearchTerm] = useState(initialFilters.search);
   const [selectedProjectMultimedia, setSelectedProjectMultimedia] = useState<{
     multimedia: any[];
     youtubeVideos: any[];
@@ -102,17 +130,48 @@ const Proyectos = () => {
   // Check if user has any action permission
   const hasAnyActionPermission = canUpdate || canDelete || isSuperAdmin;
   
-  // Filtros específicos
-  const [nombreFilter, setNombreFilter] = useState("");
-  const [desarrolladorFilter, setDesarrolladorFilter] = useState("");
-  const [ciudadFilter, setCiudadFilter] = useState("");
-  const [estatusFilter, setEstatusFilter] = useState("all");
-  const [sozuFilter, setSozuFilter] = useState("all");
+  // Filtros específicos (hidratados desde localStorage)
+  const [desarrolladorFilter, setDesarrolladorFilter] = useState(initialFilters.desarrollador);
+  const [ciudadFilter, setCiudadFilter] = useState(initialFilters.ciudad);
+  const [estatusFilter, setEstatusFilter] = useState(initialFilters.estatus);
+  const [sozuFilter, setSozuFilter] = useState(initialFilters.sozu);
+
+  // Persistir filtros en cada cambio.
+  useEffect(() => {
+    const payload: ProjectFilters = {
+      search: searchTerm,
+      desarrollador: desarrolladorFilter,
+      ciudad: ciudadFilter,
+      estatus: estatusFilter,
+      sozu: sozuFilter,
+    };
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(payload));
+    } catch {
+      /* almacenamiento no disponible: ignorar */
+    }
+  }, [searchTerm, desarrolladorFilter, ciudadFilter, estatusFilter, sozuFilter]);
+
+  const hasActiveFilters =
+    inputValue !== "" ||
+    desarrolladorFilter !== "" ||
+    ciudadFilter !== "" ||
+    estatusFilter !== "all" ||
+    sozuFilter !== "all";
+
+  const clearFilters = () => {
+    setInputValue("");
+    setSearchTerm("");
+    setDesarrolladorFilter("");
+    setCiudadFilter("");
+    setEstatusFilter("all");
+    setSozuFilter("all");
+  };
   
   // Pagination states
   const [currentPageActive, setCurrentPageActive] = useState(1);
   const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
-  const itemsPerPage = 25;
+  const itemsPerPage = 15;
 
   // Query to get project inmobiliaria names (entidades with id_tipo_entidad = 5)
   const { data: inmobiliariaProjectMap = {} as Record<number, string> } = useQuery({
@@ -145,7 +204,7 @@ const Proyectos = () => {
   const sozuProjectIds = useMemo(() => new Set(Object.keys(inmobiliariaProjectMap).map(Number)), [inmobiliariaProjectMap]);
 
   const { data: activeProjectsData, refetch: refetchActive } = useQuery({
-    queryKey: ["projects", "active", currentPageActive, searchTerm, nombreFilter, ciudadFilter, estatusFilter, sozuFilter, accessibleProjectIds, Array.from(sozuProjectIds)],
+    queryKey: ["projects", "active", itemsPerPage, currentPageActive, searchTerm, estatusFilter, sozuFilter, accessibleProjectIds, Array.from(sozuProjectIds)],
     queryFn: async () => {
       // If user has no access and is not admin, return empty
       if (hasNoAccess) {
@@ -244,13 +303,10 @@ const Proyectos = () => {
       if (searchTerm) {
         query = query.ilike("nombre", `%${searchTerm}%`);
       }
-      if (nombreFilter) {
-        query = query.ilike("nombre", `%${nombreFilter}%`);
-      }
       if (estatusFilter !== "all") {
         query = query.eq("id_estatus_proyecto", parseInt(estatusFilter));
       }
-      
+
       // Apply Sozu filter
       if (sozuFilter === "sozu" && sozuProjectIds.size > 0) {
         query = query.in("id", Array.from(sozuProjectIds));
@@ -285,7 +341,7 @@ const Proyectos = () => {
   const totalActiveCount = activeProjectsData?.count || 0;
 
   const { data: deletedProjectsData, refetch: refetchDeleted } = useQuery({
-    queryKey: ["projects", "deleted", currentPageDeleted, searchTerm, nombreFilter, ciudadFilter, estatusFilter],
+    queryKey: ["projects", "deleted", itemsPerPage, currentPageDeleted, searchTerm, estatusFilter],
     queryFn: async () => {
       const from = (currentPageDeleted - 1) * itemsPerPage;
       const to = from + itemsPerPage - 1;
@@ -374,17 +430,14 @@ const Proyectos = () => {
       if (searchTerm) {
         query = query.ilike("nombre", `%${searchTerm}%`);
       }
-      if (nombreFilter) {
-        query = query.ilike("nombre", `%${nombreFilter}%`);
-      }
       if (estatusFilter !== "all") {
         query = query.eq("id_estatus_proyecto", parseInt(estatusFilter));
       }
-      
+
       const { data, error, count } = await query
         .order("nombre", { ascending: true })
         .range(from, to);
-      
+
       if (error) {
         console.error("Error fetching deleted projects:", error);
         return { projects: [], count: 0 };
@@ -419,14 +472,14 @@ const Proyectos = () => {
     }
   }, [activeProjectsData, deletedProjectsData, inputValue]);
 
-  // Reset pages when filters change
+  // Reset pages when server-side filters change
   useEffect(() => {
     setCurrentPageActive(1);
-  }, [searchTerm, nombreFilter, ciudadFilter, estatusFilter, sozuFilter]);
+  }, [searchTerm, estatusFilter, sozuFilter]);
 
   useEffect(() => {
     setCurrentPageDeleted(1);
-  }, [searchTerm, nombreFilter, ciudadFilter, estatusFilter, sozuFilter]);
+  }, [searchTerm, estatusFilter, sozuFilter]);
 
   // Query para obtener estatus de proyecto para el filtro
   const { data: estatusProyecto = [] } = useQuery({
@@ -681,6 +734,18 @@ const Proyectos = () => {
     return averagePerM2;
   };
 
+  // Refinamiento client-side sobre las filas ya cargadas (Desarrollador y Ciudad
+  // dependen de datos embebidos/joins, no de la query paginada del servidor).
+  const applyClientFilters = (rows: any[]) =>
+    rows.filter((p) => {
+      if (desarrolladorFilter && !getDeveloperName(p).toLowerCase().includes(desarrolladorFilter.toLowerCase())) return false;
+      if (ciudadFilter && !getCityName(p).toLowerCase().includes(ciudadFilter.toLowerCase())) return false;
+      return true;
+    });
+
+  const filteredActiveProjects = applyClientFilters(activeProjects);
+  const filteredDeletedProjects = applyClientFilters(deletedProjects);
+
   // Pagination logic para proyectos activos (ahora del lado del servidor)
   const totalActivePages = Math.ceil(totalActiveCount / itemsPerPage);
 
@@ -761,29 +826,27 @@ const Proyectos = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre del Proyecto</TableHead>
+                <TableHead>Proyecto</TableHead>
                 <TableHead>Desarrollador</TableHead>
-                <TableHead>Número de Departamentos</TableHead>
+                <TableHead className="text-center">Num. Departamentos</TableHead>
                 <TableHead>Ciudad</TableHead>
-                <TableHead>Dirección</TableHead>
-                <TableHead>Total del proyecto</TableHead>
-                <TableHead>Precio Promedio Propiedades</TableHead>
-                <TableHead>Precio Promedio por M2</TableHead>
-                <TableHead>Multimedia</TableHead>
-                <TableHead>Showroom</TableHead>
-                <TableHead>Estatus</TableHead>
-                <TableHead>Comercializada por</TableHead>
-                <TableHead>Publicar</TableHead>
-                {hasAnyActionPermission && <TableHead>Acciones</TableHead>}
+                <TableHead className="text-center">Dirección</TableHead>
+                <TableHead className="text-center">Total Proyecto</TableHead>
+                <TableHead className="text-center">Precio Promedio Propiedades</TableHead>
+                <TableHead className="text-center">Precio Promedio por M2</TableHead>
+                <TableHead className="text-center">Multimedia</TableHead>
+                <TableHead className="text-center">Showroom</TableHead>
+                <TableHead className="text-center">Estatus</TableHead>
+                <TableHead className="text-center">Comercializador</TableHead>
+                <TableHead className="text-center">Publicar</TableHead>
+                {hasAnyActionPermission && <TableHead className="text-center">Acciones</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {projects.map((project) => {
                 const multimedia = getMultimediaCount(project);
                 const city = getCityName(project);
-                const developer = project.entidades_relacionadas?.[0]?.personas?.nombre_comercial || 
-                  project.entidades_relacionadas?.[0]?.personas?.nombre_legal || 
-                  "Por definir";
+                const developer = getDeveloperName(project);
                 const departmentCount = project.edificios?.reduce((total: number, edificio: any) => {
                   return total + (edificio.edificios_modelos?.reduce((edificioTotal: number, modelo: any) => {
                     return edificioTotal + (modelo.propiedades?.length || 0);
@@ -795,119 +858,118 @@ const Proyectos = () => {
                 
                 return (
                   <TableRow key={project.id}>
-                    <TableCell className="font-medium">{project.nombre}</TableCell>
-                    <TableCell>{developer}</TableCell>
-                    <TableCell>{departmentCount}</TableCell>
-                    <TableCell>{city}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="block max-w-[220px] truncate" title={project.nombre}>{project.nombre}</span>
+                    </TableCell>
                     <TableCell>
-                      {project.latitud && project.longitud ? (
-                        <a 
-                          href={`https://www.google.com/maps?q=${project.latitud},${project.longitud}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:text-primary/80 inline-flex items-center"
-                          title={project.direccion || "Ver en mapa"}
-                        >
-                          <MapPin className="h-5 w-5" />
-                        </a>
+                      {developer === "Por definir" ? (
+                        <EmptyValue label="Por definir" />
                       ) : (
-                        <span className="inline-flex items-center" title="Sin coordenadas">
-                          <MapPin className="h-5 w-5 text-muted-foreground/50" />
-                        </span>
+                        <span className="block max-w-[180px] truncate" title={developer}>{developer}</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-center tabular-nums">{departmentCount}</TableCell>
                     <TableCell>
-                      {totalPrecioLista > 0 ? (
+                      {city === "No especificada" ? (
+                        <EmptyValue label="No especificada" />
+                      ) : (
+                        <span className="block max-w-[180px] truncate" title={city}>{city}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {project.latitud && project.longitud ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">{formatCurrencyShort(totalPrecioLista)}</span>
+                            <a
+                              href={`https://www.google.com/maps?q=${project.latitud},${project.longitud}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-primary hover:text-primary/80"
+                            >
+                              <MapPin className="h-5 w-5" />
+                            </a>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{formatCurrencyFull(totalPrecioLista)}</p>
-                          </TooltipContent>
+                          <TooltipContent>{project.direccion || "Ver en mapa"}</TooltipContent>
                         </Tooltip>
-                      ) : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {avgPropertyPrice > 0 ? (
+                      ) : (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">{formatCurrencyShort(avgPropertyPrice)}</span>
+                            <span className="inline-flex items-center">
+                              <MapPin className="h-5 w-5 text-muted-foreground/40" />
+                            </span>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{formatCurrencyFull(avgPropertyPrice)}</p>
-                          </TooltipContent>
+                          <TooltipContent>Sin coordenadas</TooltipContent>
                         </Tooltip>
-                      ) : "N/A"}
+                      )}
                     </TableCell>
-                    <TableCell>
-                      {avgPricePerM2 > 0 ? (
+                    <TableCell className="text-center tabular-nums whitespace-nowrap">
+                      {totalPrecioLista > 0 ? formatCurrencyFull(totalPrecioLista) : <EmptyValue />}
+                    </TableCell>
+                    <TableCell className="text-center tabular-nums whitespace-nowrap">
+                      {avgPropertyPrice > 0 ? formatCurrencyFull(avgPropertyPrice) : <EmptyValue />}
+                    </TableCell>
+                    <TableCell className="text-center tabular-nums whitespace-nowrap">
+                      {avgPricePerM2 > 0 ? formatCurrencyFull(avgPricePerM2) : <EmptyValue />}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {multimedia.images > 0 || multimedia.videos > 0 ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">{formatCurrencyShort(avgPricePerM2)}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mx-auto flex h-auto items-center gap-2 p-1 text-primary hover:bg-primary/10 hover:text-primary"
+                              onClick={() => setSelectedProjectMultimedia({
+                                multimedia: project.multimedias_proyecto || [],
+                                youtubeVideos: project.videos_youtube || [],
+                                projectName: project.nombre
+                              })}
+                            >
+                              {multimedia.images > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Image className="h-4 w-4" />
+                                  <span className="text-sm tabular-nums">{multimedia.images}</span>
+                                </span>
+                              )}
+                              {multimedia.videos > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Video className="h-4 w-4" />
+                                  <span className="text-sm tabular-nums">{multimedia.videos}</span>
+                                </span>
+                              )}
+                            </Button>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{formatCurrencyFull(avgPricePerM2)}</p>
-                          </TooltipContent>
+                          <TooltipContent>Clic para ver la multimedia</TooltipContent>
                         </Tooltip>
-                      ) : "N/A"}
+                      ) : (
+                        <EmptyValue label="Sin multimedia" />
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {multimedia.images > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex items-center gap-1 p-1 h-auto"
-                            onClick={() => setSelectedProjectMultimedia({
-                              multimedia: project.multimedias_proyecto || [],
-                              youtubeVideos: project.videos_youtube || [],
-                              projectName: project.nombre
-                            })}
-                          >
-                            <Image className="h-4 w-4" />
-                            <span className="text-sm">{multimedia.images}</span>
-                          </Button>
-                        )}
-                        {multimedia.videos > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex items-center gap-1 p-1 h-auto"
-                            onClick={() => setSelectedProjectMultimedia({
-                              multimedia: project.multimedias_proyecto || [],
-                              youtubeVideos: project.videos_youtube || [],
-                              projectName: project.nombre
-                            })}
-                          >
-                            <Video className="h-4 w-4" />
-                            <span className="text-sm">{multimedia.videos}</span>
-                          </Button>
-                        )}
-                        {multimedia.images === 0 && multimedia.videos === 0 && (
-                          <span className="text-muted-foreground text-sm">Sin multimedia</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <ShowroomCell projectId={project.id} projectName={project.nombre} onShowDetail={(showrooms) => {
                         setShowroomDetail({ showrooms, projectName: project.nombre });
                         setSelectedShowroomIndex(0);
                       }} />
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={getBadgeVariant(project.estatus_proyecto?.nombre)}>
-                        {project.estatus_proyecto?.nombre || "Sin estatus"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {inmobiliariaProjectMap[project.id] ? (
-                        <Badge variant="default">{inmobiliariaProjectMap[project.id]}</Badge>
+                    <TableCell className="text-center">
+                      {project.estatus_proyecto?.nombre ? (
+                        <Badge variant={getBadgeVariant(project.estatus_proyecto?.nombre)} className="max-w-[160px] truncate">
+                          {project.estatus_proyecto.nombre}
+                        </Badge>
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <EmptyValue label="Sin estatus" />
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
+                      {inmobiliariaProjectMap[project.id] ? (
+                        <Badge variant="default" className="max-w-[160px] truncate" title={inmobiliariaProjectMap[project.id]}>
+                          {inmobiliariaProjectMap[project.id]}
+                        </Badge>
+                      ) : (
+                        <EmptyValue />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
                       {sozuProjectIds.has(project.id) ? (
                         <Switch
                           checked={!!project.publicar}
@@ -915,21 +977,22 @@ const Proyectos = () => {
                           disabled={isDeletedTab}
                         />
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <EmptyValue label="N/A" />
                       )}
                     </TableCell>
                     {hasAnyActionPermission && (
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
                           {!isDeletedTab && (canUpdate || isSuperAdmin) && (
                             <EditProjectDialog
                               projectId={project.id}
                               onProjectUpdated={handleProjectUpdated}
+                              triggerTooltip="Editar proyecto"
                               canCreate={canCreate || isSuperAdmin}
                               canUpdate={canUpdate || isSuperAdmin}
                               canDelete={canDelete || isSuperAdmin}
                               trigger={
-                                <Button variant="ghost" size="sm">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Editar proyecto">
                                   <Edit className="h-4 w-4" />
                                 </Button>
                               }
@@ -937,25 +1000,30 @@ const Proyectos = () => {
                           )}
                           {(canDelete || isSuperAdmin) && !(project.id_tipo_uso === 9 || project.id_tipo_uso === 10 || project.id_tipo_uso === 11) && (
                             <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className={isDeletedTab ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-red-600 hover:text-red-700 hover:bg-red-50"}
-                                disabled={!isDeletedTab && project.edificios && project.edificios.length > 0}
-                                title={isDeletedTab ? "Restaurar proyecto" : "Eliminar proyecto"}
-                              >
-                                {isDeletedTab ? (
-                                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                                    <path d="M8 12l2 2 4-4"/>
-                                  </svg>
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </AlertDialogTrigger>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className={isDeletedTab ? "h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50" : "h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"}
+                                      disabled={!isDeletedTab && project.edificios && project.edificios.length > 0}
+                                      aria-label={isDeletedTab ? "Restaurar proyecto" : "Eliminar proyecto"}
+                                    >
+                                      {isDeletedTab ? (
+                                        <RotateCcw className="h-4 w-4" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {!isDeletedTab && project.edificios && project.edificios.length > 0
+                                    ? "No se puede eliminar: tiene edificios"
+                                    : isDeletedTab ? "Restaurar proyecto" : "Eliminar proyecto"}
+                                </TooltipContent>
+                              </Tooltip>
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
@@ -990,10 +1058,18 @@ const Proyectos = () => {
           </Table>
         </div>
       ) : (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">
-            {emptyMessage}
-          </p>
+        <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-14 text-center">
+          <FolderX className="mb-3 h-12 w-12 text-muted-foreground/40" />
+          <p className="font-medium text-foreground">{emptyMessage}</p>
+          {hasActiveFilters && (
+            <>
+              <p className="mt-1 text-sm text-muted-foreground">Prueba ajustar o limpiar los filtros.</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={clearFilters}>
+                <X className="mr-1 h-4 w-4" />
+                Limpiar filtros
+              </Button>
+            </>
+          )}
         </div>
       )}
     </TooltipProvider>
@@ -1020,70 +1096,106 @@ const Proyectos = () => {
       ) : (
         <>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar proyectos..."
+              placeholder="Buscar proyectos por nombre..."
               ref={searchInputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-10"
             />
+            {inputValue && (
+              <button
+                type="button"
+                aria-label="Limpiar búsqueda"
+                onClick={() => { setInputValue(""); setSearchTerm(""); searchInputRef.current?.focus(); }}
+                className="absolute right-2.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
       {/* Filtros específicos */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-muted/50 rounded-lg">
-        <div>
-          <label className="text-sm font-medium mb-2 block">Nombre del Proyecto</label>
-          <Input
-            placeholder="Filtrar por nombre..."
-            value={nombreFilter}
-            onChange={(e) => setNombreFilter(e.target.value)}
-          />
+      <div className="rounded-lg border bg-muted/30">
+        <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+            Filtros
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!hasActiveFilters}
+            onClick={clearFilters}
+            className={`h-8 gap-1 ${hasActiveFilters ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-muted-foreground"}`}
+          >
+            <X className="h-4 w-4" />
+            Limpiar
+          </Button>
         </div>
-        <div>
-          <label className="text-sm font-medium mb-2 block">Desarrollador</label>
-          <Input
-            placeholder="Filtrar por desarrollador..."
-            value={desarrolladorFilter}
-            onChange={(e) => setDesarrolladorFilter(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-2 block">Ciudad</label>
-          <Input
-            placeholder="Filtrar por ciudad..."
-            value={ciudadFilter}
-            onChange={(e) => setCiudadFilter(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-2 block">Estatus</label>
-          <Select value={estatusFilter} onValueChange={setEstatusFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Todos los estatus" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estatus</SelectItem>
-              {estatusProyecto.map((estatus) => (
-                <SelectItem key={estatus.id} value={estatus.id.toString()}>
-                  {estatus.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-2 block">Comercializada por</label>
-          <Select value={sozuFilter} onValueChange={setSozuFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="sozu">Sozu</SelectItem>
-              <SelectItem value="no-sozu">No Sozu</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Desarrollador</label>
+            <div className="relative">
+              <Input
+                placeholder="Filtrar por desarrollador..."
+                value={desarrolladorFilter}
+                onChange={(e) => setDesarrolladorFilter(e.target.value)}
+                className="pr-9"
+              />
+              {desarrolladorFilter && (
+                <button type="button" aria-label="Limpiar desarrollador" onClick={() => setDesarrolladorFilter("")} className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Ciudad</label>
+            <div className="relative">
+              <Input
+                placeholder="Filtrar por ciudad..."
+                value={ciudadFilter}
+                onChange={(e) => setCiudadFilter(e.target.value)}
+                className="pr-9"
+              />
+              {ciudadFilter && (
+                <button type="button" aria-label="Limpiar ciudad" onClick={() => setCiudadFilter("")} className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Estatus</label>
+            <Select value={estatusFilter} onValueChange={setEstatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos los estatus" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[228px]">
+                <SelectItem value="all">Todos los estatus</SelectItem>
+                {estatusProyecto.map((estatus) => (
+                  <SelectItem key={estatus.id} value={estatus.id.toString()}>
+                    {estatus.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Comercializada por</label>
+            <Select value={sozuFilter} onValueChange={setSozuFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="sozu">Sozu</SelectItem>
+                <SelectItem value="no-sozu">No Sozu</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -1097,18 +1209,15 @@ const Proyectos = () => {
           </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="active" className="mt-6">
-          {activeProjects.length === 0 && totalActiveCount > 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                No se encontraron proyectos activos que coincidan con la búsqueda.
-              </p>
-            </div>
-          ) : (
+        <TabsContent value="active" className="mt-4">
             <>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Mostrando <span className="font-medium text-foreground tabular-nums">{filteredActiveProjects.length}</span> de{" "}
+                <span className="font-medium text-foreground tabular-nums">{totalActiveCount}</span> proyectos
+              </p>
               {renderProjectsTable(
-                activeProjects, 
-                "No hay proyectos activos disponibles.",
+                filteredActiveProjects,
+                hasActiveFilters ? "No se encontraron proyectos activos con estos filtros." : "No hay proyectos activos disponibles.",
                 false
               )}
               {totalActivePages > 1 && (
@@ -1139,7 +1248,7 @@ const Proyectos = () => {
                         )
                       ))}
                       <PaginationItem>
-                        <PaginationNext 
+                        <PaginationNext
                           onClick={() => setCurrentPageActive(Math.min(totalActivePages, currentPageActive + 1))}
                           className={currentPageActive === totalActivePages ? "pointer-events-none opacity-50" : "cursor-pointer"}
                         />
@@ -1149,21 +1258,17 @@ const Proyectos = () => {
                 </div>
               )}
             </>
-          )}
         </TabsContent>
-        
-        <TabsContent value="deleted" className="mt-6">
-          {deletedProjects.length === 0 && totalDeletedCount > 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                No se encontraron proyectos eliminados que coincidan con la búsqueda.
-              </p>
-            </div>
-          ) : (
+
+        <TabsContent value="deleted" className="mt-4">
             <>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Mostrando <span className="font-medium text-foreground tabular-nums">{filteredDeletedProjects.length}</span> de{" "}
+                <span className="font-medium text-foreground tabular-nums">{totalDeletedCount}</span> proyectos
+              </p>
               {renderProjectsTable(
-                deletedProjects, 
-                "No hay proyectos eliminados.",
+                filteredDeletedProjects,
+                hasActiveFilters ? "No se encontraron proyectos eliminados con estos filtros." : "No hay proyectos eliminados.",
                 true
               )}
               {totalDeletedPages > 1 && (
@@ -1194,7 +1299,7 @@ const Proyectos = () => {
                         )
                       ))}
                       <PaginationItem>
-                        <PaginationNext 
+                        <PaginationNext
                           onClick={() => setCurrentPageDeleted(Math.min(totalDeletedPages, currentPageDeleted + 1))}
                           className={currentPageDeleted === totalDeletedPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
                         />
@@ -1204,7 +1309,6 @@ const Proyectos = () => {
                 </div>
               )}
             </>
-          )}
         </TabsContent>
       </Tabs>
 
@@ -1224,7 +1328,7 @@ const Proyectos = () => {
               <ShowroomDialogHeader>
                 <ShowroomDialogTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5" />
-                  Showrooms — {showroomDetail?.projectName}
+                  Showrooms de {showroomDetail?.projectName}
                 </ShowroomDialogTitle>
               </ShowroomDialogHeader>
               {showroomDetail && showroomDetail.showrooms.length > 0 && (() => {

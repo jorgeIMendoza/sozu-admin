@@ -48,7 +48,7 @@ export interface PagoInputPld {
   descripcion: string | null;
   id_metodos_pago: number | null;
   validacion_documental_efectivo: boolean;
-  estado_validacion?: 'coincide' | 'error' | 'no_coincide' | null;
+  estado_validacion?: 'coincide' | 'error' | 'no_coincide' | 'sin_evidencia' | 'monto_ilegible' | 'monto_ausente_db' | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -102,6 +102,15 @@ function buildFlagsPorPago(
     } else if (p.estado_validacion === 'no_coincide') {
       flag    = 'amarillo';
       tooltip = 'Validación de pago: no coincide.';
+    } else if (p.estado_validacion === 'sin_evidencia') {
+      flag    = 'amarillo';
+      tooltip = 'Validación de pago: sin evidencia (comprobante).';
+    } else if (p.estado_validacion === 'monto_ilegible') {
+      flag    = 'amarillo';
+      tooltip = 'Validación de pago: monto ilegible en el comprobante.';
+    } else if (p.estado_validacion === 'monto_ausente_db') {
+      flag    = 'amarillo';
+      tooltip = 'Validación de pago: monto ausente en la base de datos.';
     } else if (p.estado_validacion === 'coincide') {
       flag    = 'verde';
       tooltip = 'Pago validado: coincide con comprobante.';
