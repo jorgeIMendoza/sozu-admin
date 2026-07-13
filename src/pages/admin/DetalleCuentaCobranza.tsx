@@ -19,6 +19,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { EliminarPagoDialog } from "@/components/admin/portal-cobranza/EliminarPagoDialog";
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/useEliminarPago";
 import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
 import { EditMultaDialog } from "@/components/admin/EditMultaDialog";
 import { AddCepDialog } from "@/components/admin/AddCepDialog";
@@ -128,11 +130,6 @@ interface OfferData {
   lead_rfc?: string | null;
 }
 
-interface AplicacionToDelete {
-  id: number;
-  monto: number;
-  conceptoNombre: string;
-}
 
 interface Multa {
   id: number;
@@ -493,15 +490,11 @@ export default function DetalleCuentaCobranza() {
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
   const [compradoresOpen, setCompradoresOpen] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{ 
-    isOpen: boolean; 
-    aplicacion: AplicacionToDelete | null;
-    warningMessage?: string;
-  }>({
-    isOpen: false,
-    aplicacion: null,
-    warningMessage: ""
-  });
+  // Eliminar pago = SOFT DELETE vía RPC eliminar_pago (unificado con portal-cobranza /
+  // validación de pagos). El borrado es del PAGO (tabla pagos), no de una aplicación suelta.
+  const { eliminarPago, isDeleting: isDeletingPago } = useEliminarPago();
+  const [deletePagoDialog, setDeletePagoDialog] = useState<{ pagoId: number; monto: number; concepto: string } | null>(null);
+  const [deletePagoImpacto, setDeletePagoImpacto] = useState<PagoImpacto | null>(null);
   const [multaDialog, setMultaDialog] = useState<{ 
     isOpen: boolean; 
     acuerdoId: number | null;
@@ -2194,146 +2187,37 @@ export default function DetalleCuentaCobranza() {
   };
 
   // Mutation to delete payment application (physical deletion)
-  const deletePaymentMutation = useMutation({
-    mutationFn: async (aplicacionId: number) => {
-      // Get the application to find its payment
-      const { data: aplicacion, error: aplicacionError } = await supabase
-        .from('aplicaciones_pago')
-        .select('id_pago, id_acuerdo_pago, monto')
-        .eq('id', aplicacionId)
-        .single();
+  // Abrir el diálogo de eliminación de pago (soft delete). Precarga el impacto.
+  const handleDeletePayment = (pagoId: number, monto: number, concepto: string) => {
+    setDeletePagoDialog({ pagoId, monto, concepto });
+    setDeletePagoImpacto(null);
+    fetchPagoImpacto(pagoId).then(setDeletePagoImpacto).catch(() => setDeletePagoImpacto(null));
+  };
 
-      if (aplicacionError) throw aplicacionError;
-      if (!aplicacion) throw new Error("Aplicación no encontrada");
+  const confirmDeletePayment = async (motivo: string) => {
+    if (!deletePagoDialog) return;
+    try {
+      await eliminarPago(deletePagoDialog.pagoId, motivo);
+      toast({ title: "Pago eliminado", description: "El pago se marcó como eliminado. Recalculando aplicaciones..." });
+      setDeletePagoDialog(null);
+      setDeletePagoImpacto(null);
 
-      // Get the payment with clave_rastreo for STP cleanup
-      const { data: pago, error: pagoError } = await supabase
-        .from('pagos')
-        .select('id_metodos_pago, clave_rastreo')
-        .eq('id', aplicacion.id_pago)
-        .single();
-
-      if (pagoError) throw pagoError;
-      if (!pago) throw new Error("Pago no encontrado");
-
-      // Get all applications for this payment to update related acuerdos
-      const { data: todasAplicaciones, error: aplicacionesError } = await supabase
-        .from('aplicaciones_pago')
-        .select('id, id_acuerdo_pago')
-        .eq('id_pago', aplicacion.id_pago);
-
-      if (aplicacionesError) throw aplicacionesError;
-
-      // 1. PHYSICALLY DELETE all applications for this payment
-      const { error: deleteAplicacionesError } = await supabase
-        .from('aplicaciones_pago')
-        .delete()
-        .eq('id_pago', aplicacion.id_pago);
-
-      if (deleteAplicacionesError) throw deleteAplicacionesError;
-
-      // 2. PHYSICALLY DELETE the payment
-      const { error: deletePagoError } = await supabase
-        .from('pagos')
-        .delete()
-        .eq('id', aplicacion.id_pago);
-
-      if (deletePagoError) throw deletePagoError;
-
-      // 3. If it was an STP payment, clean up related records
-      if (pago.clave_rastreo) {
-        // 3a. Delete the tabla_datos_cep record (allows regeneration on reload)
-        await supabase
-          .from('tabla_datos_cep')
-          .delete()
-          .eq('claverastreo', pago.clave_rastreo);
-
-        // 3b. Mark pagos_stp_raw as not applied (allows reprocessing)
-        await supabase
-          .from('pagos_stp_raw')
-          .update({ es_pago_aplicado: false })
-          .eq('claverastreo', pago.clave_rastreo);
-      }
-
-      // 4. Mark all affected payment agreements as incomplete
-      if (todasAplicaciones && todasAplicaciones.length > 0) {
-        const acuerdosIds = [...new Set(todasAplicaciones.map(a => a.id_acuerdo_pago))];
-        
-        const { error: acuerdosError } = await supabase
-          .from('acuerdos_pago')
-          .update({ pago_completado: false })
-          .in('id', acuerdosIds);
-
-        if (acuerdosError) throw acuerdosError;
-      }
-    },
-    onSuccess: async () => {
-      toast({
-        title: "Pago eliminado",
-        description: "El pago ha sido eliminado. Recalculando aplicaciones...",
-      });
-
-      // Call edge function proxy to redistribute remaining payments (avoids CORS issues)
+      // Redistribuir los pagos restantes (recalcular-aplicaciones excluye pagos con activo=false).
       try {
-        await supabase.functions.invoke('recalcular-aplicaciones', {
-          body: { id_cuenta_cobranza: cuentaId }
-        });
+        await supabase.functions.invoke('recalcular-aplicaciones', { body: { id_cuenta_cobranza: cuentaId } });
       } catch (webhookError) {
         console.error('Error calling recalcular-aplicaciones:', webhookError);
       }
 
-      // Invalidate queries after a short delay to allow webhook to complete
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
       }, 2000);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el pago",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleDeletePayment = async (aplicacion: AplicacionToDelete) => {
-    // Check if payment method is STP
-    const acuerdo = acuerdosPago?.find(a => 
-      (a.aplicaciones || []).some(app => app.id === aplicacion.id)
-    );
-    const aplicacionData = acuerdo?.aplicaciones?.find(app => app.id === aplicacion.id);
-    
-    // STP payments can now be deleted
-
-    // Get the number of applications for this payment
-    if (aplicacionData) {
-      const { data: todasAplicaciones } = await supabase
-        .from('aplicaciones_pago')
-        .select('id')
-        .eq('id_pago', aplicacionData.pago.id)
-        .eq('activo', true);
-      
-      const numAplicaciones = todasAplicaciones?.length || 0;
-      let warningMessage = "";
-      
-      if (numAplicaciones > 1) {
-        warningMessage = `Este pago tiene ${numAplicaciones} aplicaciones. Al eliminarlo, se eliminarán todas sus aplicaciones y los acuerdos de pago relacionados quedarán como Pendientes.`;
-      }
-      
-      setDeleteDialog({ isOpen: true, aplicacion, warningMessage });
-    } else {
-      setDeleteDialog({ isOpen: true, aplicacion, warningMessage: "" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message ?? "No se pudo eliminar el pago", variant: "destructive" });
     }
-  };
-
-  const confirmDeletePayment = () => {
-    if (deleteDialog.aplicacion) {
-      deletePaymentMutation.mutate(deleteDialog.aplicacion.id);
-    }
-    setDeleteDialog({ isOpen: false, aplicacion: null, warningMessage: "" });
   };
 
   const handleEditPayment = async (aplicacionId: number) => {
@@ -4552,12 +4436,8 @@ export default function DetalleCuentaCobranza() {
                                                       variant="destructive"
                                                       size="icon"
                                                       className="h-6 w-6"
-                                                      onClick={() => handleDeletePayment({
-                                                        id: aplicacion.id,
-                                                        monto: aplicacion.monto,
-                                                        conceptoNombre: conceptoDisplay
-                                                      })}
-                                                      disabled={deletePaymentMutation.isPending || esCuentaCancelada || isReadOnly || isEnDemanda}
+                                                      onClick={() => handleDeletePayment(aplicacion.pago.id, aplicacion.monto, conceptoDisplay)}
+                                                      disabled={isDeletingPago || esCuentaCancelada || isReadOnly || isEnDemanda}
                                                     >
                                                       <Trash2 className="h-3 w-3" />
                                                     </Button>
@@ -5302,22 +5182,15 @@ export default function DetalleCuentaCobranza() {
             </CardContent>
           </Card>
 
-      <DeleteConfirmationDialog
-        open={deleteDialog.isOpen}
-        onOpenChange={(open) => setDeleteDialog({ 
-          isOpen: open, 
-          aplicacion: open ? deleteDialog.aplicacion : null,
-          warningMessage: open ? deleteDialog.warningMessage : ""
-        })}
+      <EliminarPagoDialog
+        open={deletePagoDialog !== null}
+        onOpenChange={(open) => { if (!open) { setDeletePagoDialog(null); setDeletePagoImpacto(null); } }}
         onConfirm={confirmDeletePayment}
-        title="Eliminar Pago y sus Aplicaciones"
-        description={
-          deleteDialog.aplicacion
-            ? `Al eliminar esta aplicación de pago de ${formatCurrency(deleteDialog.aplicacion.monto)} para el concepto "${deleteDialog.aplicacion.conceptoNombre}", se eliminará el pago completo y todas sus aplicaciones asociadas. Esta acción no se puede deshacer.`
-            : ""
-        }
-        warningMessage={deleteDialog.warningMessage}
-        isLoading={deletePaymentMutation.isPending}
+        isLoading={isDeletingPago}
+        impacto={deletePagoImpacto}
+        encabezado={deletePagoDialog
+          ? `pago de ${formatCurrency(deletePagoDialog.monto)} (${deletePagoDialog.concepto})`
+          : undefined}
       />
 
       <DeleteConfirmationDialog
