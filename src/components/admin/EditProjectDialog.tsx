@@ -93,6 +93,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [firmanteOpen, setFirmanteOpen] = useState(false);
+  // Foto real de cada amenidad EN ESTE proyecto (id_amenidad → url_imagen)
+  const [amenityImages, setAmenityImages] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -214,7 +216,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
           fecha_creacion,
           fecha_actualizacion,
           amenidades_proyectos (
-            id_amenidad
+            id_amenidad,
+            url_imagen
           )
         `)
         .eq("id", projectId)
@@ -456,6 +459,13 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
       });
       
       setSelectedCountry(project.direccion_id_pais || "");
+
+      // Cargar fotos reales de amenidad por proyecto
+      const imgs: Record<string, string> = {};
+      (project.amenidades_proyectos ?? []).forEach((ap: any) => {
+        if (ap.url_imagen) imgs[ap.id_amenidad.toString()] = ap.url_imagen;
+      });
+      setAmenityImages(imgs);
     }
   }, [project, form]);
 
@@ -523,6 +533,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         const amenityRelations = values.amenidades.map(amenidadId => ({
           id_proyecto: projectId,
           id_amenidad: parseInt(amenidadId),
+          url_imagen: amenityImages[amenidadId] || null,
         }));
 
         const { error: amenityError } = await supabase
@@ -1157,6 +1168,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                                             </FormControl>
                                             <div className="flex flex-1 items-center gap-2 min-w-0">
                                               <span className="text-sm truncate flex-1 min-w-0 leading-tight">{amenidad.nombre}</span>
+                                              {amenityImages[amenidad.id.toString()] && (
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Con foto real" />
+                                              )}
                                               <div className="shrink-0">
                                                 <EditAmenityDialog
                                                   amenityId={amenidad.id}
@@ -1164,6 +1178,15 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                                                   onAmenityUpdated={() => {
                                                     queryClient.invalidateQueries({ queryKey: ['amenidades'] })
                                                   }}
+                                                  projectImageUrl={amenityImages[amenidad.id.toString()] || ""}
+                                                  onProjectImageChange={(url) =>
+                                                    setAmenityImages((prev) => {
+                                                      const next = { ...prev };
+                                                      if (url) next[amenidad.id.toString()] = url;
+                                                      else delete next[amenidad.id.toString()];
+                                                      return next;
+                                                    })
+                                                  }
                                                 />
                                               </div>
                                             </div>
