@@ -328,6 +328,76 @@ export function useSolicitudesBanco(idBanco?: number | null) {
   });
 }
 
+/** Un pago aplicado a la cuenta de cobranza (desglose del "Total pagado"). */
+export interface PagoAplicadoBanco {
+  /** pagos.fecha_pago (ISO) */
+  fechaPago: string | null;
+  /** metodos_pago.nombre */
+  metodo: string;
+  /** aplicaciones_pago.monto (monto aplicado a la cuenta) */
+  montoAplicado: number;
+}
+
+/**
+ * Desglose de pagos que componen el "Total pagado" de una solicitud del banco.
+ * Mismo criterio que el total mostrado: aplicaciones de pago (es_multa = false)
+ * de los acuerdos de la cuenta (conceptos 1,2,3,5). Se consulta bajo demanda
+ * (al abrir el modal). Devuelve `[]` si no hay cuenta o error.
+ */
+export function usePagosCuentaBanco(idCuentaCobranza?: number | null) {
+  return useQuery({
+    queryKey: ["pagos-cuenta-banco", idCuentaCobranza ?? "none"],
+    enabled: idCuentaCobranza != null,
+    staleTime: 30_000,
+    queryFn: async (): Promise<PagoAplicadoBanco[]> => {
+      const ccId = idCuentaCobranza as number;
+      const { data: acuerdos } = await (supabase as any)
+        .from("acuerdos_pago")
+        .select("id")
+        .eq("id_cuenta_cobranza", ccId)
+        .in("id_concepto", [1, 2, 3, 5])
+        .eq("activo", true);
+      const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
+      if (!acuerdoIds.length) return [];
+
+      const { data: aplicaciones } = await (supabase as any)
+        .from("aplicaciones_pago")
+        .select(
+          "monto, es_multa, pagos!fk_aplicaciones_pago_pago(fecha_pago, id_metodos_pago)",
+        )
+        .in("id_acuerdo_pago", acuerdoIds)
+        .eq("activo", true);
+      const rows = (aplicaciones || []).filter((ap: any) => !ap.es_multa);
+
+      const metodoIds = Array.from(
+        new Set(rows.map((r: any) => r.pagos?.id_metodos_pago).filter((v: any) => v != null)),
+      );
+      const { data: metodos } = metodoIds.length
+        ? ((await (supabase as any)
+            .from("metodos_pago")
+            .select("id, nombre")
+            .in("id", metodoIds)) as any)
+        : { data: [] };
+      const metodoById = new Map<number, string>(
+        (metodos || []).map((m: any) => [m.id, m.nombre ?? ""]),
+      );
+
+      return rows
+        .map((r: any) => ({
+          fechaPago: r.pagos?.fecha_pago ?? null,
+          metodo:
+            r.pagos?.id_metodos_pago != null
+              ? metodoById.get(r.pagos.id_metodos_pago) || "—"
+              : "—",
+          montoAplicado: Number(r.monto) || 0,
+        }))
+        .sort((a: PagoAplicadoBanco, b: PagoAplicadoBanco) =>
+          (b.fechaPago ?? "").localeCompare(a.fechaPago ?? ""),
+        );
+    },
+  });
+}
+
 export interface ActualizarSolicitudInput {
   id: number;
   idBanco: number; // para invalidar la query del banco
