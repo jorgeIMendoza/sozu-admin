@@ -66,6 +66,10 @@ const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
 const ROLE_NOTARIO = 6;
 
+// Roles del Portal Bancos que requieren banco vinculado (detección por nombre
+// porque sus ids pueden diferir entre ambientes; se crean por seed/UI de roles)
+const BANCO_ROLE_NAMES = ["Supervisor Banco", "Operador Banco"];
+
 // Roles that Administrador de Proyecto can manage
 const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
 
@@ -314,6 +318,7 @@ export default function Usuarios() {
     id_persona: "",
     id_inmobiliaria: "", // ID de la inmobiliaria para agentes
     id_notario: "", // ID del notario (tabla notarios) para rol Notario
+    id_banco: "", // ID del banco (tabla bancos) para roles Supervisor/Operador Banco
   });
   const [isFieldsLocked, setIsFieldsLocked] = useState(false);
   const [selectedPersonaTipo, setSelectedPersonaTipo] = useState<string | null>(null);
@@ -322,6 +327,7 @@ export default function Usuarios() {
   const [isInmobiliariaLocked, setIsInmobiliariaLocked] = useState(false);
   const [isInmobiliariaPopoverOpen, setIsInmobiliariaPopoverOpen] = useState(false);
   const [isNotarioPopoverOpen, setIsNotarioPopoverOpen] = useState(false);
+  const [isBancoPopoverOpen, setIsBancoPopoverOpen] = useState(false);
   
   // Persona lookup state
   const [matchedPersona, setMatchedPersona] = useState<{
@@ -547,13 +553,17 @@ export default function Usuarios() {
   }, [roles, isAdministradorProyecto]);
 
   // Convert roles to combobox options
-  const roleOptions = useMemo(() => 
+  const roleOptions = useMemo(() =>
     availableRoles.map(rol => ({
       value: rol.id.toString(),
       label: rol.nombre
     })),
     [availableRoles]
   );
+
+  // Rol seleccionado en el formulario de nuevo usuario (por nombre)
+  const selectedRolNombre = availableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
+  const isBancoRoleSelected = BANCO_ROLE_NAMES.includes(selectedRolNombre);
 
   // Fetch agents and inmobiliarias for combobox
   const { data: personasConTipo = [] } = useQuery({
@@ -621,6 +631,21 @@ export default function Usuarios() {
 
       if (error) throw error;
       return (data || []) as { id: number; nombre: string | null; notaria: string | null; email: string | null }[];
+    },
+  });
+
+  // Fetch bancos for the selector shown when creating a Supervisor/Operador Banco user
+  const { data: bancosOptions = [] } = useQuery({
+    queryKey: ['bancos_options'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bancos')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string }[];
     },
   });
 
@@ -889,6 +914,16 @@ export default function Usuarios() {
       }
     }
 
+    // Validate banco is required for Supervisor Banco / Operador Banco roles
+    if (isBancoRoleSelected && !newUserForm.id_banco) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona el banco al que pertenece el usuario.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validate Inmobiliaria role requires a principal user
     if (rolId === ROLE_INMOBILIARIA && newUserForm.id_inmobiliaria) {
       const selectedInmob = inmobiliariasOptions.find(
@@ -955,6 +990,7 @@ export default function Usuarios() {
           id_persona: newUserForm.id_persona ? parseInt(newUserForm.id_persona) : null,
           id_inmobiliaria: newUserForm.id_inmobiliaria ? parseInt(newUserForm.id_inmobiliaria) : null,
           id_notario: rolId === ROLE_NOTARIO && newUserForm.id_notario ? parseInt(newUserForm.id_notario) : null,
+          id_banco: isBancoRoleSelected && newUserForm.id_banco ? parseInt(newUserForm.id_banco) : null,
         },
       });
 
@@ -994,7 +1030,7 @@ export default function Usuarios() {
   };
 
   const resetNewUserForm = () => {
-    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "", id_notario: "" });
+    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "", id_notario: "", id_banco: "" });
     setIsFieldsLocked(false);
     setSelectedPersonaTipo(null);
     setIsInmobiliariaLocked(false);
@@ -1106,6 +1142,7 @@ export default function Usuarios() {
         rol_id: autoRolId,
         id_inmobiliaria: autoInmobiliariaId,
         id_notario: "",
+        id_banco: "",
       });
       setSelectedPersonaTipo(selectedPersona.tipo_entidad);
       setIsFieldsLocked(true);
@@ -1116,6 +1153,7 @@ export default function Usuarios() {
   // Handle role change to auto-set inmobiliaria for Agente Interno
   const handleRoleChange = (roleId: string) => {
     const newRolId = parseInt(roleId);
+    const newRolNombre = availableRoles.find(r => r.id.toString() === roleId)?.nombre ?? "";
 
     if (newRolId === ROLE_AGENTE_INTERNO) {
       // Preselect Sozu and LOCK the field
@@ -1123,7 +1161,8 @@ export default function Usuarios() {
         ...prev,
         rol_id: roleId,
         id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString(),
-        id_notario: ""
+        id_notario: "",
+        id_banco: ""
       }));
       setIsInmobiliariaLocked(true); // Lock for Agente Interno
     } else if (newRolId === ROLE_AGENTE_INMOBILIARIO || newRolId === ROLE_INMOBILIARIA) {
@@ -1132,7 +1171,8 @@ export default function Usuarios() {
         ...prev,
         rol_id: roleId,
         id_inmobiliaria: prev.id_inmobiliaria,
-        id_notario: ""
+        id_notario: "",
+        id_banco: ""
       }));
       setIsInmobiliariaLocked(false);
     } else if (newRolId === ROLE_NOTARIO) {
@@ -1142,19 +1182,31 @@ export default function Usuarios() {
         rol_id: roleId,
         id_inmobiliaria: "",
         id_notario: "",
+        id_banco: "",
         email: "",
         nombre: ""
       }));
       setIsInmobiliariaLocked(false);
       setMatchedPersona(null);
       setIsPersonaLinked(false);
+    } else if (BANCO_ROLE_NAMES.includes(newRolNombre)) {
+      // Supervisor/Operador Banco: requiere seleccionar banco
+      setNewUserForm(prev => ({
+        ...prev,
+        rol_id: roleId,
+        id_inmobiliaria: "",
+        id_notario: "",
+        id_banco: prev.id_banco
+      }));
+      setIsInmobiliariaLocked(false);
     } else {
       // Clear inmobiliaria for other roles
       setNewUserForm(prev => ({
         ...prev,
         rol_id: roleId,
         id_inmobiliaria: "",
-        id_notario: ""
+        id_notario: "",
+        id_banco: ""
       }));
       setIsInmobiliariaLocked(false);
     }
@@ -1725,6 +1777,66 @@ export default function Usuarios() {
                 )}
                 <p className="text-xs text-muted-foreground">
                   El correo del usuario será el correo registrado de la notaría.
+                </p>
+              </div>
+            )}
+
+            {/* 2c. Banco - SOLO visible para roles Supervisor Banco / Operador Banco */}
+            {isBancoRoleSelected && (
+              <div className="space-y-2">
+                <Label htmlFor="banco" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Banco *
+                </Label>
+                <Popover open={isBancoPopoverOpen} onOpenChange={setIsBancoPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !newUserForm.id_banco && "text-muted-foreground"
+                      )}
+                    >
+                      {newUserForm.id_banco
+                        ? (bancosOptions.find(b => b.id.toString() === newUserForm.id_banco)?.nombre ?? "Seleccionar banco...")
+                        : "Seleccionar banco..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar banco..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el banco.</CommandEmpty>
+                        <CommandGroup>
+                          {bancosOptions.map((banco) => (
+                            <CommandItem
+                              key={banco.id}
+                              value={banco.nombre}
+                              onSelect={() => {
+                                setNewUserForm(prev => ({ ...prev, id_banco: banco.id.toString() }));
+                                setIsBancoPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newUserForm.id_banco === banco.id.toString()
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {banco.nombre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Banco al que pertenece el usuario del Portal Bancos.
                 </p>
               </div>
             )}
