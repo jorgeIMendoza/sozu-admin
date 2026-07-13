@@ -19,6 +19,7 @@ interface UserProfile {
   notaria_nombre: string | null;
   id_perfil_juridico: number | null;
   puede_impersonar: boolean;
+  administrar_app_clientes: boolean;
   foto_perfil_url: string | null;
   frase_perfil: string | null;
 }
