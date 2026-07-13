@@ -308,7 +308,7 @@ const MiProyectoDetalle = () => {
       {/* Header for simplified roles */}
       {isSimplifiedRole && (
         <div className={`sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/50 -mx-4 px-4 py-2.5 sm:-mx-6 sm:px-6 -mt-4 sm:-mt-6 transition-transform duration-300 overflow-hidden ${showHeaderBar ? "translate-y-0" : "-translate-y-full"}`}>
-          {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
+          {profile?.puede_impersonar === true && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
             <span className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
               Hola, <span className="font-medium text-foreground">{profile?.nombre?.split(" ")[0] || "Usuario"}</span>
