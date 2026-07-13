@@ -13,6 +13,7 @@ import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { usePortalNav, type PortalNavItem } from "@/hooks/usePortalNav";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 
 const BANCOS_MENU_ID = 32;
 
@@ -46,11 +47,19 @@ export const PortalBancosLayout = () => {
 
   const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
   const isSuperAdmin = profile?.rol_id === 1;
+  const { isPathAllowed } = useAllowedMenus();
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  // Operativo (todos): lo que viene de BD sin las rutas de administración.
-  const operativos = navAll.filter((i) => !ADMIN_ONLY_PATHS.has(i.path));
-  // Super Admin ve además Equipo y Bancos (garantizados aunque falte el submenu en BD).
-  const NAV = isSuperAdmin ? [...operativos, ...ADMIN_ITEMS] : operativos;
+  // Las rutas operativas se muestran siempre; las de administración
+  // (Equipo / Bancos) se muestran según los permisos reales del rol
+  // (submenus_permisos · 'leer'), no solo para Super Admin. Así un rol con
+  // permiso explícito (ej. Supervisor Bancos con Equipo) sí ve el menú.
+  const visibles = navAll.filter(
+    (i) => !ADMIN_ONLY_PATHS.has(i.path) || isPathAllowed(i.path),
+  );
+  // Super Admin: garantizar Equipo y Bancos aunque el submenu no exista en BD.
+  const NAV = isSuperAdmin
+    ? [...visibles, ...ADMIN_ITEMS.filter((a) => !visibles.some((v) => v.path === a.path))]
+    : visibles;
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";
