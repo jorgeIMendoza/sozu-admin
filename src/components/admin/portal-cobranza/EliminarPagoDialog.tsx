@@ -30,9 +30,11 @@ export function EliminarPagoDialog({
   }, [open]);
 
   const cargando = impacto === null;
+  const bloqueadoPorStp = !!impacto && impacto.esStp;
   const bloqueadoPorFactura = !!impacto && impacto.facturas > 0;
+  const bloqueado = bloqueadoPorStp || bloqueadoPorFactura;
   const motivoValido = motivo.trim().length >= 3;
-  const puedeConfirmar = !isLoading && !cargando && !bloqueadoPorFactura && motivoValido;
+  const puedeConfirmar = !isLoading && !cargando && !bloqueado && motivoValido;
 
   const abonosTxt = impacto
     ? impacto.aplicaciones === 1
@@ -59,6 +61,14 @@ export function EliminarPagoDialog({
             <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" /> Revisando registros asociados…
             </div>
+          ) : bloqueadoPorStp ? (
+            <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 dark:border-red-900/50 dark:bg-red-950/30">
+              <Ban className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" strokeWidth={2} />
+              <p className="text-[13px] leading-relaxed text-red-800 dark:text-red-200">
+                Este es un pago <strong>STP</strong> (automático) y no se puede eliminar. Solo se
+                pueden eliminar pagos STP-manual y de otros métodos.
+              </p>
+            </div>
           ) : bloqueadoPorFactura ? (
             <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 dark:border-red-900/50 dark:bg-red-950/30">
               <Ban className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" strokeWidth={2} />
@@ -79,7 +89,7 @@ export function EliminarPagoDialog({
           )}
 
           {/* Motivo obligatorio */}
-          {!bloqueadoPorFactura && (
+          {!bloqueado && (
             <div className="space-y-1.5">
               <Label htmlFor="motivo-eliminar-pago" className="text-[12px] font-medium">
                 Motivo de la eliminación <span className="text-red-500">*</span>

@@ -12,19 +12,24 @@ import { supabase } from '@/integrations/supabase/client';
 export interface PagoImpacto {
   aplicaciones: number; // abonos que dejarán de aplicarse
   facturas: number;     // facturas de mantenimiento ligadas → bloquean el borrado
+  esStp: boolean;       // pago con método "STP" (automático) → NUNCA se puede eliminar
 }
 
-// Cuenta lo relevante para el diálogo: abonos activos + facturas de mantenimiento.
+// Cuenta lo relevante para el diálogo: abonos activos + facturas de mantenimiento + si es STP.
+// Regla: solo el método exacto "STP" bloquea; "STP-manual" y el resto sí se pueden eliminar.
 export async function fetchPagoImpacto(idPago: number): Promise<PagoImpacto> {
-  const [apl, fac] = await Promise.all([
+  const [apl, fac, pagoRes] = await Promise.all([
     (supabase as any).from('aplicaciones_pago')
       .select('id', { count: 'exact', head: true }).eq('id_pago', idPago).eq('activo', true),
     (supabase as any).from('facturas_mantenimientos')
       .select('id', { count: 'exact', head: true }).eq('id_pago', idPago),
+    (supabase as any).from('pagos')
+      .select('metodos_pago(nombre)').eq('id', idPago).maybeSingle(),
   ]);
   return {
     aplicaciones: apl.count ?? 0,
     facturas: fac.count ?? 0,
+    esStp: pagoRes?.data?.metodos_pago?.nombre === 'STP',
   };
 }
 
