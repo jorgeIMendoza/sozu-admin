@@ -10,8 +10,8 @@ import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { AddCepDialog } from '@/components/admin/AddCepDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
-import { DeleteConfirmationDialog } from '@/components/admin/DeleteConfirmationDialog';
-import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from '@/hooks/useEliminarPago';
+import { EliminarPagoDialog } from '@/components/admin/portal-cobranza/EliminarPagoDialog';
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
 import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -252,10 +252,10 @@ export default function CollectionPayments() {
     fetchPagoImpacto(r.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (motivo: string) => {
     if (!deletePayment) return;
     try {
-      await eliminarPago(deletePayment.pago_id);
+      await eliminarPago(deletePayment.pago_id, motivo);
       toast.success('Pago eliminado');
       setDeletePayment(null);
       setDeleteImpacto(null);
@@ -540,12 +540,18 @@ export default function CollectionPayments() {
                         </button>
                       </IconTip>
                       {canDelete && (
-                        <IconTip label="Eliminar pago">
-                          <button onClick={() => openDelete(r)}
-                            className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive">
-                            <Trash2 className="size-4" />
-                          </button>
-                        </IconTip>
+                        r.metodo_pago === 'STP' ? (
+                          <IconTip label="Pago STP: no se puede eliminar">
+                            <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
+                          </IconTip>
+                        ) : (
+                          <IconTip label="Eliminar pago">
+                            <button onClick={() => openDelete(r)}
+                              className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive">
+                              <Trash2 className="size-4" />
+                            </button>
+                          </IconTip>
+                        )
                       )}
                     </div>
                   </td>
@@ -597,20 +603,16 @@ export default function CollectionPayments() {
         onSaved={refetchPayments}
       />
 
-      {/* Eliminar pago (cascada vía RPC eliminar_pago) */}
-      <DeleteConfirmationDialog
+      {/* Eliminar pago (soft delete vía RPC eliminar_pago) */}
+      <EliminarPagoDialog
         open={!!deletePayment}
-        onOpenChange={(open) => { if (!open && !isDeleting) { setDeletePayment(null); setDeleteImpacto(null); } }}
+        onOpenChange={(open) => { if (!open) { setDeletePayment(null); setDeleteImpacto(null); } }}
         onConfirm={handleConfirmDelete}
         isLoading={isDeleting}
-        title="Eliminar pago"
-        description={
-          deletePayment
-            ? `Se eliminará el pago de ${fmtCurrency(Number(deletePayment.monto))}${deletePayment.cliente ? ` de ${deletePayment.cliente}` : ''}.` +
-              impactoClause(deleteImpacto)
-            : ''
-        }
-        warningMessage={impactoWarning(deleteImpacto)}
+        impacto={deleteImpacto}
+        encabezado={deletePayment
+          ? `pago de ${fmtCurrency(Number(deletePayment.monto))}${deletePayment.cliente ? ` de ${deletePayment.cliente}` : ''}`
+          : undefined}
       />
     </div>
   );
