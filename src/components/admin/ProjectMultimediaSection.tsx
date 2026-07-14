@@ -82,9 +82,6 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     }
   }, [categorias, newMultimedia.id_categoria]);
 
-  const categoriaNombre = (id: number | null) =>
-    categorias.find(c => c.id === id)?.nombre ?? "Sin categoría";
-
   const { data: youtubeVideos = [] } = useQuery({
     queryKey: ['projectYoutubeVideos', projectId],
     queryFn: async () => {
@@ -201,6 +198,24 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     },
     onError: () => {
       toast({ title: "Error al cambiar estado del multimedia", variant: "destructive" });
+    }
+  });
+
+  const updateCategoriaMutation = useMutation({
+    mutationFn: async ({ multimediaId, id_categoria }: { multimediaId: number; id_categoria: number }) => {
+      const { error } = await supabase
+        .from('multimedias_proyecto')
+        .update({ id_categoria })
+        .eq('id', multimediaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
+      toast({ title: "Etiqueta actualizada exitosamente" });
+    },
+    onError: () => {
+      toast({ title: "Error al actualizar etiqueta", variant: "destructive" });
     }
   });
 
@@ -542,10 +557,6 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                        <Badge variant="outline">
                          {item.es_imagen ? "Imagen" : "Video"}
                        </Badge>
-                       <Badge variant="secondary" className="gap-1">
-                         <Tag className="h-3 w-3" />
-                         {categoriaNombre(item.id_categoria)}
-                       </Badge>
                        <Badge variant={item.activo ? "default" : "secondary"}>
                          {item.activo ? "Activo" : "Inactivo"}
                        </Badge>
@@ -590,6 +601,26 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                         </div>
                       )}
                     </div>
+
+                  <div className="flex items-center gap-2 px-3 pt-3">
+                    <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <Select
+                      value={item.id_categoria != null ? String(item.id_categoria) : undefined}
+                      onValueChange={(value) =>
+                        updateCategoriaMutation.mutate({ multimediaId: item.id, id_categoria: Number(value) })
+                      }
+                      disabled={updateCategoriaMutation.isPending}
+                    >
+                      <SelectTrigger className="h-8 text-xs" aria-label="Etiqueta / categoría">
+                        <SelectValue placeholder="Sin etiqueta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   <a
                     href={item.url}

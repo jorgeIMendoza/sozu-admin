@@ -12,10 +12,11 @@ import {
   DialogTitle,
   DialogFooter
 } from "@/components/ui/dialog";
-import { Edit, Wand2, Trash2, Image as ImageIcon, Camera } from "lucide-react";
+import { Edit, Wand2, Trash2, Image as ImageIcon, Camera, Images } from "lucide-react";
 import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUploadField } from "./ImageUploadField";
+import { optimizedImage } from "@/lib/image-transform";
 
 interface EditAmenityDialogProps {
   amenityId: number;
@@ -27,6 +28,8 @@ interface EditAmenityDialogProps {
    *  Solo se muestra la sección si se pasa onProjectImageChange. */
   projectImageUrl?: string;
   onProjectImageChange?: (url: string) => void;
+  /** Proyecto actual. Habilita elegir la foto real desde la multimedia ya cargada. */
+  projectId?: number;
 }
 
 export function EditAmenityDialog({
@@ -37,6 +40,7 @@ export function EditAmenityDialog({
   trigger,
   projectImageUrl,
   onProjectImageChange,
+  projectId,
 }: EditAmenityDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -46,6 +50,48 @@ export function EditAmenityDialog({
   const [iconDescription, setIconDescription] = useState("");
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [isGeneratingIcon, setIsGeneratingIcon] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [showAllCats, setShowAllCats] = useState(false);
+
+  // Id de la categoría/etiqueta "Amenidades" para priorizar esas imágenes en el picker.
+  const { data: amenidadCatId = null } = useQuery({
+    queryKey: ['categoriaAmenidadesId'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categorias_multimedia_proyecto')
+        .select('id, nombre')
+        .ilike('nombre', 'amenidades')
+        .maybeSingle();
+      if (error) throw error;
+      return data?.id ?? null;
+    },
+    enabled: open && showPicker,
+  });
+
+  // Imágenes ya cargadas en la Multimedia del proyecto — para asignar como foto real
+  // sin volver a subirlas (el usuario pudo subirlas directo en Multimedia).
+  const { data: projectMultimedia = [] } = useQuery({
+    queryKey: ['amenityMultimediaPicker', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('multimedias_proyecto')
+        .select('id, url, es_imagen, activo, id_categoria')
+        .eq('id_proyecto', projectId as number)
+        .eq('es_imagen', true)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open && showPicker && projectId != null,
+  });
+
+  // Por defecto solo las etiquetadas "Amenidades" (orden); toggle "Ver todas" como respaldo.
+  const pickerImages =
+    !showAllCats && amenidadCatId != null
+      ? projectMultimedia.filter((m) => m.id_categoria === amenidadCatId)
+      : projectMultimedia;
 
   // Fetch amenity details when dialog opens
   const { data: amenityDetails } = useQuery({
@@ -204,6 +250,8 @@ export function EditAmenityDialog({
     setIconDescription("");
     setShowAiGenerator(false);
     setIsGeneratingIcon(false);
+    setShowPicker(false);
+    setShowAllCats(false);
   };
 
   const defaultTrigger = (
@@ -332,6 +380,72 @@ export function EditAmenityDialog({
                   onChange={(url) => onProjectImageChange(url)}
                   accept="image/*"
                 />
+
+                {projectId != null && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPicker(!showPicker)}
+                      className="w-full gap-2"
+                    >
+                      <Images className="h-4 w-4" />
+                      {showPicker ? "Ocultar multimedia" : "Elegir de Multimedia"}
+                    </Button>
+
+                    {showPicker && (
+                      <div className="space-y-2 rounded-lg border bg-muted/20 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {showAllCats ? "Todas las etiquetas" : "Etiqueta: Amenidades"}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => setShowAllCats(!showAllCats)}
+                          >
+                            {showAllCats ? "Solo Amenidades" : "Ver todas"}
+                          </Button>
+                        </div>
+                        {pickerImages.length > 0 ? (
+                          <div className="grid max-h-52 grid-cols-3 gap-2 overflow-y-auto">
+                            {pickerImages.map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  onProjectImageChange(m.url);
+                                  setShowPicker(false);
+                                  toast({ title: "Foto asignada desde Multimedia" });
+                                }}
+                                className={`relative aspect-square overflow-hidden rounded-md border transition-colors hover:border-primary ${
+                                  projectImageUrl === m.url ? "border-primary ring-2 ring-primary" : "border-border"
+                                }`}
+                                aria-label="Usar esta imagen como foto real"
+                              >
+                                <img
+                                  src={optimizedImage(m.url, { width: 160 })}
+                                  alt=""
+                                  loading="lazy"
+                                  className="h-full w-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="py-4 text-center text-xs text-muted-foreground">
+                            {showAllCats
+                              ? "No hay imágenes en la Multimedia del proyecto"
+                              : 'No hay imágenes con etiqueta "Amenidades". Usa "Ver todas".'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

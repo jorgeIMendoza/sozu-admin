@@ -1175,6 +1175,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                                                 <EditAmenityDialog
                                                   amenityId={amenidad.id}
                                                   amenityName={amenidad.nombre}
+                                                  projectId={projectId}
                                                   onAmenityUpdated={() => {
                                                     queryClient.invalidateQueries({ queryKey: ['amenidades'] })
                                                   }}
