@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { PersonForm } from '@/components/admin/PersonForm';
 import { NotariaExpedienteModal } from '@/components/admin/portal-notaria/NotariaExpedienteModal';
 import { NotariaPagosModal } from '@/components/admin/portal-notaria/NotariaPagosModal';
+import { NotariaCuentaDetalleSheet } from '@/components/admin/portal-notaria/NotariaCuentaDetalleSheet';
 import { toast } from 'sonner';
 import {
   Search, Download, RefreshCw, X, CheckCircle2, Clock,
@@ -201,6 +202,10 @@ export function AppNotariaDashboard() {
       cuentaCode: row.cuentaCode,
     });
   };
+
+  // ── Sheet Detalle Cuenta ────────────────────────────────────────────────────
+  const [detailSheetRow, setDetailSheetRow] = useState<NotaryRow | null>(null);
+  const handleOpenDetailSheet = (row: NotaryRow) => setDetailSheetRow(row);
 
   // ── Modal Pagos ─────────────────────────────────────────────────────────────
   const [pagosModal, setPagosModal] = useState<{
@@ -1087,9 +1092,12 @@ export function AppNotariaDashboard() {
                         <p className="font-medium text-sm leading-tight">{row.proyectoNombre}</p>
                         {row.edificioNombre && <p className="text-xs text-muted-foreground">{row.edificioNombre}</p>}
                       </td>
-                      {/* Unidad — Cliente */}
-                      <td className="px-3 py-3">
-                        <p className="font-semibold text-sm">{row.unitCode}</p>
+                      {/* Unidad — Cliente (abre sheet de detalle) */}
+                      <td
+                        className="px-3 py-3 cursor-pointer group"
+                        onClick={e => { e.stopPropagation(); handleOpenDetailSheet(row); }}
+                      >
+                        <p className="font-semibold text-sm group-hover:underline decoration-dotted underline-offset-2">{row.unitCode}</p>
                         <p className="text-xs text-muted-foreground">{row.clienteName}</p>
                         <p className="text-[11px] text-muted-foreground/60 font-mono">{row.cuentaCode}</p>
                       </td>
@@ -1552,6 +1560,17 @@ export function AppNotariaDashboard() {
         cuentaCode={expedienteModal?.cuentaCode ?? ''}
         usuarioEmail={profile?.email ?? null}
       />
+
+      {/* ── Sheet Detalle Cuenta ────────────────────────────────────────────── */}
+      {detailSheetRow && (
+        <NotariaCuentaDetalleSheet
+          open={!!detailSheetRow}
+          onOpenChange={open => { if (!open) setDetailSheetRow(null); }}
+          row={detailSheetRow}
+          notarioId={notarioId}
+          usuarioEmail={profile?.email ?? null}
+        />
+      )}
 
       {/* ── Modal Pagos ─────────────────────────────────────────────────────── */}
       <NotariaPagosModal
