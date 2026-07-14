@@ -97,37 +97,6 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
   const { data: schemes = [], isLoading: schemesLoading } = useQuery({
     queryKey: ["inmob-pipeline-schemes", card?.id_propiedad, isProducto, card?.id_producto, propertyDetail?.id_edificio_modelo, card?.id_esquema_pago_seleccionado],
     queryFn: async () => {
-      let projectId: number | null = null;
-
-      if (isProducto) {
-        if (!card?.id_producto) return [];
-        const { data: prod } = await (supabase as any)
-          .from("productos_servicios")
-          .select("id_proyecto")
-          .eq("id", card.id_producto)
-          .limit(1)
-          .single();
-        projectId = prod?.id_proyecto || null;
-      } else {
-        if (!propertyDetail?.id_edificio_modelo) return [];
-        const { data: emData } = await (supabase as any)
-          .from("edificios_modelos")
-          .select("id_edificio")
-          .eq("id", propertyDetail.id_edificio_modelo)
-          .limit(1)
-          .single();
-        if (!emData?.id_edificio) return [];
-        const { data: edificio } = await (supabase as any)
-          .from("edificios")
-          .select("id_proyecto")
-          .eq("id", emData.id_edificio)
-          .limit(1)
-          .single();
-        projectId = edificio?.id_proyecto || null;
-      }
-
-      if (!projectId) return [];
-
       // If the offer has a selected scheme, check if it's manual
       if (card?.id_esquema_pago_seleccionado) {
         const { data: selectedScheme } = await (supabase as any)
@@ -142,6 +111,37 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
           return [{ ...selectedScheme, nombre: "Manual" }];
         }
       }
+
+      if (isProducto) {
+        // Product offers: only schemes tied to this product. Project-level schemes
+        // don't apply to product offers (n8n rejects acuerdos generated with them).
+        if (!card?.id_producto) return [];
+        const { data: productSchemes } = await (supabase as any)
+          .from("esquemas_pago")
+          .select("*")
+          .eq("id_producto", card.id_producto)
+          .eq("activo", true)
+          .order("orden", { ascending: true });
+        return productSchemes || [];
+      }
+
+      if (!propertyDetail?.id_edificio_modelo) return [];
+      const { data: emData } = await (supabase as any)
+        .from("edificios_modelos")
+        .select("id_edificio")
+        .eq("id", propertyDetail.id_edificio_modelo)
+        .limit(1)
+        .single();
+      if (!emData?.id_edificio) return [];
+      const { data: edificio } = await (supabase as any)
+        .from("edificios")
+        .select("id_proyecto")
+        .eq("id", emData.id_edificio)
+        .limit(1)
+        .single();
+      const projectId = edificio?.id_proyecto || null;
+
+      if (!projectId) return [];
 
       // Non-manual: show all preloaded schemes
       const { data: nonManual } = await (supabase as any)

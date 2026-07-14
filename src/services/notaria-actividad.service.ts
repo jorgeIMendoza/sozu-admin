@@ -31,7 +31,8 @@ export type NotariaEvento =
   | 'EXPEDIENTE_VIEWED'
   | 'EXPEDIENTE_DOWNLOAD_COMPLETO'
   | 'EXPEDIENTE_DOWNLOAD_PARCIAL'
-  | 'PAGOS_DOWNLOAD';
+  | 'PAGOS_DOWNLOAD'
+  | 'ESCRITURACION_UPDATED';
 
 interface RegistrarActividadParams {
   idCuentaCobranza: number;
@@ -50,6 +51,8 @@ interface RegistrarActividadParams {
     archivos_fallidos?: number;
     compradores_completos?: number;
     compradores_incompletos?: number;
+    // ESCRITURACION_UPDATED
+    campos_actualizados?: string[];
     // PAGOS_DOWNLOAD
     pagos_sin_comprobante?: number;
     archivos_duplicados?: number;
