@@ -111,7 +111,7 @@ export function AddManualPaymentDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { registrarPago, registrarRecuperacionPago } = useActivityLogger();
+  const { registrarPago, registrarRecuperacionPago, registrarCreacion } = useActivityLogger();
   
   // States for duplicate detection and recovery
   const [pagoExistente, setPagoExistente] = useState<PagoExistente | null>(null);
@@ -457,6 +457,107 @@ export function AddManualPaymentDialog({
     }
   };
 
+  const invalidarQueriesPago = () => {
+    // Invalidar queries genéricas
+    queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
+    queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
+    queryClient.invalidateQueries({ queryKey: ["pagos"] });
+
+    // Invalidar queries específicas según el tipo de cuenta
+    if (esMantenimiento) {
+      queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
+    }
+  };
+
+  const tieneAplicacionActiva = async (idPago: number): Promise<boolean> => {
+    const { count, error } = await supabase
+      .from("aplicaciones_pago")
+      .select("id", { count: "exact", head: true })
+      .eq("id_pago", idPago)
+      .eq("activo", true);
+    if (error) {
+      console.error("Error verificando aplicaciones del pago:", error);
+      return false;
+    }
+    return (count ?? 0) > 0;
+  };
+
+  // La aplicación del pago a sus acuerdos la hace el webhook n8n (aplicaPago) de forma
+  // asíncrona. Si ese paso falla o se omite, el pago queda "huérfano" (0 aplicaciones) y
+  // los acuerdos no reflejan el abono. Esta verificación detecta ese caso y lo corrige
+  // invocando recalcular-aplicaciones (idempotente: redistribuye todos los pagos FIFO).
+  const asegurarAplicacionPago = async (
+    idPago: number,
+    monto: number,
+    workflow: string,
+    webhookFallo: boolean
+  ) => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let via: "webhook" | "recalculo" | null = null;
+
+    if (!webhookFallo) {
+      // Dar tiempo al webhook asíncrono antes de intervenir
+      for (let intento = 0; intento < 3 && !via; intento++) {
+        await wait(3000);
+        if (await tieneAplicacionActiva(idPago)) via = "webhook";
+      }
+    }
+
+    if (!via) {
+      const { error: recalcError } = await supabase.functions.invoke("recalcular-aplicaciones", {
+        body: { id_cuenta_cobranza: cuentaCobranzaId },
+      });
+      if (recalcError) {
+        console.error("Error en recalcular-aplicaciones (fallback):", recalcError);
+      } else {
+        // La función corre async del lado servidor
+        await wait(2000);
+        if (await tieneAplicacionActiva(idPago)) via = "recalculo";
+      }
+    }
+
+    const datosAuditoria = {
+      id_pago: idPago,
+      id_cuenta_cobranza: cuentaCobranzaId,
+      monto,
+      via: via ?? "sin_aplicacion",
+      webhook_fallo: webhookFallo,
+    };
+
+    if (via) {
+      await registrarCreacion("aplicaciones_pago", datosAuditoria, workflow, "exito");
+      if (via === "recalculo") {
+        toast({
+          title: "Aplicación recuperada",
+          description: "El webhook de aplicación falló; el pago se aplicó mediante recálculo automático.",
+        });
+      }
+      invalidarQueriesPago();
+    } else {
+      await registrarCreacion(
+        "aplicaciones_pago",
+        datosAuditoria,
+        workflow,
+        "error",
+        "Pago registrado sin aplicación: webhook y recálculo no generaron aplicaciones_pago"
+      );
+      toast({
+        title: "Pago sin aplicar a acuerdos",
+        description: `El pago #${idPago} se registró pero no se aplicó a ningún acuerdo. Usa "Recalcular dispersión" en el detalle de la cuenta o contacta a soporte.`,
+        variant: "destructive",
+      });
+    }
+  };
+
   // Mutation to create payment with file uploads
   const createPaymentMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -529,13 +630,14 @@ export function AddManualPaymentDialog({
       };
     },
     onSuccess: async (result) => {
+      // Determine siguiente_accion based on account type
+      const siguienteAccion = esMantenimiento
+        ? 'aplicar_pago_manual_mantenimiento'
+        : 'aplicar_pago_manual';
+      let webhookFallo = false;
+
       // Call webhook after successful payment creation
       try {
-        // Determine siguiente_accion based on account type
-        const siguienteAccion = esMantenimiento
-          ? 'aplicar_pago_manual_mantenimiento'
-          : 'aplicar_pago_manual';
-        
         const webhookBody = {
           success: true,
           siguiente_accion: siguienteAccion,
@@ -561,9 +663,11 @@ export function AddManualPaymentDialog({
 
         if (notifError) {
           console.error('❌ enviar-notificacion (aplicaPago) failed:', notifError);
+          webhookFallo = true;
         }
       } catch (error) {
         console.error('Error calling webhook:', error);
+        webhookFallo = true;
       }
 
       toast({
@@ -583,29 +687,14 @@ export function AddManualPaymentDialog({
         tipo_cuenta: tipoCuenta
       });
       
-      // Invalidar queries genéricas
-      queryClient.invalidateQueries({ queryKey: ["cuentas_cobranza"] });
-      queryClient.invalidateQueries({ queryKey: ["cuentas_mantenimiento"] });
-      queryClient.invalidateQueries({ queryKey: ["pagos"] });
-      
-      // Invalidar queries específicas según el tipo de cuenta
-      if (esMantenimiento) {
-        // Queries específicas de mantenimiento
-        queryClient.invalidateQueries({ queryKey: ["cuenta_mantenimiento_detalle", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["pagos_mantenimiento", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["acuerdos_mantenimiento", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["multas_mantenimiento", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
-      } else {
-        // Queries específicas de cuentas de cobranza normales
-        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaCobranzaId] });
-        queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaCobranzaId] });
-      }
-      
+      invalidarQueriesPago();
+
       form.reset();
       onClose();
+
+      // Verificación en background: garantiza que el pago quede aplicado a sus
+      // acuerdos aunque el webhook falle o se omita (ver asegurarAplicacionPago).
+      void asegurarAplicacionPago(result.id_pago, result.monto, siguienteAccion, webhookFallo);
     },
     onError: (error) => {
       console.error("Error creating payment:", error);
