@@ -1031,16 +1031,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
   // Get payment schemes
   const { data: esquemasPago } = useQuery({
-    queryKey: ["esquemas_pago"],
+    queryKey: ["esquemas_pago", ofertaProductoData.id_producto, propiedadDetalle?.id],
     queryFn: async () => {
+      // Cuenta tipo Producto: sólo esquemas ligados a este producto, incluyendo los
+      // manuales (es_manual=true) — los esquemas de producto se crean así y excluirlos
+      // deja el dropdown sin el esquema correcto; n8n rechaza el acuerdo si el esquema
+      // no corresponde al producto de la oferta.
+      if (ofertaProductoData.id_producto) {
+        const { data } = await supabase
+          .from('esquemas_pago')
+          .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+          .eq('id_producto', ofertaProductoData.id_producto)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        return data || [];
+      }
+
       if (!propiedadDetalle) return [];
-      
+
       const { data: entidad } = await supabase
         .from('entidades_relacionadas')
         .select('id_proyecto')
         .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
         .single();
-        
+
       if (!entidad?.id_proyecto) return [];
 
       const { data } = await supabase
@@ -1053,7 +1068,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
       return data || [];
     },
-    enabled: !!propiedadDetalle
+    enabled: !!propiedadDetalle || !!ofertaProductoData.id_producto
   });
 
   // Get inmobiliaria name for the project (Type 5 = Inmobiliaria)
