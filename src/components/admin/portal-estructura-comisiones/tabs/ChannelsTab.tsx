@@ -44,7 +44,6 @@ const emptyChannel = (): Channel => ({
   code: '',
   description: '',
   category: 'Externo',
-  parentId: null,
   baseCommissionPct: 0,
   participatesInScaling: true,
   participatesInBonuses: true,
@@ -53,11 +52,7 @@ const emptyChannel = (): Channel => ({
   requiresTraining: false,
   requiresApproval: false,
   leadProtectionDays: 0,
-  allowsSubchannels: false,
 });
-
-const slugifyId = (name: string) =>
-  `ch-${name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32)}-${crypto.randomUUID().slice(0, 4)}`;
 
 export default function ChannelsTab() {
   const { channels, addChannel, updateChannel, duplicateChannel, deleteChannel, getChannelDependencies } = useSimulator();
@@ -149,7 +144,7 @@ export default function ChannelsTab() {
       updateChannel({ ...editingChannel, ...clean, id: editingChannel.id });
       toast.success('Canal actualizado');
     } else {
-      addChannel({ ...clean, id: slugifyId(clean.name) });
+      addChannel(clean);
       toast.success('Canal creado');
     }
     setModalOpen(false);
@@ -378,7 +373,6 @@ export default function ChannelsTab() {
           <li>• La <strong>comisión base</strong> sincroniza con la comisión externa que usa el motor — la lógica de cálculo no cambia.</li>
           <li>• El <strong>remanente interno</strong> = comisión total del escenario – comisión externa.</li>
           <li>• Los canales <strong>inactivos</strong> se conservan para históricos pero no se ofrecen en nuevas configuraciones.</li>
-          <li>• La estructura soporta <strong>subcanales</strong> (parentId) para evolución futura sin migración.</li>
         </ul>
       </div>
 
@@ -422,18 +416,6 @@ export default function ChannelsTab() {
                     onChange={e => setForm({ ...form, description: e.target.value })}
                     placeholder="Ej. Usuarios que generan oportunidades comerciales mediante referidos, sin participar en el proceso de venta."
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Canal padre (subcanal de…)</Label>
-                  <Select value={form.parentId || 'none'} onValueChange={v => setForm({ ...form, parentId: v === 'none' ? null : v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Ninguno (canal raíz)</SelectItem>
-                      {channels.filter(c => c.id !== editingChannel?.id && c.allowsSubchannels).map(c =>
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>,
-                      )}
-                    </SelectContent>
-                  </Select>
                 </div>
                 <div className="flex items-center gap-3 pt-6">
                   <Switch checked={form.active} onCheckedChange={v => setForm({ ...form, active: v })} />
@@ -496,10 +478,6 @@ export default function ChannelsTab() {
                 <label className="flex items-center gap-2 text-sm">
                   <Switch checked={!!form.requiresApproval} onCheckedChange={v => setForm({ ...form, requiresApproval: v })} />
                   Requiere aprobación
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Switch checked={!!form.allowsSubchannels} onCheckedChange={v => setForm({ ...form, allowsSubchannels: v })} />
-                  Permite subcanales
                 </label>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Protección de leads (días)</Label>

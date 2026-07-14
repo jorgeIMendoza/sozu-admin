@@ -83,7 +83,6 @@ export interface Channel {
   code?: string;
   description?: string;
   category?: string;
-  parentId?: string | null;
   baseCommissionPct?: number;
   participatesInScaling?: boolean;
   participatesInBonuses?: boolean;
@@ -92,7 +91,6 @@ export interface Channel {
   requiresTraining?: boolean;
   requiresApproval?: boolean;
   leadProtectionDays?: number;
-  allowsSubchannels?: boolean;
   history?: ChannelHistoryEntry[];
   createdAt?: string;
   updatedAt?: string;
@@ -222,4 +220,6 @@ export interface AppState {
   scenarios: Scenario[];
   roleAssignments: RoleAssignment[];
   commercialPolicies: CommercialPoliciesConfig;
+  /** Matriz de comisión por canal × puesto — única y compartida, independiente de escenario. */
+  commissionRules: CommissionRule[];
 }
