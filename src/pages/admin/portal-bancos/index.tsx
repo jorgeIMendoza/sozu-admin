@@ -15,7 +15,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
   HEALTH_DESCRIPTOR, deriveHealth, closedDescriptor, fmtMXN, fmtDate,
@@ -32,6 +32,7 @@ import {
 } from "@/hooks/usePortalBancos/useBancosConvenio";
 import {
   useBancosAgentes, useCrearAgente, useActualizarAgente, useSetActivoAgente,
+  useCurrentBancoAgente,
   type BancoAgente, type AgenteRol,
 } from "@/hooks/usePortalBancos/useBancosAgentes";
 import {
@@ -54,10 +55,15 @@ function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive"
   }[t];
 }
 
-/** Solo Super Admin (rol_id=1) administra agentes/bancos del Portal Bancos. */
-function useIsBancosAdmin() {
-  const { profile } = useAuth();
-  return profile?.rol_id === 1;
+/**
+ * Acceso a una ruta administrativa del Portal Bancos (Equipo / Bancos) según
+ * los permisos reales del rol (`submenus_permisos` · 'leer'). Super Admin
+ * siempre tiene acceso. Reemplaza el gate hardcodeado a rol_id=1, que ocultaba
+ * estas secciones a roles con permiso explícito (ej. Supervisor Bancos).
+ */
+function useBancosPathAllowed(path: string) {
+  const { isPathAllowed, isLoading } = useAllowedMenus();
+  return { allowed: isPathAllowed(path), isLoading };
 }
 
 function useBankScopedLeads(): BankLead[] {
@@ -65,6 +71,13 @@ function useBankScopedLeads(): BankLead[] {
   // Fuente real: bancos_solicitudes del banco seleccionado (lo que el cliente
   // envía desde Pago Final). Reemplaza el store mock.
   const { data = [] } = useSolicitudesBanco(banco?.id_banco);
+  // Alcance por rol de equipo: un ejecutivo con rol 'agente' solo ve las
+  // solicitudes asignadas a su usuario; 'admin' (y quien no sea del equipo,
+  // p.ej. Super Admin) ve todas.
+  const agente = useCurrentBancoAgente(banco?.id_banco);
+  if (agente && agente.rol === "agente") {
+    return data.filter((l) => l.assignedAgentId === String(agente.id));
+  }
   return data;
 }
 
@@ -645,7 +658,7 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
 
 // ============================== EQUIPO (Agentes por banco — real) ==============================
 export function BancosEquipo() {
-  const isAdmin = useIsBancosAdmin();
+  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/equipo");
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
   const crear = useCrearAgente();
   const actualizar = useActualizarAgente();
@@ -659,7 +672,8 @@ export function BancosEquipo() {
   const { data: agents = [], isLoading } = useBancosAgentes(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as AgenteRol });
 
-  if (!isAdmin) return <AccessDenied />;
+  if (cargandoPermisos) return null;
+  if (!allowed) return <AccessDenied />;
 
   if (!cargandoBancos && convenios.length === 0) {
     return (
@@ -778,7 +792,7 @@ function Avatar2({ name }: { name: string }) {
 
 // ============================== BANCOS (convenio — real) ==============================
 export function BancosBancos() {
-  const isAdmin = useIsBancosAdmin();
+  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/bancos");
   const { data: convenios = [], isLoading } = useBancosConvenio();
   const { data: catalogo = [] } = useBancosCatalogo();
   const agregar = useAgregarBancoConvenio();
@@ -786,7 +800,8 @@ export function BancosBancos() {
 
   const [nuevo, setNuevo] = useState({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" });
 
-  if (!isAdmin) return <AccessDenied />;
+  if (cargandoPermisos) return null;
+  if (!allowed) return <AccessDenied />;
 
   const disponibles = catalogo.filter((c) => !convenios.some((cv) => cv.id_banco === c.id));
 

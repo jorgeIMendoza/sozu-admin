@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Agentes/ejecutivos de contacto por banco — fuente de verdad real
@@ -48,6 +49,23 @@ export function useBancosAgentes(idBanco?: number | null) {
       }));
     },
   });
+}
+
+/**
+ * Identidad del usuario logueado dentro del equipo del banco, resuelta por
+ * coincidencia de email contra `bancos_agentes`. Devuelve su registro (con
+ * `rol` 'agente' | 'admin') o `null` si no forma parte del equipo del banco
+ * (p.ej. Super Admin).
+ *
+ * Se usa para acotar la visibilidad de solicitudes: un 'agente' solo ve las
+ * asignadas a él; un 'admin' (o quien no sea del equipo) ve todo.
+ */
+export function useCurrentBancoAgente(idBanco?: number | null): BancoAgente | null {
+  const { profile, user } = useAuth();
+  const email = (profile?.email ?? user?.email ?? "").trim().toLowerCase();
+  const { data: agents = [] } = useBancosAgentes(idBanco);
+  if (!email) return null;
+  return agents.find((a) => (a.email ?? "").trim().toLowerCase() === email) ?? null;
 }
 
 export interface NuevoAgente {
