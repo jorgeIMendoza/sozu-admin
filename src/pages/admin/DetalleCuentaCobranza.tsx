@@ -858,8 +858,24 @@ export default function DetalleCuentaCobranza() {
 
   // Fetch available payment schemes for the project
   const { data: availableSchemes } = useQuery({
-    queryKey: ["payment_schemes", cuentaDetalle?.proyecto_id],
+    queryKey: ["payment_schemes", cuentaDetalle?.proyecto_id, offerData?.id_producto],
     queryFn: async () => {
+      // Cuenta tipo Producto: sólo esquemas ligados al producto de la oferta,
+      // incluyendo manuales (así se crean los esquemas de producto). Ofrecer
+      // esquemas genéricos de proyecto aquí apunta la oferta a un esquema sin
+      // producto y n8n rechaza la generación del acuerdo.
+      if (offerData?.id_producto) {
+        const { data: schemes, error } = await supabase
+          .from('esquemas_pago')
+          .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+          .eq('id_producto', offerData.id_producto)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        if (error) throw error;
+        return schemes || [];
+      }
+
       if (!cuentaDetalle?.proyecto_id) return [];
 
       const { data: schemes, error } = await supabase
@@ -873,7 +889,7 @@ export default function DetalleCuentaCobranza() {
       if (error) throw error;
       return schemes || [];
     },
-    enabled: !!cuentaDetalle?.proyecto_id,
+    enabled: !!cuentaDetalle?.proyecto_id || !!offerData?.id_producto,
   });
 
   // Fetch original payment scheme details
@@ -1002,11 +1018,31 @@ export default function DetalleCuentaCobranza() {
       // 1. Obtener el esquema seleccionado para acceder a porcentaje_descuento_aumento
       const { data: esquema, error: esquemaError } = await supabase
         .from('esquemas_pago')
-        .select('porcentaje_descuento_aumento')
+        .select('porcentaje_descuento_aumento, id_producto')
         .eq('id', schemeId)
         .single();
 
       if (esquemaError) throw esquemaError;
+
+      // Validación: el esquema debe corresponder al producto de la oferta (o no tener
+      // producto si la oferta es de propiedad). Un esquema equivocado deja la cuenta
+      // sin acuerdos porque n8n rechaza la generación.
+      if (offerData.id_producto && esquema?.id_producto !== offerData.id_producto) {
+        toast({
+          title: "Esquema incompatible",
+          description: "El plan seleccionado no pertenece al producto de esta oferta. Selecciona un esquema del producto.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!offerData.id_producto && esquema?.id_producto) {
+        toast({
+          title: "Esquema incompatible",
+          description: "El plan seleccionado pertenece a un producto y esta oferta es de propiedad.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // 2. Determinar precio_lista (propiedad o producto)
       let precioLista = 0;
