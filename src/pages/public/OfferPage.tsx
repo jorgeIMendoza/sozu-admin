@@ -264,8 +264,6 @@ const OfferPage = () => {
   return (
     <PublicShell
       agent={agent}
-      developmentLogoUrl={offer.development?.logoUrl ?? offer.development?.logoUrlInverse}
-      developmentName={offer.property.projectName}
       navSections={visibleNavSections}
       onNavClick={scrollToSection}
       activeSectionId={activeSection}
@@ -730,21 +728,7 @@ const OfferPage = () => {
 
                 {/* Project logo + unit model */}
                 <div className="pb-4 border-b border-border/60">
-                  <div className="flex flex-col items-center text-center gap-5 mb-1">
-                    {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) ? (
-                      <div className="h-4 md:h-6 flex items-center justify-center">
-                        <DevelopmentLogo
-                          development={offer.development}
-                          developmentName={offer.property.projectName}
-                          variant="footer"
-                          className="h-4 md:h-6"
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-primary/70">
-                        {offer.property.projectName}
-                      </p>
-                    )}
+                  <div className="flex flex-col items-center text-center mb-1">
                     <p className="font-serif text-[19px] font-semibold tracking-[0.03em] text-foreground leading-snug">
                       {offer.property.unitModel} {offer.property.unitNumber}
                     </p>

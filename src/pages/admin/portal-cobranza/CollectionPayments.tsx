@@ -420,7 +420,7 @@ export default function CollectionPayments() {
       {/* Tabla estándar (columnas fijas, uppercase, truncate + tooltip) */}
       <div className="rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1580px] table-fixed text-sm whitespace-nowrap">
+          <table className="w-full min-w-[1462px] table-fixed text-sm whitespace-nowrap">
             <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
               <tr>
                 <SortHeader label="Cuenta" sortKey="account" sort={sort} onSort={toggleSort} thClass="w-[116px]" />
@@ -432,7 +432,6 @@ export default function CollectionPayments() {
                 <th className="w-[116px] text-center">Método</th>
                 <th className="w-[148px] text-center">Clave rastreo</th>
                 <SortHeader label="Monto" sortKey="amount" sort={sort} onSort={toggleSort} thClass="w-[112px]" />
-                <th className="w-[118px] text-center">Aplicado</th>
                 <th className="w-[100px] text-center">Estado</th>
                 <SortHeader label="Validado" sortKey="status" sort={sort} onSort={toggleSort} thClass="w-[104px]" />
                 <th className="w-[56px]" aria-label="Comprobante" />
@@ -441,7 +440,7 @@ export default function CollectionPayments() {
             </thead>
             <tbody>
               {shown === 0 && (
-                <tr><td colSpan={14} className="py-14 text-center">
+                <tr><td colSpan={13} className="py-14 text-center">
                   <DollarSign className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No se encontraron pagos</p>
                 </td></tr>
@@ -495,12 +494,6 @@ export default function CollectionPayments() {
                   {/* Monto */}
                   <td className="px-2 text-center">
                     <span className="text-[12px] tabular-nums">{fmtCurrency(Number(r.monto))}</span>
-                  </td>
-                  {/* Aplicado */}
-                  <td className="px-2 text-center">
-                    {r.monto_aplicado == null
-                      ? <span className="text-[11px] text-muted-foreground/40">Sin registro</span>
-                      : <span className="text-[12px] tabular-nums">{fmtCurrency(Number(r.monto_aplicado))}</span>}
                   </td>
                   {/* Estado (acuerdo) */}
                   <td className="px-2 text-center">

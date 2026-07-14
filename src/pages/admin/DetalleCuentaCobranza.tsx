@@ -2476,6 +2476,123 @@ export default function DetalleCuentaCobranza() {
     setNewPaymentRows(prev => prev.filter(row => row.id !== id));
   };
 
+  // true si el dinero recibido (pagos activos) no coincide con lo dispersado en
+  // aplicaciones_pago (tolerancia ±$0.01), consultando BD directo (a diferencia de
+  // hayDiscrepanciaAplicaciones, que usa el estado de las queries en memoria).
+  // null si no se pudo verificar.
+  const verificarDiscrepanciaAplicaciones = async (): Promise<boolean | null> => {
+    const { data: pagosData, error: pagosError } = await supabase
+      .from('pagos')
+      .select('id, monto')
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true);
+    if (pagosError || !pagosData) {
+      console.error('Error verificando pagos de la cuenta:', pagosError);
+      return null;
+    }
+    if (pagosData.length === 0) return false;
+
+    const { data: aplicacionesData, error: aplicacionesError } = await supabase
+      .from('aplicaciones_pago')
+      .select('monto')
+      .in('id_pago', pagosData.map(p => p.id))
+      .eq('activo', true);
+    if (aplicacionesError || !aplicacionesData) {
+      console.error('Error verificando aplicaciones de la cuenta:', aplicacionesError);
+      return null;
+    }
+
+    const totalPagos = pagosData.reduce((sum, p) => sum + Number(p.monto), 0);
+    const totalAplicado = aplicacionesData.reduce((sum, a) => sum + Number(a.monto), 0);
+    return Math.abs(totalPagos - totalAplicado) > 0.01;
+  };
+
+  // Webhook n8n que redistribuye las aplicaciones tras un ajuste. fetch solo lanza en
+  // errores de red: un 4xx/5xx pasa silencioso, por eso se valida response.ok.
+  const llamarWebhookAjuste = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
+      });
+      if (!response.ok) {
+        console.error('Adjustment webhook returned non-OK status:', response.status);
+        return false;
+      }
+      return true;
+    } catch (webhookError) {
+      console.error('Error calling adjustment webhook:', webhookError);
+      return false;
+    }
+  };
+
+  // La redistribución de aplicaciones tras un ajuste la hace el webhook n8n de forma
+  // asíncrona; si falla o se omite, los pagos quedan sin dispersar y nadie se entera.
+  // Esta verificación en background detecta la discrepancia y la corrige invocando
+  // recalcular-aplicaciones (idempotente: redistribuye todos los pagos FIFO), dejando
+  // rastro en el log de actividades en ambos casos.
+  const asegurarDispersionTrasAjuste = async (workflow: string, webhookFallo: boolean) => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let via: 'webhook' | 'recalculo' | null = null;
+
+    if (!webhookFallo) {
+      // Dar tiempo al webhook asíncrono antes de intervenir
+      for (let intento = 0; intento < 3 && !via; intento++) {
+        await wait(3000);
+        if ((await verificarDiscrepanciaAplicaciones()) === false) via = 'webhook';
+      }
+    }
+
+    if (!via) {
+      const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+        body: { id_cuenta_cobranza: cuentaId }
+      });
+      if (recalcError) {
+        console.error('Error en recalcular-aplicaciones (fallback):', recalcError);
+      } else {
+        // La función corre async del lado servidor
+        await wait(2000);
+        if ((await verificarDiscrepanciaAplicaciones()) === false) via = 'recalculo';
+      }
+    }
+
+    const datosAuditoria = {
+      id_cuenta_cobranza: cuentaId,
+      via: via ?? 'sin_dispersar',
+      webhook_fallo: webhookFallo,
+    };
+
+    if (via) {
+      await registrarActualizacion('aplicaciones_pago', null, datosAuditoria, workflow, 'exito');
+      if (via === 'recalculo') {
+        toast({
+          title: "Dispersión recuperada",
+          description: "El webhook de ajuste falló; las aplicaciones se recalcularon automáticamente.",
+        });
+      }
+    } else {
+      await registrarActualizacion(
+        'aplicaciones_pago',
+        null,
+        datosAuditoria,
+        workflow,
+        'error',
+        'Ajuste guardado pero las aplicaciones no coinciden con los pagos tras webhook y recálculo'
+      );
+      toast({
+        title: "Aplicaciones sin sincronizar",
+        description: "Los ajustes se guardaron pero las aplicaciones no reflejan los pagos. Usa \"Recalcular aplicaciones\" o contacta a soporte.",
+        variant: "destructive",
+      });
+    }
+
+    // Refrescar de nuevo para reflejar la redistribución
+    queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+    queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+    queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+  };
+
   const handleConfirmAdjustments = async () => {
     if (!montoAdjustments) return;
 
@@ -2510,15 +2627,7 @@ export default function DetalleCuentaCobranza() {
       }
 
       // 3. Llamar al webhook para recalcular aplicaciones
-      try {
-        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
-        });
-      } catch (webhookError) {
-        console.error('Error calling adjustment webhook:', webhookError);
-      }
+      const webhookOk = await llamarWebhookAjuste();
 
       toast({
         title: "Ajustes guardados",
@@ -2534,6 +2643,10 @@ export default function DetalleCuentaCobranza() {
       queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+
+      // Verificación en background: garantiza que los pagos queden dispersados
+      // aunque el webhook falle (ver asegurarDispersionTrasAjuste).
+      void asegurarDispersionTrasAjuste('ajuste_montos_pago', !webhookOk);
     } catch (error) {
       console.error("Error saving adjustments:", error);
       toast({
@@ -2586,15 +2699,7 @@ export default function DetalleCuentaCobranza() {
       }
 
       // 3. Llamar al webhook para recalcular aplicaciones
-      try {
-        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
-        });
-      } catch (webhookError) {
-        console.error('Error calling adjustment webhook:', webhookError);
-      }
+      const webhookOk = await llamarWebhookAjuste();
 
       toast({
         title: "Ajustes guardados",
@@ -2610,6 +2715,10 @@ export default function DetalleCuentaCobranza() {
       queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+
+      // Verificación en background: garantiza que los pagos queden dispersados
+      // aunque el webhook falle (ver asegurarDispersionTrasAjuste).
+      void asegurarDispersionTrasAjuste('ajuste_aplicaciones_pago', !webhookOk);
     } catch (error) {
       console.error("Error saving application adjustments:", error);
       toast({
