@@ -712,7 +712,8 @@ async function fetchAmenidades(proyectoId: number): Promise<AmenidadCondominio[]
   const ams = await fetchInChunks<{ id: number; nombre: string | null; url: string | null }>(amenidadIds, (chunk, from, to) =>
     supabase.from("amenidades").select("id, nombre, url").in("id", chunk as number[]).eq("activo", true).range(from, to),
   );
-  return ams.map((a) => ({ id: String(a.id), nombre: a.nombre ?? "—", url: perProjectImg[String(a.id)] ?? a.url ?? null }));
+  // Solo foto real por proyecto; sin fallback al icono del catálogo (si no hay, no se muestra imagen)
+  return ams.map((a) => ({ id: String(a.id), nombre: a.nombre ?? "—", url: perProjectImg[String(a.id)] ?? null }));
 }
 
 export interface CondominioConfig {

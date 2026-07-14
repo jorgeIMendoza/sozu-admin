@@ -668,10 +668,8 @@ const MisProyectos = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
               {amenidades.map((ap: any) => (
                 <div key={ap.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                  {(ap.url_imagen || ap.amenidades?.url) ? (
-                    <img src={ap.url_imagen || ap.amenidades.url} alt={ap.amenidades?.nombre} className={ap.url_imagen ? "h-10 w-10 object-cover rounded" : "h-8 w-8 object-contain"} />
-                  ) : (
-                    <Star className="h-5 w-5 text-muted-foreground" />
+                  {ap.url_imagen && (
+                    <img src={ap.url_imagen} alt={ap.amenidades?.nombre} className="h-10 w-10 object-cover rounded" />
                   )}
                   <span className="text-sm font-medium text-foreground">{ap.amenidades?.nombre}</span>
                 </div>

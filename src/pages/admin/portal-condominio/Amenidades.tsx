@@ -1,7 +1,6 @@
 import { PageHeader, EstadoVista } from "./_helpers";
 import { useCondominio } from "@/contexts/CondominioContext";
 import { useCondominioDataset } from "@/hooks/condominio/useCondominioData";
-import { Image as ImageIcon } from "lucide-react";
 
 export default function Amenidades() {
   const { proyectoId } = useCondominio();
@@ -20,13 +19,11 @@ export default function Amenidades() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
           {amenidades.map((a) => (
             <div key={a.id} className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="h-32 bg-muted flex items-center justify-center">
-                {a.url ? (
+              {a.url && (
+                <div className="h-32 bg-muted flex items-center justify-center">
                   <img src={a.url} alt={a.nombre} className="h-full w-full object-cover" loading="lazy" />
-                ) : (
-                  <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
-                )}
-              </div>
+                </div>
+              )}
               <div className="p-4">
                 <h3 className="font-semibold">{a.nombre}</h3>
               </div>

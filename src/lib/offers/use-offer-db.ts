@@ -454,6 +454,25 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     .map((ap: any) => ap.amenidades?.nombre)
     .filter(Boolean);
 
+  // Bento enriquecido: foto real (url_imagen) + nombre. Sin foto → solo texto.
+  // El icono del catálogo NO se usa en la oferta (solo PDF).
+  const amenitiesEnriched = (amenidadesProyecto ?? [])
+    .map((ap: any, i: number) => {
+      const name = ap.amenidades?.nombre;
+      if (!name) return null;
+      return {
+        id: String(ap.amenidades?.id ?? i),
+        name,
+        shortDescription: "",
+        images: ap.url_imagen
+          ? [{ url: toOptimizedUrl(ap.url_imagen, 800, 80), caption: name }]
+          : [],
+        size: (ap.url_imagen && i % 5 === 0 ? "large" : "medium") as "large" | "medium" | "small",
+        iconName: "",
+      };
+    })
+    .filter(Boolean);
+
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
@@ -792,7 +811,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     constructionMilestones:  milestones,
     constructionDescription: undefined,
     amenities:               amenidadesNames,
-    amenitiesEnriched:       [],
+    amenitiesEnriched,
     location: {
       address: (proyecto as any).direccion ?? "",
       lat:     Number((proyecto as any).latitud ?? 0),
