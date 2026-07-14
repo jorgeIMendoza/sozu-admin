@@ -17,6 +17,8 @@ interface UserProfile {
   ver_filtros_avanzados_eliminados: boolean;
   id_notario: number | null;
   notaria_nombre: string | null;
+  id_banco: number | null;
+  banco_nombre: string | null;
   id_perfil_juridico: number | null;
   puede_impersonar: boolean;
   administrar_app_clientes: boolean;

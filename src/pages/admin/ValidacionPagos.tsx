@@ -19,8 +19,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
-import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
-import { useEliminarPago, fetchPagoImpacto, impactoClause, impactoWarning, type PagoImpacto } from "@/hooks/useEliminarPago";
+import { EliminarPagoDialog } from "@/components/admin/portal-cobranza/EliminarPagoDialog";
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/useEliminarPago";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -783,11 +784,11 @@ export default function ValidacionPagos() {
     fetchPagoImpacto(row.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (motivo: string) => {
     if (!deleteRow) return;
     try {
-      await eliminarPago(deleteRow.pago_id);
-      toast({ title: "Pago eliminado", description: "El pago y sus registros asociados fueron eliminados." });
+      await eliminarPago(deleteRow.pago_id, motivo);
+      toast({ title: "Pago eliminado", description: "El pago se marcó como eliminado y dejó de contar en los saldos." });
       setDeleteRow(null);
       setDeleteImpacto(null);
       queryClient.invalidateQueries({ queryKey: ["validacion-pagos-all-v2"] });
@@ -1802,10 +1803,26 @@ export default function ValidacionPagos() {
                           </button>
                         )}
                         {canDelete && (
-                          <button onClick={() => openDelete(row)} title="Eliminar pago"
-                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-                            <Trash2 className="size-4" />
-                          </button>
+                          row.metodo_nombre === "STP" ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-not-allowed">
+                                  <Trash2 className="size-4" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Pago STP: no se puede eliminar</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button onClick={() => openDelete(row)}
+                                  className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Eliminar pago</TooltipContent>
+                            </Tooltip>
+                          )
                         )}
                       </div>
                     </TableCell>
@@ -1853,19 +1870,15 @@ export default function ValidacionPagos() {
       />
       <EditPagoValidacionModal row={editRow} onClose={() => setEditRow(null)} />
       <CargarEvidenciaModal row={cargarRow} onClose={() => setCargarRow(null)} />
-      <DeleteConfirmationDialog
+      <EliminarPagoDialog
         open={!!deleteRow}
-        onOpenChange={(open) => { if (!open && !isDeleting) { setDeleteRow(null); setDeleteImpacto(null); } }}
+        onOpenChange={(open) => { if (!open) { setDeleteRow(null); setDeleteImpacto(null); } }}
         onConfirm={handleConfirmDelete}
         isLoading={isDeleting}
-        title="Eliminar pago"
-        description={
-          deleteRow
-            ? `Se eliminará el pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${formatCuentaCobranzaId(deleteRow.cuenta_id)}).` +
-              impactoClause(deleteImpacto)
-            : ""
-        }
-        warningMessage={impactoWarning(deleteImpacto)}
+        impacto={deleteImpacto}
+        encabezado={deleteRow
+          ? `pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${formatCuentaCobranzaId(deleteRow.cuenta_id)})`
+          : undefined}
       />
     </div>
   );

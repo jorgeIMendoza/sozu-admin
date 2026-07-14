@@ -396,14 +396,20 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                                 </IconTip>
                                 {/* Eliminar pago (solo pago único; en acumulados va en cada parcialidad) */}
                                 {canDeletePago && a.numAplicaciones < 2 && a.ultimoPago?.id && (
-                                  <IconTip label="Eliminar pago">
-                                    <button
-                                      onClick={() => openEliminarPago(a.ultimoPago.id)}
-                                      className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
-                                    >
-                                      <Trash2 className="size-4" />
-                                    </button>
-                                  </IconTip>
+                                  a.ultimoPago.metodo === 'STP' ? (
+                                    <IconTip label="Pago STP: no se puede eliminar">
+                                      <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
+                                    </IconTip>
+                                  ) : (
+                                    <IconTip label="Eliminar pago">
+                                      <button
+                                        onClick={() => openEliminarPago(a.ultimoPago.id)}
+                                        className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
+                                      >
+                                        <Trash2 className="size-4" />
+                                      </button>
+                                    </IconTip>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -493,7 +499,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                                     <span className="p-1.5 inline-flex shrink-0"><FileClock className="size-4 text-muted-foreground/25" /></span>
                                   </IconTip>
                                   {/* Eliminar este pago (parcialidad) */}
-                                  {canDeletePago && ap.id_pago ? (
+                                  {canDeletePago && ap.id_pago && ap.metodo !== 'STP' ? (
                                     <IconTip label="Eliminar pago">
                                       <button
                                         onClick={e => { e.stopPropagation(); openEliminarPago(ap.id_pago); }}
@@ -503,7 +509,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                                       </button>
                                     </IconTip>
                                   ) : canDeletePago ? (
-                                    <IconTip label="Sin pago">
+                                    <IconTip label={ap.metodo === 'STP' ? 'Pago STP: no se puede eliminar' : 'Sin pago'}>
                                       <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
                                     </IconTip>
                                   ) : null}

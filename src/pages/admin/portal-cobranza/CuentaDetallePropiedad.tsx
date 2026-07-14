@@ -3,7 +3,7 @@ import {
   ArrowRightLeft, CreditCard, FileDown, Pencil, Scale,
   Loader2, Upload, FileText, Eye,
   FileClock, FileCheck, FileWarning,
-  Undo2, Layers, Plus,
+  Undo2, Layers, Plus, RefreshCw,
   Building2, Calendar, Hash, Home, Landmark,
   User, Phone, Mail, ChevronRight, Briefcase,
   AlertTriangle, Lock, Trash2,
@@ -13,7 +13,7 @@ import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
-  DocEstatusBadge, InfoRow, RecalcularDispersionButton,
+  DocEstatusBadge, InfoRow,
   INFO_TABS, ACTIVITY_TABS,
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
@@ -176,11 +176,6 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <CreditCard className="size-3.5" />Agregar Pago
           </button>
         )}
-        <RecalcularDispersionButton
-          show={!isEnDemanda && hayDiscrepanciaAplicaciones}
-          loading={recalculandoAplic}
-          onClick={handleRecalcularAplicaciones}
-        />
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
           onClick={handleEstadoCuenta}
@@ -213,6 +208,18 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           >
             <Scale className="size-3.5" />En demanda
           </span>
+        )}
+        {/* Recalcular pagos — solo visible cuando hay discrepancia en aplicaciones */}
+        {!isEnDemanda && hayDiscrepanciaAplicaciones && (
+          <button
+            onClick={handleRecalcularAplicaciones}
+            disabled={recalculandoAplic}
+            title="Recalcular la aplicación de pagos de esta cuenta"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-300 bg-background text-[12px] font-medium text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-60"
+          >
+            {recalculandoAplic ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            Recalcular pagos
+          </button>
         )}
       </div>
 
@@ -593,14 +600,20 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                 )}
                                 {/* Eliminar pago (solo pago único; en acumulados va en cada parcialidad) */}
                                 {canDeletePago && !isEnDemanda && a.numAplicaciones < 2 && a.ultimoPago?.id && (
-                                  <IconTip label="Eliminar pago">
-                                    <button
-                                      onClick={() => openEliminarPago(a.ultimoPago.id)}
-                                      className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
-                                    >
-                                      <Trash2 className="size-4" />
-                                    </button>
-                                  </IconTip>
+                                  a.ultimoPago.metodo === 'STP' ? (
+                                    <IconTip label="Pago STP: no se puede eliminar">
+                                      <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
+                                    </IconTip>
+                                  ) : (
+                                    <IconTip label="Eliminar pago">
+                                      <button
+                                        onClick={() => openEliminarPago(a.ultimoPago.id)}
+                                        className="p-1.5 rounded transition-colors text-foreground hover:bg-destructive/10 hover:text-destructive"
+                                      >
+                                        <Trash2 className="size-4" />
+                                      </button>
+                                    </IconTip>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -690,7 +703,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                     <span className="p-1.5 inline-flex shrink-0"><FileClock className="size-4 text-muted-foreground/25" /></span>
                                   </IconTip>
                                   {/* Eliminar este pago (parcialidad) */}
-                                  {canDeletePago && !isEnDemanda && ap.id_pago ? (
+                                  {canDeletePago && !isEnDemanda && ap.id_pago && ap.metodo !== 'STP' ? (
                                     <IconTip label="Eliminar pago">
                                       <button
                                         onClick={e => { e.stopPropagation(); openEliminarPago(ap.id_pago); }}
@@ -700,7 +713,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                                       </button>
                                     </IconTip>
                                   ) : canDeletePago ? (
-                                    <IconTip label="Sin pago">
+                                    <IconTip label={ap.metodo === 'STP' ? 'Pago STP: no se puede eliminar' : 'Sin pago'}>
                                       <span className="p-1.5 inline-flex text-muted-foreground/25 cursor-not-allowed"><Trash2 className="size-4" /></span>
                                     </IconTip>
                                   ) : null}
