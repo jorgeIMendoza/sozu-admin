@@ -24,7 +24,6 @@ export const PortalNotariaLayout = () => {
 
   const NAV = usePortalNav(NOTARIA_MENU_ID, iconMap, Home);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
   const { canReturnToAdmin } = useCanReturnToAdmin();
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");

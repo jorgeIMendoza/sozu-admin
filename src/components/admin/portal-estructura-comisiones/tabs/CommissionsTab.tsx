@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,7 +33,10 @@ const loadHistory = (): SyncHistoryEntry[] => {
 const saveHistory = (h: SyncHistoryEntry[]) => localStorage.setItem(SYNC_HISTORY_KEY, JSON.stringify(h));
 
 export default function CommissionsTab() {
-  const { scenarios, channels, roles, roleAssignments, updateScenario } = useSimulator();
+  const {
+    scenarios, channels, roles, roleAssignments, updateScenario,
+    commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
+  } = useSimulator();
   const [selectedScenarioId, setSelectedScenarioId] = useState(scenarios[0]?.id || '');
   const scenario = scenarios.find(s => s.id === selectedScenarioId);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -49,54 +52,26 @@ export default function CommissionsTab() {
 
   const commRoles = roles.filter(r => r.participatesInCommission);
 
-  // Auto-load: ensure all commRoles exist in every channel for this scenario
-  const syncRolesToScenario = useCallback((applyUpdate = true) => {
-    if (!scenario) return { added: 0, newRules: [] as typeof scenario.commissionRules };
-    let newRules = [...scenario.commissionRules];
-    let added = 0;
-
-    channels.forEach(ch => {
-      commRoles.forEach(role => {
-        const exists = newRules.some(r => r.channelId === ch.id && r.roleId === role.id);
-        if (!exists) {
-          newRules.push({
-            id: crypto.randomUUID(),
-            scenarioId: scenario.id,
-            channelId: ch.id,
-            roleId: role.id,
-            percentage: 0,
-            pool: role.belongsTo === 'sozu_central' ? 'sozu' : 'project',
-          });
-          added++;
-        }
-      });
-    });
-
-    if (applyUpdate && added > 0) {
-      updateScenario({ ...scenario, commissionRules: newRules });
-    }
-    return { added, newRules };
-  }, [scenario, channels, commRoles, updateScenario]);
-
-  // Auto-load on scenario change
+  // La matriz canal×puesto es única y compartida (no depende de escenario)
+  // — se sincroniza una sola vez, no en cada cambio de escenario.
   useEffect(() => {
-    syncRolesToScenario(true);
-  }, [selectedScenarioId]); // eslint-disable-line react-hooks/exhaustive-deps
+    syncMissingCommissionRules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const rolesToAdd = useMemo(() => {
-    if (!scenario) return 0;
     let n = 0;
     channels.forEach(ch => {
       commRoles.forEach(role => {
-        if (!scenario.commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id)) n++;
+        if (!commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id)) n++;
       });
     });
     return n;
-  }, [scenario, channels, commRoles]);
+  }, [commissionRules, channels, commRoles]);
 
-  const handleConfirmSync = (replaceManual: boolean) => {
+  const handleConfirmSync = async (replaceManual: boolean) => {
     if (!scenario) return;
-    const { added, newRules } = syncRolesToScenario(false);
+    const added = await syncMissingCommissionRules();
 
     const updatedExternal = { ...scenario.channelExternalPcts };
     const channelChanges: SyncHistoryEntry['channelChanges'] = [];
@@ -119,11 +94,7 @@ export default function CommissionsTab() {
       channelChanges.push({ channelId: ch.id, channelName: ch.name, from: current, to: next });
     });
 
-    updateScenario({
-      ...scenario,
-      commissionRules: newRules,
-      channelExternalPcts: updatedExternal,
-    });
+    updateScenario({ ...scenario, channelExternalPcts: updatedExternal });
 
     const entry: SyncHistoryEntry = {
       id: crypto.randomUUID(),
@@ -206,39 +177,21 @@ export default function CommissionsTab() {
   const addRule = (channelId: string) => {
     if (commRoles.length === 0) return;
     // Find a role not yet in this channel
-    const channelRules = scenario.commissionRules.filter(r => r.channelId === channelId);
+    const channelRules = commissionRules.filter(r => r.channelId === channelId);
     const unusedRole = roles.find(r => !channelRules.some(cr => cr.roleId === r.id));
     const roleId = unusedRole?.id || roles[0]?.id;
     if (!roleId) return;
-
-    const newRule = {
-      id: crypto.randomUUID(),
-      scenarioId: scenario.id,
-      channelId,
-      roleId,
-      percentage: 0,
-      pool: 'project' as const,
-    };
-    updateScenario({
-      ...scenario,
-      commissionRules: [...scenario.commissionRules, newRule],
-    });
+    addCommissionRule(channelId, roleId, 'project');
   };
 
-  const updateRule = (ruleId: string, updates: Partial<typeof scenario.commissionRules[0]>) => {
-    updateScenario({
-      ...scenario,
-      commissionRules: scenario.commissionRules.map(r =>
-        r.id === ruleId ? { ...r, ...updates } : r
-      ),
-    });
+  const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
+    const rule = commissionRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    updateCommissionRule({ ...rule, ...updates });
   };
 
   const deleteRule = (ruleId: string) => {
-    updateScenario({
-      ...scenario,
-      commissionRules: scenario.commissionRules.filter(r => r.id !== ruleId),
-    });
+    deleteCommissionRule(ruleId);
   };
 
   const formatCurrency = (n: number) =>
@@ -370,6 +323,17 @@ export default function CommissionsTab() {
                 <thead>
                   <tr>
                     <th>Rol</th>
+                    {scenario.commissionMode === 'on_sale_value' && (
+                      <th>
+                        % sobre Comisión a Dispersar
+                        <Tooltip>
+                          <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-xs">
+                            % del rol respecto a la Comisión a Dispersar del canal (Interna esperada: {comisionInterna.toFixed(2)}%). El % sobre venta se calcula solo.
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
+                    )}
                     <th>% {scenario.commissionMode === 'on_sale_value' ? 'sobre venta' : 'sobre remanente'}</th>
                     <th>Pool</th>
                     <th></th>
@@ -378,6 +342,7 @@ export default function CommissionsTab() {
                 <tbody>
                   {channelRules.map(rule => {
                     const { role, assignment } = getRoleInfo(rule.roleId);
+                    const sharePct = comisionInterna > 0 ? (rule.percentage / comisionInterna) * 100 : 0;
                     return (
                       <tr key={rule.id}>
                         <td>
@@ -398,12 +363,28 @@ export default function CommissionsTab() {
                             )}
                           </div>
                         </td>
+                        {scenario.commissionMode === 'on_sale_value' && (
+                          <td>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              className="w-24 h-8 text-sm font-mono"
+                              value={Number.isFinite(sharePct) ? +sharePct.toFixed(4) : 0}
+                              onChange={e => {
+                                const newShare = +e.target.value;
+                                const newPercentage = comisionInterna > 0 ? (newShare / 100) * comisionInterna : 0;
+                                updateRule(rule.id, { percentage: newPercentage });
+                              }}
+                            />
+                          </td>
+                        )}
                         <td>
                           <Input
                             type="number"
                             step="0.01"
                             className="w-24 h-8 text-sm font-mono"
                             value={rule.percentage}
+                            disabled={scenario.commissionMode === 'on_sale_value'}
                             onChange={e => updateRule(rule.id, { percentage: +e.target.value })}
                           />
                         </td>

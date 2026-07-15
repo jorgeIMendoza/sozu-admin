@@ -187,9 +187,9 @@ export function AppNotariaDashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Puede impersonar notarios: admins (rol 1-2) o cualquier rol con el flag
-  // roles.puede_impersonar activo (no se amarra a rol_id fijo).
-  const isAdmin = (profile?.rol_id ?? 99) <= 2 || profile?.puede_impersonar === true;
+  // Puede ver el selector de notarios: roles 1, 7, 29 explícitos
+  // o cualquier rol con el flag puede_impersonar activo en BD.
+  const isAdmin = [1, 7, 29].includes(profile?.rol_id ?? 0) || profile?.puede_impersonar === true;
 
   // ── Modal Expediente ────────────────────────────────────────────────────────
   const [expedienteModal, setExpedienteModal] = useState<{
