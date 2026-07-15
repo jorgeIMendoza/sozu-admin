@@ -212,23 +212,23 @@ export function useNotariaCuentaDetalle({
       }
 
       // ── Paso 4: Contrato firmado (tipo_documento = 18) ─────────────────────
+      // El contrato está vinculado a la CUENTA (id_persona = NULL), no a la persona.
+      // Misma regla que DocumentsTab con entityType = 'cuenta_cobranza'.
       let contratoFirmadoUrl: string | null = null;
 
-      if (personaIds.length) {
-        const { data: contratos } = await (supabase as any)
-          .from('documentos')
-          .select('url, id_estatus_verificacion, fecha_creacion')
-          .in('id_persona', personaIds)
-          .eq('id_tipo_documento', 18)
-          .eq('activo', true)
-          .eq('es_draft', false)
-          .order('fecha_creacion', { ascending: false })
-          .limit(1);
+      const { data: contratos } = await (supabase as any)
+        .from('documentos')
+        .select('url, id_estatus_verificacion, fecha_creacion')
+        .eq('id_cuenta_cobranza', cuentaId!)
+        .eq('id_tipo_documento', 18)
+        .eq('activo', true)
+        .eq('es_draft', false)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1);
 
-        const contrato = (contratos ?? [])[0] ?? null;
-        // Mostrar el contrato más reciente, independientemente del estatus
-        if (contrato?.url) contratoFirmadoUrl = contrato.url;
-      }
+      const contrato = (contratos ?? [])[0] ?? null;
+      // Mostrar el contrato más reciente, independientemente del estatus
+      if (contrato?.url) contratoFirmadoUrl = contrato.url;
 
       return {
         cuentaId: cuentaId!,
