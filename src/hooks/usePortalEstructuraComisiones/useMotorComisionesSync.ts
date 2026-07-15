@@ -119,17 +119,24 @@ function ruleFromRow(row: any): CommissionRule {
     id: String(row.id),
     scenarioId: "",
     channelId: String(row.id_canal),
-    roleId: String(row.id_rol),
+    roleId: row.id_rol,
     percentage: Number(row.porcentaje ?? 0),
     pool: row.pool,
   };
 }
 
-/** No incluye `id` — la BD lo asigna (IDENTITY). Válido para insert y update. */
+/**
+ * No incluye `id` — la BD lo asigna (IDENTITY). Válido para insert y update.
+ *
+ * `id_rol` es `text`, no `bigint`: identifica un rol de "Puestos y Sueldos"
+ * (`StructureTab.tsx` / `useSimulator().roles`, ej. 'role-dir-sozu'), que es
+ * 100% local (localStorage) y no tiene tabla propia — es un catálogo
+ * distinto de `roles_organizacionales` (Directorio de Personal).
+ */
 function ruleToRow(rule: CommissionRule) {
   return {
     id_canal: Number(rule.channelId),
-    id_rol: Number(rule.roleId),
+    id_rol: rule.roleId,
     porcentaje: rule.percentage,
     pool: rule.pool,
     fecha_actualizacion: new Date().toISOString(),
