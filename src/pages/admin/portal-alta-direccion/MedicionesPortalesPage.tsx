@@ -658,6 +658,10 @@ const CHART_COLORS = [
 ];
 const OTROS_COLOR = "hsl(var(--muted-foreground))";
 const MAX_SLICES = 5; // top 5 + "Otros"
+/** Valores del RPC que significan "sin clasificar": siempre van al bucket gris "Otros". */
+const NEUTRAL_VALUES = new Set(["Otro", "Otros", "Desconocido"]);
+/** La app nativa de clientes es categoría de primera clase: nunca se pliega en "Otros". */
+const APP_SLICE = "App clientes";
 
 type Slice = { valor: string; valor_num: number; color: string; pct: number };
 
@@ -697,6 +701,9 @@ function GraficosDispositivosSheet({
   const filas = q.data ?? [];
 
   // Pivotar por dimensión → slices con color y porcentaje (top 5 + "Otros").
+  // "Otros" agrupa SOLO lo no clasificado ('Otro'/'Desconocido' del RPC) más el
+  // excedente del top; "App clientes" nunca se pliega ahí (si queda fuera del
+  // top desplaza al último clasificado).
   const porDimension = useMemo(() => {
     const out: Record<string, { slices: Slice[]; total: number }> = {};
     for (const dim of DIMENSIONES) {
@@ -713,33 +720,34 @@ function GraficosDispositivosSheet({
 
       const total = rows.reduce((s, r) => s + r.valor_num, 0);
 
-      let slices: Slice[];
-      if (rows.length > MAX_SLICES + 1) {
-        const top = rows.slice(0, MAX_SLICES);
-        const restoNum = rows.slice(MAX_SLICES).reduce((s, r) => s + r.valor_num, 0);
-        slices = [
-          ...top.map((r, i) => ({
-            valor: r.valor,
-            valor_num: r.valor_num,
-            color: CHART_COLORS[i % CHART_COLORS.length],
-            pct: total > 0 ? Math.round((r.valor_num / total) * 100) : 0,
-          })),
-          {
-            valor: "Otros",
-            valor_num: restoNum,
-            color: OTROS_COLOR,
-            pct: total > 0 ? Math.round((restoNum / total) * 100) : 0,
-          },
-        ];
-      } else {
-        slices = rows.map((r, i) => ({
-          valor: r.valor,
-          valor_num: r.valor_num,
-          color: r.valor === "Otros" || r.valor === "Otro" || r.valor === "Desconocido"
-            ? OTROS_COLOR
-            : CHART_COLORS[i % CHART_COLORS.length],
-          pct: total > 0 ? Math.round((r.valor_num / total) * 100) : 0,
-        }));
+      const nombradas = rows.filter((r) => !NEUTRAL_VALUES.has(r.valor));
+      const neutrasNum = rows
+        .filter((r) => NEUTRAL_VALUES.has(r.valor))
+        .reduce((s, r) => s + r.valor_num, 0);
+
+      const top = nombradas.slice(0, MAX_SLICES);
+      const resto = nombradas.slice(MAX_SLICES);
+      const appIdx = resto.findIndex((r) => r.valor === APP_SLICE);
+      if (appIdx >= 0) {
+        const app = resto.splice(appIdx, 1)[0];
+        if (top.length === MAX_SLICES) resto.unshift(top.pop()!);
+        top.push(app);
+      }
+      const otrosNum = neutrasNum + resto.reduce((s, r) => s + r.valor_num, 0);
+
+      const slices: Slice[] = top.map((r, i) => ({
+        valor: r.valor,
+        valor_num: r.valor_num,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        pct: total > 0 ? Math.round((r.valor_num / total) * 100) : 0,
+      }));
+      if (otrosNum > 0) {
+        slices.push({
+          valor: "Otros",
+          valor_num: otrosNum,
+          color: OTROS_COLOR,
+          pct: total > 0 ? Math.round((otrosNum / total) * 100) : 0,
+        });
       }
       out[dim.key] = { slices, total };
     }
