@@ -9,6 +9,7 @@ import {
   Banknote,
   CalendarDays,
   ShieldCheck,
+  FileCheck,
   Settings2,
   ArrowLeft,
   LogOut,
@@ -27,12 +28,20 @@ import { usePortalNav } from "@/hooks/usePortalNav";
 
 const CONDOMINIO_MENU_ID = 30;
 
+// Item del módulo Titularidad. La nav del portal se lee de BD (`usePortalNav`),
+// pero este módulo es UI + mock en esta fase, así que se inyecta en el front
+// entre "Cobranza" y "Tesorería". Dedupe por ruta: si el submenu ya existe en
+// BD (una vez aplicados los INSERT de Ejecuciones_manuales), no se duplica.
+const TITULARIDAD_PATH = "/admin/portal-condominio/titularidad";
+const COBRANZA_PATH = "/admin/portal-condominio/cobranza";
+
 const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-condominio/dashboard":     LayoutDashboard,
   "/admin/portal-condominio/departamentos": Building2,
   "/admin/portal-condominio/cargos":        Receipt,
   "/admin/portal-condominio/pagos":         Landmark,
   "/admin/portal-condominio/cobranza":      CircleDollarSign,
+  "/admin/portal-condominio/titularidad":   FileCheck,
   "/admin/portal-condominio/tesoreria":     Banknote,
   "/admin/portal-condominio/amenidades":    CalendarDays,
   "/admin/portal-condominio/auditoria":     ShieldCheck,
@@ -63,7 +72,16 @@ const PortalCondominioLayoutInner = () => {
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navItems = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
+  const navFromDb = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
+  const navItems = (() => {
+    if (navFromDb.some((i) => i.path === TITULARIDAD_PATH)) return navFromDb;
+    const item = { path: TITULARIDAD_PATH, label: "Titularidad", icon: FileCheck };
+    const idx = navFromDb.findIndex((i) => i.path === COBRANZA_PATH);
+    if (idx === -1) return [...navFromDb, item];
+    const copy = [...navFromDb];
+    copy.splice(idx + 1, 0, item);
+    return copy;
+  })();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const currentSection = navItems.find((i) => isActive(i.path))?.label || "Condominio";

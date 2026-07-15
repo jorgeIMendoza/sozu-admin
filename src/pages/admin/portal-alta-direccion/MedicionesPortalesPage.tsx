@@ -8,7 +8,7 @@
  * Se refresca automáticamente cada 30s para que el conteo de online sea
  * accionable en tiempo casi-real.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users, BarChart3, Activity, RefreshCw, ChevronRight, X, Mail, Loader2, Monitor, Smartphone, Tablet, HelpCircle, PieChart as PieChartIcon, Cpu, Globe, Tag, Radio, type LucideIcon } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip } from "recharts";
@@ -142,42 +142,12 @@ export default function MedicionesPortalesPage() {
     return new Date(Date.now() - horas * 3600 * 1000).toISOString();
   }, [rango]);
 
-  // Realtime: cualquier INSERT/UPDATE en portal_sesiones (sesión nueva,
-  // heartbeat, cierre) invalida todas las queries de mediciones. Debounce de
-  // 2s porque los heartbeats de todos los portales llegan en ráfagas.
-  // Requiere que la tabla esté en la publicación supabase_realtime + policy
-  // SELECT para staff; si no lo está, el canal simplemente no emite y la
-  // página degrada al polling de 30s ya existente.
-  const invalidateTimerRef = useRef<number | null>(null);
-  useEffect(() => {
-    const channel = supabase
-      .channel("mediciones-portal-sesiones")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "portal_sesiones" },
-        () => {
-          if (invalidateTimerRef.current != null) return;
-          invalidateTimerRef.current = window.setTimeout(() => {
-            invalidateTimerRef.current = null;
-            queryClient.invalidateQueries({ queryKey: ["mediciones"] });
-          }, 2_000);
-        },
-      )
-      .subscribe();
-    return () => {
-      if (invalidateTimerRef.current != null) {
-        window.clearTimeout(invalidateTimerRef.current);
-        invalidateTimerRef.current = null;
-      }
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  // Usuarios online — refetch cada 30s para sensación de tiempo real.
+  // Usuarios online — refetch cada 15s para sensación de tiempo real.
   const onlineQ = useQuery<OnlineRow[]>({
     queryKey: ["mediciones", "online"],
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     staleTime: 0,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc(
@@ -191,7 +161,10 @@ export default function MedicionesPortalesPage() {
 
   const historicoQ = useQuery<HistoricoRow[]>({
     queryKey: ["mediciones", "historico", rango],
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc(
         "visitas_historicas_por_portal",
@@ -205,7 +178,10 @@ export default function MedicionesPortalesPage() {
   // Uso por tipo de dispositivo (clasificado en BD desde user_agent).
   const dispositivosQ = useQuery<DispositivoRow[]>({
     queryKey: ["mediciones", "dispositivos", rango],
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc(
         "dispositivos_uso_por_portal",
@@ -216,6 +192,26 @@ export default function MedicionesPortalesPage() {
       return (data ?? []) as DispositivoRow[];
     },
   });
+
+  // Tiempo real: al cambiar `portal_sesiones` (login / navegación / cierre),
+  // invalida todas las mediciones para reflejarlo al instante. El polling de
+  // arriba cubre además las transiciones por tiempo (online → offline a 15 min)
+  // y el caso en que la tabla no esté en la publicación de realtime.
+  useEffect(() => {
+    const channel = (supabase as any)
+      .channel("alta-direccion-mediciones-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "portal_sesiones" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["mediciones"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      (supabase as any).removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const onlineMap = useMemo(() => {
     const m = new Map<string, OnlineRow>();
@@ -273,26 +269,39 @@ export default function MedicionesPortalesPage() {
     <>
       <PageHeader
         title="Uso por portal"
-        description="Usuarios activos en línea y visitas históricas — mediciones por portal."
+        description="Usuarios activos en línea y visitas históricas — mediciones por portal, en tiempo real."
         action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onlineQ.refetch();
-              historicoQ.refetch();
-            }}
-            disabled={onlineQ.isFetching || historicoQ.isFetching}
-            className="h-9"
-          >
-            <RefreshCw
-              className={cn(
-                "h-3.5 w-3.5 mr-1.5",
-                (onlineQ.isFetching || historicoQ.isFetching) && "animate-spin",
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              En vivo
+              {onlineQ.dataUpdatedAt > 0 && (
+                <span className="tabular-nums">· {fmtHoraActual(onlineQ.dataUpdatedAt)}</span>
               )}
-            />
-            Actualizar
-          </Button>
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onlineQ.refetch();
+                historicoQ.refetch();
+                dispositivosQ.refetch();
+              }}
+              disabled={onlineQ.isFetching || historicoQ.isFetching || dispositivosQ.isFetching}
+              className="h-9"
+            >
+              <RefreshCw
+                className={cn(
+                  "h-3.5 w-3.5 mr-1.5",
+                  (onlineQ.isFetching || historicoQ.isFetching || dispositivosQ.isFetching) && "animate-spin",
+                )}
+              />
+              Actualizar
+            </Button>
+          </div>
         }
       />
 
@@ -591,6 +600,19 @@ function KpiTile({
       </div>
     </div>
   );
+}
+
+/** Hora local HH:MM:SS de un timestamp (ms) — para "última actualización". */
+function fmtHoraActual(ms: number): string {
+  try {
+    return new Date(ms).toLocaleTimeString("es-MX", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return "";
+  }
 }
 
 function formatRelativo(iso: string): string {
@@ -1147,6 +1169,8 @@ function DetalleUsuariosSheet({
     queryKey: ["mediciones", "detalle-usuarios", portal, desde],
     enabled: !!portal,
     staleTime: 30_000,
+    refetchInterval: portal ? 30_000 : false,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc(
         "usuarios_actividad_por_portal",
