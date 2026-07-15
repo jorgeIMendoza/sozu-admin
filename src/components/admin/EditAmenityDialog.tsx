@@ -51,7 +51,9 @@ export function EditAmenityDialog({
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [isGeneratingIcon, setIsGeneratingIcon] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const [showAllCats, setShowAllCats] = useState(false);
+  // Default: mostrar TODAS las etiquetas. La mayoría de proyectos suben imágenes en
+  // "General", no en "Amenidades", así que filtrar por esa etiqueta las ocultaba todas.
+  const [showAllCats, setShowAllCats] = useState(true);
 
   // Id de la categoría/etiqueta "Amenidades" para priorizar esas imágenes en el picker.
   const { data: amenidadCatId = null } = useQuery({
@@ -421,7 +423,7 @@ export function EditAmenityDialog({
                                   setShowPicker(false);
                                   toast({ title: "Foto asignada desde Multimedia" });
                                 }}
-                                className={`relative aspect-square overflow-hidden rounded-md border transition-colors hover:border-primary ${
+                                className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-muted transition-colors hover:border-primary ${
                                   projectImageUrl === m.url ? "border-primary ring-2 ring-primary" : "border-border"
                                 }`}
                                 aria-label="Usar esta imagen como foto real"
@@ -430,7 +432,7 @@ export function EditAmenityDialog({
                                   src={optimizedImage(m.url, { width: 160 })}
                                   alt=""
                                   loading="lazy"
-                                  className="h-full w-full object-cover"
+                                  className="max-h-full max-w-full object-contain"
                                 />
                               </button>
                             ))}
