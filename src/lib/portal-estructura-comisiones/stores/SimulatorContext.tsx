@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig } from '../types/simulator';
+import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig, CommissionRule } from '../types/simulator';
 import {
   defaultProjects, defaultRoles, defaultChannels, defaultScenarios,
   defaultRoleAssignments, defaultCommercialPolicies,
 } from '../utils/seed-data';
 import {
-  fetchCanalesReales, fetchEscenariosReales, seedCanalesYEscenarios,
-  upsertCanalRemoto, deleteCanalRemoto, upsertEscenarioRemoto, deleteEscenarioRemoto,
+  fetchCanalesReales, seedCanalesReales, insertCanalRemoto, updateCanalRemoto, deleteCanalRemoto,
+  fetchReglasComisionReales, insertReglaComisionRemota, insertReglasComisionRemotas,
+  updateReglaComisionRemota, deleteReglaComisionRemota,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 
 const STORAGE_KEY = 'sozu-ec-simulator-state';
@@ -22,9 +23,9 @@ interface SimulatorContextType extends AppState {
   addRoleAssignment: (ra: RoleAssignment) => void;
   updateRoleAssignment: (ra: RoleAssignment) => void;
   deleteRoleAssignment: (id: string) => void;
-  addChannel: (c: Channel) => void;
+  addChannel: (c: Channel) => Promise<void>;
   updateChannel: (c: Channel, changeNote?: string) => void;
-  duplicateChannel: (id: string) => void;
+  duplicateChannel: (id: string) => Promise<void>;
   deleteChannel: (id: string) => void;
   getChannelDependencies: (id: string) => string[];
   addScenario: (s: Scenario) => void;
@@ -33,6 +34,12 @@ interface SimulatorContextType extends AppState {
   duplicateScenario: (id: string) => void;
   updateCommercialPolicies: (cp: CommercialPoliciesConfig) => void;
   resetToDefaults: () => void;
+  /** Matriz de comisión canal × puesto — única y compartida, independiente de escenario. */
+  addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => Promise<void>;
+  updateCommissionRule: (rule: CommissionRule) => void;
+  deleteCommissionRule: (id: string) => void;
+  /** Crea las combinaciones canal×puesto que falten para los roles que participan en comisión. */
+  syncMissingCommissionRules: () => Promise<number>;
 }
 
 const SimulatorContext = createContext<SimulatorContextType | null>(null);
@@ -64,13 +71,14 @@ function loadState(): AppState {
         const missingDefaults = defaultProjects.filter((p) => !existingIds.has(p.id));
         parsed.projects = [...parsed.projects, ...missingDefaults];
       }
+      if (!parsed.commissionRules) parsed.commissionRules = [];
       return parsed;
     }
   } catch { /* ignore */ }
   return {
     projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,
     scenarios: defaultScenarios, roleAssignments: defaultRoleAssignments,
-    commercialPolicies: defaultCommercialPolicies,
+    commercialPolicies: defaultCommercialPolicies, commissionRules: [],
   };
 }
 
@@ -78,39 +86,24 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
 
-  // Canales y Escenarios (incluye el % de comisión por rol/canal) son
-  // compartidos vía Supabase — al montar, la BD manda sobre el localStorage
-  // local. Si las tablas aún no existen (DDL pendiente) o hay un error de
-  // red, no pasa nada: sigue funcionando 100% local, igual que antes.
+  // Canales y la matriz de Comisiones (canal × puesto) son compartidos vía
+  // Supabase — al montar, la BD manda sobre el localStorage local. Si las
+  // tablas aún no existen (DDL pendiente) o hay un error de red, no pasa
+  // nada: sigue funcionando 100% local, igual que antes. Los Escenarios
+  // (simulación) siguen siendo 100% locales — no se persisten en BD.
   useEffect(() => {
     (async () => {
-      const [remoteChannels, remoteScenarios] = await Promise.all([fetchCanalesReales(), fetchEscenariosReales()]);
+      const [remoteChannels, remoteRules] = await Promise.all([fetchCanalesReales(), fetchReglasComisionReales()]);
       if (remoteChannels !== null && remoteChannels.length === 0) {
-        await seedCanalesYEscenarios(state.channels, []);
-      }
-      if (remoteScenarios !== null && remoteScenarios.length === 0) {
-        await seedCanalesYEscenarios([], state.scenarios);
+        await seedCanalesReales(state.channels);
       }
       setState(prev => ({
         ...prev,
         channels: remoteChannels && remoteChannels.length > 0 ? remoteChannels : prev.channels,
-        scenarios: remoteScenarios && remoteScenarios.length > 0 ? remoteScenarios : prev.scenarios,
+        commissionRules: remoteRules ?? prev.commissionRules,
       }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const syncChannel = useCallback((c: Channel) => {
-    upsertCanalRemoto(c).then(ok => { if (!ok) toast.error(`No se pudo guardar el canal "${c.name}" en el servidor.`); });
-  }, []);
-  const syncChannelDelete = useCallback((id: string) => {
-    deleteCanalRemoto(id).then(ok => { if (!ok) toast.error('No se pudo eliminar el canal en el servidor.'); });
-  }, []);
-  const syncScenario = useCallback((s: Scenario) => {
-    upsertEscenarioRemoto(s).then(ok => { if (!ok) toast.error(`No se pudo guardar el escenario "${s.name}" en el servidor.`); });
-  }, []);
-  const syncScenarioDelete = useCallback((id: string) => {
-    deleteEscenarioRemoto(id).then(ok => { if (!ok) toast.error('No se pudo eliminar el escenario en el servidor.'); });
   }, []);
 
   const update = useCallback((fn: (s: AppState) => AppState) => setState(prev => fn(prev)), []);
@@ -118,9 +111,10 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   const getChannelDependencies = useCallback((id: string): string[] => {
     const deps: string[] = [];
     const s = state;
+    const usedInRules = s.commissionRules.some(r => r.channelId === id);
+    if (usedInRules) deps.push('reglas de comisión');
     const usedInScenarios = s.scenarios.filter(sc =>
-      sc.channelMix[id] !== undefined || sc.channelExternalPcts[id] !== undefined ||
-      sc.commissionRules.some(r => r.channelId === id)
+      sc.channelMix[id] !== undefined || sc.channelExternalPcts[id] !== undefined
     );
     if (usedInScenarios.length > 0) deps.push(`${usedInScenarios.length} escenario(s)`);
     const usedInProjects = s.projects.filter(p => p.channelMix[id] !== undefined);
@@ -128,8 +122,15 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     return deps;
   }, [state]);
 
+  // La matriz de comisiones es única y compartida (no depende de escenario)
+  // — se inyecta igual en cada escenario expuesto, así el resto de tabs
+  // (Resultados, Simuladores, etc.) sigue leyendo `scenario.commissionRules`
+  // sin cambios.
+  const scenariosWithRules = state.scenarios.map(sc => ({ ...sc, commissionRules: state.commissionRules }));
+
   const ctx: SimulatorContextType = {
     ...state,
+    scenarios: scenariosWithRules,
     addProject: (p) => update(s => ({ ...s, projects: [...s.projects, p] })),
     updateProject: (p) => update(s => ({ ...s, projects: s.projects.map(x => x.id === p.id ? p : x) })),
     deleteProject: (id) => update(s => ({ ...s, projects: s.projects.filter(x => x.id !== id) })),
@@ -139,12 +140,14 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     addRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: [...s.roleAssignments, ra] })),
     updateRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: s.roleAssignments.map(x => x.id === ra.id ? ra : x) })),
     deleteRoleAssignment: (id) => update(s => ({ ...s, roleAssignments: s.roleAssignments.filter(x => x.id !== id) })),
-    addChannel: (c) => {
+    addChannel: async (c) => {
       const now = new Date().toISOString();
       const entry = { id: crypto.randomUUID(), timestamp: now, user: 'Tú', action: 'created' as const };
-      const withMeta: Channel = { ...c, createdAt: now, updatedAt: now, history: [...(c.history || []), entry] };
+      const draft: Channel = { ...c, id: '', createdAt: now, updatedAt: now, history: [entry] };
+      const { channel: created, tableMissing } = await insertCanalRemoto(draft);
+      if (!created && !tableMissing) toast.error(`No se pudo guardar el canal "${c.name}" en el servidor.`);
+      const withMeta: Channel = created ? { ...draft, ...created } : { ...draft, id: `local-${crypto.randomUUID()}` };
       update(s => ({ ...s, channels: [...s.channels, withMeta] }));
-      syncChannel(withMeta);
     },
     updateChannel: (c, changeNote) => {
       const prev = state.channels.find(x => x.id === c.id);
@@ -157,47 +160,95 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       }
       const next: Channel = { ...c, updatedAt: now, history };
       update(s => ({ ...s, channels: s.channels.map(x => x.id === c.id ? next : x) }));
-      syncChannel(next);
+      updateCanalRemoto(next).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error(`No se pudo guardar el canal "${c.name}" en el servidor.`);
+      });
     },
-    duplicateChannel: (id) => {
+    duplicateChannel: async (id) => {
       const orig = state.channels.find(x => x.id === id);
       if (!orig) return;
       const now = new Date().toISOString();
-      const newId = `ch-${crypto.randomUUID().slice(0, 8)}`;
-      const dup: Channel = {
-        ...orig, id: newId, name: `${orig.name} (copia)`,
+      const draft: Channel = {
+        ...orig, id: '', name: `${orig.name} (copia)`,
         code: orig.code ? `${orig.code}_COPY` : undefined,
         createdAt: now, updatedAt: now,
         history: [{ id: crypto.randomUUID(), timestamp: now, user: 'Tú', action: 'duplicated', note: `Duplicado desde ${orig.name}` }],
       };
+      const { channel: created, tableMissing } = await insertCanalRemoto(draft);
+      if (!created && !tableMissing) toast.error(`No se pudo duplicar el canal "${orig.name}" en el servidor.`);
+      const dup: Channel = created ? { ...draft, ...created } : { ...draft, id: `local-${crypto.randomUUID()}` };
       update(s => ({ ...s, channels: [...s.channels, dup] }));
-      syncChannel(dup);
     },
     deleteChannel: (id) => {
       update(s => ({ ...s, channels: s.channels.filter(x => x.id !== id) }));
-      syncChannelDelete(id);
+      deleteCanalRemoto(id).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error('No se pudo eliminar el canal en el servidor.');
+      });
     },
     getChannelDependencies,
-    addScenario: (s) => { update(st => ({ ...st, scenarios: [...st.scenarios, s] })); syncScenario(s); },
-    updateScenario: (s) => { update(st => ({ ...st, scenarios: st.scenarios.map(x => x.id === s.id ? s : x) })); syncScenario(s); },
-    deleteScenario: (id) => { update(s => ({ ...s, scenarios: s.scenarios.filter(x => x.id !== id) })); syncScenarioDelete(id); },
+    // Escenarios: 100% locales (localStorage) — no se persisten en BD.
+    addScenario: (s) => update(st => ({ ...st, scenarios: [...st.scenarios, s] })),
+    updateScenario: (s) => update(st => ({ ...st, scenarios: st.scenarios.map(x => x.id === s.id ? s : x) })),
+    deleteScenario: (id) => update(s => ({ ...s, scenarios: s.scenarios.filter(x => x.id !== id) })),
     duplicateScenario: (id) => {
       const orig = state.scenarios.find(x => x.id === id);
       if (!orig) return;
-      const newId = crypto.randomUUID();
       const dup: Scenario = {
-        ...orig, id: newId, name: `${orig.name} (copia)`,
-        commissionRules: orig.commissionRules.map(r => ({ ...r, id: crypto.randomUUID(), scenarioId: newId })),
+        ...orig, id: crypto.randomUUID(), name: `${orig.name} (copia)`,
         roleAssignments: orig.roleAssignments.map(r => ({ ...r, id: crypto.randomUUID() })),
       };
       update(s => ({ ...s, scenarios: [...s.scenarios, dup] }));
-      syncScenario(dup);
     },
     updateCommercialPolicies: (cp) => update(s => ({ ...s, commercialPolicies: cp })),
+    addCommissionRule: async (channelId, roleId, pool) => {
+      const draft: CommissionRule = { id: '', scenarioId: '', channelId, roleId, percentage: 0, pool };
+      const { rule: created, tableMissing } = await insertReglaComisionRemota(draft);
+      if (!created) {
+        if (!tableMissing) toast.error('No se pudo guardar la regla de comisión en el servidor.');
+        update(s => ({ ...s, commissionRules: [...s.commissionRules, { ...draft, id: `local-${crypto.randomUUID()}` }] }));
+        return;
+      }
+      update(s => ({ ...s, commissionRules: [...s.commissionRules, created] }));
+    },
+    updateCommissionRule: (rule) => {
+      update(s => ({ ...s, commissionRules: s.commissionRules.map(r => r.id === rule.id ? rule : r) }));
+      updateReglaComisionRemota(rule).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error('No se pudo guardar la regla de comisión en el servidor.');
+      });
+    },
+    deleteCommissionRule: (id) => {
+      update(s => ({ ...s, commissionRules: s.commissionRules.filter(r => r.id !== id) }));
+      deleteReglaComisionRemota(id).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error('No se pudo eliminar la regla de comisión en el servidor.');
+      });
+    },
+    syncMissingCommissionRules: async () => {
+      const commRoles = state.roles.filter(r => r.participatesInCommission);
+      const missing: CommissionRule[] = [];
+      state.channels.forEach(ch => {
+        commRoles.forEach(role => {
+          const exists = state.commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id);
+          if (!exists) {
+            missing.push({
+              id: '', scenarioId: '', channelId: ch.id, roleId: role.id, percentage: 0,
+              pool: role.belongsTo === 'sozu_central' ? 'sozu' : 'project',
+            });
+          }
+        });
+      });
+      if (missing.length === 0) return 0;
+      const { rules: created, tableMissing } = await insertReglasComisionRemotas(missing);
+      if (created.length === 0 && !tableMissing) {
+        toast.error('No se pudieron sincronizar las reglas de comisión en el servidor.');
+      }
+      const toAdd = created.length > 0 ? created : missing.map(r => ({ ...r, id: `local-${crypto.randomUUID()}` }));
+      update(s => ({ ...s, commissionRules: [...s.commissionRules, ...toAdd] }));
+      return toAdd.length;
+    },
     resetToDefaults: () => setState({
       projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,
       scenarios: defaultScenarios, roleAssignments: defaultRoleAssignments,
-      commercialPolicies: defaultCommercialPolicies,
+      commercialPolicies: defaultCommercialPolicies, commissionRules: [],
     }),
   };
 

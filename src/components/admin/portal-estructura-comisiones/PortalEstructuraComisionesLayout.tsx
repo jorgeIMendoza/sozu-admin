@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2, Store, Target, GitBranch, Users, DollarSign, UserCheck,
   SlidersHorizontal, Calculator, TrendingUp, BarChart3, Wallet,
   ArrowLeftRight, Shield, IdCard,
-  ArrowLeft, LogOut, ChevronDown, ChevronRight, Menu, LucideIcon,
+  ArrowLeft, LogOut, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { useEstructuraComisionesSubmenus } from "@/hooks/usePortalEstructuraComisiones/useEstructuraComisionesSubmenus";
 import { useProjectAdminImpersonation, ProjectAdminImpersonationProvider } from "@/contexts/ProjectAdminImpersonationContext";
 import { ProjectAdminImpersonationSelector } from "./ProjectAdminImpersonationSelector";
 import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
@@ -19,69 +21,47 @@ import { AmbassadorsProvider as PECAmbassadorsProvider } from "@/lib/portal-estr
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 
-interface NavLeaf { label: string; path: string; icon: LucideIcon }
-interface NavParent { label: string; icon: LucideIcon; children: { label: string; path: string }[] }
-type NavItem = NavLeaf | NavParent;
+interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
-const isParent = (i: NavItem): i is NavParent => "children" in i;
 
 const BASE = "/admin/portal-estructura-comisiones";
 
-const navGroups: NavGroup[] = [
-  {
-    label: "Configuración",
-    items: [
-      { label: "Proyectos", path: `${BASE}/projects`, icon: Building2 },
-      { label: "Canales de Venta", path: `${BASE}/channels`, icon: Store },
-      { label: "Benchmark", path: `${BASE}/benchmark`, icon: Target },
-    ],
-  },
-  {
-    label: "Estructura",
-    items: [
-      { label: "Organigrama", path: `${BASE}/org-chart`, icon: GitBranch },
-      { label: "Roles y Sueldos", path: `${BASE}/structure`, icon: Users },
-      { label: "Directorio de Personal", path: `${BASE}/directorio`, icon: IdCard },
-      { label: "Comisiones", path: `${BASE}/commissions`, icon: DollarSign },
-      { label: "Incentivos Dinámicos", path: `${BASE}/broker-incentives`, icon: UserCheck },
-    ],
-  },
-  {
-    label: "Simulación",
-    items: [
-      { label: "Escenarios", path: `${BASE}/scenarios`, icon: SlidersHorizontal },
-      { label: "Distribución", path: `${BASE}/dist-simulator`, icon: DollarSign },
-      { label: "Comisión / Unidad", path: `${BASE}/unit-commission`, icon: Calculator },
-      { label: "Flujo Comercial", path: `${BASE}/monthly-flow`, icon: TrendingUp },
-    ],
-  },
-  {
-    label: "Resultados",
-    items: [
-      { label: "Financieros", path: `${BASE}/results`, icon: BarChart3 },
-      { label: "Costos Comerciales", path: `${BASE}/compensation`, icon: Wallet },
-      { label: "Simulador de Ingresos", path: `${BASE}/broker-calc`, icon: UserCheck },
-    ],
-  },
-  {
-    label: "Análisis",
-    items: [
-      { label: "Comparador", path: `${BASE}/comm-simulator`, icon: ArrowLeftRight },
-      { label: "Competitividad", path: `${BASE}/competitividad`, icon: Shield },
-    ],
-  },
-];
+// Los íconos no viven en BD — única fuente hardcodeada, una entrada por cada
+// `vista_front_end` real que existe hoy en `submenus` (menu_id=35).
+const PATH_ICONS: Record<string, LucideIcon> = {
+  [`${BASE}/projects`]: Building2,
+  [`${BASE}/channels`]: Store,
+  [`${BASE}/benchmark`]: Target,
+  [`${BASE}/org-chart`]: GitBranch,
+  [`${BASE}/structure`]: Users,
+  [`${BASE}/directorio`]: IdCard,
+  [`${BASE}/commissions`]: DollarSign,
+  [`${BASE}/broker-incentives`]: UserCheck,
+  [`${BASE}/scenarios`]: SlidersHorizontal,
+  [`${BASE}/dist-simulator`]: DollarSign,
+  [`${BASE}/unit-commission`]: Calculator,
+  [`${BASE}/monthly-flow`]: TrendingUp,
+  [`${BASE}/results`]: BarChart3,
+  [`${BASE}/compensation`]: Wallet,
+  [`${BASE}/broker-calc`]: UserCheck,
+  [`${BASE}/comm-simulator`]: ArrowLeftRight,
+  [`${BASE}/competitividad`]: Shield,
+};
 
-const SECTION_LABELS: Record<string, string> = (() => {
-  const map: Record<string, string> = {};
-  for (const g of navGroups) {
-    for (const it of g.items) {
-      if (isParent(it)) it.children.forEach(c => { map[c.path] = c.label; });
-      else map[it.path] = it.label;
-    }
-  }
-  return map;
-})();
+// `submenus.orden` codifica la sección por el centenar (100=Configuración, ...).
+const ORDEN_GROUP_LABEL: Record<number, string> = {
+  100: "Configuración",
+  200: "Estructura",
+  300: "Simulación",
+  400: "Resultados",
+  500: "Análisis",
+};
+const GROUP_ORDER = ["Configuración", "Estructura", "Simulación", "Resultados", "Análisis"];
+
+function getGroupLabel(orden: number): string {
+  const bucket = Math.floor(orden / 100) * 100;
+  return ORDEN_GROUP_LABEL[bucket] ?? "Otros";
+}
 
 const PortalEstructuraComisionesLayoutInner = () => {
   const location = useLocation();
@@ -90,11 +70,31 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const { impersonatedUser, isImpersonating } = useProjectAdminImpersonation();
   const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const { isPathAllowed, isSuperAdmin: hasAllMenus, isLoading: isLoadingPerms } = useAllowedMenus();
+  const { data: ecSubmenus, isLoading: isLoadingSubmenus } = useEstructuraComisionesSubmenus();
+
+  const visibleGroups = useMemo<NavGroup[]>(() => {
+    if (isLoadingPerms || isLoadingSubmenus || !ecSubmenus) return [];
+
+    const grouped = new Map<string, NavItem[]>();
+    for (const s of ecSubmenus) {
+      const icon = PATH_ICONS[s.vista_front_end];
+      if (!icon) continue;
+      if (!isPathAllowed(s.vista_front_end)) continue;
+      const groupLabel = getGroupLabel(s.orden);
+      if (!grouped.has(groupLabel)) grouped.set(groupLabel, []);
+      grouped.get(groupLabel)!.push({ label: s.nombre, path: s.vista_front_end, icon });
+    }
+
+    return GROUP_ORDER
+      .filter(g => grouped.has(g))
+      .map(g => ({ label: g, items: grouped.get(g)! }));
+  }, [ecSubmenus, isLoadingPerms, isLoadingSubmenus, isPathAllowed, hasAllMenus]);
+
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
-  const currentSection = Object.entries(SECTION_LABELS).find(([p]) => isActive(p))?.[1] || "Estructura de comisiones";
+  const currentSection = visibleGroups.flatMap(g => g.items).find(i => isActive(i.path))?.label || "Estructura de comisiones";
 
   const handleNavigate = (path: string) => { navigate(path); setMobileOpen(false); };
 
@@ -118,52 +118,13 @@ const PortalEstructuraComisionesLayoutInner = () => {
       </div>
 
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {navGroups.map(group => (
+        {visibleGroups.map(group => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}
             </p>
             <div className="space-y-0.5">
               {group.items.map(item => {
-                if (isParent(item)) {
-                  const groupActive = item.children.some(c => isActive(c.path));
-                  const expanded = expandedMenu === item.label || groupActive;
-                  return (
-                    <div key={item.label}>
-                      <button
-                        onClick={() => setExpandedMenu(expanded ? null : item.label)}
-                        className={cn(
-                          "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors",
-                          groupActive ? "bg-primary/[0.06] text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        )}
-                      >
-                        <span className={cn("absolute left-0 top-0 bottom-0 w-[2px] rounded-r bg-primary", groupActive ? "opacity-100" : "opacity-0")} />
-                        <item.icon className="size-4 shrink-0 opacity-70" />
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {expanded ? <ChevronDown className="size-3.5 opacity-60" /> : <ChevronRight className="size-3.5 opacity-60" />}
-                      </button>
-                      {expanded && (
-                        <div className="mt-0.5 ml-7 space-y-0.5">
-                          {item.children.map(child => {
-                            const childActive = isActive(child.path);
-                            return (
-                              <button
-                                key={child.path}
-                                onClick={() => handleNavigate(child.path)}
-                                className={cn(
-                                  "w-full flex items-center px-3 py-1.5 rounded-md text-[13px] font-medium text-left",
-                                  childActive ? "bg-primary/[0.06] text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                )}
-                              >
-                                {child.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
                 const active = isActive(item.path);
                 return (
                   <button
