@@ -25,6 +25,12 @@ export interface SolicitudCredito {
   estatus: SolicitudEstatus;
   monto_financiar: number;
   plazo_anios: number;
+  mensualidad_estimada_min: number | null;
+  mensualidad_estimada_max: number | null;
+  tasa_estimada_min: number | null;
+  tasa_estimada_max: number | null;
+  cat_estimado_min: number | null;
+  cat_estimado_max: number | null;
   dias_respuesta_snapshot: number | null;
   fecha_expiracion: string | null;
   fecha_envio: string;
@@ -60,7 +66,7 @@ export function useSolicitudCreditoVigente(cuentaId?: number | null) {
       const { data, error } = await (supabase as any)
         .from("bancos_solicitudes")
         .select(
-          "id, id_cuenta_cobranza, id_banco, estatus, monto_financiar, plazo_anios, dias_respuesta_snapshot, fecha_expiracion, fecha_envio",
+          "id, id_cuenta_cobranza, id_banco, estatus, monto_financiar, plazo_anios, mensualidad_estimada_min, mensualidad_estimada_max, tasa_estimada_min, tasa_estimada_max, cat_estimado_min, cat_estimado_max, dias_respuesta_snapshot, fecha_expiracion, fecha_envio",
         )
         .eq("id_cuenta_cobranza", cuentaId)
         .eq("activo", true)
@@ -75,6 +81,12 @@ export function useSolicitudCreditoVigente(cuentaId?: number | null) {
         estatus: r.estatus,
         monto_financiar: Number(r.monto_financiar),
         plazo_anios: r.plazo_anios,
+        mensualidad_estimada_min: r.mensualidad_estimada_min != null ? Number(r.mensualidad_estimada_min) : null,
+        mensualidad_estimada_max: r.mensualidad_estimada_max != null ? Number(r.mensualidad_estimada_max) : null,
+        tasa_estimada_min: r.tasa_estimada_min != null ? Number(r.tasa_estimada_min) : null,
+        tasa_estimada_max: r.tasa_estimada_max != null ? Number(r.tasa_estimada_max) : null,
+        cat_estimado_min: r.cat_estimado_min != null ? Number(r.cat_estimado_min) : null,
+        cat_estimado_max: r.cat_estimado_max != null ? Number(r.cat_estimado_max) : null,
         dias_respuesta_snapshot: r.dias_respuesta_snapshot ?? null,
         fecha_expiracion: r.fecha_expiracion ?? null,
         fecha_envio: r.fecha_envio,
