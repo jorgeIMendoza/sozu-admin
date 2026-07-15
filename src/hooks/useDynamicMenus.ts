@@ -144,8 +144,6 @@ import {
     '/admin/portal-cobranza/comunicacion/ejecuciones': History,
     '/admin/portal-cobranza/comunicacion/plantillas': FileText,
     '/admin/portal-cobranza/reportes': BarChart3,
-    '/admin/portal-cobranza/inputs-obra': Building,
-    '/admin/portal-cobranza/configuracion': Cog,
     // Embajadores
     '/admin/embajadores/gestion': Users,
     // Portal Embajadores

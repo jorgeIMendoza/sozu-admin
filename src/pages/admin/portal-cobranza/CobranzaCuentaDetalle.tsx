@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { EditCuentaCobranzaDialog } from '@/components/admin/EditCuentaCobranzaDialog';
 import { TransferPaymentDialog } from '@/components/admin/TransferPaymentDialog';
+import { CargarEvidenciaDialog } from '@/components/admin/CargarEvidenciaDialog';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,400 +29,16 @@ import { CuentaDetalleProducto } from './CuentaDetalleProducto';
 
 // ── fetch ───────────────────────────────────────────────────────────────────────
 
+// Detalle completo de la cuenta en UNA sola RPC (homogéneo con el resto del
+// portal: get_pcobranza_*). Antes eran ~33 .from() en waterfall. El jsonb que
+// devuelve la RPC ya trae el shape exacto que consumen las sub-vistas (mismas
+// llaves camelCase), por eso se retorna tal cual. Ver Ejecuciones_manuales/P30.
 async function fetchCuentaDetalle(cuentaId: number) {
-  // 1. cuentas_cobranza — include id_cuenta_cobranza_padre for maintenance detection
-  const { data: cuenta, error: cuentaErr } = await (supabase as any)
-    .from('cuentas_cobranza')
-    .select('id, clabe_stp, precio_final, fecha_compra, valor_uma, id_oferta, id_propiedad, activo, id_cuenta_cobranza_padre')
-    .eq('id', cuentaId)
-    .maybeSingle();
-  if (cuentaErr) throw cuentaErr;
-  if (!cuenta) throw new Error('Cuenta no encontrada');
-
-  const esMantenimiento = !!cuenta.id_cuenta_cobranza_padre && !cuenta.id_oferta;
-
-  // For maintenance: inherit oferta from parent account
-  let efectivoIdOferta: number | null = cuenta.id_oferta ?? null;
-  if (esMantenimiento && cuenta.id_cuenta_cobranza_padre) {
-    const { data: padre } = await (supabase as any)
-      .from('cuentas_cobranza')
-      .select('id_oferta')
-      .eq('id', cuenta.id_cuenta_cobranza_padre)
-      .maybeSingle();
-    if (padre?.id_oferta) efectivoIdOferta = padre.id_oferta;
-  }
-
-  // 2. oferta — separate fetch (never triple-join from cuentas_cobranza)
-  let oferta: any = null;
-  if (efectivoIdOferta) {
-    const { data: ofData } = await (supabase as any)
-      .from('ofertas')
-      .select(`
-        id, id_producto, email_creador,
-        id_esquema_pago_seleccionado,
-        esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades),
-        propiedades!ofertas_id_propiedad_fkey(id, numero_propiedad, m2_interiores, m2_exteriores, id_edificio_modelo, id_estatus_disponibilidad),
-        productos_servicios!ofertas_id_producto_fkey(nombre, categorias_producto!productos_servicios_id_categoria_fkey(nombre))
-      `)
-      .eq('id', efectivoIdOferta)
-      .maybeSingle();
-    oferta = ofData;
-  }
-
-  const ofertaId: number | null = oferta?.id ?? null;
-  const ofertaProductoId: number | null = oferta?.id_producto ?? null;
-  const propiedad = oferta?.propiedades ?? null;
-  const propiedadId: number | null = propiedad?.id ?? cuenta.id_propiedad ?? null;
-  const esquema = oferta?.esquemas_pago ?? null;
-  const esquemaNombre: string = esquema?.nombre ?? '';
-  const esquemaPct = esquema ? {
-    enganche: Number(esquema.porcentaje_enganche ?? 0),
-    mensualidades: Number(esquema.porcentaje_mensualidades ?? 0),
-    entrega: Number(esquema.porcentaje_entrega ?? 0),
-    numMensualidades: Number(esquema.numero_mensualidades ?? 0),
-  } : null;
-  const productoNombre: string | null = oferta?.productos_servicios?.nombre ?? null;
-  const categoriaNombre: string | null = oferta?.productos_servicios?.categorias_producto?.nombre ?? null;
-  const tipo = esMantenimiento ? 'Mantenimiento' : productoNombre ? (categoriaNombre ?? 'Producto') : 'Propiedad';
-
-  // 3. Compradores — maintenance inherits from parent account
-  const cuentaIdParaCompradores = esMantenimiento && cuenta.id_cuenta_cobranza_padre
-    ? cuenta.id_cuenta_cobranza_padre
-    : cuentaId;
-  const { data: compRows } = await (supabase as any)
-    .from('compradores')
-    .select('id_persona, porcentaje_copropiedad, personas!compradores_id_persona_fkey(nombre_legal)')
-    .eq('id_cuenta_cobranza', cuentaIdParaCompradores)
-    .eq('activo', true);
-  const compradores = (compRows ?? []).map((c: any) => ({
-    id_persona: c.id_persona as number | null,
-    nombre: c.personas?.nombre_legal ?? '',
-    porcentaje: c.porcentaje_copropiedad,
-  }));
-  const compradorPersonaIds = compradores.map((c: any) => c.id_persona).filter(Boolean) as number[];
-  const clienteNombre = compradores.map((c: any) => c.nombre).filter(Boolean).join(', ') || 'Sin nombre';
-
-  // 4. Propiedad details — waterfall to avoid triple-join
-  const precioFinal = Number(cuenta.precio_final ?? 0);
-  let proyectoNombre = '';
-  let edificioNombre = '';
-  let modeloNombre = '';
-  let numero_propiedad: string | null = null;
-  let m2Interiores = 0;
-  let m2Exteriores = 0;
-  let precioM2: number | null = null;
-  let estatusPropiedad = '';
-
-  if (propiedad) {
-    numero_propiedad = propiedad.numero_propiedad ?? null;
-    m2Interiores = Number(propiedad.m2_interiores ?? 0);
-    m2Exteriores = Number(propiedad.m2_exteriores ?? 0);
-    precioM2 = m2Interiores > 0 ? precioFinal / m2Interiores : null;
-
-    if (propiedad.id_edificio_modelo) {
-      const { data: em } = await (supabase as any)
-        .from('edificios_modelos')
-        .select('edificios!edificios_modelos_id_edificio_fkey(id, nombre, id_proyecto), modelos!edificios_modelos_id_modelo_fkey(nombre)')
-        .eq('id', propiedad.id_edificio_modelo)
-        .maybeSingle();
-      edificioNombre = em?.edificios?.nombre ?? '';
-      modeloNombre = em?.modelos?.nombre ?? '';
-      if (em?.edificios?.id_proyecto) {
-        const { data: proy } = await (supabase as any)
-          .from('proyectos').select('nombre').eq('id', em.edificios.id_proyecto).maybeSingle();
-        proyectoNombre = proy?.nombre ?? '';
-      }
-    }
-
-    if (propiedad.id_estatus_disponibilidad) {
-      const { data: est } = await (supabase as any)
-        .from('estatus_disponibilidad').select('nombre').eq('id', propiedad.id_estatus_disponibilidad).maybeSingle();
-      estatusPropiedad = est?.nombre ?? '';
-    }
-  } else if (productoNombre && ofertaProductoId) {
-    const { data: prod } = await (supabase as any)
-      .from('productos_servicios').select('proyectos(nombre)').eq('id', ofertaProductoId).maybeSingle();
-    proyectoNombre = prod?.proyectos?.nombre ?? '';
-  }
-
-  // 5. Agente — via oferta.email_creador → usuarios
-  let agente: any | null = null;
-  if (oferta?.email_creador) {
-    const { data: usu } = await (supabase as any)
-      .from('usuarios')
-      .select('nombre, email, telefono, roles!usuarios_rol_id_fkey(nombre)')
-      .eq('email', oferta.email_creador)
-      .maybeSingle();
-    const rolNombre: string = usu?.roles?.nombre ?? '';
-    agente = {
-      nombre: usu?.nombre ?? oferta.email_creador,
-      email: usu?.email ?? oferta.email_creador,
-      telefono: usu?.telefono ?? null,
-      rolNombre,
-      tipoAgente: rolNombre.toLowerCase().includes('agente') ? 'Agente' : (rolNombre || 'Otro'),
-      organizacion: (usu?.email ?? oferta.email_creador).includes('@sozu.com') ? 'Sozu' : null,
-    };
-  }
-
-  // 6. Acuerdos — flat query + separate waterfall (4-level nesting silently fails in PostgREST)
-  const { data: acuerdosRaw } = await (supabase as any)
-    .from('acuerdos_pago')
-    .select('id, orden, monto, fecha_pago, pago_completado, id_concepto')
-    .eq('id_cuenta_cobranza', cuentaId)
-    .eq('activo', true)
-    .order(esMantenimiento ? 'fecha_pago' : 'orden', { ascending: !esMantenimiento });
-
-  const acuerdoList: any[] = acuerdosRaw ?? [];
-  const acuerdoIds = acuerdoList.map((a: any) => a.id);
-
-  // conceptos by ids
-  let conceptoMap: Record<number, string> = {};
-  if (acuerdoList.length > 0) {
-    const cids = [...new Set(acuerdoList.map((a: any) => a.id_concepto).filter(Boolean))];
-    if (cids.length > 0) {
-      const { data: cs } = await (supabase as any).from('conceptos_pago').select('id, nombre').in('id', cids);
-      for (const c of (cs ?? [])) conceptoMap[c.id] = c.nombre;
-    }
-  }
-
-  // aplicaciones_pago flat
-  const { data: aplicacionesRaw } = await (supabase as any)
-    .from('aplicaciones_pago')
-    .select('id, monto, es_multa, id_acuerdo_pago, id_pago')
-    .in('id_acuerdo_pago', acuerdoIds.length > 0 ? acuerdoIds : [-1])
-    .eq('activo', true);
-
-  // pagos linked to those aplicaciones
-  const pagoIdsFromAplic = [...new Set(
-    (aplicacionesRaw ?? []).map((a: any) => a.id_pago).filter(Boolean) as number[]
-  )];
-
-  let pagosMap: Record<number, any> = {};
-  let metodoNombreMap: Record<number, string> = {};
-  if (pagoIdsFromAplic.length > 0) {
-    const { data: pagosLinked } = await (supabase as any)
-      .from('pagos')
-      .select('id, fecha_pago, clave_rastreo, id_metodos_pago, url_cep, url_recibo')
-      .in('id', pagoIdsFromAplic);
-    for (const p of (pagosLinked ?? [])) pagosMap[p.id] = p;
-
-    const metodosIds = [...new Set((pagosLinked ?? []).map((p: any) => p.id_metodos_pago).filter(Boolean))];
-    if (metodosIds.length > 0) {
-      const { data: ms } = await (supabase as any).from('metodos_pago').select('id, nombre').in('id', metodosIds);
-      for (const m of (ms ?? [])) metodoNombreMap[m.id] = m.nombre;
-    }
-  }
-
-  // multas
-  const { data: multasData } = await (supabase as any)
-    .from('multas')
-    .select('id, id_acuerdo_pago, monto, descripcion, id_tipo_multa, activo, tipos_multa(nombre)')
-    .in('id_acuerdo_pago', acuerdoIds.length > 0 ? acuerdoIds : [-1])
-    .eq('activo', true);
-
-  // validaciones for linked pagos
-  let validacionByPago: Record<number, any> = {};
-  if (pagoIdsFromAplic.length > 0) {
-    const { data: validaciones } = await (supabase as any)
-      .from('pago_validaciones')
-      .select('id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion')
-      .in('id_pago', pagoIdsFromAplic)
-      .order('fecha_creacion', { ascending: false });
-    for (const v of (validaciones ?? [])) {
-      if (!validacionByPago[v.id_pago]) {
-        validacionByPago[v.id_pago] = {
-          estado: v.estado, motivo: v.motivo,
-          monto_esperado: Number(v.monto_esperado), monto_real: Number(v.monto_real),
-        };
-      }
-    }
-  }
-
-  // Build acuerdos from lookups
-  const acuerdos = acuerdoList.map((a: any) => {
-    const aplics = (aplicacionesRaw ?? []).filter((ap: any) => ap.id_acuerdo_pago === a.id);
-    const aplicsNormales = aplics.filter((ap: any) => !ap.es_multa);
-    const montoAplicado = aplicsNormales.reduce((s: number, ap: any) => s + Number(ap.monto), 0);
-
-    const pagoIds = [...new Set(aplicsNormales.map((ap: any) => ap.id_pago).filter(Boolean) as number[])];
-    const pagosLinked = pagoIds.map((pid: number) => pagosMap[pid]).filter(Boolean);
-    pagosLinked.sort((a: any, b: any) => (b.fecha_pago ?? '').localeCompare(a.fecha_pago ?? ''));
-    const ultimoPago = pagosLinked[0] ?? null;
-
-    const aplicacionesDetalle = aplicsNormales.map((ap: any) => {
-      const pago = ap.id_pago ? pagosMap[ap.id_pago] : null;
-      return {
-        id: ap.id as number,
-        monto: Number(ap.monto),
-        id_pago: ap.id_pago as number | null,
-        fecha_pago: pago?.fecha_pago ?? null,
-        metodo: pago ? (metodoNombreMap[pago.id_metodos_pago] ?? 'Sin método') : null,
-        clave_rastreo: pago?.clave_rastreo ?? null,
-        url_cep: pago?.url_cep ?? null,
-        url_recibo: pago?.url_recibo ?? null,
-        validacion: ap.id_pago ? (validacionByPago[ap.id_pago] ?? null) : null,
-      };
-    });
-
-    const multasActivas = (multasData ?? []).filter((m: any) => m.id_acuerdo_pago === a.id);
-    const estado = a.pago_completado ? 'pagado'
-      : !a.fecha_pago ? 'pendiente'
-      : (() => {
-          const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-          const f = new Date(a.fecha_pago + 'T00:00:00');
-          if (f < hoy) return 'vencido';
-          const pronto = new Date(hoy); pronto.setDate(pronto.getDate() + 30);
-          return f <= pronto ? 'proximo' : 'pendiente';
-        })();
-
-    return {
-      id: a.id as number,
-      orden: a.orden as number,
-      monto: Number(a.monto),
-      montoAplicado,
-      fecha_pago: a.fecha_pago as string | null,
-      pago_completado: a.pago_completado as boolean,
-      concepto: conceptoMap[a.id_concepto] ?? 'Sin concepto',
-      estado,
-      numAplicaciones: aplicsNormales.length,
-      aplicacionesDetalle,
-      ultimoPago: ultimoPago ? {
-        id: ultimoPago.id as number,
-        id_metodos_pago: ultimoPago.id_metodos_pago as number | null,
-        metodo: metodoNombreMap[ultimoPago.id_metodos_pago] ?? 'Sin método',
-        clave_rastreo: ultimoPago.clave_rastreo ?? null,
-        fecha_pago: ultimoPago.fecha_pago ?? null,
-        url_cep: ultimoPago.url_cep ?? null,
-        url_recibo: ultimoPago.url_recibo ?? null,
-      } : null,
-      pagoIds,
-      validacion: ultimoPago ? (validacionByPago[ultimoPago.id] ?? null) : null,
-      multas: multasActivas.length > 0
-        ? { count: multasActivas.length, total: multasActivas.reduce((s: number, m: any) => s + Number(m.monto), 0), items: multasActivas }
-        : null,
-    };
-  });
-
-  // 7. Pagos directos de la cuenta (tab Pagos)
-  const { data: pagosRaw } = await (supabase as any)
-    .from('pagos')
-    .select('id, fecha_pago, monto, clave_rastreo, id_metodos_pago, url_cep, url_recibo, descripcion, metodos_pago!pagos_id_metodos_pago_fkey(nombre)')
-    .eq('id_cuenta_cobranza', cuentaId)
-    .eq('activo', true)
-    .order('fecha_pago', { ascending: false });
-
-  // validaciones for direct pagos not already in map
-  const directPagoIds = (pagosRaw ?? []).map((p: any) => p.id as number);
-  const missingValidIds = directPagoIds.filter((id: number) => !(id in validacionByPago));
-  if (missingValidIds.length > 0) {
-    const { data: extraVal } = await (supabase as any)
-      .from('pago_validaciones')
-      .select('id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion')
-      .in('id_pago', missingValidIds)
-      .order('fecha_creacion', { ascending: false });
-    for (const v of (extraVal ?? [])) {
-      if (!validacionByPago[v.id_pago]) {
-        validacionByPago[v.id_pago] = {
-          estado: v.estado, motivo: v.motivo,
-          monto_esperado: Number(v.monto_esperado), monto_real: Number(v.monto_real),
-        };
-      }
-    }
-  }
-
-  const pagadoEfectivo = (pagosRaw ?? [])
-    .filter((p: any) => p.id_metodos_pago === 1)
-    .reduce((s: number, p: any) => s + Number(p.monto), 0);
-
-  const pagos = (pagosRaw ?? []).map((p: any) => ({
-    id: p.id as number,
-    fecha_pago: p.fecha_pago as string,
-    monto: Number(p.monto),
-    clave_rastreo: p.clave_rastreo as string | null,
-    metodo: p.metodos_pago?.nombre ?? 'Sin método',
-    id_metodos_pago: p.id_metodos_pago as number | null,
-    url_cep: p.url_cep as string | null,
-    url_recibo: p.url_recibo as string | null,
-    descripcion: p.descripcion as string | null,
-    validacion: validacionByPago[p.id] ?? null,
-  }));
-
-  // 8. aplicacionesList — built from already-fetched data (no extra query)
-  const aplicacionesList = acuerdoList.flatMap((a: any) => {
-    const aplics = (aplicacionesRaw ?? []).filter((ap: any) => ap.id_acuerdo_pago === a.id && !ap.es_multa);
-    return aplics.map((ap: any) => {
-      const pago = ap.id_pago ? pagosMap[ap.id_pago] : null;
-      return {
-        id: ap.id as number,
-        monto: Number(ap.monto),
-        id_pago: ap.id_pago as number | null,
-        concepto: conceptoMap[a.id_concepto] ?? 'Sin concepto',
-        acuerdoOrden: a.orden as number,
-        fechaLimite: a.fecha_pago as string | null,
-        fecha_pago: pago?.fecha_pago ?? null,
-        id_metodos_pago: pago ? (pago.id_metodos_pago as number | null) : null,
-        metodo: pago ? (metodoNombreMap[pago.id_metodos_pago] ?? 'Sin método') : null,
-        clave_rastreo: pago?.clave_rastreo ?? null,
-        url_cep: pago?.url_cep ?? null,
-        url_recibo: pago?.url_recibo ?? null,
-        validacion: ap.id_pago ? (validacionByPago[ap.id_pago] ?? null) : null,
-      };
-    });
-  }).sort((a: any, b: any) => {
-    if (!a.fecha_pago && !b.fecha_pago) return (a.acuerdoOrden ?? 0) - (b.acuerdoOrden ?? 0);
-    if (!a.fecha_pago) return 1;
-    if (!b.fecha_pago) return -1;
-    return a.fecha_pago.localeCompare(b.fecha_pago);
-  });
-
-  // 9. Totals
-  const totalPagado = acuerdos.reduce((s: number, a: any) => s + a.montoAplicado, 0);
-  // Suma de TODAS las aplicaciones (incluye multas) → para detectar dinero recibido
-  // que aún no se dispersa. Comparar contra totalPagado (sin multas) daría falsos
-  // positivos en cuentas con multas pagadas.
-  const totalAplicacionesAll = (aplicacionesRaw ?? []).reduce((s: number, ap: any) => s + Number(ap.monto), 0);
-  const saldoPendiente = precioFinal - totalPagado;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const vencidos = acuerdos.filter((a: any) => !a.pago_completado && a.fecha_pago && new Date(a.fecha_pago + 'T00:00:00') < today);
-  const montoVencido = vencidos.reduce((s: number, a: any) => s + Math.max(0, a.monto - a.montoAplicado), 0);
-  const parcialidadesVencidas = vencidos.length;
-
-  return {
-    clabe_stp: cuenta.clabe_stp ?? null,
-    precio_final: precioFinal,
-    fecha_compra: cuenta.fecha_compra ?? null,
-    valor_uma: cuenta.valor_uma ? Number(cuenta.valor_uma) : null,
-    activo: cuenta.activo ?? true,
-    clienteNombre,
-    compradores,
-    compradorPersonaIds,
-    agente,
-    ofertaId,
-    ofertaProductoId,
-    propiedadId,
-    esquemaNombre,
-    esquemaPct,
-    proyectoNombre,
-    edificioNombre,
-    modeloNombre,
-    numero_propiedad,
-    productoNombre,
-    tipo,
-    m2Interiores,
-    m2Exteriores,
-    precioM2,
-    estatusPropiedad,
-    totalPagado,
-    totalAplicacionesAll,
-    saldoPendiente,
-    montoVencido,
-    parcialidadesVencidas,
-    pagadoEfectivo,
-    acuerdos,
-    pagos,
-    aplicacionesList,
-    esMantenimiento,
-  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('get_pcobranza_cuenta_detalle', { p_cuenta_id: cuentaId });
+  if (error) throw error;
+  if (!data) throw new Error('Cuenta no encontrada');
+  return data;
 }
 
 async function fetchDocumentos(cuentaId: number, propiedadId: number | null, _compradorPersonaIds: number[]) {
@@ -497,11 +114,6 @@ export default function CobranzaCuentaDetalle() {
   // ── Cargar evidencia de pago (por registro → bucket ceps / evidencias_efectivo) ──
   const [cargarPagoDialog, setCargarPagoDialog] = useState(false);
   const [cpTarget, setCpTarget] = useState<any | null>(null); // pago destino
-  const [cpFile, setCpFile] = useState<File | null>(null);
-  const [cpDragging, setCpDragging] = useState(false);
-  const [cpEsValido, setCpEsValido] = useState(false);
-  const [cpEsCep, setCpEsCep] = useState(false);
-  const [cpSaving, setCpSaving] = useState(false);
 
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [pdfPreviewModal, setPdfPreviewModal] = useState<{ url: string; title: string } | null>(null);
@@ -752,45 +364,13 @@ export default function CobranzaCuentaDetalle() {
     }
   }
 
-  // Bucket por check "Es CEP"; columna por check "Validado".
-  const cpBucket = cpEsCep ? 'ceps' : 'evidencias_efectivo';
-  const cpColumna = cpEsValido ? 'url_cep' : 'url_recibo';
-
   function cpResetForm() {
-    setCpTarget(null); setCpFile(null); setCpEsValido(false); setCpEsCep(false);
+    setCpTarget(null);
   }
 
   function openCargarEvidencia(pago: any) {
     setCpTarget(pago);
-    setCpFile(null);
-    setCpEsValido(false);
-    setCpEsCep(false);
     setCargarPagoDialog(true);
-  }
-
-  async function handleCargarPagoSubmit() {
-    if (!cpFile) { toast.error('Arrastra o selecciona un archivo'); return; }
-    if (!cpTarget?.id) { toast.error('No hay pago destino'); return; }
-    setCpSaving(true);
-    try {
-      const ext = cpFile.name.split('.').pop() ?? 'bin';
-      const path = `${cuentaId}/${cpTarget.id}/${Date.now()}.${ext}`;
-      const { error: se } = await supabase.storage.from(cpBucket).upload(path, cpFile, { upsert: true });
-      if (se) throw se;
-      const { data: pub } = supabase.storage.from(cpBucket).getPublicUrl(path);
-      // Columna: validado → url_cep ; no validado → url_recibo (evidencia)
-      const { error: ue } = await (supabase as any).from('pagos')
-        .update({ [cpColumna]: pub.publicUrl }).eq('id', cpTarget.id);
-      if (ue) throw ue;
-      toast.success('Evidencia cargada');
-      setCargarPagoDialog(false);
-      cpResetForm();
-      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al subir evidencia');
-    } finally {
-      setCpSaving(false);
-    }
   }
 
   // Recalcular dispersión de pagos: reparte los pagos crudos en aplicaciones_pago.
@@ -1397,87 +977,22 @@ export default function CobranzaCuentaDetalle() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Cargar pago (evidencia → bucket) */}
-      <Dialog open={cargarPagoDialog} onOpenChange={(o) => { setCargarPagoDialog(o); if (!o) cpResetForm(); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="text-[15px]">Cargar evidencia de pago</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-1">
-            {/* Dropzone */}
-            <div
-              onDragOver={(e) => { e.preventDefault(); setCpDragging(true); }}
-              onDragLeave={() => setCpDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setCpDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setCpFile(f); }}
-              className={`relative rounded-lg border-2 border-dashed transition-colors ${cpDragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'}`}
-            >
-              <input
-                id="cp-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.xml"
-                onChange={(e) => setCpFile(e.target.files?.[0] ?? null)}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-              />
-              <div className="flex flex-col items-center justify-center gap-1.5 py-7 px-4 text-center pointer-events-none">
-                {cpFile ? (
-                  <>
-                    <FileCheck className="size-7 text-primary" />
-                    <p className="text-[13px] font-medium text-foreground break-all">{cpFile.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{(cpFile.size / 1024).toFixed(0)} KB · clic para cambiar</p>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="size-7 text-muted-foreground" />
-                    <p className="text-[13px] font-medium text-foreground">Arrastra el archivo aquí</p>
-                    <p className="text-[11px] text-muted-foreground">o haz clic para seleccionar · PDF, imagen o XML</p>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Pago destino (registro) */}
-            {cpTarget && (
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12px] space-y-1">
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">Método</span>
-                  <span className="font-medium text-foreground">{cpTarget.metodo ?? '—'}</span>
-                </div>
-                {cpTarget.monto != null && (
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Monto</span>
-                    <span className="font-medium tabular-nums text-foreground">{fmtCurrency(Number(cpTarget.monto))}</span>
-                  </div>
-                )}
-                {cpTarget.fecha_pago && (
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Fecha de pago</span>
-                    <span className="font-medium text-foreground">{fmtDate(cpTarget.fecha_pago)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Checks */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
-                <input type="checkbox" checked={cpEsValido} onChange={(e) => setCpEsValido(e.target.checked)}
-                  className="size-4 accent-primary" />
-                <span className="text-[13px] font-medium text-foreground">Pago validado</span>
-              </label>
-              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
-                <input type="checkbox" checked={cpEsCep} onChange={(e) => setCpEsCep(e.target.checked)}
-                  className="size-4 accent-primary" />
-                <span className="text-[13px] font-medium text-foreground">Es CEP</span>
-              </label>
-            </div>
-          </div>
-          <DialogFooter>
-            <button onClick={() => { setCargarPagoDialog(false); cpResetForm(); }}
-              className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancelar</button>
-            <button onClick={handleCargarPagoSubmit} disabled={cpSaving || !cpFile}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {cpSaving && <Loader2 className="size-3.5 animate-spin" />}
-              Cargar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Cargar evidencia de pago (modal canónico compartido con RP) */}
+      <CargarEvidenciaDialog
+        open={cargarPagoDialog}
+        onClose={() => { setCargarPagoDialog(false); cpResetForm(); }}
+        cuentaId={Number(cuentaId)}
+        target={cpTarget ? {
+          id: cpTarget.id,
+          metodo: cpTarget.metodo,
+          monto: cpTarget.monto,
+          fecha_pago: cpTarget.fecha_pago,
+          clave_rastreo: cpTarget.clave_rastreo,
+        } : null}
+        onDone={() => queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] })}
+        captureClaveRastreo
+        logActivity
+      />
 
       {/* Dialog: Poner en Demanda */}
       <Dialog open={demandaDialog} onOpenChange={open => { if (!demandaSaving) setDemandaDialog(open); }}>

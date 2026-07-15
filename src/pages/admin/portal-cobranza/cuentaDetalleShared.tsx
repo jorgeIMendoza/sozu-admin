@@ -92,7 +92,7 @@ export function ValidacionBadge({ estado }: { estado: string | null | undefined 
     </span>
   );
   const cfg: Record<string, { label: string; cls: string }> = {
-    coincide:         { label: 'Valido',         cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    coincide:         { label: 'Coincide',       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
     error:            { label: 'Error',          cls: 'bg-red-50 text-red-700 border-red-200' },
     no_coincide:      { label: 'No coincide',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
     sin_evidencia:    { label: 'Sin evidencia',  cls: 'bg-slate-50 text-slate-600 border-slate-200' },

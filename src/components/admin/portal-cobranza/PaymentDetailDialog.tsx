@@ -40,7 +40,7 @@ export function PaymentDetailDialog({
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ fecha: '', metodo: '', estado: '', monto: '' });
+  const [form, setForm] = useState({ fecha: '', metodo: '', estado: '', monto: '', clave: '' });
 
   const { data: methods = [] } = useQuery({
     queryKey: ['metodos-pago'],
@@ -94,8 +94,9 @@ export function PaymentDetailDialog({
       metodo: detail?.idMetodo != null ? String(detail.idMetodo) : '',
       estado: val?.estado ?? '',
       monto: detail?.montoAplicado != null ? String(detail.montoAplicado) : '',
+      clave: payment?.clave_rastreo ?? '',
     });
-  }, [payment?.pago_id, detail?.idMetodo, val?.estado, payment?.fecha_pago, detail?.montoAplicado]);
+  }, [payment?.pago_id, detail?.idMetodo, val?.estado, payment?.fecha_pago, detail?.montoAplicado, payment?.clave_rastreo]);
 
   if (!payment) return null;
   const url = payment.url_cep || payment.url_recibo || null;
@@ -106,7 +107,8 @@ export function PaymentDetailDialog({
   const metodoChanged = !!form.metodo && Number(form.metodo) !== detail?.idMetodo;
   const montoChanged = form.monto !== '' && detail?.aplId != null && Number(form.monto) !== Number(detail?.montoAplicado);
   const estadoChanged = !!form.estado && form.estado !== (val?.estado ?? '');
-  const dirty = fechaChanged || metodoChanged || montoChanged || estadoChanged;
+  const claveChanged = form.clave.trim() !== (payment.clave_rastreo ?? '');
+  const dirty = fechaChanged || metodoChanged || montoChanged || estadoChanged || claveChanged;
 
   async function handleSave() {
     if (!payment || !dirty) return;
@@ -115,6 +117,7 @@ export function PaymentDetailDialog({
       const patchPago: Record<string, unknown> = {};
       if (fechaChanged) patchPago.fecha_pago = form.fecha;
       if (metodoChanged) patchPago.id_metodos_pago = Number(form.metodo);
+      if (claveChanged) patchPago.clave_rastreo = form.clave.trim() || null;
       if (Object.keys(patchPago).length) {
         const { error } = await (supabase as any).from('pagos').update(patchPago).eq('id', payment.pago_id);
         if (error) throw error;
@@ -204,7 +207,7 @@ export function PaymentDetailDialog({
                     value={form.estado}
                     onValueChange={v => setForm(f => ({ ...f, estado: v }))}
                     options={[
-                      { value: 'coincide', label: 'Válido' },
+                      { value: 'coincide', label: 'Coincide' },
                       { value: 'no_coincide', label: 'No coincide' },
                       { value: 'error', label: 'Error' },
                       { value: 'sin_evidencia', label: 'Sin evidencia' },
@@ -227,6 +230,17 @@ export function PaymentDetailDialog({
                     ? <Input type="number" step="0.01" min="0" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} className="h-9 w-full" />
                     : <p className="text-[12px] text-muted-foreground/60 h-9 flex items-center">Sin aplicación registrada</p>}
                 </Field>
+                <div className="sm:col-span-2">
+                  <Field label="Clave de rastreo">
+                    <Input
+                      type="text"
+                      value={form.clave}
+                      onChange={e => setForm(f => ({ ...f, clave: e.target.value }))}
+                      placeholder="2024061812345678"
+                      className="h-9 w-full"
+                    />
+                  </Field>
+                </div>
               </div>
             </div>
 
