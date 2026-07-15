@@ -34,28 +34,89 @@ export interface CollectionAccount {
   prioridad: 'purple' | 'red_dark' | 'red' | 'yellow' | 'green' | 'blue' | 'gray';
 }
 
+export interface CollectionAccountsKpis {
+  total: number;
+  overdue: number;
+  pending: number;
+  in_arrears: number;
+}
+
+export interface CollectionAccountsResult {
+  cuentas: CollectionAccount[];
+  total: number;
+  kpis: CollectionAccountsKpis;
+  modelos: string[];
+  estatus: string[];
+}
+
 interface CollectionAccountsParams {
   projectId?: number | null;
   search?: string;
   onlyOverdue?: boolean;
+  // Filtros de la bandeja (todos server-side para poder paginar como RP).
+  cliente?: string;
+  unidad?: string;
+  clabe?: string;
+  cuenta?: string;
+  modelos?: string[];
+  tipos?: string[];
+  estatus?: string[];
+  prioridad?: string[];
+  invalidLevel?: string[];
+  sortKey?: string | null;
+  sortDir?: 'asc' | 'desc';
+  page: number;
+  pageSize: number;
+  enabled?: boolean;
 }
 
-export function useCollectionAccounts(params: CollectionAccountsParams = {}) {
+const EMPTY_KPIS: CollectionAccountsKpis = { total: 0, overdue: 0, pending: 0, in_arrears: 0 };
+
+const arrOrNull = (a?: string[]) => (a && a.length > 0 ? a : null);
+
+export function useCollectionAccounts(params: CollectionAccountsParams) {
   return useQuery({
-    queryKey: ['pcobranza-cuentas-cobranza', params.projectId, params.search, params.onlyOverdue],
-    queryFn: async (): Promise<CollectionAccount[]> => {
+    queryKey: [
+      'pcobranza-cuentas-cobranza',
+      params.projectId, params.search, params.onlyOverdue,
+      params.cliente, params.unidad, params.clabe, params.cuenta,
+      params.modelos, params.tipos, params.estatus, params.prioridad, params.invalidLevel,
+      params.sortKey, params.sortDir, params.page, params.pageSize,
+    ],
+    queryFn: async (): Promise<CollectionAccountsResult> => {
       // Cast to any: the RPC name is not yet in Supabase's generated types.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).rpc('get_pcobranza_cuentas_cobranza', {
         p_proyecto_id: params.projectId ?? null,
         p_search: params.search || null,
         p_solo_vencidas: params.onlyOverdue ?? false,
+        p_cliente: params.cliente || null,
+        p_unidad: params.unidad || null,
+        p_clabe: params.clabe || null,
+        p_cuenta: params.cuenta || null,
+        p_modelos: arrOrNull(params.modelos),
+        p_tipos: arrOrNull(params.tipos),
+        p_estatus: arrOrNull(params.estatus),
+        p_prioridad: arrOrNull(params.prioridad),
+        p_invalid_level: arrOrNull(params.invalidLevel),
+        p_sort_key: params.sortKey || null,
+        p_sort_dir: params.sortDir ?? 'asc',
+        p_limit: params.pageSize,
+        p_offset: (params.page - 1) * params.pageSize,
       });
       if (error) throw error;
-      return (data as unknown as CollectionAccount[]) ?? [];
+      const d = (data ?? {}) as Partial<CollectionAccountsResult>;
+      return {
+        cuentas: (d.cuentas as CollectionAccount[]) ?? [],
+        total: Number(d.total ?? 0),
+        kpis: (d.kpis as CollectionAccountsKpis) ?? EMPTY_KPIS,
+        modelos: (d.modelos as string[]) ?? [],
+        estatus: (d.estatus as string[]) ?? [],
+      };
     },
     staleTime: 3 * 60 * 1000,
-    // Keep previous rows while refetching (project change) to avoid blanking the UI.
+    enabled: params.enabled !== false,
+    // Keep previous rows while refetching (filtros/página) to avoid blanking the UI.
     placeholderData: keepPreviousData,
   });
 }

@@ -8,7 +8,7 @@ import { ESTATUS_VALIDACION_KEY, MetodoMultiSelect } from '@/components/admin/po
 import { PaymentsAdvancedFilters } from '@/components/admin/portal-cobranza/PaymentsAdvancedFilters';
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
-import { AddCepDialog } from '@/components/admin/AddCepDialog';
+import { CargarEvidenciaDialog } from '@/components/admin/CargarEvidenciaDialog';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
 import { EliminarPagoDialog } from '@/components/admin/portal-cobranza/EliminarPagoDialog';
 import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
@@ -55,14 +55,6 @@ function formatCompactCurrency(n: number): string {
   if (abs >= 1_000) return `$${formatWithThousands(n / 1_000)}K`;
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-
-// Mapea el estatus del pago al estado crudo que espera ValidacionBadge (del detalle).
-const VALIDACION_RAW: Record<PagoRecord['estatus'], string> = {
-  valido:      'coincide',
-  invalido:    'no_coincide',
-  error:       'error',
-  sin_revisar: 'sin_validar',
-};
 
 // Texto de color por tipo (mismo estándar que Cuentas de Cobranza; sin pastilla).
 function typeTextClass(tipo: string | null): string {
@@ -503,7 +495,7 @@ export default function CollectionPayments() {
                   </td>
                   {/* Validado (validación) */}
                   <td className="px-2 text-center">
-                    <ValidacionBadge estado={VALIDACION_RAW[r.estatus]} />
+                    <ValidacionBadge estado={r.estado_validacion} />
                   </td>
                   <td className="px-2 text-center">
                     <IconTip label={r.url_cep ? 'CEP (comprobante fiscal)' : r.url_recibo ? 'Recibo (evidencia sin CEP)' : 'Sin comprobante'}>
@@ -583,10 +575,23 @@ export default function CollectionPayments() {
         )}
       </div>
 
-      {/* Cargar evidencia */}
+      {/* Cargar evidencia (modal canónico compartido con CC) */}
       {loadPayment && loadPayment.id_cuenta_cobranza != null && (
-        <AddCepDialog open={!!loadPayment} onClose={handleLoadClose}
-          paymentId={loadPayment.pago_id} cuentaCobranzaId={loadPayment.id_cuenta_cobranza} />
+        <CargarEvidenciaDialog
+          open={!!loadPayment}
+          onClose={handleLoadClose}
+          cuentaId={loadPayment.id_cuenta_cobranza}
+          target={{
+            id: loadPayment.pago_id,
+            metodo: loadPayment.metodo_pago,
+            monto: loadPayment.monto,
+            fecha_pago: loadPayment.fecha_pago,
+            clave_rastreo: loadPayment.clave_rastreo,
+          }}
+          onDone={refetchPayments}
+          captureClaveRastreo
+          logActivity
+        />
       )}
 
       {/* Detalle del pago (info + edición en una sola vista) */}

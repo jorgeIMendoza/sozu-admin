@@ -428,14 +428,14 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                               <td className="px-3 py-1.5 text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
                                 {ap.fecha_pago ? fmtDate(ap.fecha_pago) : '-'}
                               </td>
-                              <td className="px-3 py-1.5 text-[11px] text-foreground whitespace-nowrap">
+                              <td className="px-3 py-1.5 text-center text-[11px] text-foreground whitespace-nowrap">
                                 {ap.metodo ?? '-'}
                               </td>
                               <td className="px-3 py-1.5 text-center">
                                 <ClaveCopyable value={ap.clave_rastreo} />
                               </td>
                               <td />
-                              <td className="px-3 py-1.5 text-right text-[11px] font-semibold tabular-nums text-emerald-600">
+                              <td className="px-3 py-1.5 text-center text-[11px] font-semibold tabular-nums text-emerald-600">
                                 {fmtCurrency(ap.monto)}
                               </td>
                               <td />
@@ -482,7 +482,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                                       <button
                                         onClick={e => {
                                           e.stopPropagation();
-                                          openCargarEvidencia({ id: ap.id_pago, metodo: ap.metodo, fecha_pago: ap.fecha_pago, monto: ap.monto, id_metodos_pago: ap.id_metodos_pago });
+                                          openCargarEvidencia({ id: ap.id_pago, metodo: ap.metodo, fecha_pago: ap.fecha_pago, monto: ap.monto, id_metodos_pago: ap.id_metodos_pago, clave_rastreo: ap.clave_rastreo });
                                         }}
                                         className="p-1.5 rounded transition-colors text-foreground hover:bg-muted"
                                       >
