@@ -30,6 +30,8 @@ import {
   getPreValidationStatusInfo,
   type MortgageChoice,
   type MortgageProcess,
+  type SelectedBank,
+  type PreValidationStatus,
   type StatusInfo,
   type StatusTone,
   type PrequalificationData,
@@ -42,7 +44,10 @@ import {
   useSolicitudCreditoVigente,
   useCrearSolicitudCredito,
   puedeCambiarBanco,
+  type SolicitudCredito,
+  type SolicitudEstatus,
 } from "@/hooks/usePortalBancos/useSolicitudesCredito";
+import { useBancosConvenio } from "@/hooks/usePortalBancos/useBancosConvenio";
 
 interface PagoFinalSheetProps {
   stage: StageInfo;
@@ -102,6 +107,63 @@ const toneIcon = (tone: StatusTone) => {
 
 import MortgageBankSelector from "./MortgageBankSelector";
 
+// Mapea el estatus de la solicitud persistida al estado que pinta el status card.
+const estatusToPreStatus = (e: SolicitudEstatus): PreValidationStatus => {
+  switch (e) {
+    case "rechazado":
+      return "rejected";
+    case "formalizado":
+      return "completed";
+    case "pre_aprobado":
+    case "oferta_vinculante":
+      return "pre_approved";
+    default:
+      return "in_progress"; // solicitud ya enviada, banco revisando
+  }
+};
+
+// Reconstruye el MortgageProcess desde la solicitud persistida en BD.
+// Necesario tras logout/login o recarga: el store en memoria se pierde, pero la
+// selección de banco es la de `bancos_solicitudes` (fuente de verdad).
+const buildProcessFromSolicitud = (
+  propertyId: string,
+  s: SolicitudCredito,
+  bancos: ReturnType<typeof useBancosConvenio>["data"],
+): MortgageProcess => {
+  const banco = bancos?.find((b) => b.id_banco === s.id_banco);
+  const bank: SelectedBank = {
+    idBanco: s.id_banco,
+    nombre: banco?.nombre ?? `Banco ${s.id_banco}`,
+    rates: {
+      tasaMin: banco?.tasa_min ?? null,
+      tasaMax: banco?.tasa_max ?? null,
+      catMin: banco?.cat_min ?? null,
+      catMax: banco?.cat_max ?? null,
+    },
+  };
+  const prequalification: PrequalificationData = {
+    idBanco: s.id_banco,
+    bankName: bank.nombre,
+    montoFinanciar: s.monto_financiar,
+    plazoAnios: s.plazo_anios,
+    estimatedMonthlyMin: s.mensualidad_estimada_min ?? undefined,
+    estimatedMonthlyMax: s.mensualidad_estimada_max ?? undefined,
+    estimatedRateMin: s.tasa_estimada_min ?? undefined,
+    estimatedRateMax: s.tasa_estimada_max ?? undefined,
+    estimatedCatMin: s.cat_estimado_min ?? undefined,
+    estimatedCatMax: s.cat_estimado_max ?? undefined,
+    consentimientoCompartirDatos: true,
+    submittedAt: s.fecha_envio,
+  };
+  return {
+    propertyId,
+    declaredAt: s.fecha_envio,
+    choice: { type: "preferred", bank },
+    preferredStatus: estatusToPreStatus(s.estatus),
+    prequalification,
+  };
+};
+
 const PagoFinalSheet = ({
   stage,
   investment,
@@ -113,6 +175,7 @@ const PagoFinalSheet = ({
   const cuentaId = Number(property.id);
   const queryClient = useQueryClient();
   const { data: solicitudVigente } = useSolicitudCreditoVigente(cuentaId);
+  const { data: bancos } = useBancosConvenio();
   const crearSolicitud = useCrearSolicitudCredito();
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<PaymentMethod>(null);
@@ -128,7 +191,11 @@ const PagoFinalSheet = ({
 
   const isFullyPaid = financials.pendingBalance <= 0;
 
-  // Hydrate persisted mortgage process when sheet opens
+  // Hydrate persisted mortgage process when sheet opens.
+  // Prioridad: (1) store en memoria; (2) solicitud persistida en BD — sobrevive
+  // logout/login y recarga, y BLOQUEA re-selección de banco (la selección es
+  // definitiva mientras el banco responde); (3) crédito elegido sin solicitud
+  // aún enviada → permitir elegir banco; (4) método sin definir.
   useEffect(() => {
     if (!open) return;
     const existing = getMortgageProcess(property.id);
@@ -136,8 +203,14 @@ const PagoFinalSheet = ({
       setProcess(existing);
       setStep("status");
       setMethod("credito");
+    } else if (solicitudVigente) {
+      // Solicitud ya enviada al banco: reconstruir desde BD y mostrar estatus.
+      // handleChangeBank / canChangeBank aplican el gate puedeCambiarBanco.
+      setProcess(buildProcessFromSolicitud(property.id, solicitudVigente, bancos));
+      setMethod("credito");
+      setStep("status");
     } else if (property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
-      // Ya eligió crédito (persistido): mostrar flujo de banco, nunca datos de pago
+      // Eligió crédito pero aún no envía solicitud: mostrar selector de banco.
       setProcess(null);
       setMethod("credito");
       setStep("mortgage-select");
@@ -146,7 +219,7 @@ const PagoFinalSheet = ({
       setStep("method");
       setMethod(null);
     }
-  }, [open, property.id, property.tipoFinanciamiento]);
+  }, [open, property.id, property.tipoFinanciamiento, solicitudVigente, bancos]);
 
   const handleClose = () => {
     onClose();
