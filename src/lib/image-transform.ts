@@ -26,7 +26,7 @@ export interface ImageTransformOpts {
   height?: number;
   /** Calidad 20–100. Default 90. */
   quality?: number;
-  /** Modo de reescalado cuando se pasan width y height. */
+  /** Modo de reescalado. Default "contain" = preserva aspect ratio (no deforma). */
   resize?: "cover" | "contain" | "fill";
 }
 
@@ -40,7 +40,11 @@ export function optimizedImage(url?: string | null, opts: ImageTransformOpts = {
     return url;
   }
 
-  const { width, height, quality = 90, resize } = opts;
+  // IMPORTANTE: sin `resize`, el endpoint de render NO conserva el aspect ratio.
+  // Con solo `width` devolvía WxH_original (p.ej. 640x2037 en vez de 640x290),
+  // deformando la imagen a vertical. `resize=contain` escala proporcional dentro
+  // del bounding box. Por eso el default es "contain".
+  const { width, height, quality = 90, resize = "contain" } = opts;
   const [base] = url.split("?");
   const rendered = base.replace(OBJECT_MARKER, RENDER_MARKER);
 
@@ -48,7 +52,7 @@ export function optimizedImage(url?: string | null, opts: ImageTransformOpts = {
   if (width) params.set("width", String(Math.round(width)));
   if (height) params.set("height", String(Math.round(height)));
   params.set("quality", String(quality));
-  if (resize) params.set("resize", resize);
+  params.set("resize", resize);
 
   const qs = params.toString();
   return qs ? `${rendered}?${qs}` : rendered;
