@@ -17,12 +17,13 @@
  */
 
 import { useMemo, useState } from 'react';
-import { X, Loader2, DollarSign, TrendingDown, TrendingUp, FileText, Eye } from 'lucide-react';
+import { X, Loader2, DollarSign, TrendingDown, TrendingUp, FileText, Eye, Download } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useCuentaCobranzaFinancials } from '@/hooks/useCuentaCobranzaFinancials';
 import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
 import { usePldForCuenta, type PagoInputPld } from '@/hooks/usePldForCuenta';
 import { useNotariaRelacionPagos } from '@/hooks/useNotariaRelacionPagos';
+import { useExportToExcel } from '@/hooks/useExportToExcel';
 import {
   KpiCard, KpiCardSkeleton, DetailCard, DetailCardSkeleton,
   CashPaymentCard, EscrituracionCard, AccesorioCard,
@@ -78,11 +79,14 @@ export function NotariaRelacionPagosModal({
     pagosPrincipal, aplicacionesPrincipal,
     pagosBodega, aplicacionesBodega,
     pagosEst, aplicacionesEst,
-    idPropiedad, isLoading: isLoadingRp, isError,
+    idPropiedad, cuentaIdPrincipal, isLoading: isLoadingRp, isError,
   } = useNotariaRelacionPagos({ cuentaId, notarioId, enabled: open });
 
+  // useCuentaCobranzaFinancials y usePldForCuenta usan la cuenta principal resuelta,
+  // no la cuenta recibida (que puede ser una accesoria).
+  // cuentaIdPrincipal es null mientras carga → hooks deshabilitados hasta resolución.
   const { data: financials, isLoading: isLoadingFinancials } = useCuentaCobranzaFinancials(
-    open ? cuentaId : null,
+    open ? cuentaIdPrincipal : null,
   );
 
   const { data: accesorios, isLoading: isLoadingAccesorios } = useAccesoriosFinancials(
@@ -106,7 +110,7 @@ export function NotariaRelacionPagosModal({
 
   const valorUma = financials ? financials.limiteEfectivo / 8025 : 0;
   const pld = usePldForCuenta(
-    open ? cuentaId : null,
+    open ? cuentaIdPrincipal : null,
     pagosParaPld,
     valorUma,
     financials?.precioFinal ?? 0,
@@ -157,6 +161,59 @@ export function NotariaRelacionPagosModal({
   const isLoadingCards = isLoadingFinancials || isLoadingAccesorios || pld.isLoading;
   const isLoadingTable = isLoadingRp;
 
+  // ── Exportar Excel ────────────────────────────────────────────────────────
+  // Reutiliza exactamente el mismo mecanismo que Portal Escrituración:
+  // useExportToExcel → Edge Function exportar-reporte → descarga CSV.
+  // Alcance: unidad principal + bodegas + estacionamientos (exclusivo, sin extras).
+  const { exportToExcel, isExporting } = useExportToExcel();
+
+  const totalExportRows = rowsPrincipal.length + rowsBodega.length + rowsEst.length;
+
+  const handleExport = async () => {
+    const pagoIdsBodega = new Set(rowsBodega.map(p => p.pagoId));
+    const pagoIdsEst    = new Set(rowsEst.map(p => p.pagoId));
+
+    const sanitize = (s: string) =>
+      s.replace(/[^a-zA-Z0-9À-ÿ_-]/g, '_').replace(/_+/g, '_').slice(0, 40);
+
+    const fmtDateExport = (s: string | null) =>
+      s
+        ? new Date(s + 'T00:00:00').toLocaleDateString('es-MX', {
+            day: '2-digit', month: 'short', year: 'numeric',
+          })
+        : '—';
+
+    const rows = [...rowsPrincipal, ...rowsBodega, ...rowsEst].map(p => ({
+      proyecto:    proyectoNombre,
+      comprador:   clienteName,
+      depto:       unitCode,
+      producto:    pagoIdsBodega.has(p.pagoId) ? 'Bodega'
+                   : pagoIdsEst.has(p.pagoId)  ? 'Cajón'
+                   : 'Propiedad',
+      fecha_pago:  fmtDateExport(p.fechaPago),
+      concepto:    p.concepto ?? '—',
+      pago:        p.monto,
+      metodo_pago: p.metodoPago ?? '—',
+      comprobante: p.urlCep || p.urlRecibo || '—',
+    }));
+
+    await exportToExcel({
+      data: rows,
+      filename: `Relacion_Pagos_${sanitize(proyectoNombre)}_${sanitize(unitCode)}_${cuentaCode}`,
+      columnas_visibles: [
+        { key: 'proyecto',    label: 'Proyecto' },
+        { key: 'comprador',   label: 'Comprador' },
+        { key: 'depto',       label: 'Depto' },
+        { key: 'producto',    label: 'Producto' },
+        { key: 'fecha_pago',  label: 'Fecha del Pago' },
+        { key: 'concepto',    label: 'Concepto' },
+        { key: 'pago',        label: 'Pago' },
+        { key: 'metodo_pago', label: 'Método de Pago' },
+        { key: 'comprobante', label: 'Comprobante' },
+      ],
+    });
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,12 +231,22 @@ export function NotariaRelacionPagosModal({
                 <p className="text-xs text-slate-400">{proyectoNombre}</p>
               )}
             </div>
-            <button
-              onClick={() => onOpenChange(false)}
-              className="shrink-0 p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleExport}
+                disabled={isExporting || totalExportRows === 0 || isLoadingRp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {isExporting ? 'Exportando...' : 'Exportar Excel'}
+              </button>
+              <button
+                onClick={() => onOpenChange(false)}
+                className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Body */}
