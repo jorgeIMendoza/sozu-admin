@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users } from 'lucide-react';
+import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 import { checkForUpdates, clearCacheAndReload } from '@/utils/versionUtils';
 import { APP_VERSION } from '@/lib/config';
@@ -48,6 +48,7 @@ const PORTAL_LABELS: Record<string, { label: string; color: string }> = {
 export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -371,16 +372,29 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
           {/* Password */}
           <div>
             <label className="block text-sm font-semibold text-[hsl(0_0%_5%)] mb-2">Contraseña</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-              autoComplete="current-password"
-              required
-              className="login-input w-full"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+                autoComplete="current-password"
+                required
+                className="login-input w-full pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                disabled={isLoading}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition-colors"
+                style={{ color: 'hsl(0 0% 45%)' }}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           {/* Submit */}
