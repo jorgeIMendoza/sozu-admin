@@ -23,8 +23,10 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 
 interface NavItem {
   label: string;
@@ -53,6 +55,7 @@ export const PortalEscrituracionLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
@@ -74,7 +77,7 @@ export const PortalEscrituracionLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Escrituración
         </p>
@@ -122,16 +125,18 @@ export const PortalEscrituracionLayout = () => {
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={() => navigate("/admin")}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          >
-            <ArrowLeft className="size-4 shrink-0" />
-            Regresar
-          </button>
+          {canReturnToAdmin && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <ArrowLeft className="size-4 shrink-0" />
+              Regresar
+            </button>
+          )}
           <button
             onClick={signOut}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors"
+            className={`${canReturnToAdmin ? "flex-1" : "w-full"} flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors`}
           >
             <LogOut className="size-4 shrink-0" />
             Cerrar sesión
@@ -178,7 +183,7 @@ export const PortalEscrituracionLayout = () => {
             </div>
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-screen">
+          <main className="px-8 py-4 bg-background min-h-screen">
             <Outlet />
           </main>
         </div>

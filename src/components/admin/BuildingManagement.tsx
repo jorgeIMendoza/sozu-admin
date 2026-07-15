@@ -12,6 +12,7 @@ import { NewBuildingDialog } from "./NewBuildingDialog";
 import { EditBuildingDialog } from "./EditBuildingDialog";
 import { ConfigureLevelsDialog } from "./ConfigureLevelsDialog";
 import { PlanoArquitectonicoUpload } from "./PlanoArquitectonicoUpload";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useToast } from "@/hooks/use-toast";
 
 interface BuildingManagementProps {
@@ -83,16 +84,18 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
   const DeleteBuildingDialog = ({ building }: { building: any }) => {
     return (
       <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Eliminar
-          </Button>
-        </AlertDialogTrigger>
+        <IconTooltip label="Eliminar edificio">
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              aria-label="Eliminar edificio"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </AlertDialogTrigger>
+        </IconTooltip>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar edificio?</AlertDialogTitle>
@@ -160,12 +163,13 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
 
     return (
       <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Eye className="h-4 w-4 mr-1" />
-            Ver Modelos
-          </Button>
-        </DialogTrigger>
+        <IconTooltip label="Ver modelos">
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver modelos">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+        </IconTooltip>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Modelos de {buildingName}</DialogTitle>
@@ -234,84 +238,63 @@ export const BuildingManagement = ({ projectId }: BuildingManagementProps) => {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Edificios del Proyecto</h3>
-          <NewBuildingDialog 
-            projectId={projectId} 
-            onBuildingAdded={handleBuildingAdded} 
+        <div className="flex items-center justify-end gap-3 mb-3">
+          <NewBuildingDialog
+            projectId={projectId}
+            onBuildingAdded={handleBuildingAdded}
           />
         </div>
-        <div>Cargando edificios...</div>
+        <div className="text-xs text-muted-foreground">Cargando edificios...</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Edificios del Proyecto</h3>
-        <NewBuildingDialog 
-          projectId={projectId} 
-          onBuildingAdded={handleBuildingAdded} 
+      <div className="flex items-center justify-end gap-3 mb-3">
+        <NewBuildingDialog
+          projectId={projectId}
+          onBuildingAdded={handleBuildingAdded}
         />
       </div>
 
       {buildings && buildings.length > 0 ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground mb-3">
             {buildings.length} edificio{buildings.length !== 1 ? 's' : ''} encontrado{buildings.length !== 1 ? 's' : ''}
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
           {buildings.map((building) => (
-            <Card key={building.id}>
-              <CardContent className="p-4">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Building2 className="h-4 w-4" />
-                    <h4 className="font-medium text-base">{building.nombre}</h4>
-                  </div>
-                  
-                  <div className="flex space-x-2">
-                    <EditBuildingDialog 
-                      building={building}
-                      projectId={projectId}
-                      onBuildingUpdated={handleBuildingAdded} 
-                    />
-                    {Number(building.numero_pisos) > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          setConfigureLevelsBuilding(building);
-                        }}
-                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                      >
-                        <Layers className="h-4 w-4 mr-1" />
-                        Niveles
-                      </Button>
-                    )}
-                    <BuildingModelsDialog 
-                      buildingId={building.id} 
-                      buildingName={building.nombre} 
-                    />
-                    <DeleteBuildingDialog building={building} />
-                  </div>
-
+            <div key={building.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <Building2 className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-foreground truncate">{building.nombre}</h4>
                   {(building.numero_pisos || building.fecha_lanzamiento) && (
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      {building.numero_pisos && (
-                        <p>Niveles: {building.numero_pisos}</p>
-                      )}
-                      {building.fecha_lanzamiento && (
-                        <p>Lanzamiento: {new Date(building.fecha_lanzamiento).toLocaleDateString()}</p>
-                      )}
+                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {building.numero_pisos && <span className="inline-flex items-center gap-1 tabular-nums"><Layers className="h-3 w-3" />{building.numero_pisos} niveles</span>}
+                      {building.fecha_lanzamiento && <span className="tabular-nums">{new Date(building.fecha_lanzamiento).toLocaleDateString()}</span>}
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {/* ORDER: Niveles, Ver Modelos, Editar, Eliminar */}
+                {Number(building.numero_pisos) > 0 && (
+                  <IconTooltip label="Configurar niveles">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurar niveles"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setConfigureLevelsBuilding(building); }}>
+                      <Layers className="h-4 w-4" />
+                    </Button>
+                  </IconTooltip>
+                )}
+                <BuildingModelsDialog buildingId={building.id} buildingName={building.nombre} />
+                <EditBuildingDialog building={building} projectId={projectId} onBuildingUpdated={handleBuildingAdded} />
+                <DeleteBuildingDialog building={building} />
+              </div>
+            </div>
           ))}
           </div>
         </div>

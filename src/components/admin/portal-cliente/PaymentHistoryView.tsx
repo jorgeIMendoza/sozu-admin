@@ -1,12 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
-import { CheckCircle2, Clock, ChevronDown, ChevronUp, Eye, Loader2, Receipt, FileText } from "lucide-react";
+import { useState, useMemo, useEffect, Fragment } from "react";
+import { CheckCircle2, Clock, ChevronDown, ChevronUp, Eye, Loader2, Receipt, FileText, Layers } from "lucide-react";
 import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import type { InvestmentProperty } from "@/lib/portal-cliente/mock-data";
 import { getPropertyStatus } from "@/lib/portal-cliente/mock-data";
-import { usePaymentPlan } from "@/lib/portal-cliente/payment-data";
+import { usePaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/payment-data";
+import PaymentMethodBadge from "./PaymentMethodBadge";
 import PaymentReceiptModal, { type ReceiptData } from "./detail/PaymentReceiptModal";
 import { buildReceiptFromPaymentRecord, buildReceiptFromInstallment, buildReceiptFromMaintenance } from "@/lib/portal-cliente/receipt-utils";
-import { fmtMXN as fmt } from "@/lib/utils";
+import { fmtMXNDecimals as fmt } from "@/lib/utils";
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from "@/lib/config";
 
 const sozuLogo = "/sozu-logo.png";
@@ -17,16 +18,38 @@ interface PaymentHistoryViewProps {
   investment: InvestmentProperty;
 }
 
+type PaymentStatus = "pagado" | "pendiente" | "parcial";
+
 type UnifiedPayment = {
   date: string;
   concept: string;
-  amount: number;
-  status: "pagado" | "pendiente";
+  amount: number;   // monto planeado del concepto
+  applied: number;  // suma de pagos aplicados
+  status: PaymentStatus;
   type: "Inversión" | "Mantenimiento";
   sourceIndex: number;
   pagoId?: number;
   cepUrl?: string;
   evidenceUrl?: string;
+  rowKey: string;
+  applications?: PaymentApplication[]; // pagos dispersados que componen el concepto
+};
+
+const statusLabel = (s: PaymentStatus) => s === "pagado" ? "Pagado" : s === "parcial" ? "Parcial" : "Pendiente";
+
+// Monto por fila: parcial muestra aplicado de total + faltante; resto, el monto tal cual.
+const MontoCell = ({ p, className = "" }: { p: UnifiedPayment; className?: string }) => {
+  if (p.status === "parcial") {
+    return (
+      <div className="flex flex-col items-end leading-tight">
+        <span className="text-[13px] font-semibold tabular-nums text-foreground whitespace-nowrap">{fmt(p.applied)}</span>
+        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">de {fmt(p.amount)}</span>
+        <span className="text-[10px] font-medium text-warning tabular-nums whitespace-nowrap">Faltan {fmt(Math.max(0, p.amount - p.applied))}</span>
+      </div>
+    );
+  }
+  const amt = p.status === "pagado" ? (p.applied || p.amount) : p.amount;
+  return <span className={`tabular-nums whitespace-nowrap ${className}`}>{fmt(amt)}</span>;
 };
 
 type PdfModal = { url: string; concept: string; date: string; amount: number } | null;
@@ -100,15 +123,19 @@ function IconBtn({ onClick, disabled, title, children }: { onClick?: () => void;
   );
 }
 
-const MobilePaymentRow = ({ payment, onReceiptClick, onEyeClick, onCepClick, generatingId }: {
+const MobilePaymentRow = ({ payment, onReceiptClick, onEyeClick, onCepClick, generatingId, multiCount = 0, expanded = false, onToggle }: {
   payment: UnifiedPayment;
   onReceiptClick: (p: UnifiedPayment) => void;
   onEyeClick: (p: UnifiedPayment) => void;
   onCepClick: (p: UnifiedPayment) => void;
   generatingId: number | null;
+  multiCount?: number;
+  expanded?: boolean;
+  onToggle?: () => void;
 }) => {
   const isGenerating = !!payment.pagoId && generatingId === payment.pagoId;
   const hasCep = !!(payment.cepUrl || payment.evidenceUrl);
+  const multi = multiCount > 1;
   return (
     <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
       <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${payment.status === "pagado" ? "bg-success/10" : "bg-warning/10"}`}>
@@ -121,22 +148,35 @@ const MobilePaymentRow = ({ payment, onReceiptClick, onEyeClick, onCepClick, gen
           {payment.type === "Mantenimiento" && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">Mant.</span>
           )}
+          {multi && (
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+              <Layers className="w-2.5 h-2.5" />{multiCount} pagos
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <div className="text-right mr-1">
-          <p className={`text-sm font-semibold tabular-nums ${payment.status === "pagado" ? "text-foreground" : "text-warning"}`}>{fmt(payment.amount)}</p>
-          <p className={`text-[10px] font-medium ${payment.status === "pagado" ? "text-success" : "text-warning"}`}>{payment.status === "pagado" ? "Pagado" : "Pendiente"}</p>
+          <MontoCell p={payment} className={`text-sm font-semibold ${payment.status === "pagado" ? "text-foreground" : "text-warning"}`} />
+          <p className={`text-[10px] font-medium ${payment.status === "pagado" ? "text-success" : "text-warning"}`}>{statusLabel(payment.status)}</p>
         </div>
-        <IconBtn onClick={() => onReceiptClick(payment)} disabled={payment.status !== "pagado"} title={payment.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-          <FileText className="w-4 h-4" />
-        </IconBtn>
-        <IconBtn onClick={() => !isGenerating && payment.pagoId && onEyeClick(payment)} disabled={!payment.pagoId || payment.status !== "pagado" || isGenerating} title={payment.status !== "pagado" ? "Pago pendiente" : payment.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
-          {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-        </IconBtn>
-        <IconBtn onClick={() => hasCep && onCepClick(payment)} disabled={payment.status !== "pagado" || !hasCep} title={payment.status !== "pagado" ? "Pago pendiente" : payment.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
-          <Receipt className="w-4 h-4" />
-        </IconBtn>
+        {multi ? (
+          <IconBtn onClick={onToggle} title="Ver pagos aplicados">
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </IconBtn>
+        ) : (
+          <>
+            <IconBtn onClick={() => onReceiptClick(payment)} disabled={payment.status !== "pagado"} title={payment.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+              <FileText className="w-4 h-4" />
+            </IconBtn>
+            <IconBtn onClick={() => !isGenerating && payment.pagoId && onEyeClick(payment)} disabled={!payment.pagoId || payment.status !== "pagado" || isGenerating} title={payment.status !== "pagado" ? "Pago pendiente" : payment.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+            </IconBtn>
+            <IconBtn onClick={() => hasCep && onCepClick(payment)} disabled={payment.status !== "pagado" || !hasCep} title={payment.status !== "pagado" ? "Pago pendiente" : payment.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
+              <Receipt className="w-4 h-4" />
+            </IconBtn>
+          </>
+        )}
       </div>
     </div>
   );
@@ -150,6 +190,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
   const [filterYear, setFilterYear] = useState<string>("todos");
   const [filterType, setFilterType] = useState<"todos" | "Inversión" | "Mantenimiento">("todos");
   const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [pdfModal, setPdfModal] = useState<PdfModal>(null);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
@@ -204,22 +245,38 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
   const allPayments = useMemo<UnifiedPayment[]>(() => {
     const result: UnifiedPayment[] = [];
     if (paymentPlan) {
-      paymentPlan.installments.forEach((inst, i) => result.push({
-        date: inst.dueDate,
-        concept: inst.number === 1 ? "Enganche" : `Parcialidad ${inst.number}`,
-        amount: inst.amount,
-        status: inst.status === "pagado" ? "pagado" : "pendiente",
-        type: "Inversión",
-        sourceIndex: i,
-      }));
+      paymentPlan.installments.forEach((inst, i) => {
+        const apps = inst.applications;
+        // Con una sola aplicación, cablear los botones a ese pago; con varias,
+        // la fila se expande y cada aplicación trae sus propios botones.
+        const single = apps && apps.length === 1 ? apps[0] : undefined;
+        const applied = inst.appliedAmount;
+        const status: PaymentStatus = inst.status === "pagado" ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
+        result.push({
+          date: inst.dueDate,
+          concept: inst.concepto,
+          amount: inst.amount,
+          applied,
+          status,
+          type: "Inversión",
+          sourceIndex: i,
+          rowKey: `inv-${inst.id}`,
+          applications: apps,
+          pagoId: single?.pagoId,
+          cepUrl: single?.cepUrl,
+          evidenceUrl: single?.evidenceUrl,
+        });
+      });
     } else {
       payments.forEach((p, i) => result.push({
         date: p.date,
         concept: p.concept,
         amount: p.amount,
+        applied: p.status === "pagado" ? p.amount : 0,
         status: p.status,
         type: "Inversión",
         sourceIndex: i,
+        rowKey: `inv-${i}`,
         pagoId: p.pagoId,
         cepUrl: p.cepUrl,
         evidenceUrl: p.evidenceUrl,
@@ -229,9 +286,11 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
       date: m.month,
       concept: "Mantenimiento",
       amount: m.amount,
+      applied: m.status === "pagado" ? m.amount : 0,
       status: m.status,
       type: "Mantenimiento",
       sourceIndex: i,
+      rowKey: `mant-${i}`,
     }));
     return result;
   }, [payments, paymentPlan, maintenance]);
@@ -246,7 +305,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
     let r = allPayments;
     if (filterYear !== "todos") r = r.filter(p => p.date.includes(filterYear));
     if (filterStatus === "pagado") r = r.filter(p => p.status === "pagado");
-    if (filterStatus === "pendiente") r = r.filter(p => p.status === "pendiente");
+    if (filterStatus === "pendiente") r = r.filter(p => p.status !== "pagado");
     if (filterType !== "todos") r = r.filter(p => p.type === filterType);
     return r;
   }, [allPayments, filterYear, filterStatus, filterType]);
@@ -259,7 +318,8 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
   const paidPayments = allPayments.filter(p => p.status === "pagado");
-  const totalPaid = paidPayments.reduce((s, p) => s + p.amount, 0);
+  // Total pagado autoritativo = suma real de pagos de la cuenta (incluye abonos parciales)
+  const totalPaid = financials.totalPaid;
   const lastPaid = [...paidPayments].sort((a, b) => b.date.localeCompare(a.date))[0];
   const progressPct = Math.min(100, Math.round((financials.totalPaid / financials.initialPrice) * 100));
 
@@ -294,6 +354,38 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
     }
   };
 
+  const toggleRow = (key: string) =>
+    setExpandedRows(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const appCount = (p: UnifiedPayment) => p.applications?.length ?? 0;
+
+  // Sub-fila: un pago dispersado individual dentro de un concepto con varios pagos
+  const AppRow = ({ app, concept }: { app: PaymentApplication; concept: string }) => {
+    const isGenerating = generatingId === app.pagoId;
+    const hasCep = !!(app.cepUrl || app.evidenceUrl);
+    const synthetic = { concept, date: app.date, amount: app.amount, pagoId: app.pagoId } as UnifiedPayment;
+    return (
+      <div className="flex items-center gap-2 py-2 pl-3 border-l-2 border-primary/20">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-medium text-foreground truncate">
+            {app.methodName ?? "Pago"} · <span className="tabular-nums">{fmt(app.amount)}</span>
+          </p>
+          <p className="text-[10px] text-muted-foreground truncate">
+            {app.dateDisplay}{app.trackingKey ? ` · Clave ${app.trackingKey}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <IconBtn onClick={() => !isGenerating && app.pagoId && handleEyeClick(synthetic)} disabled={!app.pagoId || isGenerating} title={app.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          </IconBtn>
+          <IconBtn onClick={() => { const url = app.cepUrl ?? app.evidenceUrl; if (url) openPdf(url, synthetic); }} disabled={!hasCep} title={app.cepUrl ? "CEP electrónico" : hasCep ? "Comprobante de pago" : "Sin comprobante"}>
+            <Receipt className="w-4 h-4" />
+          </IconBtn>
+        </div>
+      </div>
+    );
+  };
+
   // ── Shared blocks ──────────────────────────────────────────────
 
   const filterBar = (
@@ -326,6 +418,10 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
         </div>
       )}
     </div>
+  );
+
+  const methodBadge = (
+    <PaymentMethodBadge cuentaId={Number(property.id)} tipo={property.tipoFinanciamiento} />
   );
 
   const summaryBlock = (
@@ -399,41 +495,77 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
               </tr>
             </thead>
             <tbody>
-              {sortedForTable.map((p, i) => (
-                <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="px-5 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDate(p.date)}</td>
-                  <td className="px-3 py-3 text-[13px] font-medium text-foreground">{p.concept}</td>
-                  {hasMaintenance && (
-                    <td className="px-3 py-3">
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${p.type === "Mantenimiento" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>
-                        {p.type}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-[13px] text-foreground">{fmt(p.amount)}</td>
-                  <td className="px-3 py-3 text-center">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                      p.status === "pagado" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                    }`}>
-                      {p.status === "pagado" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                      {p.status === "pagado" ? "Pagado" : "Pendiente"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <IconBtn onClick={() => handleViewReceipt(p)} disabled={p.status !== "pagado"} title={p.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
-                        <FileText className="w-4 h-4" />
-                      </IconBtn>
-                      <IconBtn onClick={() => handleEyeClick(p)} disabled={!p.pagoId || p.status !== "pagado" || generatingId === p.pagoId} title={p.status !== "pagado" ? "Pago pendiente" : p.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
-                        {generatingId === p.pagoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                      </IconBtn>
-                      <IconBtn onClick={() => { const url = p.cepUrl ?? p.evidenceUrl; if (url) openPdf(url, p); }} disabled={p.status !== "pagado" || (!p.cepUrl && !p.evidenceUrl)} title={p.status !== "pagado" ? "Pago pendiente" : p.cepUrl ? "CEP electrónico" : p.evidenceUrl ? "Comprobante de pago" : "Sin comprobante"}>
-                        <Receipt className="w-4 h-4" />
-                      </IconBtn>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {sortedForTable.map((p) => {
+                const multi = appCount(p) > 1;
+                const isExpanded = expandedRows.has(p.rowKey);
+                const colCount = hasMaintenance ? 6 : 5;
+                return (
+                  <Fragment key={p.rowKey}>
+                    <tr className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                      <td className="px-5 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDate(p.date)}</td>
+                      <td className="px-3 py-3 text-[13px] font-medium text-foreground">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{p.concept}</span>
+                          {multi && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                              <Layers className="w-3 h-3" />{appCount(p)} pagos
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {hasMaintenance && (
+                        <td className="px-3 py-3">
+                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${p.type === "Mantenimiento" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>
+                            {p.type}
+                          </span>
+                        </td>
+                      )}
+                      <td className="px-3 py-3 text-[13px] text-foreground"><div className="flex justify-end"><MontoCell p={p} className="font-semibold" /></div></td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                          p.status === "pagado" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                        }`}>
+                          {p.status === "pagado" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          {statusLabel(p.status)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-center gap-0.5">
+                          {multi ? (
+                            <IconBtn onClick={() => toggleRow(p.rowKey)} title="Ver pagos aplicados">
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </IconBtn>
+                          ) : (
+                            <>
+                              <IconBtn onClick={() => handleViewReceipt(p)} disabled={p.status !== "pagado"} title={p.status !== "pagado" ? "Pago pendiente" : "Ver recibo"}>
+                                <FileText className="w-4 h-4" />
+                              </IconBtn>
+                              <IconBtn onClick={() => handleEyeClick(p)} disabled={!p.pagoId || p.status !== "pagado" || generatingId === p.pagoId} title={p.status !== "pagado" ? "Pago pendiente" : p.pagoId ? "Generar recibo PDF" : "Sin recibo"}>
+                                {generatingId === p.pagoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                              </IconBtn>
+                              <IconBtn onClick={() => { const url = p.cepUrl ?? p.evidenceUrl; if (url) openPdf(url, p); }} disabled={p.status !== "pagado" || (!p.cepUrl && !p.evidenceUrl)} title={p.status !== "pagado" ? "Pago pendiente" : p.cepUrl ? "CEP electrónico" : p.evidenceUrl ? "Comprobante de pago" : "Sin comprobante"}>
+                                <Receipt className="w-4 h-4" />
+                              </IconBtn>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {multi && isExpanded && (
+                      <tr className="bg-muted/10">
+                        <td colSpan={colCount} className="px-5 py-2">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            {appCount(p)} pagos aplicados a {p.concept}
+                          </p>
+                          <div className="space-y-0.5">
+                            {p.applications!.map((app, ai) => <AppRow key={ai} app={app} concept={p.concept} />)}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -467,7 +599,29 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
               </button>
               {isGroupExpanded(group.sortKey) && (
                 <div className="px-4">
-                  {group.payments.map((p, i) => <MobilePaymentRow key={i} payment={p} onReceiptClick={handleViewReceipt} onEyeClick={handleEyeClick} onCepClick={(pay) => { const url = pay.cepUrl ?? pay.evidenceUrl; if (url) openPdf(url, pay); }} generatingId={generatingId} />)}
+                  {group.payments.map((p) => {
+                    const multi = appCount(p) > 1;
+                    const rowExpanded = expandedRows.has(p.rowKey);
+                    return (
+                      <Fragment key={p.rowKey}>
+                        <MobilePaymentRow
+                          payment={p}
+                          onReceiptClick={handleViewReceipt}
+                          onEyeClick={handleEyeClick}
+                          onCepClick={(pay) => { const url = pay.cepUrl ?? pay.evidenceUrl; if (url) openPdf(url, pay); }}
+                          generatingId={generatingId}
+                          multiCount={appCount(p)}
+                          expanded={rowExpanded}
+                          onToggle={() => toggleRow(p.rowKey)}
+                        />
+                        {multi && rowExpanded && (
+                          <div className="pb-3 pl-10 space-y-0.5">
+                            {p.applications!.map((app, ai) => <AppRow key={ai} app={app} concept={p.concept} />)}
+                          </div>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -481,18 +635,20 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
     <div className="animate-fade-in pb-8">
       {/* Mobile */}
       <div className="md:hidden space-y-4 pb-6">
+        {methodBadge}
         {filterBar}
         {summaryBlock}
         {mobilePaymentsBlock}
       </div>
 
       {/* Desktop: 2-col */}
-      <div className="hidden md:grid md:grid-cols-[1fr_280px] md:gap-6 md:items-start">
-        <div className="space-y-4">
+      <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 md:items-start">
+        <div className="space-y-4 min-w-0">
           {filterBar}
           {desktopPaymentsTable}
         </div>
         <div className="sticky top-20 space-y-4">
+          {methodBadge}
           {summaryBlock}
         </div>
       </div>

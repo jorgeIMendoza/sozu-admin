@@ -4,13 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SUPABASE_PROJECT_ID } from "@/lib/config";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Building2, Users, Edit2, Save, X, Info, ExternalLink, Copy, AlertCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { FieldGrid } from "@/components/admin/project-form/FieldGrid";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import {
   Select,
   SelectContent,
@@ -634,20 +637,14 @@ export const ProjectLegalEntitiesSection = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Add new legal entity section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Agregar Entidad Legal
-          </CardTitle>
-          <CardDescription>
-            Selecciona una entidad legal para agregar al proyecto. {!isProductosOrServicios && "Solo puede haber una entidad por tipo."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <FormSection
+        title="Agregar Entidad Legal"
+        icon={Plus}
+        description={`Selecciona una entidad legal para agregar al proyecto.${!isProductosOrServicios ? " Solo puede haber una entidad por tipo." : ""}`}
+      >
+          <FieldGrid cols={2}>
             <div>
               <label className="text-sm font-medium mb-2 block">Tipo de Entidad</label>
               <Select
@@ -695,7 +692,7 @@ export const ProjectLegalEntitiesSection = ({
                 disabled={!selectedEntityTypeId}
               />
             </div>
-          </div>
+          </FieldGrid>
 
            <Button
              type="button"
@@ -707,34 +704,27 @@ export const ProjectLegalEntitiesSection = ({
            </Button>
            {selectedEntityTypeId && availableFilteredEntities.length === 0 && (
               <p className="text-sm text-muted-foreground text-center">
-                {isLoadingEntities 
+                {isLoadingEntities
                   ? "Cargando entidades..."
-                  : availableLegalEntities.length > 0 
+                  : availableLegalEntities.length > 0
                     ? "Todas las entidades de este tipo ya fueron asignadas al proyecto."
                     : "No hay entidades legales disponibles para este tipo."}
               </p>
             )}
-        </CardContent>
-      </Card>
+      </FormSection>
 
       {/* Current legal entities */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Entidades Legales Asignadas ({projectLegalEntities.length})
-        </h3>
-
+      <FormSection
+        title={`Entidades Legales Asignadas (${projectLegalEntities.length})`}
+        icon={Users}
+      >
         {projectLegalEntities.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-muted-foreground">
-                No hay entidades legales asignadas a este proyecto.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+            <Building2 className="mx-auto mb-2 h-10 w-10 opacity-40" />
+            <p className="text-sm">No hay entidades legales asignadas a este proyecto.</p>
+          </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {projectLegalEntities.map((entity) => {
               const hasAccounts = entitiesWithAccounts.includes(entity.id);
               const hasProperties = entitiesWithProperties.includes(entity.id);
@@ -1084,23 +1074,29 @@ export const ProjectLegalEntitiesSection = ({
                           </div>
                         )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeEntityMutation.mutate(entity.id)}
-                        disabled={removeEntityMutation.isPending || hasAccounts || hasProperties}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title={
-                          hasAccounts 
-                            ? "No se puede eliminar: tiene cuentas STP generadas" 
-                            : hasProperties 
+                      <IconTooltip
+                        label={
+                          hasAccounts
+                            ? "No se puede eliminar: tiene cuentas STP generadas"
+                            : hasProperties
                               ? "No se puede eliminar: tiene propiedades asignadas"
                               : "Eliminar entidad"
                         }
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <span className="shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeEntityMutation.mutate(entity.id)}
+                            disabled={removeEntityMutation.isPending || hasAccounts || hasProperties}
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            aria-label="Eliminar entidad"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </span>
+                      </IconTooltip>
                     </div>
                   </CardContent>
                 </Card>
@@ -1108,7 +1104,7 @@ export const ProjectLegalEntitiesSection = ({
             })}
           </div>
         )}
-      </div>
+      </FormSection>
     </div>
   );
 };

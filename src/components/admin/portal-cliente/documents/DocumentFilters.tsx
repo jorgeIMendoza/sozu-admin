@@ -44,13 +44,13 @@ const DocumentFilters = ({
   onClearAll,
 }: FiltersProps) => {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-5 md:px-0 pb-1">
+    <div className="flex gap-2 overflow-x-auto px-5 md:px-0 pb-3 scrollbar-hide items-center">
       <Select
         value={filterProperty ?? "todos"}
         onValueChange={(v) => onChangeProperty(v === "todos" ? null : v)}
       >
-        <SelectTrigger className="h-9 text-xs min-w-[140px] w-auto">
-          <SelectValue placeholder="Todas las propiedades" />
+        <SelectTrigger className="h-8 text-[11px] flex-shrink-0 w-auto min-w-[130px] rounded-md font-medium">
+          <SelectValue placeholder="Propiedad" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="todos">Todas las propiedades</SelectItem>
@@ -66,8 +66,8 @@ const DocumentFilters = ({
         value={filterType ?? "todos"}
         onValueChange={(v) => onChangeType(v === "todos" ? null : v)}
       >
-        <SelectTrigger className="h-9 text-xs min-w-[120px] w-auto">
-          <SelectValue placeholder="Todos los tipos" />
+        <SelectTrigger className="h-8 text-[11px] flex-shrink-0 w-auto min-w-[110px] rounded-md font-medium">
+          <SelectValue placeholder="Tipo" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="todos">Todos los tipos</SelectItem>
@@ -79,23 +79,34 @@ const DocumentFilters = ({
         </SelectContent>
       </Select>
 
-      <Select
-        value={groupBy}
-        onValueChange={(v) => onChangeGroupBy(v as "property" | "status")}
-      >
-        <SelectTrigger className="h-9 text-xs min-w-[120px] w-auto">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="property">Por propiedad</SelectItem>
-          <SelectItem value="status">Por estado</SelectItem>
-        </SelectContent>
-      </Select>
+      <div className="flex h-8 rounded-md border border-input overflow-hidden flex-shrink-0 bg-background">
+        <button
+          onClick={() => onChangeGroupBy("property")}
+          className={`px-3 text-[11px] font-medium transition-colors whitespace-nowrap ${
+            groupBy === "property"
+              ? "bg-foreground/[0.08] text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Propiedad
+        </button>
+        <div className="w-px bg-border" />
+        <button
+          onClick={() => onChangeGroupBy("status")}
+          className={`px-3 text-[11px] font-medium transition-colors whitespace-nowrap ${
+            groupBy === "status"
+              ? "bg-foreground/[0.08] text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Estado
+        </button>
+      </div>
 
       {hasActiveFilters && (
         <button
           onClick={onClearAll}
-          className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+          className="h-8 flex-shrink-0 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-destructive bg-destructive/[0.08] border border-destructive/20 rounded-md hover:bg-destructive/[0.12] transition-colors whitespace-nowrap"
         >
           <X className="w-3 h-3" />
           Limpiar

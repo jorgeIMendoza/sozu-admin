@@ -1015,6 +1015,10 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">Producto</TableHead>
+                      <TableHead className="text-xs">No. Depa</TableHead>
                       <TableHead className="text-xs">Nombre comisionista</TableHead>
                       <TableHead className="text-xs">Tipo</TableHead>
                       <TableHead className="text-xs text-right">% Comisión</TableHead>
@@ -1033,6 +1037,12 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                           <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
                             {formatCuentaFolio(p)}
                           </TableCell>
+                          <TableCell className="text-sm">{p.proyecto_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm">{p.modelo_nombre || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {p.producto_nombre || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">{p.numero_departamento || "—"}</TableCell>
                           <TableCell className="text-sm">
                             <div>{p.beneficiario_nombre}</div>
                             {p.beneficiario_rfc && (
@@ -1369,6 +1379,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
             monto: p.monto_comision,
             clabe_destino: "—",
             dias_desde_autorizacion: p.dias_desde_devengo,
+            id_cuenta_cobranza: p.id_cuenta_cobranza,
+            email_usuario: p.email_usuario,
           };
           const propiedadLabel =
             [p.proyecto_nombre, p.modelo_nombre, p.numero_departamento ? `Depto ${p.numero_departamento}` : null]

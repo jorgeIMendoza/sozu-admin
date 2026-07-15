@@ -18,7 +18,9 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { AdministracionFiltersProvider } from "@/contexts/AdministracionFiltersContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";
@@ -84,6 +86,7 @@ export const PortalAdministracionLayout = () => {
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = profile?.rol_nombre === "Super Administrador";
+  const { canReturnToAdmin } = useCanReturnToAdmin();
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -111,7 +114,7 @@ export const PortalAdministracionLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Administración
         </p>
@@ -168,7 +171,7 @@ export const PortalAdministracionLayout = () => {
         </div>
 
         <div className="flex gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <button
               onClick={() => handleNavigate("/admin")}
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
@@ -181,7 +184,7 @@ export const PortalAdministracionLayout = () => {
             onClick={signOut}
             className={cn(
               "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors",
-              isSuperAdmin ? "flex-1" : "w-full"
+              canReturnToAdmin ? "flex-1" : "w-full"
             )}
           >
             <LogOut className="size-4 shrink-0" />
@@ -230,7 +233,7 @@ export const PortalAdministracionLayout = () => {
               </div>
             </header>
 
-            <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-screen">
+            <main className="px-8 py-4 bg-background min-h-screen">
               {!ROUTES_SIN_FILTER_BAR.some((r) => location.pathname.startsWith(r)) && (
                 <GlobalFilterBar />
               )}

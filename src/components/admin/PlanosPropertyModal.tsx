@@ -30,7 +30,7 @@ const resolveDepto = (unidad: string, piso: number | null): string => {
   return fallback.length === 1 ? fallback.padStart(2, "0") : fallback || raw;
 };
 
-const FloorPlanCanvas = ({
+export const FloorPlanCanvas = ({
   imageUrl,
   regiones,
   highlightUnit,

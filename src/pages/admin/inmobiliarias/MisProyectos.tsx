@@ -260,7 +260,7 @@ const MisProyectos = () => {
       if (!amenidadesDialog.projectId) return [];
       const { data, error } = await supabase
         .from("amenidades_proyectos")
-        .select("id, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
+        .select("id, url_imagen, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
         .eq("id_proyecto", amenidadesDialog.projectId)
         .eq("activo", true);
       if (error) {
@@ -458,7 +458,7 @@ const MisProyectos = () => {
       {/* Simplified role header bar — matches InventarioGlobal */}
       {isSimplifiedRole && (
         <div className={`sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/50 -mx-4 px-4 py-2.5 sm:-mx-6 sm:px-6 -mt-4 sm:-mt-6 transition-transform duration-300 overflow-hidden ${showHeaderBar ? "translate-y-0" : "-translate-y-full"}`}>
-          {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
+          {profile?.puede_impersonar === true && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
             <span className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
               Hola, <span className="font-medium text-foreground">{profile?.nombre?.split(" ")[0] || "Usuario"}</span>
@@ -668,10 +668,8 @@ const MisProyectos = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
               {amenidades.map((ap: any) => (
                 <div key={ap.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                  {ap.amenidades?.url ? (
-                    <img src={ap.amenidades.url} alt={ap.amenidades.nombre} className="h-8 w-8 object-contain" />
-                  ) : (
-                    <Star className="h-5 w-5 text-muted-foreground" />
+                  {ap.url_imagen && (
+                    <img src={ap.url_imagen} alt={ap.amenidades?.nombre} className="h-10 w-10 object-cover rounded" />
                   )}
                   <span className="text-sm font-medium text-foreground">{ap.amenidades?.nombre}</span>
                 </div>

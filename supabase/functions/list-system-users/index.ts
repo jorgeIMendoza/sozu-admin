@@ -5,7 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ROLE_SUPER_ADMIN = 1;
 const ROLE_ADMINISTRADOR_PROYECTO = 2;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
@@ -64,7 +63,20 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Usuario no encontrado" }, 403);
     }
 
-    if (![ROLE_SUPER_ADMIN, ROLE_ADMINISTRADOR_PROYECTO].includes(requester.rol_id ?? 0)) {
+    // RBAC: la autorización la decide submenus_permisos (vía user_has_permission),
+    // no una lista fija de roles. Se ejecuta con el cliente del usuario para que
+    // la RPC resuelva la sesión del solicitante.
+    const { data: hasReadPermission, error: permError } = await supabaseUser.rpc(
+      "user_has_permission",
+      { _submenu_path: "/admin/usuarios", _permission_name: "leer" },
+    );
+
+    if (permError) {
+      console.error("Error checking user_has_permission:", permError);
+      return jsonResponse({ error: "No se pudo verificar permisos" }, 500);
+    }
+
+    if (!hasReadPermission) {
       return jsonResponse({ error: "No tienes permisos para consultar usuarios del sistema" }, 403);
     }
 
@@ -90,6 +102,8 @@ Deno.serve(async (req) => {
           id_persona,
           debe_cambiar_password,
           email_confirmado,
+          id_notario,
+          notarios (notaria),
           roles!inner (nombre, es_rol_interno),
           personas (nombre_legal, email)
         `)

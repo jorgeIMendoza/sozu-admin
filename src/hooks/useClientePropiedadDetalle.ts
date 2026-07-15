@@ -156,7 +156,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         // Acuerdos de pago (parcialidades) for property cuenta
         supabase
           .from("acuerdos_pago")
-          .select("id, fecha_pago, monto, pago_completado, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
+          .select("id, id_concepto, fecha_pago, monto, pago_completado, orden, conceptos_pago!acuerdos_pago_id_concepto_fkey(nombre)")
           .eq("id_cuenta_cobranza", cuentaId)
           .eq("activo", true)
           .order("orden", { ascending: true }),
@@ -441,7 +441,10 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
           saldoPendiente: Math.max(0, a.monto - montoPagado),
           pagado: a.pago_completado,
           orden: a.orden,
-          concepto: a.conceptos_pago?.nombre || `Parcialidad #${a.orden}`,
+          // Concepto 3 = "Pago a contra entrega" en BD → se muestra como "Pago a escrituración"
+          concepto: a.id_concepto === 3
+            ? "Pago a escrituración"
+            : (a.conceptos_pago?.nombre || `Parcialidad #${a.orden}`),
         };
       });
 

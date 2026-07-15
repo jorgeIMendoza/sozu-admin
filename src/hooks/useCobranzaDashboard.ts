@@ -3,45 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCobranzaImpersonation } from '@/contexts/CobranzaImpersonationContext';
 
-export interface DashboardKPIs {
-  cobrado_total: number;
-  vencido_total: number;
-  vencido_total_sin_ce: number;
-  pendiente_total: number;
-  cobrado_mes: number;
-  programado_mes: number;
-  programado_mes_sin_ce: number;
-  por_cobrar_mes: number;
-  por_cobrar_mes_sin_ce: number;
-  recovery_rate: number;
-  aging: { rango: string; monto: number; monto_sin_ce: number; cantidad: number }[] | null;
-  morosidad: { grupo: string; cuentas: number }[] | null;
-  por_proyecto: { proyecto: string; proyecto_id: number; cobrado: number; vencido: number; pendiente: number }[] | null;
-  cobrado_mensual: { mes: string; cobrado: number }[] | null;
-  programado_mensual: { mes: string; programado: number; programado_sin_ce: number }[] | null;
-}
-
-export function useCobranzaDashboard(
-  proyectoId?: number | null,
-  fechaInicio?: string | null,
-  fechaFin?: string | null,
-  entidadIds?: number[] | null,
-) {
-  return useQuery({
-    queryKey: ['cobranza-dashboard-kpis', proyectoId, fechaInicio, fechaFin, entidadIds],
-    queryFn: async (): Promise<DashboardKPIs> => {
-      const { data, error } = await supabase.rpc('get_dashboard_cobranza_kpis', {
-        p_proyecto_id: proyectoId ?? null,
-        p_fecha_inicio: fechaInicio ?? null,
-        p_fecha_fin: fechaFin ?? null,
-        p_entidad_ids: entidadIds && entidadIds.length > 0 ? entidadIds : null,
-      } as any);
-      if (error) throw error;
-      return data as unknown as DashboardKPIs;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-}
+// NOTA: el hook y tipos del Dashboard se movieron a `useCollectionDashboard.ts`
+// (migración del menú a inglés). Este archivo compartido conserva solo
+// `useProyectosCobranza`, usado por varios menús del portal de cobranza.
 
 /**
  * Returns only projects the current user has access to via proyectos_acceso.
@@ -60,11 +24,30 @@ export function useProyectosCobranza() {
       if (!effectiveEmail && !hasFullProjectAccess) return [];
 
       if (hasFullProjectAccess) {
-        // Effective Super Admin / Admin see all active projects
+        // Step 1: proyectos con cuenta_madre_stp configurada (operan con SOZU)
+        const { data: erData, error: erErr } = await (supabase as any)
+          .from('entidades_relacionadas')
+          .select('id_proyecto')
+          .not('cuenta_madre_stp', 'is', null)
+          .eq('activo', true);
+        if (erErr) throw erErr;
+        const erpIds = [...new Set(((erData ?? []) as any[]).map((r) => r.id_proyecto as number))];
+        if (!erpIds.length) return [];
+
+        // Step 2: solo proyectos con edificios (desarrollos reales, no cubetas)
+        const { data: edifData, error: edifErr } = await (supabase as any)
+          .from('edificios')
+          .select('id_proyecto')
+          .in('id_proyecto', erpIds);
+        if (edifErr) throw edifErr;
+        const validIds = [...new Set(((edifData ?? []) as any[]).map((e) => e.id_proyecto as number))];
+        if (!validIds.length) return [];
+
+        // Step 3: datos del proyecto
         const { data, error } = await supabase
           .from('proyectos')
           .select('id, nombre')
-          .eq('activo', true)
+          .in('id', validIds)
           .order('nombre');
         if (error) throw error;
         return data ?? [];

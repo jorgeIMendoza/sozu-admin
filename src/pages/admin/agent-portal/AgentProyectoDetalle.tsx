@@ -468,7 +468,7 @@ const AgentProyectoDetalle = () => {
           <ArrowLeft className="h-5 w-5 text-gray-700" />
         </button>
 
-        {/* Avance badge — positioned above project name with spacing */}
+        {/* Avance badge - positioned above project name with spacing */}
         {avanceObra > 0 && (
           <div className="absolute bottom-20 left-4 bg-[hsl(var(--agent-primary))] rounded-lg px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
             <HardHat className="h-3.5 w-3.5 text-white" />
@@ -665,7 +665,7 @@ const AgentProyectoDetalle = () => {
           );
         })()}
 
-        {/* Modelos — horizontal gallery */}
+        {/* Modelos - horizontal gallery */}
         {modelos.length > 0 && (
           <section>
             <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Modelos</h2>
@@ -812,7 +812,7 @@ const AgentProyectoDetalle = () => {
           </p>
         </section>
 
-        {/* Compartir proyecto — same modal as inventory card */}
+        {/* Compartir proyecto - same modal as inventory card */}
         <div className="flex justify-center pb-4">
           <Button variant="outline" onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }} className="rounded-xl">
             <Share2 className="h-4 w-4 mr-2" />
@@ -828,7 +828,7 @@ const AgentProyectoDetalle = () => {
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Compartir — {project.nombre}</DialogTitle>
+            <DialogTitle>Compartir - {project.nombre}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 pt-2">
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("whatsapp")}>

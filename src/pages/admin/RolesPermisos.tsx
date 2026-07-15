@@ -30,6 +30,8 @@ interface Role {
   ver_filtros_avanzados_eliminados: boolean;
   ver_todos_duenos: boolean;
   configurar_citas: boolean;
+  puede_impersonar: boolean;
+  administrar_app_clientes: boolean;
 }
 
 interface Permiso {
@@ -522,7 +524,7 @@ export default function RolesPermisos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas')
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes')
         .eq('es_rol_interno', true)
         .order('id');
       
@@ -856,6 +858,52 @@ export default function RolesPermisos() {
         })
         .eq('id', id);
       
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
+      toast.success('Configuración actualizada');
+    },
+    onError: (error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  // Update puede_impersonar mutation
+  const updatePuedeImpersonarMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
+      const { error } = await supabase
+        .from('roles')
+        .update({
+          puede_impersonar: value,
+          fecha_actualizacion: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
+      toast.success('Configuración actualizada');
+    },
+    onError: (error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  // Update administrar_app_clientes mutation
+  const updateAdministrarAppClientesMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
+      const { error } = await supabase
+        .from('roles')
+        .update({
+          administrar_app_clientes: value,
+          fecha_actualizacion: new Date().toISOString()
+        })
+        .eq('id', id);
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -1506,7 +1554,43 @@ export default function RolesPermisos() {
                           </p>
                         </div>
                       </label>
-                      
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.puede_impersonar || false}
+                          onCheckedChange={(checked) => {
+                            updatePuedeImpersonarMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updatePuedeImpersonarMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Impersonar usuarios en portales</span>
+                          <p className="text-xs text-muted-foreground">
+                            Muestra el selector "Ver como" en los portales (agentes, cobranza, CRM, bancos, etc.) para navegar como otro usuario
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.administrar_app_clientes || false}
+                          onCheckedChange={(checked) => {
+                            updateAdministrarAppClientesMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updateAdministrarAppClientesMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Administrar app clientes</span>
+                          <p className="text-xs text-muted-foreground">
+                            Permite administrar la app de clientes (acceso y gestión del portal de clientes)
+                          </p>
+                        </div>
+                      </label>
+
                       {/* Estatus de disponibilidad visibles */}
                       <EstatusDisponibilidadSelector 
                         rolId={selectedRole.id}

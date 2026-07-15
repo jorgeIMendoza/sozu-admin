@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from "@/lib/config";
 import { NewPropertyDialog } from "@/components/admin/NewPropertyDialog";
 import { EditPropertyDialog } from "@/components/admin/EditPropertyDialog";
-import { Settings2, GripVertical } from "lucide-react";
+import { Settings2, GripVertical, ExternalLink, Copy } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -48,7 +48,7 @@ import { ReventaDialog } from "@/components/admin/ReventaDialog";
 import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
-import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -279,6 +279,7 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
 
 const STORAGE_KEY = 'propiedades-visible-columns';
 const ORDER_STORAGE_KEY = 'propiedades-columns-order';
+const FILTERS_STORAGE_KEY = 'propiedades-filtros';
 
 // Sortable Item Component
 const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnConfig; isVisible: boolean; onToggle: (key: ColumnKey) => void }) => {
@@ -329,9 +330,23 @@ const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnCon
 
 const Propiedades = () => {
   const [searchParams] = useSearchParams();
-  const [inputValue, setInputValue] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("activos");
+
+  // Persistencia de filtros: sobreviven al remount del componente (p.ej. al
+  // generar una oferta y regresar a la tabla, o navegar fuera y volver) usando
+  // sessionStorage. Se restauran al montar y se guardan ante cualquier cambio.
+  const savedFiltersRef = useRef<any>(null);
+  if (savedFiltersRef.current === null) {
+    try {
+      savedFiltersRef.current = JSON.parse(sessionStorage.getItem(FILTERS_STORAGE_KEY) || '{}');
+    } catch {
+      savedFiltersRef.current = {};
+    }
+  }
+  const savedFilters = savedFiltersRef.current;
+
+  const [inputValue, setInputValue] = useState(savedFilters.searchTerm ?? "");
+  const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm ?? "");
+  const [activeTab, setActiveTab] = useState(savedFilters.activeTab ?? "activos");
   const [planosProperty, setPlanosProperty] = useState<Property | null>(null);
   
   // Project access control
@@ -427,29 +442,29 @@ const Propiedades = () => {
   const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState<Property | null>(null);
   
   // Filtros de selección múltiple para proyecto y modelo
-  const [selectedProyectos, setSelectedProyectos] = useState<number[]>([]);
-  const [selectedModelos, setSelectedModelos] = useState<number[]>([]);
-  const [selectedModelosLabels, setSelectedModelosLabels] = useState<Record<number, string>>({});
+  const [selectedProyectos, setSelectedProyectos] = useState<number[]>(savedFilters.selectedProyectos ?? []);
+  const [selectedModelos, setSelectedModelos] = useState<number[]>(savedFilters.selectedModelos ?? []);
+  const [selectedModelosLabels, setSelectedModelosLabels] = useState<Record<number, string>>(savedFilters.selectedModelosLabels ?? {});
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState(false);
   const [isModeloFilterOpen, setIsModeloFilterOpen] = useState(false);
-  
+
   const [modeloSearchInput, setModeloSearchInput] = useState("");
   const [modeloSearchTerm, setModeloSearchTerm] = useState("");
-  
-  const [recamarasFilterInput, setRecamarasFilterInput] = useState<string | null>(null);
-  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(null);
-  const [banosFilterInput, setBanosFilterInput] = useState("");
-  const [banosFilter, setBanosFilter] = useState("");
-  const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([]);
-  const [tipoTransaccionFilter, setTipoTransaccionFilter] = useState<string[]>([]);
-  const [bodegasFilter, setBodegasFilter] = useState("");
-  const [estacionamientosFilter, setEstacionamientosFilter] = useState("");
-  const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState("");
-  const [areaFilterInput, setAreaFilterInput] = useState<number[]>([0, 500]);
-  const [areaFilter, setAreaFilter] = useState<number[]>([0, 500]);
-  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>([0, 100000000]);
-  const [precioFilter, setPrecioFilter] = useState<number[]>([0, 100000000]);
-  const [precioSort, setPrecioSort] = useState<'asc' | 'desc' | null>(null);
+
+  const [recamarasFilterInput, setRecamarasFilterInput] = useState<string | null>(savedFilters.recamarasFilter ?? null);
+  const [recamarasFilter, setRecamarasFilter] = useState<string | null>(savedFilters.recamarasFilter ?? null);
+  const [banosFilterInput, setBanosFilterInput] = useState(savedFilters.banosFilter ?? "");
+  const [banosFilter, setBanosFilter] = useState(savedFilters.banosFilter ?? "");
+  const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>(savedFilters.disponibilidadFilter ?? []);
+  const [tipoTransaccionFilter, setTipoTransaccionFilter] = useState<string[]>(savedFilters.tipoTransaccionFilter ?? []);
+  const [bodegasFilter, setBodegasFilter] = useState(savedFilters.bodegasFilter ?? "");
+  const [estacionamientosFilter, setEstacionamientosFilter] = useState(savedFilters.estacionamientosFilter ?? "");
+  const [cuentaCobranzaFilter, setCuentaCobranzaFilter] = useState(savedFilters.cuentaCobranzaFilter ?? "");
+  const [areaFilterInput, setAreaFilterInput] = useState<number[]>(savedFilters.areaFilter ?? [0, 500]);
+  const [areaFilter, setAreaFilter] = useState<number[]>(savedFilters.areaFilter ?? [0, 500]);
+  const [precioFilterInput, setPrecioFilterInput] = useState<number[]>(savedFilters.precioFilter ?? [0, 100000000]);
+  const [precioFilter, setPrecioFilter] = useState<number[]>(savedFilters.precioFilter ?? [0, 100000000]);
+  const [precioSort, setPrecioSort] = useState<'asc' | 'desc' | null>(savedFilters.precioSort ?? null);
 
   // Column visibility and order state
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => {
@@ -552,22 +567,7 @@ const Propiedades = () => {
   
   // Hook reutilizable para exportación
   const { exportToExcel, isExporting } = useExportToExcel();
-  
-  // Verificar si hay filtros activos
-  const hasActiveFilters = 
-    selectedProyectos.length > 0 ||
-    selectedModelos.length > 0 ||
-    recamarasFilter !== null ||
-    banosFilter !== "" ||
-    disponibilidadFilter.length > 0 ||
-    tipoTransaccionFilter.length > 0 ||
-    bodegasFilter !== "" ||
-    estacionamientosFilter !== "" ||
-    cuentaCobranzaFilter !== "" ||
-    areaFilter[0] !== 0 || areaFilter[1] !== 500 ||
-    precioFilter[0] !== 0 || precioFilter[1] !== 100000000 ||
-    searchTerm !== "";
-  
+
   // Función para exportar a Excel - obtiene TODOS los datos filtrados sin paginación
   const handleExportToExcel = async () => {
     try {
@@ -618,6 +618,14 @@ const Propiedades = () => {
         query = query.eq('activo', true).eq('es_aprobado', false);
       } else {
         query = query.eq('activo', false);
+      }
+
+      // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+      query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
+
+      // Precio es columna directa → filtrar server-side (columna real, no requiere fetch completo).
+      if (precioFilterIsActive) {
+        query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
       }
 
       // Aplicar búsqueda - buscar por proyecto, edificio, propietario, o número de propiedad
@@ -799,7 +807,7 @@ const Propiedades = () => {
         });
       }
 
-      if (precioFilter[0] !== 0 || precioFilter[1] !== 100000000) {
+      if (precioFilterIsActive) {
         filteredData = filteredData.filter(p => {
           return p.precio_lista >= precioFilter[0] && p.precio_lista <= precioFilter[1];
         });
@@ -953,34 +961,67 @@ const Propiedades = () => {
   const { data: precioRange } = useQuery({
     queryKey: ['precio-range-filter', accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      let query = supabase
-        .from('propiedades')
-        .select('precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id, id_tipo_uso)))')
-        .eq('activo', true)
-        .eq('es_aprobado', true)
-        .gt('precio_lista', 0);
-      
-      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-        query = query.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
-      }
+      // Select con join para poder filtrar por proyectos accesibles (usuarios restringidos).
+      const selectWithJoin =
+        'precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id)))';
 
-      const { data, error } = await query.order('precio_lista', { ascending: true }).limit(1);
-      const { data: dataMax } = await supabase
-        .from('propiedades')
-        .select('precio_lista')
-        .eq('activo', true)
-        .eq('es_aprobado', true)
-        .gt('precio_lista', 0)
-        .order('precio_lista', { ascending: false })
-        .limit(1);
+      const applyFilters = (q: any) => {
+        q = q.eq('activo', true).eq('es_aprobado', true).gt('precio_lista', 0);
+        q = q.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
+        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+          q = q.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        }
+        return q;
+      };
 
-      const minPrice = data?.[0]?.precio_lista || 0;
-      const maxPrice = dataMax?.[0]?.precio_lista || 100000000;
+      // Total de propiedades elegibles: se usa para ubicar los percentiles por posición.
+      const { count } = await applyFilters(
+        supabase.from('propiedades').select(selectWithJoin, { count: 'exact', head: true })
+      );
+      const n = count || 0;
+      if (n === 0) return { min: 0, max: 100000000 };
+
+      // Percentil 1 y 99 por offset: recorta outliers extremos ($1, $2.69B) que arruinan el slider.
+      const idxLow = Math.min(Math.floor(n * 0.01), n - 1);
+      const idxHigh = Math.min(Math.floor(n * 0.99), n - 1);
+
+      const fetchAt = async (idx: number): Promise<number | null> => {
+        const { data } = await applyFilters(supabase.from('propiedades').select(selectWithJoin))
+          .order('precio_lista', { ascending: true })
+          .range(idx, idx);
+        return (data?.[0] as any)?.precio_lista ?? null;
+      };
+
+      const [p1, p99] = await Promise.all([fetchAt(idxLow), fetchAt(idxHigh)]);
+      const minPrice = p1 ?? 0;
+      const maxPrice = p99 ?? 100000000;
       return { min: Math.floor(minPrice), max: Math.ceil(maxPrice) };
     },
     enabled: !isLoadingAccess,
     staleTime: 5 * 60 * 1000,
   });
+
+  // El rango de precio se auto-inicializa a [min,max] reales de la BD, que nunca igualan los
+  // centinelas [0, 100000000]. Por eso NO se puede detectar "precio filtrado" comparando contra
+  // los centinelas (daría siempre true → needsFullFetch true → listado capado a 1000 filas).
+  // Solo cuenta como filtro activo si el usuario estrechó el rango respecto al real.
+  const precioFilterIsActive =
+    !!precioRange && (precioFilter[0] > precioRange.min || precioFilter[1] < precioRange.max);
+
+  // Verificar si hay filtros activos
+  const hasActiveFilters =
+    selectedProyectos.length > 0 ||
+    selectedModelos.length > 0 ||
+    recamarasFilter !== null ||
+    banosFilter !== "" ||
+    disponibilidadFilter.length > 0 ||
+    tipoTransaccionFilter.length > 0 ||
+    bodegasFilter !== "" ||
+    estacionamientosFilter !== "" ||
+    cuentaCobranzaFilter !== "" ||
+    areaFilter[0] !== 0 || areaFilter[1] !== 500 ||
+    precioFilterIsActive ||
+    searchTerm !== "";
 
   // Debounce filtros de sliders y búsqueda de modelos
   useEffect(() => {
@@ -1016,22 +1057,61 @@ const Propiedades = () => {
     return () => clearTimeout(timer);
   }, [modeloSearchInput]);
 
-  // Limpiar modelos seleccionados cuando cambian los proyectos
+  // Limpiar modelos seleccionados cuando cambian los proyectos.
+  // Se omite el primer render para no borrar los modelos restaurados desde
+  // sessionStorage al montar (solo limpia ante cambios reales del usuario).
+  const skipModelosResetRef = useRef(true);
   useEffect(() => {
+    if (skipModelosResetRef.current) {
+      skipModelosResetRef.current = false;
+      return;
+    }
     setSelectedModelos([]);
     setSelectedModelosLabels({});
     setModeloSearchInput("");
     setModeloSearchTerm("");
   }, [selectedProyectos]);
 
-  // Initialize price range from dynamic data
+  // Initialize price range from dynamic data.
+  // Solo aplica el rango por defecto una vez y únicamente si el usuario no tiene
+  // un filtro de precio guardado, para no pisar el valor restaurado ni resetearlo
+  // en cada refetch de precioRange.
+  const precioInitRef = useRef(false);
   useEffect(() => {
-    if (precioRange) {
-      setPrecioFilterInput([precioRange.min, precioRange.max]);
-      setPrecioFilter([precioRange.min, precioRange.max]);
+    if (precioRange && !precioInitRef.current) {
+      precioInitRef.current = true;
+      if (!savedFilters.precioFilter) {
+        setPrecioFilterInput([precioRange.min, precioRange.max]);
+        setPrecioFilter([precioRange.min, precioRange.max]);
+      }
     }
   }, [precioRange]);
-  
+
+  // Persistir filtros en sessionStorage ante cualquier cambio
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+        activeTab,
+        searchTerm,
+        selectedProyectos,
+        selectedModelos,
+        selectedModelosLabels,
+        recamarasFilter,
+        banosFilter,
+        disponibilidadFilter,
+        tipoTransaccionFilter,
+        bodegasFilter,
+        estacionamientosFilter,
+        cuentaCobranzaFilter,
+        areaFilter,
+        precioFilter,
+        precioSort,
+      }));
+    } catch {
+      /* ignorar errores de cuota/serialización */
+    }
+  }, [activeTab, searchTerm, selectedProyectos, selectedModelos, selectedModelosLabels, recamarasFilter, banosFilter, disponibilidadFilter, tipoTransaccionFilter, bodegasFilter, estacionamientosFilter, cuentaCobranzaFilter, areaFilter, precioFilter, precioSort]);
+
   // Paginación
   const [currentPageActive, setCurrentPageActive] = useState(1);
   const [currentPageDraft, setCurrentPageDraft] = useState(1);
@@ -1873,6 +1953,7 @@ const Propiedades = () => {
         .in('id_edificio_modelo', edificioModeloIds)
         .eq('activo', true)
         .eq('es_aprobado', true);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
       
       // Also apply ownership filter if rep empresa dueña
       if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
@@ -1922,6 +2003,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', true)
           .eq('es_aprobado', true);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (!hasUnrestrictedAccess && accessiblePropertyIds && accessiblePropertyIds.length > 0) {
@@ -2116,15 +2199,18 @@ const Propiedades = () => {
           }
         }
 
-        // Determine if we need full fetch for local filtering
+        // Precio es columna directa → filtrar server-side evita el tope de 1000 filas del fetch cliente.
+        if (precioFilterIsActive) {
+          query = query.gte('precio_lista', precioFilter[0]).lte('precio_lista', precioFilter[1]);
+        }
+
+        // Determine if we need full fetch for local filtering (solo filtros no expresables en SQL)
         const needsFullFetch =
           bodegasFilter !== "" ||
           estacionamientosFilter !== "" ||
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) || // Need local filter for "no"
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
           precioSort !== null;
 
         let enrichedData;
@@ -2309,6 +2395,7 @@ const Propiedades = () => {
             .in('id_edificio_modelo', edificioModeloIds)
             .eq('activo', true)
             .eq('es_aprobado', false);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
           
           if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
             propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
@@ -2344,6 +2431,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', true)
           .eq('es_aprobado', false);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (draftPropertyIds && draftPropertyIds.length > 0) {
@@ -2540,8 +2629,7 @@ const Propiedades = () => {
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) ||
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
+          precioFilterIsActive ||
           precioSort !== null;
 
         let enrichedData;
@@ -2726,6 +2814,7 @@ const Propiedades = () => {
             .in('id_edificio_modelo', edificioModeloIds)
             .eq('activo', false)
             .eq('es_aprobado', false);
+        propQuery = propQuery.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
           
           if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
             propQuery = propQuery.in('id_entidad_relacionada_dueno', ownershipEntityIds);
@@ -2761,6 +2850,8 @@ const Propiedades = () => {
           `, { count: 'exact' })
           .eq('activo', false)
           .eq('es_aprobado', false);
+        // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
+        query = query.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
 
         // Apply pre-computed property ID filter for restricted users
         if (deletedPropertyIds && deletedPropertyIds.length > 0) {
@@ -2957,8 +3048,7 @@ const Propiedades = () => {
           (cuentaCobranzaFilter === "no" && propertyIdsWithCuentas.length > 0) ||
           areaFilter[0] !== 0 ||
           areaFilter[1] !== 500 ||
-          precioFilter[0] !== 0 ||
-          precioFilter[1] !== 100000000 ||
+          precioFilterIsActive ||
           precioSort !== null;
 
         let enrichedData;
@@ -3673,7 +3763,41 @@ const Propiedades = () => {
 
       // Determine if this is a product offer
       const isProductOffer = !!currentOffer.id_producto;
-      
+
+      // Pre-check: una propiedad solo puede tener UNA cuenta de cobranza activa de propiedad.
+      // El workflow de n8n rechaza silenciosamente (HTTP 200 sin crear nada) cuando ya existe,
+      // por lo que hay que detectarlo aquí y avisar al usuario en lugar de reportar falso éxito.
+      if (!isProductOffer) {
+        const { data: ofertasPropiedad } = await supabase
+          .from('ofertas')
+          .select('id')
+          .eq('id_propiedad', propertyId)
+          .is('id_producto', null)
+          .eq('activo', true);
+
+        const ofertaIds = (ofertasPropiedad || []).map(o => o.id);
+        if (ofertaIds.length > 0) {
+          const { data: cuentaExistente } = await supabase
+            .from('cuentas_cobranza')
+            .select('id, id_oferta')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .limit(1)
+            .maybeSingle();
+
+          if (cuentaExistente) {
+            toast({
+              title: "La propiedad ya tiene cuenta de cobranza",
+              description: `Existe la cuenta CC-${String(cuentaExistente.id).padStart(6, '0')} activa (oferta OP-${String(cuentaExistente.id_oferta).padStart(6, '0')}). Cancela o cede esa cuenta antes de generar una nueva.`,
+              variant: "destructive",
+            });
+            setConfirmGenerateAccountOpen(false);
+            setSelectedOfferForAccount(null);
+            return;
+          }
+        }
+      }
+
       // Get property details to get id_entidad_relacionada_dueno
       const allProperties = [...sortedActiveProperties, ...sortedDraftProperties, ...sortedInactiveProperties];
       const property = allProperties?.find(p => p.id === propertyId);
@@ -3812,6 +3936,27 @@ const Propiedades = () => {
 
       const responseData = notifData?.n8nResponse ?? {};
 
+      // Post-verify: n8n puede responder 200 sin haber creado la cuenta (rechazo silencioso).
+      // Confirmar contra la BD que la cuenta realmente existe antes de reportar éxito.
+      let cuentaCreada: { id: number } | null = null;
+      for (let intento = 0; intento < 3 && !cuentaCreada; intento++) {
+        if (intento > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        const { data: cuentaVerificada } = await supabase
+          .from('cuentas_cobranza')
+          .select('id')
+          .eq('id_oferta', offerId)
+          .eq('activo', true)
+          .limit(1)
+          .maybeSingle();
+        cuentaCreada = cuentaVerificada;
+      }
+
+      if (!cuentaCreada) {
+        throw new Error('El servidor respondió pero la cuenta de cobranza no se creó. Revisa el workflow de n8n (aplicaPago).');
+      }
+
       // Si es oferta de propiedad (no producto), actualizar estatus a "Apartado" (4)
       if (!isProductOffer && propertyId) {
         const { error: updateError } = await supabase
@@ -3868,7 +4013,7 @@ const Propiedades = () => {
 
       toast({
         title: "Error",
-        description: "No se pudo generar la cuenta de cobranza",
+        description: error?.message || "No se pudo generar la cuenta de cobranza",
         variant: "destructive",
       });
       return; // Exit early on error
@@ -3896,8 +4041,7 @@ const Propiedades = () => {
     cuentaCobranzaFilter !== "" ||
     areaFilter[0] !== 0 ||
     areaFilter[1] !== 500 ||
-    precioFilter[0] !== 0 ||
-    precioFilter[1] !== 100000000;
+    precioFilterIsActive;
 
   const totalActivePage = Math.ceil((hasClientSideFilters ? filteredActivosCount : totalActivosCount) / itemsPerPage);
   const totalDraftPage = Math.ceil((hasClientSideFilters ? filteredDraftCount : totalDraftCount) / itemsPerPage);
@@ -5143,7 +5287,7 @@ const Propiedades = () => {
             </div>
             
             {/* Filtros específicos */}
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-4 p-4 bg-muted/50 rounded-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-5 p-5 rounded-xl border bg-muted/30">
               <div>
                 <label className="text-sm font-medium mb-2 block">Desarrollo</label>
                 <Popover open={isProjectFilterOpen} onOpenChange={setIsProjectFilterOpen}>
@@ -5318,36 +5462,14 @@ const Propiedades = () => {
               </div>
               )}
               {canSeeAdvancedFilters && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Recámaras</label>
-                    <div className="flex gap-1.5">
-                      {[1, 2, 3, '4+'].map((val) => {
-                        const strVal = String(val);
-                        const isActive = recamarasFilterInput === strVal;
-                        return (
-                          <Button
-                            key={strVal}
-                            variant={isActive ? "default" : "outline"}
-                            size="sm"
-                            className={cn("min-w-[40px]", isActive && "bg-primary text-primary-foreground")}
-                            onClick={() => setRecamarasFilterInput(isActive ? null : strVal)}
-                          >
-                            {strVal}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Baños</label>
-                    <Input
-                      placeholder="Ej: 1, 2..."
-                      value={banosFilterInput}
-                      onChange={(e) => setBanosFilterInput(e.target.value)}
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Baños</label>
+                  <Input
+                    placeholder="Ej: 1, 2..."
+                    value={banosFilterInput}
+                    onChange={(e) => setBanosFilterInput(e.target.value)}
+                  />
+                </div>
               )}
               {canSeeAdvancedFilters && (
                 <div>
@@ -5468,37 +5590,65 @@ const Propiedades = () => {
                 </div>
               )}
               {canSeeAdvancedFilters && (
-                <>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Tiene Cuenta de Cobranza</label>
+                  <Select value={cuentaCobranzaFilter} onValueChange={setCuentaCobranzaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por cuenta..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {/* Fila: Recámaras + Bodega + Estacionamiento */}
+              {canSeeAdvancedFilters && (
+                <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Recámaras</label>
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, '4+'].map((val) => {
+                        const strVal = String(val);
+                        const isActive = recamarasFilterInput === strVal;
+                        return (
+                          <Button
+                            key={strVal}
+                            variant={isActive ? "default" : "outline"}
+                            size="sm"
+                            className={cn("min-w-[40px]", isActive && "bg-primary text-primary-foreground")}
+                            onClick={() => setRecamarasFilterInput(isActive ? null : strVal)}
+                          >
+                            {strVal}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Con bodega</label>
-                    <Switch
-                      checked={bodegasFilter === "con_bodegas"}
-                      onCheckedChange={(checked) => setBodegasFilter(checked ? "con_bodegas" : "")}
-                    />
+                    <div className="flex items-center h-9">
+                      <Switch
+                        checked={bodegasFilter === "con_bodegas"}
+                        onCheckedChange={(checked) => setBodegasFilter(checked ? "con_bodegas" : "")}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Con estacionamiento</label>
-                    <Switch
-                      checked={estacionamientosFilter === "con_estacionamientos"}
-                      onCheckedChange={(checked) => setEstacionamientosFilter(checked ? "con_estacionamientos" : "")}
-                    />
+                    <div className="flex items-center h-9">
+                      <Switch
+                        checked={estacionamientosFilter === "con_estacionamientos"}
+                        onCheckedChange={(checked) => setEstacionamientosFilter(checked ? "con_estacionamientos" : "")}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Tiene Cuenta de Cobranza</label>
-                    <Select value={cuentaCobranzaFilter} onValueChange={setCuentaCobranzaFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filtrar por cuenta..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="si">Sí</SelectItem>
-                        <SelectItem value="no">No</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
+                </div>
               )}
+              {/* Fila: Rangos (Área + Precio) — excepción, fila propia */}
               {canSeeAdvancedFilters && (
-                <>
+                <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium mb-2 block">Área (m²)</label>
                     <div className="flex items-center gap-2 mb-2">
@@ -5549,7 +5699,7 @@ const Propiedades = () => {
                       className="mt-1"
                     />
                   </div>
-                  <div className="min-w-[200px]">
+                  <div>
                     <label className="text-sm font-medium mb-2 block whitespace-nowrap">Rango de precio</label>
                     <div className="flex items-center gap-2 mb-2">
                       <Input
@@ -5601,7 +5751,7 @@ const Propiedades = () => {
                       className="mt-1"
                     />
                   </div>
-                </>
+                </div>
               )}
             </div>
             
@@ -5862,7 +6012,7 @@ const Propiedades = () => {
                      <TableHead>Esquema de Pago</TableHead>
                      <TableHead>Estatus Aprob.</TableHead>
                      <TableHead>Cuenta de Cobranza</TableHead>
-                     <TableHead>Descarga</TableHead>
+                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -6036,7 +6186,7 @@ const Propiedades = () => {
                                                ? formatEscalonadoLabel(scheme, tramos, selectedPropertyForOffers?.precio_lista)
                                                : (() => {
                                                    const proyFechaEntrega = (proyectos as any[])?.find((p: any) => p.id === selectedPropertyForOffers?.proyecto_id)?.fecha_entrega as string | null | undefined;
-                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesEntreFechas(new Date(), proyFechaEntrega) : 0;
+                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesMensualidadesRestantes(proyFechaEntrega) : 0;
                                                    const precioLista = selectedPropertyForOffers?.precio_lista || 0;
                                                    const dyn = precioLista > 0 ? calcDynamicScheme(scheme, precioLista, dynMeses) : null;
                                                    const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);
@@ -6185,6 +6335,40 @@ const Propiedades = () => {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p>Enviar oferta por correo</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        title="Abrir oferta digital"
+                                        onClick={() => window.open(`${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`, '_blank', 'noopener')}
+                                      >
+                                        <ExternalLink className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Abrir oferta digital</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        title="Copiar link de oferta digital"
+                                        onClick={() => {
+                                          const url = `${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`;
+                                          navigator.clipboard.writeText(url);
+                                          toast({ title: 'Link copiado', description: url });
+                                        }}
+                                      >
+                                        <Copy className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Copiar link de oferta digital</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </div>

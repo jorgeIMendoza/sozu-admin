@@ -246,7 +246,7 @@ export default function MiInformacion() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <InmobiliariaHeader 
         selectedInmobiliariaId={selectedInmobiliariaId}
         onInmobiliariaChange={setSelectedInmobiliariaId}

@@ -9,12 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileText, Upload, Eye, Trash2, AlertTriangle, Loader2, CheckCircle2, History, Edit } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { DocumentHistoryDialog } from "./DocumentHistoryDialog";
 import { DocumentStatusChangeDialog } from "./DocumentStatusChangeDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
+import {
+  TIPO_DOC_FACTURA_COMISION_EXTERNA,
+  sincronizarFacturaComisionEnCuenta,
+} from "@/utils/facturaComisionExterna";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -471,9 +476,24 @@ export function DocumentsTab({
           .from('cuentas_cobranza')
           .update({ numero_escritura: numeroValue })
           .eq('id', idCuentaCobranza);
-        
+
         if (updateError) {
           console.error('Error actualizando numero_escritura:', updateError);
+        }
+      }
+
+      // Factura de comisión externa: sincronizar cuentas_cobranza para que la
+      // cuenta entre al pipeline de cobro al desarrollador (habilita el botón
+      // "Ejecutar pago" en Pagos a externos)
+      if (parseInt(selectedTipoDocumento) === TIPO_DOC_FACTURA_COMISION_EXTERNA && idCuentaCobranza) {
+        const esXml = selectedFile.name.toLowerCase().endsWith('.xml');
+        try {
+          await sincronizarFacturaComisionEnCuenta(
+            idCuentaCobranza,
+            esXml ? { xml: urlData.publicUrl } : { pdf: urlData.publicUrl },
+          );
+        } catch (syncError) {
+          console.error('Error sincronizando factura de comisión en cuenta:', syncError);
         }
       }
 
@@ -1290,221 +1310,152 @@ export function DocumentsTab({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Documentos</h3>
-        <Button 
-          type="button" 
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          {isLoading ? 'Cargando...' : `${documentos.length} documento${documentos.length !== 1 ? 's' : ''}`}
+        </p>
+        <button
+          type="button"
           onClick={() => setIsUploadDialogOpen(true)}
           disabled={isReadOnly}
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
-          <Upload className="mr-2 h-4 w-4" />
-          Subir Documento
-        </Button>
+          <Upload className="size-3.5" />Subir documento
+        </button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Documentos Adjuntos ({documentos.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {hasInvoices && entityType === 'cuenta_cobranza' && (
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                Las facturas se muestran en la pestaña Facturas
-              </p>
-            </div>
-          )}
-          {isLoading ? (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground">Cargando documentos...</p>
-            </div>
-          ) : documentos.length === 0 && pendingDocuments.length === 0 ? (
-            <div className="text-center py-6">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-              <p className="text-muted-foreground">No hay documentos adjuntos</p>
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                   <TableHead>Tipo de Documento</TableHead>
-                   <TableHead>Número</TableHead>
-                   <TableHead>Estatus</TableHead>
-                   <TableHead>Fecha</TableHead>
-                   <TableHead className="text-center">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {/* Pending documents */}
-                  {pendingDocuments.map((pendingDoc) => {
-                    const tipoDocumentoNombre = tiposDocumento.find(t => t.id.toString() === pendingDoc.tipoDocumento)?.nombre || 'Tipo desconocido';
-                    return (
-                      <TableRow key={pendingDoc.tempId}>
-                        <TableCell className="font-medium">-</TableCell>
-                        <TableCell>{tipoDocumentoNombre}</TableCell>
-                        <TableCell></TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">Pendiente</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date().toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {!isReadOnly && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeletePending(pendingDoc.tempId)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  
-                  {/* Saved documents */}
-                  {documentos.map((documento, index) => {
-                    return (
-                      <TableRow key={`${documento.numero}-${index}`}>
-                        <TableCell className="font-medium">{index + 1}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span>{documento.tipo_documento_nombre}</span>
-                            {documento.id_categoria_documento === 6 && (
-                              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
-                                Escrituración
-                              </Badge>
-                            )}
-                            {documento.id_categoria_documento === 7 && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
-                                Entrega
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{documento.numero || ''}</TableCell>
-                        <TableCell>
-                          <Badge variant={documento.id_estatus_verificacion === 2 ? "default" : documento.id_estatus_verificacion === 3 ? "destructive" : "secondary"}>
-                            {documento.id_estatus_verificacion === 2 ? "Validado" : documento.id_estatus_verificacion === 3 ? "Rechazado" : documento.id_estatus_verificacion === 4 ? "Expirado" : "Pendiente"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(documento.fecha_creacion).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center space-x-1">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setViewerDialog({
-                                        isOpen: true,
-                                        url: documento.url,
-                                        title: documento.tipo_documento_nombre || 'Documento'
-                                      });
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Ver documento</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setHistoryDialog({
-                                        isOpen: true,
-                                        documentId: documento.id,
-                                        documentName: documento.tipo_documento_nombre || 'Documento'
-                                      });
-                                    }}
-                                  >
-                                    <History className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Ver historial de verificación</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            
-                            {!isReadOnly && !hideStatusChange && canEditStatus && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          setStatusChangeDialog({
-                                            isOpen: true,
-                                            document: documento,
-                                            isLoading: false
-                                          });
-                                        }}
-                                      >
-                                        <Edit className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Cambiar estatus</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                            )}
-                            {!isReadOnly && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setDocumentToDelete(documento)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Eliminar documento</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {hasInvoices && entityType === 'cuenta_cobranza' && (
+        <div className="p-3 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
+          <p className="text-[12px] text-blue-700 dark:text-blue-300">
+            Las facturas se muestran en la pestaña Facturas
+          </p>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-[13px] text-muted-foreground">Cargando documentos...</p>
+        </div>
+      ) : documentos.length === 0 && pendingDocuments.length === 0 ? (
+        <div className="py-12 text-center space-y-2">
+          <FileText className="h-7 w-7 mx-auto text-muted-foreground/20" />
+          <p className="text-[13px] text-muted-foreground">No hay documentos adjuntos</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border/60">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="sozu-thead">
+                {['Tipo de documento', 'Número', 'Estatus', 'Fecha', ''].map((h, i) => (
+                  <th key={i} className={cn('px-3 py-2.5 text-[10px] whitespace-nowrap', i === 2 && 'text-center', i === 4 && 'text-center w-px')}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Pending documents */}
+              {pendingDocuments.map((pendingDoc) => {
+                const tipoDocumentoNombre = tiposDocumento.find(t => t.id.toString() === pendingDoc.tipoDocumento)?.nombre || 'Tipo desconocido';
+                return (
+                  <tr key={pendingDoc.tempId} className="border-b border-border/50 bg-muted/20">
+                    <td className="px-3 py-2.5 text-[12px]">{tipoDocumentoNombre}</td>
+                    <td className="px-3 py-2.5 text-[12px] text-muted-foreground">-</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Pendiente</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-[12px] tabular-nums text-muted-foreground">{new Date().toLocaleDateString()}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePending(pendingDoc.tempId)}
+                          title="Eliminar"
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* Saved documents */}
+              {documentos.map((documento, index) => {
+                const estatusCfg = documento.id_estatus_verificacion === 2
+                  ? { label: 'Validado', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                  : documento.id_estatus_verificacion === 3
+                  ? { label: 'Rechazado', cls: 'bg-red-50 text-red-700 border-red-200' }
+                  : documento.id_estatus_verificacion === 4
+                  ? { label: 'Expirado', cls: 'bg-orange-50 text-orange-700 border-orange-200' }
+                  : { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+                return (
+                  <tr key={`${documento.numero}-${index}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px]">{documento.tipo_documento_nombre}</span>
+                        {documento.id_categoria_documento === 6 && (
+                          <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700">Escrituración</span>
+                        )}
+                        {documento.id_categoria_documento === 7 && (
+                          <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">Entrega</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{documento.numero || '-'}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', estatusCfg.cls)}>{estatusCfg.label}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-[12px] tabular-nums text-muted-foreground whitespace-nowrap">
+                      {new Date(documento.fecha_creacion).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button
+                          type="button"
+                          title="Ver documento"
+                          onClick={() => setViewerDialog({ isOpen: true, url: documento.url, title: documento.tipo_documento_nombre || 'Documento' })}
+                          className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Eye className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Ver historial de verificación"
+                          onClick={() => setHistoryDialog({ isOpen: true, documentId: documento.id, documentName: documento.tipo_documento_nombre || 'Documento' })}
+                          className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <History className="size-3.5" />
+                        </button>
+                        {!isReadOnly && !hideStatusChange && canEditStatus && (
+                          <button
+                            type="button"
+                            title="Cambiar estatus"
+                            onClick={() => setStatusChangeDialog({ isOpen: true, document: documento, isLoading: false })}
+                            className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Edit className="size-3.5" />
+                          </button>
+                        )}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            title="Eliminar documento"
+                            onClick={() => setDocumentToDelete(documento)}
+                            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Document Viewer Dialog */}
       <Dialog open={viewerDialog.isOpen} onOpenChange={(open) => setViewerDialog({ ...viewerDialog, isOpen: open })}>

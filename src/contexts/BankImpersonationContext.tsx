@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useBancosConvenio,
   type BancoConvenio,
@@ -53,14 +54,25 @@ export function useBancoScope() {
 }
 
 /**
- * Banco con convenio actualmente seleccionado. Si no hay selección explícita,
- * cae al primer convenio activo. Devuelve `null` mientras no haya convenios
- * (p.ej. DDL pendiente).
+ * Banco con convenio actualmente seleccionado.
+ *
+ * - Usuarios con banco vinculado (usuarios.id_banco — Supervisor/Operador
+ *   Banco) y SIN permiso de impersonar: siempre su propio banco.
+ * - Roles con puede_impersonar: el banco elegido en el selector "Ver como".
+ * - Fallback: primer convenio activo. Devuelve `null` mientras no haya
+ *   convenios (p.ej. DDL pendiente).
  */
 export function useCurrentBanco(): BancoConvenio | null {
+  const { profile } = useAuth();
   const { selectedBancoId } = useBancoScope();
   const { data: convenios = [] } = useBancosConvenio();
   if (convenios.length === 0) return null;
+
+  const canImpersonate = profile?.puede_impersonar === true;
+  if (!canImpersonate && profile?.id_banco != null) {
+    return convenios.find((b) => b.id_banco === profile.id_banco) ?? null;
+  }
+
   if (selectedBancoId != null) {
     const match = convenios.find((b) => b.id_banco === selectedBancoId);
     if (match) return match;

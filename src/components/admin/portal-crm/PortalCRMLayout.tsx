@@ -66,14 +66,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { CrmImpersonationSelector } from "./CrmImpersonationSelector";
 import { CrmOrgSwitcher } from "./CrmOrgSwitcher";
 
-const sozuLogo = SOZU_LOGO_URL;
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
@@ -190,6 +191,8 @@ export const PortalCRMLayout = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const { isPathAllowed, allowedPaths, isSuperAdmin, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
+  const canImpersonate = profile?.puede_impersonar === true;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const { data: crmSubmenus, isLoading: isLoadingSubmenus } = useCrmSubmenus();
 
   const { data: myPersonaData } = useQuery({
@@ -293,7 +296,7 @@ export const PortalCRMLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={sozuLogo} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal CRM
         </p>
@@ -390,16 +393,18 @@ export const PortalCRMLayout = () => {
         </button>
 
         <div className="flex gap-2">
-          <button
-            onClick={() => navigate("/admin")}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          >
-            <ArrowLeft className="size-4 shrink-0" />
-            Regresar
-          </button>
+          {canReturnToAdmin && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <ArrowLeft className="size-4 shrink-0" />
+              Regresar
+            </button>
+          )}
           <button
             onClick={signOut}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors"
+            className={`${canReturnToAdmin ? "flex-1" : "w-full"} flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors`}
           >
             <LogOut className="size-4 shrink-0" />
             Cerrar sesión
@@ -431,8 +436,8 @@ export const PortalCRMLayout = () => {
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
             <CrmOrgSwitcher />
 
-            {/* Impersonation selector — self-guards for superadmin */}
-            {isSuperAdmin && <CrmImpersonationSelector />}
+            {/* Impersonation selector — self-guards via puede_impersonar */}
+            {canImpersonate && <CrmImpersonationSelector />}
 
             {/* Avatar + perfil — pushed to right */}
             <div className="flex items-center gap-2 ml-auto">
@@ -479,14 +484,14 @@ export const PortalCRMLayout = () => {
             <div className="px-4 pb-3">
               <CrmOrgSwitcher className="w-full max-w-none" />
             </div>
-            {isSuperAdmin && (
+            {canImpersonate && (
               <div className="px-4 pb-3">
                 <CrmImpersonationSelector />
               </div>
             )}
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-64px)]">
+          <main className="px-8 py-4 bg-background min-h-[calc(100vh-64px)]">
             <Outlet />
           </main>
         </div>

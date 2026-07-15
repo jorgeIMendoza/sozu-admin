@@ -9,10 +9,12 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { usePortalNav } from "@/hooks/usePortalNav";
@@ -35,7 +37,7 @@ export const PortalInmobiliariaLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const isInmobiliariaRole = profile?.rol_nombre === "Inmobiliaria";
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const canImpersonate = profile?.puede_impersonar === true;
   const { personaId } = useInmobiliariaPersonaId();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -83,7 +85,8 @@ export const PortalInmobiliariaLayout = () => {
   const tabs = usePortalNav(PORTAL_INMOB_MENU_ID, iconMap, LayoutDashboard);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
-  const showBackButton = !isInmobiliariaRole;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  const showBackButton = canReturnToAdmin;
 
   const currentSection = tabs.find(t => isActive(t.path))?.label || "";
 
@@ -101,7 +104,7 @@ export const PortalInmobiliariaLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Inmobiliaria
         </p>
@@ -210,7 +213,7 @@ export const PortalInmobiliariaLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            {isSuperAdmin && <InmobiliariaImpersonationSelector />}
+            {canImpersonate && <InmobiliariaImpersonationSelector />}
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => navigate("/admin/portal-inmobiliaria/configuracion")}
@@ -243,14 +246,14 @@ export const PortalInmobiliariaLayout = () => {
                 {initials}
               </button>
             </div>
-            {isSuperAdmin && (
+            {canImpersonate && (
               <div className="px-4 pb-3">
                 <InmobiliariaImpersonationSelector />
               </div>
             )}
           </header>
 
-          <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-64px)]">
+          <main className="px-8 py-4 bg-background min-h-[calc(100vh-64px)]">
             <Outlet />
           </main>
         </div>

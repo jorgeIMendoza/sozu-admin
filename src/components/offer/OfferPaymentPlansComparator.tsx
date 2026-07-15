@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Wallet, TrendingDown, CalendarClock, KeyRound, BadgePercent, Star } from "lucide-react";
+import { Wallet, TrendingDown, CalendarClock, KeyRound, BadgePercent, Star, PiggyBank, Info } from "lucide-react";
 import { formatMXN, useOfferStore, useSelectedPlanId, type PaymentPlan } from "@/lib/offers/offer-data";
 import RollingNumber from "@/components/common/RollingNumber";
 
@@ -66,13 +66,16 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
 
   const hasPersonalized = plans.some((p) => p.isPersonalized);
 
-  const installmentsSublabel = selectedPlan.installments?.endDate
-    ? `Hasta ${new Date(selectedPlan.installments.endDate).toLocaleDateString("es-MX", {
-        month: "long",
-        year: "numeric",
-      })}`
-    : selectedPlan.installments
-    ? `${selectedPlan.installments.count} pagos mensuales`
+  // Las mensualidades corren hasta UN MES ANTES de la entrega (el mes de entrega
+  // es el Pago a escrituración). Mostrar ese último mes, no el de entrega.
+  const lastInstallmentLabel = (() => {
+    if (!selectedPlan.installments?.endDate) return null;
+    const d = new Date(selectedPlan.installments.endDate);
+    d.setMonth(d.getMonth() - 1);
+    return d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  })();
+  const installmentsSublabel = selectedPlan.installments
+    ? `${selectedPlan.installments.count} mensualidades${lastInstallmentLabel ? ` · hasta ${lastInstallmentLabel}` : ""}`
     : "";
 
   return (
@@ -173,7 +176,7 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
           <div
             className="flex w-full h-3 rounded-full overflow-hidden bg-muted"
             role="img"
-            aria-label={`Distribución del pago: Enganche ${selectedPlan.downPaymentPct}%${selectedPlan.installmentsPct > 0 ? `, Mensualidades ${selectedPlan.installmentsPct}%` : ""}, A la entrega ${selectedPlan.finalPaymentPct}%`}
+            aria-label={`Distribución del pago: Enganche ${selectedPlan.downPaymentPct}%${selectedPlan.installmentsPct > 0 ? `, Mensualidades ${selectedPlan.installmentsPct}%` : ""}, Pago a escrituración ${selectedPlan.finalPaymentPct}%`}
           >
             <div
               className="h-full bg-primary"
@@ -195,17 +198,29 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
             {selectedPlan.installmentsPct > 0 && (
               <LegendItem color="bg-primary/40" label="Mensualidades" pct={selectedPlan.installmentsPct} />
             )}
-            <LegendItem color="bg-foreground/70" label="A la entrega" pct={selectedPlan.finalPaymentPct} />
+            <LegendItem color="bg-foreground/70" label="Pago a escrituración" pct={selectedPlan.finalPaymentPct} />
           </div>
         </div>
 
         {/* Breakdown numérico */}
         <div>
+          {selectedPlan.apartado != null && (
+            <FlowRow
+              icon={PiggyBank}
+              label="Apartado"
+              sublabel="Reserva inicial · se descuenta del enganche"
+              amount={selectedPlan.apartado}
+            />
+          )}
           <FlowRow
             icon={Wallet}
-            label="Enganche hoy"
-            sublabel={`${selectedPlan.downPaymentPct}% del precio`}
-            amount={selectedPlan.downPaymentAmount}
+            label="Enganche"
+            sublabel={
+              selectedPlan.downPaymentNetAmount != null
+                ? `${selectedPlan.downPaymentPct}% del precio, menos el apartado`
+                : `${selectedPlan.downPaymentPct}% del precio`
+            }
+            amount={selectedPlan.downPaymentNetAmount ?? selectedPlan.downPaymentAmount}
           />
           {selectedPlan.installments && (
             <FlowRow
@@ -218,8 +233,8 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
           )}
           <FlowRow
             icon={KeyRound}
-            label="Pago a la entrega"
-            sublabel={`${selectedPlan.finalPaymentPct}% al recibir las llaves`}
+            label="Pago a escrituración"
+            sublabel={`${selectedPlan.finalPaymentPct}% al escriturar la unidad`}
             amount={selectedPlan.finalPaymentAmount}
           />
           {selectedPlan.discountAmount > 0 && (
@@ -242,6 +257,18 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
           )}
         </div>
       </div>
+
+      {selectedPlan.installments && selectedPlan.installments.count > 0 && (
+        <div className="mt-4 flex items-start gap-2.5 p-3 rounded-xl bg-muted/40 border border-border/60">
+          <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            En caso de que la propiedad pueda escriturarse o entregarse antes de que transcurran
+            las <span className="font-semibold text-foreground">{selectedPlan.installments.count} mensualidades</span>,
+            el cliente deberá liquidar la totalidad del saldo pendiente del precio. Las mensualidades
+            no cubiertas se acumulan al Pago a escrituración.
+          </p>
+        </div>
+      )}
 
       <p className="mt-4 text-[11px] text-muted-foreground leading-relaxed">
         Esquemas vigentes a la fecha de expedición de esta oferta. Sujetos a aprobación interna y

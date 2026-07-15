@@ -35,11 +35,14 @@ async function fetchDocuments(personaId: number): Promise<DocumentRecord[]> {
     .eq("id_persona", personaId)
     .eq("activo", true)
     .eq("es_draft", false)
-    .not("id_cuenta_cobranza", "is", null);
+    .not("id_cuenta_cobranza", "is", null)
+    .not("id_tipo_documento", "in", "(21,22)");
 
-  if (!docs?.length) return [];
+  // Exclude tipos 21 (Factura XML) and 22 (Factura PDF) — shown in FacturasSection instead
+  const filtered = (docs ?? []).filter(d => ![21, 22].includes(Number(d.id_tipo_documento)));
+  if (!filtered.length) return [];
 
-  const tipoIds = [...new Set(docs.map((d) => d.id_tipo_documento as number).filter(Boolean))];
+  const tipoIds = [...new Set(filtered.map((d) => d.id_tipo_documento as number).filter(Boolean))];
   const { data: tipos } = tipoIds.length
     ? await supabase
         .from("tipos_documento")
@@ -49,7 +52,7 @@ async function fetchDocuments(personaId: number): Promise<DocumentRecord[]> {
 
   const tipoMap = Object.fromEntries((tipos ?? []).map((t) => [t.id as number, t]));
 
-  const records: DocumentRecord[] = docs.map((doc): DocumentRecord => {
+  const records: DocumentRecord[] = filtered.map((doc): DocumentRecord => {
     const tipo = tipoMap[doc.id_tipo_documento as number];
     const categoriaId = Number(tipo?.id_categoria_documento ?? 9);
     const url = String(doc.url);

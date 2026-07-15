@@ -116,8 +116,8 @@ function FacturaUploadButton({ cuentaId, inmobEmail, personaId, onUploaded, disa
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `facturas-comision/${cuentaId}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("documentos").upload(path, file);
+      const path = `facturas-comision/${cuentaId}/${crypto.randomUUID()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("documentos").upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
@@ -136,7 +136,7 @@ function FacturaUploadButton({ cuentaId, inmobEmail, personaId, onUploaded, disa
       onUploaded();
     } catch (err: any) {
       console.error("Error uploading factura:", err);
-      toast.error("Error al subir la factura");
+      toast.error("Error al subir la factura: " + (err.message || "Error desconocido"));
     } finally {
       setUploading(false);
     }

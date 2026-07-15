@@ -497,14 +497,14 @@ export function SelfieCameraOverlay({
   initialDelayDone,
 }: SelfieCameraProps) {
   return (
-    <div className="space-y-3 pb-4">
-      <div className="text-center space-y-1">
+    <div className="flex-1 min-h-0 flex flex-col gap-3 pb-2">
+      <div className="text-center space-y-1 shrink-0">
         <h3 className="text-base font-bold text-foreground">Verifica tu identidad</h3>
         <p className="text-xs text-muted-foreground">Centra tu rostro en el óvalo</p>
       </div>
 
       {/* Camera with oval guide */}
-      <div className="relative rounded-2xl overflow-hidden bg-black aspect-[3/4]">
+      <div className="flex-1 min-h-0 relative rounded-2xl overflow-hidden bg-black">
         <video
           ref={videoRef}
           autoPlay
@@ -513,33 +513,18 @@ export function SelfieCameraOverlay({
           className="w-full h-full object-cover scale-x-[-1]"
         />
 
-        {/* Dark overlay outside oval */}
-        <div className="absolute inset-0 pointer-events-none">
-          <svg className="w-full h-full" viewBox="0 0 300 400" preserveAspectRatio="none">
-            <defs>
-              <mask id="oval-mask">
-                <rect width="300" height="400" fill="white" />
-                <ellipse cx="150" cy="175" rx="95" ry="125" fill="black" />
-              </mask>
-            </defs>
-            <rect
-              width="300"
-              height="400"
-              fill="rgba(0,0,0,0.6)"
-              mask="url(#oval-mask)"
-            />
-            <ellipse
-              cx="150"
-              cy="175"
-              rx="95"
-              ry="125"
-              fill="none"
-              stroke="white"
-              strokeWidth="2"
-              strokeDasharray="8 4"
-              opacity="0.8"
-            />
-          </svg>
+        {/* Portrait oval guide — height % keeps it portrait in any container orientation */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center" style={{ paddingBottom: "10%" }}>
+          <div
+            style={{
+              height: "78%",
+              aspectRatio: "3 / 4",
+              maxWidth: "72%",
+              borderRadius: "50%",
+              boxShadow: "0 0 0 9999px rgba(0,0,0,0.6)",
+              border: "2px dashed rgba(255,255,255,0.8)",
+            }}
+          />
         </div>
 
         {/* Stability indicator */}
@@ -559,7 +544,7 @@ export function SelfieCameraOverlay({
       </div>
 
       {/* Capture button - large circle */}
-      <div className="flex justify-center pt-1">
+      <div className="shrink-0 flex justify-center pt-1">
         <button
           onClick={onCapture}
           disabled={uploading}
@@ -590,7 +575,7 @@ export function SelfieCameraOverlay({
 
       <button
         onClick={onCancel}
-        className="w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+        className="shrink-0 w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
       >
         Cancelar
       </button>
@@ -662,8 +647,8 @@ export function DocCameraOverlay({
   };
 
   return (
-    <div className="space-y-3 pb-4">
-      <div className="text-center space-y-1">
+    <div className="flex-1 min-h-0 flex flex-col gap-3 pb-2 overflow-hidden">
+      <div className="text-center space-y-1 shrink-0">
         <h3 className="text-base font-bold text-foreground">{stepLabel}</h3>
         <p className={cn(
           "text-xs font-medium transition-colors duration-300",
@@ -677,9 +662,9 @@ export function DocCameraOverlay({
         </p>
       </div>
 
-      {/* Camera viewfinder */}
+      {/* Camera viewfinder — INE credit card ratio 85.6×54mm ≈ 8:5 */}
       <div className={cn(
-        "relative rounded-2xl overflow-hidden border-4 bg-black aspect-[4/3] transition-colors duration-300",
+        "relative rounded-2xl overflow-hidden border-4 bg-black transition-colors duration-300 shrink-0 aspect-[8/5]",
         frameTone
       )}>
         <video
@@ -738,10 +723,10 @@ export function DocCameraOverlay({
         )}
       </div>
 
-      <canvas className="hidden" />
+      <div className="flex-1 min-h-0" />
 
       {/* Round capture button — same style as selfie */}
-      <div className="flex justify-center pt-1">
+      <div className="shrink-0 flex justify-center pt-1">
         <button
           onClick={onCapture}
           disabled={uploading}
@@ -772,7 +757,7 @@ export function DocCameraOverlay({
 
       <button
         onClick={onCancel}
-        className="w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+        className="shrink-0 w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
       >
         Cancelar
       </button>

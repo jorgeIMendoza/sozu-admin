@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { ENVIRONMENT } from "@/lib/config";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -90,21 +91,16 @@ export function PipelineOfferDetailDialog({
     queryKey: ['pipeline-schemes', oferta?.id_propiedad, isProducto, oferta?.id_producto],
     queryFn: async () => {
       if (isProducto) {
-        // For product offers, fetch esquemas_pago from the product's project
+        // For product offers, only schemes tied to this product (manual ones included:
+        // product schemes are created as es_manual=true). Offering project-level schemes
+        // here points the offer to a scheme without product and n8n rejects the
+        // acuerdo generation, leaving the cuenta without acuerdos.
         if (!oferta?.id_producto) return [];
-        const { data: prod } = await (supabase as any)
-          .from('productos_servicios')
-          .select('id_proyecto')
-          .eq('id', oferta.id_producto)
-          .limit(1)
-          .single();
-        if (!prod?.id_proyecto) return [];
         const { data } = await (supabase as any)
           .from('esquemas_pago')
           .select('*')
-          .eq('id_proyecto', prod.id_proyecto)
+          .eq('id_producto', oferta.id_producto)
           .eq('activo', true)
-          .eq('es_manual', false)
           .order('orden', { ascending: true });
         return data || [];
       }
@@ -142,6 +138,23 @@ export function PipelineOfferDetailDialog({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedSchemeId) throw new Error("Selecciona un plan");
+
+      // Validación: el esquema debe corresponder al producto de la oferta (o no tener
+      // producto si la oferta es de propiedad). Un esquema equivocado deja la cuenta
+      // sin acuerdos porque n8n rechaza la generación.
+      const { data: esquema, error: esquemaError } = await supabase
+        .from('esquemas_pago')
+        .select('id_producto')
+        .eq('id', selectedSchemeId)
+        .single();
+      if (esquemaError) throw esquemaError;
+      if (isProducto && esquema?.id_producto !== oferta.id_producto) {
+        throw new Error("El plan seleccionado no pertenece al producto de esta oferta");
+      }
+      if (!isProducto && esquema?.id_producto) {
+        throw new Error("El plan seleccionado pertenece a un producto y esta oferta es de propiedad");
+      }
+
       const { error } = await (supabase as any)
         .from('ofertas')
         .update({
@@ -152,8 +165,52 @@ export function PipelineOfferDetailDialog({
         .eq('id', oferta.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Plan de pago guardado");
+
+      // Si la oferta ya tiene cuenta de cobranza, los acuerdos_pago existentes quedaron
+      // calculados con el esquema anterior (o no existen): regenerarlos vía n8n, igual
+      // que hace el detalle de cuenta del admin.
+      if (oferta.cuenta_cobranza_id) {
+        try {
+          const [{ data: cuenta }, { data: ofertaRow }] = await Promise.all([
+            supabase
+              .from('cuentas_cobranza')
+              .select('clabe_stp')
+              .eq('id', oferta.cuenta_cobranza_id)
+              .maybeSingle(),
+            supabase
+              .from('ofertas')
+              .select('id_propiedad, personas!ofertas_id_persona_lead_fkey(rfc, curp)')
+              .eq('id', oferta.id)
+              .maybeSingle(),
+          ]);
+
+          const { data: notifData, error: notifError } = await supabase.functions.invoke('enviar-notificacion', {
+            body: {
+              n8nPath: 'aplicaPago',
+              siguiente_accion: "genera_acuerdo_para_cuenta_cobranza",
+              id_oferta: oferta.id,
+              id_propiedad: ofertaRow?.id_propiedad ?? null,
+              id: oferta.cuenta_cobranza_id,
+              clabe_stp: cuenta?.clabe_stp || '',
+              rfc_curp_ordenante: ofertaRow?.personas?.rfc || ofertaRow?.personas?.curp || '',
+              environment: ENVIRONMENT,
+            },
+          });
+          const webhookOk = !notifError && (notifData?.n8nStatus ?? 500) < 400;
+          if (webhookOk) {
+            toast.success("Acuerdos de pago regenerados para la cuenta de cobranza");
+          } else {
+            console.error('Webhook genera_acuerdo not ok:', notifError, notifData);
+            toast.error("El plan se guardó pero no se regeneraron los acuerdos. Regenera desde el detalle de la cuenta de cobranza.");
+          }
+        } catch (webhookError) {
+          console.error('Error regenerating acuerdos:', webhookError);
+          toast.error("El plan se guardó pero no se regeneraron los acuerdos. Regenera desde el detalle de la cuenta de cobranza.");
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['agent-pipeline'] });
       onOpenChange(false);
     },
@@ -414,7 +471,7 @@ export function PipelineOfferDetailDialog({
         {alreadyHasScheme && (
           <div className="border-t p-2 bg-background text-center">
             <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-              <Lock className="h-3 w-3" /> Plan ya seleccionado — no se puede cambiar
+              <Lock className="h-3 w-3" /> Plan ya seleccionado - no se puede cambiar
             </p>
           </div>
         )}

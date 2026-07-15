@@ -1,9 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig } from '../types/simulator';
 import {
   defaultProjects, defaultRoles, defaultChannels, defaultScenarios,
   defaultRoleAssignments, defaultCommercialPolicies,
 } from '../utils/seed-data';
+import {
+  fetchCanalesReales, fetchEscenariosReales, seedCanalesYEscenarios,
+  upsertCanalRemoto, deleteCanalRemoto, upsertEscenarioRemoto, deleteEscenarioRemoto,
+} from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 
 const STORAGE_KEY = 'sozu-ec-simulator-state';
 
@@ -55,6 +60,9 @@ function loadState(): AppState {
           salesStartDate: p.salesStartDate || p.startDate || '',
           deliveryDate: p.deliveryDate || p.endDate || '',
         }));
+        const existingIds = new Set(parsed.projects.map((p: any) => p.id));
+        const missingDefaults = defaultProjects.filter((p) => !existingIds.has(p.id));
+        parsed.projects = [...parsed.projects, ...missingDefaults];
       }
       return parsed;
     }
@@ -69,6 +77,41 @@ function loadState(): AppState {
 export function SimulatorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+
+  // Canales y Escenarios (incluye el % de comisión por rol/canal) son
+  // compartidos vía Supabase — al montar, la BD manda sobre el localStorage
+  // local. Si las tablas aún no existen (DDL pendiente) o hay un error de
+  // red, no pasa nada: sigue funcionando 100% local, igual que antes.
+  useEffect(() => {
+    (async () => {
+      const [remoteChannels, remoteScenarios] = await Promise.all([fetchCanalesReales(), fetchEscenariosReales()]);
+      if (remoteChannels !== null && remoteChannels.length === 0) {
+        await seedCanalesYEscenarios(state.channels, []);
+      }
+      if (remoteScenarios !== null && remoteScenarios.length === 0) {
+        await seedCanalesYEscenarios([], state.scenarios);
+      }
+      setState(prev => ({
+        ...prev,
+        channels: remoteChannels && remoteChannels.length > 0 ? remoteChannels : prev.channels,
+        scenarios: remoteScenarios && remoteScenarios.length > 0 ? remoteScenarios : prev.scenarios,
+      }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const syncChannel = useCallback((c: Channel) => {
+    upsertCanalRemoto(c).then(ok => { if (!ok) toast.error(`No se pudo guardar el canal "${c.name}" en el servidor.`); });
+  }, []);
+  const syncChannelDelete = useCallback((id: string) => {
+    deleteCanalRemoto(id).then(ok => { if (!ok) toast.error('No se pudo eliminar el canal en el servidor.'); });
+  }, []);
+  const syncScenario = useCallback((s: Scenario) => {
+    upsertEscenarioRemoto(s).then(ok => { if (!ok) toast.error(`No se pudo guardar el escenario "${s.name}" en el servidor.`); });
+  }, []);
+  const syncScenarioDelete = useCallback((id: string) => {
+    deleteEscenarioRemoto(id).then(ok => { if (!ok) toast.error('No se pudo eliminar el escenario en el servidor.'); });
+  }, []);
 
   const update = useCallback((fn: (s: AppState) => AppState) => setState(prev => fn(prev)), []);
 
@@ -96,14 +139,15 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     addRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: [...s.roleAssignments, ra] })),
     updateRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: s.roleAssignments.map(x => x.id === ra.id ? ra : x) })),
     deleteRoleAssignment: (id) => update(s => ({ ...s, roleAssignments: s.roleAssignments.filter(x => x.id !== id) })),
-    addChannel: (c) => update(s => {
+    addChannel: (c) => {
       const now = new Date().toISOString();
       const entry = { id: crypto.randomUUID(), timestamp: now, user: 'Tú', action: 'created' as const };
       const withMeta: Channel = { ...c, createdAt: now, updatedAt: now, history: [...(c.history || []), entry] };
-      return { ...s, channels: [...s.channels, withMeta] };
-    }),
-    updateChannel: (c, changeNote) => update(s => {
-      const prev = s.channels.find(x => x.id === c.id);
+      update(s => ({ ...s, channels: [...s.channels, withMeta] }));
+      syncChannel(withMeta);
+    },
+    updateChannel: (c, changeNote) => {
+      const prev = state.channels.find(x => x.id === c.id);
       const now = new Date().toISOString();
       const history = [...(prev?.history || c.history || [])];
       if (prev && prev.active !== c.active) {
@@ -112,11 +156,12 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         history.push({ id: crypto.randomUUID(), timestamp: now, user: 'Tú', action: 'updated', note: changeNote });
       }
       const next: Channel = { ...c, updatedAt: now, history };
-      return { ...s, channels: s.channels.map(x => x.id === c.id ? next : x) };
-    }),
-    duplicateChannel: (id) => update(s => {
-      const orig = s.channels.find(x => x.id === id);
-      if (!orig) return s;
+      update(s => ({ ...s, channels: s.channels.map(x => x.id === c.id ? next : x) }));
+      syncChannel(next);
+    },
+    duplicateChannel: (id) => {
+      const orig = state.channels.find(x => x.id === id);
+      if (!orig) return;
       const now = new Date().toISOString();
       const newId = `ch-${crypto.randomUUID().slice(0, 8)}`;
       const dup: Channel = {
@@ -125,24 +170,29 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         createdAt: now, updatedAt: now,
         history: [{ id: crypto.randomUUID(), timestamp: now, user: 'Tú', action: 'duplicated', note: `Duplicado desde ${orig.name}` }],
       };
-      return { ...s, channels: [...s.channels, dup] };
-    }),
-    deleteChannel: (id) => update(s => ({ ...s, channels: s.channels.filter(x => x.id !== id) })),
+      update(s => ({ ...s, channels: [...s.channels, dup] }));
+      syncChannel(dup);
+    },
+    deleteChannel: (id) => {
+      update(s => ({ ...s, channels: s.channels.filter(x => x.id !== id) }));
+      syncChannelDelete(id);
+    },
     getChannelDependencies,
-    addScenario: (s) => update(st => ({ ...st, scenarios: [...st.scenarios, s] })),
-    updateScenario: (s) => update(st => ({ ...st, scenarios: st.scenarios.map(x => x.id === s.id ? s : x) })),
-    deleteScenario: (id) => update(s => ({ ...s, scenarios: s.scenarios.filter(x => x.id !== id) })),
-    duplicateScenario: (id) => update(s => {
-      const orig = s.scenarios.find(x => x.id === id);
-      if (!orig) return s;
+    addScenario: (s) => { update(st => ({ ...st, scenarios: [...st.scenarios, s] })); syncScenario(s); },
+    updateScenario: (s) => { update(st => ({ ...st, scenarios: st.scenarios.map(x => x.id === s.id ? s : x) })); syncScenario(s); },
+    deleteScenario: (id) => { update(s => ({ ...s, scenarios: s.scenarios.filter(x => x.id !== id) })); syncScenarioDelete(id); },
+    duplicateScenario: (id) => {
+      const orig = state.scenarios.find(x => x.id === id);
+      if (!orig) return;
       const newId = crypto.randomUUID();
       const dup: Scenario = {
         ...orig, id: newId, name: `${orig.name} (copia)`,
         commissionRules: orig.commissionRules.map(r => ({ ...r, id: crypto.randomUUID(), scenarioId: newId })),
         roleAssignments: orig.roleAssignments.map(r => ({ ...r, id: crypto.randomUUID() })),
       };
-      return { ...s, scenarios: [...s.scenarios, dup] };
-    }),
+      update(s => ({ ...s, scenarios: [...s.scenarios, dup] }));
+      syncScenario(dup);
+    },
     updateCommercialPolicies: (cp) => update(s => ({ ...s, commercialPolicies: cp })),
     resetToDefaults: () => setState({
       projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,

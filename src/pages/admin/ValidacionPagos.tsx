@@ -15,10 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle, Building2, ChevronDown, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileSearch, FileText, FileUp, Loader2, Pencil, XCircle, Receipt,
+  Clock, Eye, FileCheck, FileSearch, FileText, FileUp, Loader2, Pencil, Trash2, Upload, UploadCloud, XCircle, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { EliminarPagoDialog } from "@/components/admin/portal-cobranza/EliminarPagoDialog";
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/useEliminarPago";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 
@@ -43,11 +46,13 @@ interface PagoRow {
   url_recibo: string | null;
   descripcion: string | null;
   validacion_documental_efectivo: boolean;
-  estado_validacion: "coincide" | "error" | "no_coincide" | null;
+  estado_validacion: "coincide" | "error" | "no_coincide" | "sin_evidencia" | "monto_ilegible" | "monto_ausente_db" | null;
   motivo: string | null;
   monto_esperado: number | null;
   monto_real: number | null;
   tipo_nombre: string;
+  id_estatus_disponibilidad: number | null;
+  id_propiedad: number | null;
 }
 
 interface AplicacionDetalle {
@@ -163,6 +168,24 @@ function EstadoBadge({ estado }: { estado: PagoRow["estado_validacion"] }) {
     return (
       <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[10px] gap-1 whitespace-nowrap">
         <XCircle className="size-3" />No coincide
+      </Badge>
+    );
+  if (estado === "sin_evidencia")
+    return (
+      <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600 text-[10px] gap-1 whitespace-nowrap">
+        <AlertCircle className="size-3" />Sin evidencia
+      </Badge>
+    );
+  if (estado === "monto_ilegible")
+    return (
+      <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-[10px] gap-1 whitespace-nowrap">
+        <XCircle className="size-3" />Monto ilegible
+      </Badge>
+    );
+  if (estado === "monto_ausente_db")
+    return (
+      <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700 text-[10px] gap-1 whitespace-nowrap">
+        <XCircle className="size-3" />Monto ausente
       </Badge>
     );
   return (
@@ -470,14 +493,14 @@ function EditPagoValidacionModal({ row, onClose }: {
   row: PagoRow | null;
   onClose: () => void;
 }) {
-  const [estado, setEstado] = useState<"coincide" | "error" | "no_coincide">("error");
+  const [estado, setEstado] = useState<NonNullable<PagoRow["estado_validacion"]>>("error");
   const [motivo, setMotivo] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!row) return;
-    setEstado((row.estado_validacion as "coincide" | "error" | "no_coincide") ?? "error");
+    setEstado((row.estado_validacion as NonNullable<PagoRow["estado_validacion"]>) ?? "error");
     setMotivo(row.motivo ?? "");
   }, [row?.pago_id]);
 
@@ -485,18 +508,25 @@ function EditPagoValidacionModal({ row, onClose }: {
     mutationFn: async () => {
       if (!row) throw new Error("No hay pago seleccionado");
       const { error } = await (supabase as any).from("pago_validaciones")
-        .insert({ id_pago: row.pago_id, estado, motivo: motivo.trim() || null });
+        .upsert(
+          { id_pago: row.pago_id, estado, motivo: motivo.trim() || null },
+          { onConflict: "id_pago" }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.setQueryData(["validacion-pagos-all"], (old: PagoRow[] | undefined) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: { rows: PagoRow[]; readiness: Map<number, boolean> } | undefined) => {
         if (!old || !row) return old;
-        return old.map(r =>
-          r.pago_id === row.pago_id
-            ? { ...r, estado_validacion: estado as PagoRow["estado_validacion"], motivo: motivo.trim() || null }
-            : r
-        );
+        return {
+          ...old,
+          rows: old.rows.map(r =>
+            r.pago_id === row.pago_id
+              ? { ...r, estado_validacion: estado as PagoRow["estado_validacion"], motivo: motivo.trim() || null }
+              : r
+          ),
+        };
       });
+      if (row) queryClient.invalidateQueries({ queryKey: ["pago-detalle-modal", row.pago_id] });
       toast({ title: "Validación guardada" });
       onClose();
     },
@@ -552,6 +582,15 @@ function EditPagoValidacionModal({ row, onClose }: {
                 <SelectItem value="no_coincide" className="text-[12px]">
                   <span className="flex items-center gap-2"><XCircle className="size-3 text-amber-600" />No coincide</span>
                 </SelectItem>
+                <SelectItem value="sin_evidencia" className="text-[12px]">
+                  <span className="flex items-center gap-2"><AlertCircle className="size-3 text-slate-500" />Sin evidencia</span>
+                </SelectItem>
+                <SelectItem value="monto_ilegible" className="text-[12px]">
+                  <span className="flex items-center gap-2"><XCircle className="size-3 text-amber-600" />Monto ilegible</span>
+                </SelectItem>
+                <SelectItem value="monto_ausente_db" className="text-[12px]">
+                  <span className="flex items-center gap-2"><XCircle className="size-3 text-orange-600" />Monto ausente</span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -572,30 +611,191 @@ function EditPagoValidacionModal({ row, onClose }: {
   );
 }
 
+// ── Cargar evidencia / CEP ───────────────────────────────────────────────────
+// Bucket por check "Es CEP"; columna por check "Validado".
+//   validado  → url_cep  ; no validado → url_recibo
+//   es CEP    → bucket 'ceps' ; no CEP   → bucket 'evidencias_efectivo'
+
+function CargarEvidenciaModal({ row, onClose }: {
+  row: PagoRow | null;
+  onClose: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [esValido, setEsValido] = useState(false);
+  const [esCep, setEsCep] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setFile(null); setDragging(false); setEsValido(false); setEsCep(false);
+  }, [row?.pago_id]);
+
+  const bucket = esCep ? "ceps" : "evidencias_efectivo";
+  const columna: "url_cep" | "url_recibo" = esValido ? "url_cep" : "url_recibo";
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Selecciona un archivo");
+      if (!row) throw new Error("No hay pago seleccionado");
+      const ext = file.name.split(".").pop() ?? "bin";
+      const path = `${row.cuenta_id}/${row.pago_id}/${Date.now()}.${ext}`;
+      const { error: se } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+      if (se) throw se;
+      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+      const { error: ue } = await (supabase as any).from("pagos")
+        .update({ [columna]: pub.publicUrl }).eq("id", row.pago_id);
+      if (ue) throw ue;
+      return pub.publicUrl as string;
+    },
+    onSuccess: (url) => {
+      queryClient.setQueryData(["validacion-pagos-all-v2"], (old: { rows: PagoRow[]; readiness: Map<number, boolean> } | undefined) => {
+        if (!old || !row) return old;
+        return {
+          ...old,
+          rows: old.rows.map(r =>
+            r.pago_id === row.pago_id ? { ...r, [columna]: url } : r
+          ),
+        };
+      });
+      if (row) queryClient.invalidateQueries({ queryKey: ["pago-detalle-modal", row.pago_id] });
+      toast({ title: "Evidencia cargada" });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error al subir evidencia", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleClose = () => { if (!mutation.isPending) onClose(); };
+
+  return (
+    <Dialog open={row !== null} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-md w-[95vw] p-0 gap-0">
+        <DialogHeader className="px-5 py-4 border-b">
+          <DialogTitle className="flex items-center gap-2 text-[14px]">
+            <Upload className="size-4 text-muted-foreground" />Cargar evidencia de pago
+          </DialogTitle>
+        </DialogHeader>
+        <div className="px-5 py-4 space-y-4">
+          {row && (
+            <div className="rounded-xl border bg-muted/20 p-3 space-y-0.5">
+              <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{formatCuentaCobranzaId(row.cuenta_id)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Monto: <span className="font-medium text-foreground tabular-nums">{fmtCurrency(row.monto)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Fecha: <span className="font-medium text-foreground">{fmtDate(row.fecha_pago)}</span></p>
+            </div>
+          )}
+
+          {/* Dropzone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
+            className={cn("relative rounded-lg border-2 border-dashed transition-colors",
+              dragging ? "border-primary bg-primary/5" : "border-border bg-muted/30")}
+          >
+            <input
+              type="file" accept=".pdf,.jpg,.jpeg,.png,.xml"
+              onChange={e => setFile(e.target.files?.[0] ?? null)}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+            <div className="flex flex-col items-center justify-center gap-1.5 py-7 px-4 text-center pointer-events-none">
+              {file ? (
+                <>
+                  <FileCheck className="size-7 text-primary" />
+                  <p className="text-[13px] font-medium text-foreground break-all">{file.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · clic para cambiar</p>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="size-7 text-muted-foreground" />
+                  <p className="text-[13px] font-medium text-foreground">Arrastra el archivo aquí</p>
+                  <p className="text-[11px] text-muted-foreground">o haz clic para seleccionar · PDF, imagen o XML</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Checks */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+              <input type="checkbox" checked={esValido} onChange={e => setEsValido(e.target.checked)} className="size-4 accent-primary" />
+              <span className="text-[13px] font-medium text-foreground">Pago validado</span>
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+              <input type="checkbox" checked={esCep} onChange={e => setEsCep(e.target.checked)} className="size-4 accent-primary" />
+              <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+            </label>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={mutation.isPending} className="text-[12px] h-8">Cancelar</Button>
+          <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file} className="text-[12px] h-8">
+            {mutation.isPending && <Loader2 className="size-3.5 animate-spin mr-1.5" />}Cargar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Página principal ───────────────────────────────────────────────────────────
 
+// Filtros persistidos en localStorage (sobreviven navegación, F5 y nueva sesión).
+const FILTROS_KEY = "validacion-pagos-filtros";
+function loadFiltros(): any {
+  try { return JSON.parse(localStorage.getItem(FILTROS_KEY) || "{}"); } catch { return {}; }
+}
+
 export default function ValidacionPagos() {
-  const { isSuperAdmin } = useAllowedMenus();
-  const [searchCuenta, setSearchCuenta] = useState("");
-  const [searchCliente, setSearchCliente] = useState("");
-  const [searchDepto, setSearchDepto] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [debouncedCliente, setDebouncedCliente] = useState("");
-  const [debouncedDepto, setDebouncedDepto] = useState("");
-  const [filtroProyecto, setFiltroProyecto] = useState("todos");
-  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set());
-  const [filtroMetodo, setFiltroMetodo] = useState("todos");
+  const { canUpdate, canDelete } = usePagePermissions("/admin/validacion-pagos");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { eliminarPago, isDeleting } = useEliminarPago();
+  const PF = useMemo(loadFiltros, []);
+  const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta ?? "");
+  const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente ?? "");
+  const [searchDepto, setSearchDepto] = useState<string>(PF.searchDepto ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>((PF.searchCuenta ?? "").trim());
+  const [debouncedCliente, setDebouncedCliente] = useState<string>((PF.searchCliente ?? "").trim());
+  const [debouncedDepto, setDebouncedDepto] = useState<string>((PF.searchDepto ?? "").trim());
+  const [filtroProyecto, setFiltroProyecto] = useState<string>(PF.filtroProyecto ?? "todos");
+  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set(PF.filtroEstados ?? []));
+  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set(PF.filtroMetodos ?? []));
   const [searchProyecto, setSearchProyecto] = useState("");
   const [searchMetodo, setSearchMetodo] = useState("");
   const [searchComprobante, setSearchComprobante] = useState("");
-  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set());
-  const [filtroComprobante, setFiltroComprobante] = useState("todos");
+  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set(PF.filtroTipos ?? []));
+  const [filtroComprobante, setFiltroComprobante] = useState<string>(PF.filtroComprobante ?? "todos");
   const [currentPage, setCurrentPage] = useState(1);
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
   const [detallePagoRow, setDetallePagoRow] = useState<PagoRow | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("Comprobante de pago");
   const [editRow, setEditRow] = useState<PagoRow | null>(null);
+  const [cargarRow, setCargarRow] = useState<PagoRow | null>(null);
+  const [deleteRow, setDeleteRow] = useState<PagoRow | null>(null);
+  const [deleteImpacto, setDeleteImpacto] = useState<PagoImpacto | null>(null);
+
+  // Abrir confirmación de borrado + precargar el impacto (qué más se eliminará).
+  const openDelete = (row: PagoRow) => {
+    setDeleteRow(row);
+    setDeleteImpacto(null);
+    fetchPagoImpacto(row.pago_id).then(setDeleteImpacto).catch(() => setDeleteImpacto(null));
+  };
+
+  const handleConfirmDelete = async (motivo: string) => {
+    if (!deleteRow) return;
+    try {
+      await eliminarPago(deleteRow.pago_id, motivo);
+      toast({ title: "Pago eliminado", description: "El pago se marcó como eliminado y dejó de contar en los saldos." });
+      setDeleteRow(null);
+      setDeleteImpacto(null);
+      queryClient.invalidateQueries({ queryKey: ["validacion-pagos-all-v2"] });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "No se pudo eliminar", description: err?.message ?? "Error al eliminar el pago." });
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(searchCuenta.trim()); setCurrentPage(1); }, 350);
@@ -612,14 +812,21 @@ export default function ValidacionPagos() {
     return () => clearTimeout(t);
   }, [searchDepto]);
 
-
+  // Persistir filtros seleccionados (localStorage).
+  useEffect(() => {
+    localStorage.setItem(FILTROS_KEY, JSON.stringify({
+      searchCuenta, searchCliente, searchDepto, filtroProyecto,
+      filtroEstados: [...filtroEstados], filtroMetodos: [...filtroMetodos],
+      filtroTipos: [...filtroTipos], filtroComprobante,
+    }));
+  }, [searchCuenta, searchCliente, searchDepto, filtroProyecto, filtroEstados, filtroMetodos, filtroTipos, filtroComprobante]);
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
-  const { data: allRows = [], isLoading, isError } = useQuery({
-    queryKey: ["validacion-pagos-all"],
+  const { data: queryData, isLoading, isError } = useQuery({
+    queryKey: ["validacion-pagos-all-v2"],
     staleTime: 1000 * 60 * 5,
-    queryFn: async (): Promise<PagoRow[]> => {
+    queryFn: async (): Promise<{ rows: PagoRow[]; readiness: Map<number, boolean> }> => {
       const { count: totalPagos } = await (supabase as any)
         .from("pagos").select("*", { count: "exact", head: true }).eq("activo", true);
 
@@ -650,7 +857,7 @@ export default function ValidacionPagos() {
         inQuery("pago_validaciones", "id_pago", pagoIds,
           "id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion"),
         inQuery("cuentas_cobranza", "id", cuentaIds,
-          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre", { activo: true }),
+          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true }),
       ]);
 
       validacionesRaw.sort((a: any, b: any) =>
@@ -671,7 +878,7 @@ export default function ValidacionPagos() {
       const cuentaIdsSet = new Set(cuentaIds);
       const missingParentIds = [...new Set([...cuentaParentMap.values()])].filter(id => !cuentaIdsSet.has(id));
       const parentCuentas = missingParentIds.length
-        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad", { activo: true })
+        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad, precio_final", { activo: true })
         : [];
       const allCuentas = [...cuentas, ...parentCuentas];
 
@@ -718,12 +925,13 @@ export default function ValidacionPagos() {
       const personaIds = [...new Set([...compradorMap.values()])];
 
       const [props, personas] = await Promise.all([
-        inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad", { activo: true }),
+        inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad", { activo: true }),
         inQuery("personas", "id", personaIds, "id, nombre_legal"),
       ]);
 
       const propEMMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_edificio_modelo]));
       const propNumMap = new Map<number, string>(props.map((p: any) => [p.id, p.numero_propiedad]));
+      const propEstatusMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_estatus_disponibilidad]));
       const personaMap = new Map<number, string>(personas.map((p: any) => [p.id, p.nombre_legal]));
 
       const emIds = [...new Set(props.map((p: any) => p.id_edificio_modelo as number).filter(Boolean))];
@@ -738,7 +946,7 @@ export default function ValidacionPagos() {
       const proyectos = await inQuery("proyectos", "id", proyectoIds, "id, nombre");
       const proyectoMap = new Map<number, string>(proyectos.map((p: any) => [p.id, p.nombre]));
 
-      return allPagos.map(p => {
+      const rows: PagoRow[] = allPagos.map(p => {
         const v = validacionMap.get(p.id);
         const cId = p.id_cuenta_cobranza as number;
         const parentId = cuentaParentMap.get(cId);
@@ -780,20 +988,138 @@ export default function ValidacionPagos() {
           monto_esperado: v?.monto_esperado != null ? safeNum(v.monto_esperado) : null,
           monto_real: v?.monto_real != null ? safeNum(v.monto_real) : null,
           tipo_nombre,
+          id_estatus_disponibilidad: propId ? (propEstatusMap.get(propId) ?? null) : null,
+          id_propiedad: propId ?? null,
         };
       });
+
+      // ── Readiness "lista para escriturar" por unidad (propiedad) ─────────────
+      // Una unidad está lista si TODAS sus cuentas (propiedad + bodega/estac) están
+      // liquidadas (saldo ≤ $0.01) Y todos sus pagos están validados en "coincide";
+      // o como fallback si la propiedad ya tiene estatus escrituración (7).
+      const VENDIDAS = new Set([5, 7, 8, 9]);
+      const vendidasPropIds = propIds.filter(pid => VENDIDAS.has(propEstatusMap.get(pid) ?? -1));
+      const readiness = new Map<number, boolean>();
+
+      if (vendidasPropIds.length) {
+        // Todas las cuentas de cada propiedad vendida (incluye cuentas SIN pagos:
+        // p.ej. bodega/estac no abonados → cuenta no liquidada).
+        const cuentasPrincipales = await inQuery("cuentas_cobranza", "id_propiedad", vendidasPropIds,
+          "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true });
+        const cuentasHijas = cuentasPrincipales.length
+          ? await inQuery("cuentas_cobranza", "id_cuenta_cobranza_padre",
+              cuentasPrincipales.map((c: any) => c.id),
+              "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true })
+          : [];
+
+        const unitCuentas = new Map<number, any>();
+        for (const c of [...cuentasPrincipales, ...cuentasHijas]) unitCuentas.set(c.id, c);
+
+        // propId de cada cuenta: directo, o heredado del padre (cuentas hija)
+        const principalPropMap = new Map<number, number>(
+          cuentasPrincipales.filter((c: any) => c.id_propiedad != null).map((c: any) => [c.id, c.id_propiedad])
+        );
+        const cuentaToProp = new Map<number, number>();
+        for (const c of unitCuentas.values()) {
+          const pid = (c.id_propiedad ?? (c.id_cuenta_cobranza_padre ? principalPropMap.get(c.id_cuenta_cobranza_padre) : null)) as number | null;
+          if (pid != null) cuentaToProp.set(c.id, pid);
+        }
+
+        // Total aplicado al precio (es_multa=false) por cuenta, vía sus pagos
+        const unitCuentaIds = new Set([...unitCuentas.keys()]);
+        const pagosDeUnidad = allPagos.filter(p => unitCuentaIds.has(p.id_cuenta_cobranza as number));
+        const pagoCuentaMap = new Map<number, number>(pagosDeUnidad.map(p => [p.id as number, p.id_cuenta_cobranza as number]));
+        const aplicaciones = await inQuery("aplicaciones_pago", "id_pago",
+          pagosDeUnidad.map(p => p.id as number), "id_pago, monto", { activo: true, es_multa: false });
+        const aplicadoByCuenta = new Map<number, number>();
+        for (const a of aplicaciones) {
+          const cId = pagoCuentaMap.get(Number(a.id_pago));
+          if (cId != null) aplicadoByCuenta.set(cId, (aplicadoByCuenta.get(cId) ?? 0) + safeNum(a.monto));
+        }
+
+        // Cuentas agrupadas por propiedad + estado de validación de pagos por propiedad
+        const cuentasByProp = new Map<number, any[]>();
+        for (const c of unitCuentas.values()) {
+          const pid = cuentaToProp.get(c.id);
+          if (pid == null) continue;
+          const arr = cuentasByProp.get(pid);
+          if (arr) arr.push(c); else cuentasByProp.set(pid, [c]);
+        }
+        const valByProp = new Map<number, { total: number; coincide: number }>();
+        for (const p of pagosDeUnidad) {
+          const pid = cuentaToProp.get(p.id_cuenta_cobranza as number);
+          if (pid == null) continue;
+          const est = validacionMap.get(p.id)?.estado ?? null;
+          const acc = valByProp.get(pid) ?? { total: 0, coincide: 0 };
+          acc.total += 1;
+          if (est === "coincide") acc.coincide += 1;
+          valByProp.set(pid, acc);
+        }
+
+        for (const pid of vendidasPropIds) {
+          // Fallback: estatus escrituración (7) ya marcado en BD
+          if ((propEstatusMap.get(pid) ?? -1) === 7) { readiness.set(pid, true); continue; }
+
+          const cuentas = cuentasByProp.get(pid) ?? [];
+          const liquidada = cuentas.length > 0 && cuentas.every((c: any) =>
+            safeNum(c.precio_final) - (aplicadoByCuenta.get(c.id) ?? 0) <= 0.01
+          );
+          const val = valByProp.get(pid);
+          const todosCoincide = !!val && val.total > 0 && val.coincide === val.total;
+
+          readiness.set(pid, liquidada && todosCoincide);
+        }
+      }
+
+      return { rows, readiness };
     },
   });
 
+  const allRows = queryData?.rows ?? [];
+  const readiness = queryData?.readiness ?? new Map<number, boolean>();
+
   // ── Derived state ─────────────────────────────────────────────────────────────
 
+  // Rows filtered by everything EXCEPT estado — base para las cards y para filteredRows.
+  // Las cards reflejan proyecto/cliente/depto/método/tipo/comprobante, pero siguen mostrando
+  // el desglose por estado (no se auto-filtran por el filtro de estado seleccionado).
+  const rowsExceptEstado = useMemo(() => {
+    let rows = allRows;
+    if (debouncedSearch) {
+      const s = debouncedSearch.toLowerCase();
+      rows = rows.filter(r =>
+        String(r.pago_id).includes(s) ||
+        String(r.cuenta_id).includes(s) ||
+        (r.clave_rastreo ?? "").toLowerCase().includes(s)
+      );
+    }
+    if (debouncedCliente) {
+      const s = debouncedCliente.toLowerCase();
+      rows = rows.filter(r => r.cliente.toLowerCase().includes(s));
+    }
+    if (debouncedDepto) {
+      const s = debouncedDepto.trim().toLowerCase();
+      rows = rows.filter(r => (r.numero_propiedad ?? "").toLowerCase() === s);
+    }
+    if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
+    if (filtroMetodos.size > 0) rows = rows.filter(r => filtroMetodos.has(r.id_metodos_pago));
+    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
+    if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
+    if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
+    if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
+    return rows;
+  }, [allRows, debouncedSearch, debouncedCliente, debouncedDepto, filtroProyecto, filtroMetodos, filtroTipos, filtroComprobante]);
+
   const stats = useMemo(() => ({
-    total: allRows.length,
-    coincide: allRows.filter(r => r.estado_validacion === "coincide").length,
-    error: allRows.filter(r => r.estado_validacion === "error").length,
-    noCoincide: allRows.filter(r => r.estado_validacion === "no_coincide").length,
-    sinValidar: allRows.filter(r => r.estado_validacion === null).length,
-  }), [allRows]);
+    total: rowsExceptEstado.length,
+    coincide: rowsExceptEstado.filter(r => r.estado_validacion === "coincide").length,
+    error: rowsExceptEstado.filter(r => r.estado_validacion === "error").length,
+    noCoincide: rowsExceptEstado.filter(r => r.estado_validacion === "no_coincide").length,
+    sinEvidencia: rowsExceptEstado.filter(r => r.estado_validacion === "sin_evidencia").length,
+    montoIlegible: rowsExceptEstado.filter(r => r.estado_validacion === "monto_ilegible").length,
+    montoAusente: rowsExceptEstado.filter(r => r.estado_validacion === "monto_ausente_db").length,
+    sinValidar: rowsExceptEstado.filter(r => r.estado_validacion === null).length,
+  }), [rowsExceptEstado]);
 
   const proyectosOptions = useMemo(() =>
     [...new Set(allRows.map(r => r.proyecto).filter(p => p !== "-"))].sort(),
@@ -817,37 +1143,38 @@ export default function ValidacionPagos() {
   }, [allRows]);
 
   const filteredRows = useMemo(() => {
-    let rows = allRows;
-    if (debouncedSearch) {
-      const s = debouncedSearch.toLowerCase();
-      rows = rows.filter(r =>
-        String(r.pago_id).includes(s) ||
-        String(r.cuenta_id).includes(s) ||
-        (r.clave_rastreo ?? "").toLowerCase().includes(s)
-      );
-    }
-    if (debouncedCliente) {
-      const s = debouncedCliente.toLowerCase();
-      rows = rows.filter(r => r.cliente.toLowerCase().includes(s));
-    }
-    if (debouncedDepto) {
-      const s = debouncedDepto.trim().toLowerCase();
-      rows = rows.filter(r => (r.numero_propiedad ?? "").toLowerCase() === s);
-    }
-    if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
-    if (filtroEstados.size > 0) {
-      rows = rows.filter(r => {
-        const key = r.estado_validacion ?? "sin_validar";
-        return filtroEstados.has(key);
-      });
-    }
-    if (filtroMetodo !== "todos") rows = rows.filter(r => r.id_metodos_pago === Number(filtroMetodo));
-    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
-    if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
-    if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
-    if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
-    return rows;
-  }, [allRows, debouncedSearch, debouncedCliente, debouncedDepto, filtroProyecto, filtroEstados, filtroMetodo, filtroTipos, filtroComprobante]);
+    if (filtroEstados.size === 0) return rowsExceptEstado;
+    return rowsExceptEstado.filter(r => filtroEstados.has(r.estado_validacion ?? "sin_validar"));
+  }, [rowsExceptEstado, filtroEstados]);
+
+  // Clave de unidad: proyecto + número de propiedad; filas sin unidad caen a su cuenta.
+  const unidadKey = (r: PagoRow) =>
+    r.id_propiedad != null ? `p:${r.id_propiedad}`
+      : r.numero_propiedad ? `${r.proyecto}||${r.numero_propiedad}`
+      : `cc:${r.cuenta_id}`;
+  const countUnidades = (rows: PagoRow[], pred: (r: PagoRow) => boolean) => {
+    const set = new Set<string>();
+    for (const r of rows) if (pred(r)) set.add(unidadKey(r));
+    return set.size;
+  };
+
+  // "A revisar", "vendidas" y "listas para escriturar" solo dependen del filtro de proyecto.
+  const ESTATUS_VENDIDAS = new Set([5, 7, 8, 9]); // Vendido, Escrituración, Entregada, Pagada
+  const rowsByProyecto = useMemo(
+    () => filtroProyecto === "todos" ? allRows : allRows.filter(r => r.proyecto === filtroProyecto),
+    [allRows, filtroProyecto]
+  );
+  const vendidasTotal = useMemo(
+    () => countUnidades(rowsByProyecto, r => r.id_estatus_disponibilidad != null && ESTATUS_VENDIDAS.has(r.id_estatus_disponibilidad)),
+    [rowsByProyecto]
+  );
+  // Listas = unidades vendidas cuya readiness (todas las cuentas liquidadas + todos los
+  // pagos "coincide", o fallback estatus 7) es true. A revisar = vendidas que aún no lo están.
+  const listasEscriturar = useMemo(
+    () => countUnidades(rowsByProyecto, r => r.id_propiedad != null && readiness.get(r.id_propiedad) === true),
+    [rowsByProyecto, readiness]
+  );
+  const unidadesARevisar = Math.max(0, vendidasTotal - listasEscriturar);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const page = Math.min(currentPage, totalPages);
@@ -873,8 +1200,8 @@ export default function ValidacionPagos() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <Card>
+      <div className="flex flex-wrap gap-4">
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
             <FileSearch className="h-4 w-4 text-muted-foreground" />
@@ -885,7 +1212,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.coincide > 0 && "border-emerald-200 bg-emerald-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.coincide > 0 && "border-emerald-200 bg-emerald-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.coincide > 0 ? "text-emerald-700" : "text-muted-foreground")}>Coincide</CardTitle>
             <CheckCircle2 className={cn("h-4 w-4", !isLoading && stats.coincide > 0 ? "text-emerald-600" : "text-muted-foreground")} />
@@ -896,7 +1223,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.error > 0 && "border-red-200 bg-red-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.error > 0 && "border-red-200 bg-red-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.error > 0 ? "text-red-700" : "text-muted-foreground")}>Error</CardTitle>
             <AlertCircle className={cn("h-4 w-4", !isLoading && stats.error > 0 ? "text-red-600" : "text-muted-foreground")} />
@@ -907,7 +1234,7 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card className={cn(!isLoading && stats.noCoincide > 0 && "border-amber-200 bg-amber-50/40")}>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.noCoincide > 0 && "border-amber-200 bg-amber-50/40")}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className={cn("text-sm font-medium", !isLoading && stats.noCoincide > 0 ? "text-amber-700" : "text-muted-foreground")}>No coincide</CardTitle>
             <XCircle className={cn("h-4 w-4", !isLoading && stats.noCoincide > 0 ? "text-amber-600" : "text-muted-foreground")} />
@@ -918,7 +1245,40 @@ export default function ValidacionPagos() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.sinEvidencia > 0 && "border-slate-200 bg-slate-50/60")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.sinEvidencia > 0 ? "text-slate-700" : "text-muted-foreground")}>Sin evidencia</CardTitle>
+            <AlertCircle className={cn("h-4 w-4", !isLoading && stats.sinEvidencia > 0 ? "text-slate-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.sinEvidencia > 0 ? "text-slate-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.sinEvidencia.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.montoIlegible > 0 && "border-amber-200 bg-amber-50/40")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.montoIlegible > 0 ? "text-amber-700" : "text-muted-foreground")}>Monto ilegible</CardTitle>
+            <XCircle className={cn("h-4 w-4", !isLoading && stats.montoIlegible > 0 ? "text-amber-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.montoIlegible > 0 ? "text-amber-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.montoIlegible.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={cn("grow basis-[calc(25%-0.75rem)] min-w-[200px]", !isLoading && stats.montoAusente > 0 && "border-orange-200 bg-orange-50/40")}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className={cn("text-sm font-medium", !isLoading && stats.montoAusente > 0 ? "text-orange-700" : "text-muted-foreground")}>Monto ausente</CardTitle>
+            <XCircle className={cn("h-4 w-4", !isLoading && stats.montoAusente > 0 ? "text-orange-600" : "text-muted-foreground")} />
+          </CardHeader>
+          <CardContent>
+            <div className={cn("text-2xl font-bold tabular-nums", !isLoading && stats.montoAusente > 0 ? "text-orange-700" : "text-muted-foreground")}>
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.montoAusente.toLocaleString("es-MX")}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Sin validar</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
@@ -927,6 +1287,34 @@ export default function ValidacionPagos() {
             <div className="text-2xl font-bold tabular-nums text-muted-foreground">
               {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : stats.sinValidar.toLocaleString("es-MX")}
             </div>
+          </CardContent>
+        </Card>
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px] border-sky-200 bg-sky-50/40">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-sky-700">A revisar</CardTitle>
+            <Building2 className="h-4 w-4 text-sky-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-sky-700">
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : (
+                <>{unidadesARevisar.toLocaleString("es-MX")}<span className="text-base font-medium text-sky-700/50">/{vendidasTotal.toLocaleString("es-MX")}</span></>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">por revisar / vendidas</p>
+          </CardContent>
+        </Card>
+        <Card className="grow basis-[calc(25%-0.75rem)] min-w-[200px] border-indigo-200 bg-indigo-50/40">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-indigo-700">Listas escriturar</CardTitle>
+            <FileText className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-indigo-700">
+              {isLoading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : (
+                <>{listasEscriturar.toLocaleString("es-MX")}<span className="text-base font-medium text-indigo-700/50">/{vendidasTotal.toLocaleString("es-MX")}</span></>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">escrituración / vendidas</p>
           </CardContent>
         </Card>
       </div>
@@ -1080,10 +1468,13 @@ export default function ValidacionPagos() {
         {/* Estado de validación — multi-select (sin cambios) */}
         {(() => {
           const ESTADOS = [
-            { key: "coincide",    label: "Coincide",    cls: "text-emerald-700" },
-            { key: "error",       label: "Error",        cls: "text-red-700" },
-            { key: "no_coincide", label: "No coincide", cls: "text-amber-700" },
-            { key: "sin_validar", label: "Sin validar", cls: "text-muted-foreground" },
+            { key: "coincide",         label: "Coincide",      cls: "text-emerald-700" },
+            { key: "error",            label: "Error",         cls: "text-red-700" },
+            { key: "no_coincide",      label: "No coincide",   cls: "text-amber-700" },
+            { key: "sin_evidencia",    label: "Sin evidencia", cls: "text-slate-600" },
+            { key: "monto_ilegible",   label: "Monto ilegible", cls: "text-amber-700" },
+            { key: "monto_ausente_db", label: "Monto ausente", cls: "text-orange-700" },
+            { key: "sin_validar",      label: "Sin validar",   cls: "text-muted-foreground" },
           ];
           const noneSelected = filtroEstados.size === 0;
           const label = noneSelected
@@ -1135,14 +1526,25 @@ export default function ValidacionPagos() {
           );
         })()}
 
-        {/* Método de pago — searchable popover */}
+        {/* Método de pago — multi-select con búsqueda */}
         {(() => {
           const filtrados = metodosOptions.filter(m =>
             m.nombre.toLowerCase().includes(searchMetodo.toLowerCase())
           );
-          const metodoActivo = metodosOptions.find(m => String(m.id) === filtroMetodo);
-          const label = metodoActivo ? metodoActivo.nombre : "Todos";
-          const isActive = filtroMetodo !== "todos";
+          const noneSelected = filtroMetodos.size === 0;
+          const label = noneSelected
+            ? "Todos"
+            : filtroMetodos.size === 1
+              ? metodosOptions.find(m => filtroMetodos.has(m.id))?.nombre ?? "Método"
+              : `${filtroMetodos.size} métodos`;
+          const toggle = (id: number) => {
+            setFiltroMetodos(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+            setCurrentPage(1);
+          };
           return (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground px-0.5">Metodo de pago</span>
@@ -1151,7 +1553,7 @@ export default function ValidacionPagos() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", isActive && "border-primary/40 bg-primary/5")}
+                    className={cn("h-9 text-sm gap-1.5 font-normal w-[180px] justify-between", !noneSelected && "border-primary/40 bg-primary/5")}
                   >
                     <span className="truncate">{label}</span>
                     <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
@@ -1165,25 +1567,24 @@ export default function ValidacionPagos() {
                     className="h-8 text-sm mb-2 w-full"
                   />
                   <div className="max-h-[168px] overflow-y-auto overflow-x-hidden"><div className="flex flex-col gap-0.5">
-                    <button
-                      className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full", filtroMetodo === "todos" && "bg-muted font-medium")}
-                      onClick={() => { setFiltroMetodo("todos"); setCurrentPage(1); }}
-                    >
-                      Todos los metodos
-                    </button>
                     {filtrados.map(m => (
-                      <button
-                        key={m.id}
-                        className={cn("text-left rounded px-2 py-1.5 text-sm hover:bg-muted w-full truncate", filtroMetodo === String(m.id) && "bg-muted font-medium")}
-                        onClick={() => { setFiltroMetodo(String(m.id)); setCurrentPage(1); }}
-                      >
-                        {m.nombre}
-                      </button>
+                      <label key={m.id} className="flex items-center gap-2 rounded px-1.5 py-1.5 hover:bg-muted cursor-pointer select-none">
+                        <Checkbox checked={filtroMetodos.has(m.id)} onCheckedChange={() => toggle(m.id)} className="size-4" />
+                        <span className="text-sm truncate">{m.nombre}</span>
+                      </label>
                     ))}
                     {filtrados.length === 0 && (
                       <p className="text-xs text-muted-foreground px-2 py-2">Sin resultados</p>
                     )}
                   </div></div>
+                  {!noneSelected && (
+                    <button
+                      className="mt-1.5 w-full text-[11px] text-muted-foreground hover:text-foreground text-left px-1.5 py-0.5"
+                      onClick={() => { setFiltroMetodos(new Set()); setCurrentPage(1); }}
+                    >
+                      Limpiar filtro
+                    </button>
+                  )}
                 </PopoverContent>
               </Popover>
             </div>
@@ -1254,7 +1655,7 @@ export default function ValidacionPagos() {
         {(() => {
           const hayFiltros =
             searchCuenta !== "" || searchCliente !== "" || searchDepto !== "" ||
-            filtroProyecto !== "todos" || filtroMetodo !== "todos" || filtroComprobante !== "todos" ||
+            filtroProyecto !== "todos" || filtroMetodos.size > 0 || filtroComprobante !== "todos" ||
             filtroEstados.size > 0 || filtroTipos.size > 0;
           return (
             <div className="flex flex-col gap-1.5 self-end">
@@ -1263,7 +1664,7 @@ export default function ValidacionPagos() {
                 size="sm"
                 onClick={() => {
                   setSearchCuenta(""); setSearchCliente(""); setSearchDepto("");
-                  setFiltroProyecto("todos"); setFiltroMetodo("todos"); setFiltroComprobante("todos");
+                  setFiltroProyecto("todos"); setFiltroMetodos(new Set()); setFiltroComprobante("todos");
                   setFiltroEstados(new Set()); setFiltroTipos(new Set());
                   setCurrentPage(1);
                 }}
@@ -1308,7 +1709,7 @@ export default function ValidacionPagos() {
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden xl:table-cell whitespace-nowrap">Fecha pago</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Monto</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Estado</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[100px]">Acciones</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center w-[140px]">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1389,11 +1790,39 @@ export default function ValidacionPagos() {
                           className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                           <Eye className="size-4" />
                         </button>
-                        {isSuperAdmin && (
+                        {canUpdate && (
+                          <button onClick={() => setCargarRow(row)} title="Cargar evidencia / CEP"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                            <Upload className="size-4" />
+                          </button>
+                        )}
+                        {canUpdate && (
                           <button onClick={() => setEditRow(row)} title="Editar validación"
                             className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                             <Pencil className="size-4" />
                           </button>
+                        )}
+                        {canDelete && (
+                          row.metodo_nombre === "STP" ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground/25 cursor-not-allowed">
+                                  <Trash2 className="size-4" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Pago STP: no se puede eliminar</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button onClick={() => openDelete(row)}
+                                  className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Eliminar pago</TooltipContent>
+                            </Tooltip>
+                          )
                         )}
                       </div>
                     </TableCell>
@@ -1440,6 +1869,17 @@ export default function ValidacionPagos() {
         onClose={() => { setDetallePagoId(null); setDetallePagoRow(null); }}
       />
       <EditPagoValidacionModal row={editRow} onClose={() => setEditRow(null)} />
+      <CargarEvidenciaModal row={cargarRow} onClose={() => setCargarRow(null)} />
+      <EliminarPagoDialog
+        open={!!deleteRow}
+        onOpenChange={(open) => { if (!open) { setDeleteRow(null); setDeleteImpacto(null); } }}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        impacto={deleteImpacto}
+        encabezado={deleteRow
+          ? `pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${formatCuentaCobranzaId(deleteRow.cuenta_id)})`
+          : undefined}
+      />
     </div>
   );
 }

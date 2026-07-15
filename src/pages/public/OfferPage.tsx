@@ -232,6 +232,9 @@ const OfferPage = () => {
   const isExpired = offer.status === "expired" || daysToExpiry < 0;
   const isReserved = offer.status === "pre_reserved" || offer.status === "converted_to_account";
   const ctaDisabled = isExpired || isReserved;
+  // Apartado deshabilitado hasta integrar Stripe: se oculta el botón "Apartar".
+  // Cambiar a true cuando el flujo de pago/hold esté en producción.
+  const APARTADO_HABILITADO = false;
 
   const urgencyLevel: "normal" | "soon" | "imminent" =
     daysToExpiry < 1 ? "imminent" : daysToExpiry <= 3 ? "soon" : "normal";
@@ -248,10 +251,12 @@ const OfferPage = () => {
     .toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })
     .replace(/\./g, "");
 
+  // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
+  // precio, metraje y $/m² reconcilien exacto entre sí.
   const formattedPrice = new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(offer.property.listPrice);
 
   const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
@@ -259,8 +264,6 @@ const OfferPage = () => {
   return (
     <PublicShell
       agent={agent}
-      developmentLogoUrl={offer.development?.logoUrl ?? offer.development?.logoUrlInverse}
-      developmentName={offer.property.projectName}
       navSections={visibleNavSections}
       onNavClick={scrollToSection}
       activeSectionId={activeSection}
@@ -474,14 +477,15 @@ const OfferPage = () => {
             <div id="details" className={sectionClass("details")}>
               <OfferPropertyDetails
                 property={offer.property}
-                parkingSlots={offer.parkingSlots}
-                materialsPaletteUrl={offer.materialsPaletteUrl}
+                bodegas={offer.bodegas}
+                estacionamientos={offer.estacionamientos}
+                clabeStp={offer.clabeStp}
               />
             </div>
 
             {/* FLOOR PLAN */}
             <div id="floor-plan" className={sectionClass("floor-plan")}>
-              {offer.floorPlanUrl ? (
+              {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
                 <OfferFloorPlanLarge
                   imageUrl={offer.floorPlanUrl}
                   unitArea={offer.property.area}
@@ -489,6 +493,10 @@ const OfferPage = () => {
                   bathrooms={offer.property.bathrooms}
                   view={offer.property.view}
                   floor={offer.property.level}
+                  planoUbicacionUrl={offer.planoUbicacionUrl}
+                  planoUbicacionRegiones={offer.planoUbicacionRegiones}
+                  highlightUnit={offer.unitDepto}
+                  fullPropertyNumber={offer.property.unitNumber}
                 />
               ) : import.meta.env.DEV ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden">
@@ -720,21 +728,7 @@ const OfferPage = () => {
 
                 {/* Project logo + unit model */}
                 <div className="pb-4 border-b border-border/60">
-                  <div className="flex flex-col items-center text-center gap-5 mb-1">
-                    {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) ? (
-                      <div className="h-4 md:h-6 flex items-center justify-center">
-                        <DevelopmentLogo
-                          development={offer.development}
-                          developmentName={offer.property.projectName}
-                          variant="footer"
-                          className="h-4 md:h-6"
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-primary/70">
-                        {offer.property.projectName}
-                      </p>
-                    )}
+                  <div className="flex flex-col items-center text-center mb-1">
                     <p className="font-serif text-[19px] font-semibold tracking-[0.03em] text-foreground leading-snug">
                       {offer.property.unitModel} {offer.property.unitNumber}
                     </p>
@@ -769,7 +763,7 @@ const OfferPage = () => {
                   </p>
                   {!!offer.property.pricePerM2 && offer.property.area && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
-                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(offer.property.pricePerM2)} /m²
+                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
                     </p>
                   )}
                 </div>
@@ -782,6 +776,7 @@ const OfferPage = () => {
                       <span>
                         Entrega{" "}
                         {new Date(offer.estimatedDelivery).toLocaleDateString("es-MX", {
+                          day: "numeric",
                           month: "long",
                           year: "numeric",
                         })}
@@ -823,7 +818,7 @@ const OfferPage = () => {
                           Contacta a tu asesor para recibir una oferta actualizada.
                         </p>
                       </div>
-                    ) : (
+                    ) : APARTADO_HABILITADO ? (
                       <>
                         <button
                           onClick={ctaDisabled ? undefined : handleCtaClick}
@@ -843,7 +838,7 @@ const OfferPage = () => {
                           </p>
                         )}
                       </>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -862,8 +857,8 @@ const OfferPage = () => {
         </div>{/* /lg:grid */}
       </div>{/* /max-w-7xl */}
 
-      {/* Mobile sticky CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
-      {!reservationId && (
+      {/* Mobile sticky CTA — oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
+      {!reservationId && (isExpired || APARTADO_HABILITADO) && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
             {isExpired ? (

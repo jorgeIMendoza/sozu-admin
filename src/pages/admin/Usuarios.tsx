@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
+import { fetchAllChunked } from "@/lib/postgrest-batch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,6 +38,8 @@ type Usuario = {
   personas?: { nombre_legal: string; email?: string | null } | null;
   inmobiliaria_nombre?: string | null;
   es_usuario_principal?: boolean;
+  id_notario?: number | null;
+  notarios?: { notaria: string | null } | null;
 };
 
 type Role = {
@@ -61,6 +64,11 @@ const ROLE_ADMINISTRADOR_PROYECTO = 2;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
+const ROLE_NOTARIO = 6;
+
+// Roles del Portal Bancos que requieren banco vinculado (detección por nombre
+// porque sus ids pueden diferir entre ambientes; se crean por seed/UI de roles)
+const BANCO_ROLE_NAMES = ["Supervisor Banco", "Operador Banco"];
 
 // Roles that Administrador de Proyecto can manage
 const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
@@ -150,6 +158,10 @@ function UsersTable({
                       ) : usuario.rol_id === ROLE_AGENTE_INMOBILIARIO && !usuario.inmobiliaria_nombre ? (
                         <p className="text-xs text-amber-600">
                           Agente independiente
+                        </p>
+                      ) : usuario.rol_id === ROLE_NOTARIO && usuario.notarios?.notaria ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Notaría: {usuario.notarios.notaria}
                         </p>
                       ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INTERNO) && (
                         <p className="text-xs text-muted-foreground">
@@ -305,13 +317,17 @@ export default function Usuarios() {
     rol_id: "",
     id_persona: "",
     id_inmobiliaria: "", // ID de la inmobiliaria para agentes
+    id_notario: "", // ID del notario (tabla notarios) para rol Notario
+    id_banco: "", // ID del banco (tabla bancos) para roles Supervisor/Operador Banco
   });
   const [isFieldsLocked, setIsFieldsLocked] = useState(false);
   const [selectedPersonaTipo, setSelectedPersonaTipo] = useState<string | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  
+
   const [isInmobiliariaLocked, setIsInmobiliariaLocked] = useState(false);
   const [isInmobiliariaPopoverOpen, setIsInmobiliariaPopoverOpen] = useState(false);
+  const [isNotarioPopoverOpen, setIsNotarioPopoverOpen] = useState(false);
+  const [isBancoPopoverOpen, setIsBancoPopoverOpen] = useState(false);
   
   // Persona lookup state
   const [matchedPersona, setMatchedPersona] = useState<{
@@ -341,6 +357,10 @@ export default function Usuarios() {
   // Fetch users with their inmobiliaria info from entidades_relacionadas
   const { data: usuarios = [], isLoading: isLoadingUsuarios, isError: isUsuariosError, error: usuariosError } = useQuery({
     queryKey: ['usuarios'],
+    // Carga pesada (edge function + lookups por lotes): sin esto, cada regreso
+    // de foco a la ventana relanzaba todo y la vista parecía ciclada.
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const response = await supabase.functions.invoke('list-system-users');
 
@@ -358,13 +378,18 @@ export default function Usuarios() {
       const inmobiliariaPersonaIds = new Set<number>();
       
       if (personaIdsForLookup.length > 0) {
-        // Query for agents (tipo 19)
-        const { data: agentEntidadesData } = await supabase
-          .from('entidades_relacionadas')
-          .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
-          .eq('id_tipo_entidad', 19) // Agente Inmobiliario
-          .eq('activo', true)
-          .in('id_persona', personaIdsForLookup);
+        // Query for agents (tipo 19). Lotes: miles de ids en un solo .in()
+        // exceden el límite de URL del gateway (400) o las 1000 filas de PostgREST.
+        const agentEntidadesData = await fetchAllChunked(personaIdsForLookup, (chunk, from, to) =>
+          supabase
+            .from('entidades_relacionadas')
+            .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
+            .eq('id_tipo_entidad', 19) // Agente Inmobiliario
+            .eq('activo', true)
+            .in('id_persona', chunk)
+            .order('id')
+            .range(from, to)
+        );
         
         (agentEntidadesData || []).forEach((e: any) => {
           if (e.id_persona && e.personas) {
@@ -379,24 +404,35 @@ export default function Usuarios() {
           .map(u => u.email);
 
         if (secondaryInmobEmails.length > 0) {
-          // Get proyectos_acceso records for these users
-          const { data: proyectosAcceso } = await supabase
-            .from('proyectos_acceso')
-            .select('usuario_id, id_entidad_relacionada_dueno')
-            .in('usuario_id', secondaryInmobEmails)
-            .eq('activo', true)
-            .not('id_entidad_relacionada_dueno', 'is', null);
+          // Get proyectos_acceso records for these users. Lotes: cientos de
+          // emails en un .in() generan URLs >32KB que el gateway rechaza con 400.
+          const proyectosAcceso = await fetchAllChunked(secondaryInmobEmails, (chunk, from, to) =>
+            supabase
+              .from('proyectos_acceso')
+              .select('usuario_id, id_entidad_relacionada_dueno')
+              .in('usuario_id', chunk)
+              .eq('activo', true)
+              .not('id_entidad_relacionada_dueno', 'is', null)
+              // proyectos_acceso no tiene columna id (PK compuesta)
+              .order('usuario_id')
+              .order('proyecto_id')
+              .range(from, to)
+          );
 
           if (proyectosAcceso && proyectosAcceso.length > 0) {
             // Get unique entidad IDs
             const entidadIds = [...new Set(proyectosAcceso.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))];
 
-            // Fetch inmobiliaria names from these entidades
-            const { data: entidadesData } = await supabase
-              .from('entidades_relacionadas')
-              .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
-              .in('id', entidadIds)
-              .eq('activo', true);
+            // Fetch inmobiliaria names from these entidades (por lotes)
+            const entidadesData = await fetchAllChunked(entidadIds as number[], (chunk, from, to) =>
+              supabase
+                .from('entidades_relacionadas')
+                .select('id, id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+                .in('id', chunk)
+                .eq('activo', true)
+                .order('id')
+                .range(from, to)
+            );
 
             // Create map of entidad_id -> nombre and map of email -> nombre for users without persona
             const entidadNombres = new Map<number, string>();
@@ -448,13 +484,17 @@ export default function Usuarios() {
           .map(u => u.id_persona as number);
 
         if (inmobiliariaUserPersonaIds.length > 0) {
-          // Check which of these personas are inmobiliarias themselves
-          const { data: inmobPersonas } = await supabase
-            .from('entidades_relacionadas')
-            .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
-            .eq('id_tipo_entidad', 5) // Inmobiliaria
-            .eq('activo', true)
-            .in('id_persona', inmobiliariaUserPersonaIds);
+          // Check which of these personas are inmobiliarias themselves (por lotes)
+          const inmobPersonas = await fetchAllChunked(inmobiliariaUserPersonaIds, (chunk, from, to) =>
+            supabase
+              .from('entidades_relacionadas')
+              .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
+              .eq('id_tipo_entidad', 5) // Inmobiliaria
+              .eq('activo', true)
+              .in('id_persona', chunk)
+              .order('id')
+              .range(from, to)
+          );
 
           (inmobPersonas || []).forEach((e: any) => {
             if (e.id_persona && e.personas) {
@@ -513,13 +553,17 @@ export default function Usuarios() {
   }, [roles, isAdministradorProyecto]);
 
   // Convert roles to combobox options
-  const roleOptions = useMemo(() => 
+  const roleOptions = useMemo(() =>
     availableRoles.map(rol => ({
       value: rol.id.toString(),
       label: rol.nombre
     })),
     [availableRoles]
   );
+
+  // Rol seleccionado en el formulario de nuevo usuario (por nombre)
+  const selectedRolNombre = availableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
+  const isBancoRoleSelected = BANCO_ROLE_NAMES.includes(selectedRolNombre);
 
   // Fetch agents and inmobiliarias for combobox
   const { data: personasConTipo = [] } = useQuery({
@@ -572,6 +616,36 @@ export default function Usuarios() {
       return Array.from(personasMap.values()).sort((a, b) => 
         a.nombre_legal.localeCompare(b.nombre_legal)
       );
+    },
+  });
+
+  // Fetch notarios (notarías) for the selector shown when creating a Notario user
+  const { data: notariosOptions = [] } = useQuery({
+    queryKey: ['notarios_options'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notarios')
+        .select('id, nombre, notaria, email')
+        .eq('activo', true)
+        .order('notaria', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string | null; notaria: string | null; email: string | null }[];
+    },
+  });
+
+  // Fetch bancos for the selector shown when creating a Supervisor/Operador Banco user
+  const { data: bancosOptions = [] } = useQuery({
+    queryKey: ['bancos_options'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bancos')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string }[];
     },
   });
 
@@ -811,6 +885,45 @@ export default function Usuarios() {
       return;
     }
 
+    // Validate notaría is required for Notario role; email must be the notaría's email
+    if (rolId === ROLE_NOTARIO) {
+      if (!newUserForm.id_notario) {
+        toast({
+          title: "Error",
+          description: "Por favor selecciona la notaría a la que pertenece el usuario.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const selectedNotario = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
+      if (!selectedNotario?.email) {
+        toast({
+          title: "Error",
+          description: "La notaría seleccionada no tiene correo registrado. Captúralo primero en el módulo de Notarías.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (newUserForm.email.toLowerCase().trim() !== selectedNotario.email.toLowerCase().trim()) {
+        toast({
+          title: "Error",
+          description: `El correo del usuario Notario debe ser el de la notaría: ${selectedNotario.email}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Validate banco is required for Supervisor Banco / Operador Banco roles
+    if (isBancoRoleSelected && !newUserForm.id_banco) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona el banco al que pertenece el usuario.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validate Inmobiliaria role requires a principal user
     if (rolId === ROLE_INMOBILIARIA && newUserForm.id_inmobiliaria) {
       const selectedInmob = inmobiliariasOptions.find(
@@ -876,6 +989,8 @@ export default function Usuarios() {
           rol_id: rolId,
           id_persona: newUserForm.id_persona ? parseInt(newUserForm.id_persona) : null,
           id_inmobiliaria: newUserForm.id_inmobiliaria ? parseInt(newUserForm.id_inmobiliaria) : null,
+          id_notario: rolId === ROLE_NOTARIO && newUserForm.id_notario ? parseInt(newUserForm.id_notario) : null,
+          id_banco: isBancoRoleSelected && newUserForm.id_banco ? parseInt(newUserForm.id_banco) : null,
         },
       });
 
@@ -915,7 +1030,7 @@ export default function Usuarios() {
   };
 
   const resetNewUserForm = () => {
-    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "" });
+    setNewUserForm({ email: "", nombre: "", rol_id: "", id_persona: "", id_inmobiliaria: "", id_notario: "", id_banco: "" });
     setIsFieldsLocked(false);
     setSelectedPersonaTipo(null);
     setIsInmobiliariaLocked(false);
@@ -1026,6 +1141,8 @@ export default function Usuarios() {
         nombre: selectedPersona.nombre_legal || "",
         rol_id: autoRolId,
         id_inmobiliaria: autoInmobiliariaId,
+        id_notario: "",
+        id_banco: "",
       });
       setSelectedPersonaTipo(selectedPersona.tipo_entidad);
       setIsFieldsLocked(true);
@@ -1036,29 +1153,60 @@ export default function Usuarios() {
   // Handle role change to auto-set inmobiliaria for Agente Interno
   const handleRoleChange = (roleId: string) => {
     const newRolId = parseInt(roleId);
-    
+    const newRolNombre = availableRoles.find(r => r.id.toString() === roleId)?.nombre ?? "";
+
     if (newRolId === ROLE_AGENTE_INTERNO) {
       // Preselect Sozu and LOCK the field
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString()
+        id_inmobiliaria: SOZU_INMOBILIARIA_ID.toString(),
+        id_notario: "",
+        id_banco: ""
       }));
       setIsInmobiliariaLocked(true); // Lock for Agente Interno
     } else if (newRolId === ROLE_AGENTE_INMOBILIARIO || newRolId === ROLE_INMOBILIARIA) {
       // Allow selecting inmobiliaria (required for agents and Inmobiliaria secondary users)
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: prev.id_inmobiliaria
+        id_inmobiliaria: prev.id_inmobiliaria,
+        id_notario: "",
+        id_banco: ""
+      }));
+      setIsInmobiliariaLocked(false);
+    } else if (newRolId === ROLE_NOTARIO) {
+      // Notario: email/nombre se toman de la notaría seleccionada
+      setNewUserForm(prev => ({
+        ...prev,
+        rol_id: roleId,
+        id_inmobiliaria: "",
+        id_notario: "",
+        id_banco: "",
+        email: "",
+        nombre: ""
+      }));
+      setIsInmobiliariaLocked(false);
+      setMatchedPersona(null);
+      setIsPersonaLinked(false);
+    } else if (BANCO_ROLE_NAMES.includes(newRolNombre)) {
+      // Supervisor/Operador Banco: requiere seleccionar banco
+      setNewUserForm(prev => ({
+        ...prev,
+        rol_id: roleId,
+        id_inmobiliaria: "",
+        id_notario: "",
+        id_banco: prev.id_banco
       }));
       setIsInmobiliariaLocked(false);
     } else {
       // Clear inmobiliaria for other roles
-      setNewUserForm(prev => ({ 
-        ...prev, 
+      setNewUserForm(prev => ({
+        ...prev,
         rol_id: roleId,
-        id_inmobiliaria: ""
+        id_inmobiliaria: "",
+        id_notario: "",
+        id_banco: ""
       }));
       setIsInmobiliariaLocked(false);
     }
@@ -1097,7 +1245,7 @@ export default function Usuarios() {
   }, [personasConTipo]);
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto">
       <Card className="border-border shadow-lg">
         <CardHeader className="border-b border-border bg-muted/30">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1552,7 +1700,147 @@ export default function Usuarios() {
                 )}
               </div>
             )}
-            
+
+            {/* 2b. Notaría - SOLO visible para rol Notario (6) */}
+            {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && (
+              <div className="space-y-2">
+                <Label htmlFor="notaria" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Notaría *
+                </Label>
+                <Popover open={isNotarioPopoverOpen} onOpenChange={setIsNotarioPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !newUserForm.id_notario && "text-muted-foreground"
+                      )}
+                    >
+                      {newUserForm.id_notario
+                        ? (() => {
+                            const n = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
+                            return n ? `${n.notaria || 'Notaría'} · ${n.nombre || ''}` : "Seleccionar notaría...";
+                          })()
+                        : "Seleccionar notaría..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar notaría por nombre, notario o correo..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró la notaría.</CommandEmpty>
+                        <CommandGroup>
+                          {notariosOptions.map((notario) => (
+                            <CommandItem
+                              key={notario.id}
+                              value={`${notario.notaria || ''} ${notario.nombre || ''} ${notario.email || ''}`}
+                              onSelect={() => {
+                                setNewUserForm(prev => ({
+                                  ...prev,
+                                  id_notario: notario.id.toString(),
+                                  email: notario.email || "",
+                                  nombre: prev.nombre || notario.nombre || "",
+                                }));
+                                setMatchedPersona(null);
+                                setIsPersonaLinked(false);
+                                setIsNotarioPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newUserForm.id_notario === notario.id.toString()
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <span className="flex flex-col">
+                                <span>{notario.notaria || 'Sin nombre de notaría'}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {notario.nombre}{notario.email ? ` · ${notario.email}` : ' · Sin correo registrado'}
+                                </span>
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {newUserForm.id_notario && !notariosOptions.find(n => n.id.toString() === newUserForm.id_notario)?.email && (
+                  <p className="text-xs text-destructive">
+                    Esta notaría no tiene correo registrado. Captúralo primero en el módulo de Notarías.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  El correo del usuario será el correo registrado de la notaría.
+                </p>
+              </div>
+            )}
+
+            {/* 2c. Banco - SOLO visible para roles Supervisor Banco / Operador Banco */}
+            {isBancoRoleSelected && (
+              <div className="space-y-2">
+                <Label htmlFor="banco" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Banco *
+                </Label>
+                <Popover open={isBancoPopoverOpen} onOpenChange={setIsBancoPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !newUserForm.id_banco && "text-muted-foreground"
+                      )}
+                    >
+                      {newUserForm.id_banco
+                        ? (bancosOptions.find(b => b.id.toString() === newUserForm.id_banco)?.nombre ?? "Seleccionar banco...")
+                        : "Seleccionar banco..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar banco..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el banco.</CommandEmpty>
+                        <CommandGroup>
+                          {bancosOptions.map((banco) => (
+                            <CommandItem
+                              key={banco.id}
+                              value={banco.nombre}
+                              onSelect={() => {
+                                setNewUserForm(prev => ({ ...prev, id_banco: banco.id.toString() }));
+                                setIsBancoPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newUserForm.id_banco === banco.id.toString()
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {banco.nombre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Banco al que pertenece el usuario del Portal Bancos.
+                </p>
+              </div>
+            )}
+
             {/* 3. Nombre */}
             <div className="space-y-2">
               <Label htmlFor="nombre">Nombre *</Label>
@@ -1566,10 +1854,14 @@ export default function Usuarios() {
             
             {/* 4. Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email" className="flex items-center gap-2">
+                Email *
+                {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Input
                 id="email"
                 type="email"
+                disabled={parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO}
                 value={newUserForm.email}
                 onChange={(e) => {
                   setNewUserForm(prev => ({ ...prev, email: e.target.value }));

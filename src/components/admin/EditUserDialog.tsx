@@ -55,6 +55,11 @@ type InmobiliariaOption = {
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_INMOBILIARIA = 4;
+const ROLE_NOTARIO = 6;
+
+// Roles del Portal Bancos que requieren banco vinculado (detección por nombre
+// porque sus ids pueden diferir entre ambientes)
+const BANCO_ROLE_NAMES = ["Supervisor Banco", "Operador Banco"];
 
 export function EditUserDialog({
   open,
@@ -72,14 +77,68 @@ export function EditUserDialog({
   const [originalClavePais, setOriginalClavePais] = useState("MX");
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<string>("");
   const [originalInmobiliariaId, setOriginalInmobiliariaId] = useState<string>("");
+  const [selectedBancoId, setSelectedBancoId] = useState<string>("");
+  const [originalBancoId, setOriginalBancoId] = useState<string>("");
+  const [isBancoPopoverOpen, setIsBancoPopoverOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarActualizacion } = useActivityLogger();
 
   const isAgentRole = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_AGENTE_INTERNO;
   const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
+  const isNotarioRole = userRoleId === ROLE_NOTARIO;
   const needsInmobiliaria = isAgentRole || isInmobiliariaRole;
   const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_INMOBILIARIA;
+
+  // Notaría vinculada (usuarios.id_notario) — su email se sincroniza al cambiar el del usuario
+  const { data: notarioVinculado } = useQuery({
+    queryKey: ['user_notario', userEmail],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('usuarios')
+        .select('id_notario, notarios (id, notaria)')
+        .eq('email', userEmail)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.notarios ? { id: data.notarios.id as number, notaria: (data.notarios.notaria as string | null) ?? null } : null;
+    },
+    enabled: open && isNotarioRole,
+  });
+
+  // Rol (por nombre) y banco vinculado del usuario (usuarios.id_banco)
+  const { data: bancoInfo, isLoading: isLoadingBancoInfo } = useQuery({
+    queryKey: ['user_banco', userEmail],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('usuarios')
+        .select('id_banco, roles (nombre)')
+        .eq('email', userEmail)
+        .maybeSingle();
+      if (error) throw error;
+      return {
+        id_banco: (data?.id_banco as number | null) ?? null,
+        rol_nombre: (data?.roles?.nombre as string | undefined) ?? '',
+      };
+    },
+    enabled: open,
+  });
+
+  const isBancoRole = BANCO_ROLE_NAMES.includes(bancoInfo?.rol_nombre ?? '');
+
+  // Fetch bancos options (solo para roles Supervisor/Operador Banco)
+  const { data: bancosOptions = [] } = useQuery({
+    queryKey: ['bancos_options_edit'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bancos')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre', { ascending: true });
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string }[];
+    },
+    enabled: open && isBancoRole,
+  });
 
   // Fetch email confirmation status
   const { data: emailConfirmado, isLoading: isLoadingConfirmation } = useQuery({
@@ -266,6 +325,15 @@ export function EditUserDialog({
     }
   }, [open, needsInmobiliaria, isLoadingInmobiliaria, currentInmobiliaria]);
 
+  // Set banco when data is loaded
+  useEffect(() => {
+    if (open && !isLoadingBancoInfo) {
+      const bancoId = bancoInfo?.id_banco?.toString() || "";
+      setSelectedBancoId(bancoId);
+      setOriginalBancoId(bancoId);
+    }
+  }, [open, isLoadingBancoInfo, bancoInfo]);
+
   // Resend confirmation email mutation
   const resendConfirmationMutation = useMutation({
     mutationFn: async () => {
@@ -292,30 +360,34 @@ export function EditUserDialog({
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ 
-      oldEmail, 
-      newEmail, 
+    mutationFn: async ({
+      oldEmail,
+      newEmail,
       newNombre,
       newInmobiliariaId,
+      newBancoId,
       personaId,
       newTelefono,
       newClavePais,
-    }: { 
-      oldEmail: string; 
-      newEmail: string; 
+    }: {
+      oldEmail: string;
+      newEmail: string;
       newNombre: string;
       newInmobiliariaId?: number;
+      newBancoId?: number;
       personaId?: number;
       newTelefono?: string;
       newClavePais?: string;
     }) => {
       // Update nombre in usuarios table
-      const { error: nombreError } = await supabase
+      const { error: nombreError } = await (supabase as any)
         .from('usuarios')
-        .update({ 
+        .update({
           nombre: newNombre,
           telefono: newTelefono ?? null,
           clave_pais_telefono: newClavePais ?? null,
+          // Banco vinculado (solo roles Supervisor/Operador Banco)
+          ...(isBancoRole && newBancoId ? { id_banco: newBancoId } : {}),
           fecha_actualizacion: new Date().toISOString()
         })
         .eq('email', oldEmail);
@@ -354,6 +426,21 @@ export function EditUserDialog({
             .from('usuarios')
             .update({ email_confirmado: false })
             .eq('email', newEmail);
+        }
+
+        // Notario: el email de la notaría vinculada debe seguir al del usuario
+        if (isNotarioRole && notarioVinculado?.id) {
+          const { error: notarioError } = await (supabase as any)
+            .from('notarios')
+            .update({
+              email: newEmail,
+              fecha_actualizacion: new Date().toISOString(),
+            })
+            .eq('id', notarioVinculado.id);
+
+          if (notarioError) {
+            throw new Error(`El email del usuario se actualizó, pero falló la sincronización con la notaría: ${notarioError.message}`);
+          }
         }
       }
 
@@ -526,6 +613,8 @@ export function EditUserDialog({
       queryClient.invalidateQueries({ queryKey: ['inmob_user_inmobiliaria'] });
       queryClient.invalidateQueries({ queryKey: ['email_confirmado'] });
       queryClient.invalidateQueries({ queryKey: ['user_phone'] });
+      queryClient.invalidateQueries({ queryKey: ['user_banco'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-bancos-usuarios-banco'] });
 
       registrarActualizacion('usuario', 
         { email: data.oldEmail, nombre: userName },
@@ -568,12 +657,23 @@ export function EditUserDialog({
       return;
     }
 
+    // Banco obligatorio para roles Supervisor/Operador Banco
+    if (isBancoRole && !selectedBancoId) {
+      toast({
+        title: "Error",
+        description: "Por favor selecciona el banco al que pertenece el usuario.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Inmobiliaria change support for agents and Inmobiliaria role
     updateUserMutation.mutate({
       oldEmail: userEmail,
       newEmail: email.trim(),
       newNombre: nombre.trim(),
       newInmobiliariaId: needsInmobiliaria && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
+      newBancoId: isBancoRole && selectedBancoId ? parseInt(selectedBancoId) : undefined,
       personaId: userPersonaId,
       newTelefono: telefono.trim() || undefined,
       newClavePais: telefono.trim() ? clavePaisTelefono : undefined,
@@ -581,8 +681,9 @@ export function EditUserDialog({
   };
 
   const inmobiliariaChanged = needsInmobiliaria && selectedInmobiliariaId !== originalInmobiliariaId;
+  const bancoChanged = isBancoRole && selectedBancoId !== originalBancoId;
   const phoneChanged = telefono !== originalTelefono || clavePaisTelefono !== originalClavePais;
-  const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged || phoneChanged;
+  const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged || bancoChanged || phoneChanged;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -657,6 +758,11 @@ export function EditUserDialog({
             {email !== userEmail && showEmailConfirmation && (
               <p className="text-xs text-orange-600 dark:text-orange-400">
                 ⚠ Al cambiar el email, se requerirá nueva confirmación por correo.
+              </p>
+            )}
+            {email !== userEmail && isNotarioRole && notarioVinculado && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                ⚠ También se actualizará el correo de la notaría{notarioVinculado.notaria ? ` "${notarioVinculado.notaria}"` : ''}.
               </p>
             )}
           </div>
@@ -763,6 +869,82 @@ export function EditUserDialog({
                 <Alert className="bg-amber-500/10 border-amber-500/20">
                   <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
                     Al cambiar la inmobiliaria, se heredarán los accesos a proyectos de la nueva inmobiliaria (sin duplicar los existentes).
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
+          {/* Banco selector - obligatorio para roles Supervisor/Operador Banco */}
+          {isBancoRole && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Banco *
+              </Label>
+              {isLoadingBancoInfo ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando...
+                </div>
+              ) : (
+                <Popover open={isBancoPopoverOpen} onOpenChange={setIsBancoPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn(
+                        "w-full justify-between",
+                        !selectedBancoId && "text-muted-foreground"
+                      )}
+                    >
+                      {selectedBancoId
+                        ? (bancosOptions.find((b) => b.id.toString() === selectedBancoId)?.nombre ?? "Seleccionar banco...")
+                        : "Seleccionar banco..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar banco..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el banco.</CommandEmpty>
+                        <CommandGroup>
+                          {bancosOptions.map((banco) => (
+                            <CommandItem
+                              key={banco.id}
+                              value={banco.nombre}
+                              onSelect={() => {
+                                setSelectedBancoId(banco.id.toString());
+                                setIsBancoPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedBancoId === banco.id.toString()
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {banco.nombre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {!selectedBancoId && !isLoadingBancoInfo && (
+                <p className="text-xs text-destructive">
+                  Este usuario no tiene banco vinculado. Selecciona uno para que el Portal Bancos funcione.
+                </p>
+              )}
+              {bancoChanged && originalBancoId && (
+                <Alert className="bg-amber-500/10 border-amber-500/20">
+                  <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                    Al cambiar el banco, el usuario verá las solicitudes del nuevo banco en el Portal Bancos.
                   </AlertDescription>
                 </Alert>
               )}

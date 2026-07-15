@@ -8,6 +8,7 @@ import { Building2, Home, DollarSign, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { fetchAllChunked } from "@/lib/postgrest-batch";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface ProjectData {
@@ -51,7 +52,7 @@ const Dashboard = () => {
   });
 
   // Fetch Sozu-managed projects (Inmobiliaria = Real Estate Ventures)
-  const { data: sozuProjectIds = [] } = useQuery({
+  const { data: sozuProjectIds = [], isLoading: isLoadingSozu } = useQuery({
     queryKey: ['sozu-projects'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -61,20 +62,35 @@ const Dashboard = () => {
         .ilike('personas.nombre_legal', '%Real Estate Ventures%');
 
       if (error) throw error;
-      return data?.map(er => er.id_proyecto) || [];
+      // Hay registros tipo 5 sin proyecto asignado; un null dentro de .in('id', ...)
+      // provoca 22P02 (invalid input syntax for type integer: "null") en PostgREST.
+      return (data || [])
+        .map(er => er.id_proyecto)
+        .filter((id): id is number => id != null);
     }
   });
 
-  // Fetch projects with amounts
+  // Fetch projects with amounts.
+  // El dashboard solo muestra proyectos SOZU accesibles, así que se calcula
+  // únicamente sobre esos. Todo se resuelve con 5 queries batched (waterfall
+  // explícito + fetchAllChunked) en lugar de 6 queries por proyecto (N+1).
   const { data: projectAmounts = [] } = useQuery({
-    queryKey: ['dashboard-project-amounts', accessibleProjectIds],
+    queryKey: ['dashboard-project-amounts', accessibleProjectIds, sozuProjectIds],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       // If user has no access and is not admin, return empty
-      if (hasNoAccess) {
+      if (hasNoAccess || sozuProjectIds.length === 0) {
         return [];
       }
 
-      let query = supabase
+      let targetProjectIds = sozuProjectIds as number[];
+      // Apply project access filter for non-admin users
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
+        targetProjectIds = targetProjectIds.filter(id => accessibleProjectIds.includes(id));
+      }
+      if (targetProjectIds.length === 0) return [];
+
+      const { data: projects, error: projectsError } = await supabase
         .from('proyectos')
         .select(`
           id,
@@ -85,145 +101,109 @@ const Dashboard = () => {
         `)
         .eq('activo', true)
         .not('nombre', 'in', '("Productos","Servicios","Mantenimientos")')
+        .in('id', targetProjectIds)
         .limit(10000);
 
-      // Apply project access filter for non-admin users
-      if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-        query = query.in('id', accessibleProjectIds);
-      }
-
-      const { data: projects, error: projectsError } = await query;
-
       if (projectsError) throw projectsError;
+      if (!projects || projects.length === 0) return [];
 
-      // Get amounts for each project
-      const projectsWithAmounts = await Promise.all(
-        (projects || []).map(async (project) => {
-          // Primero obtenemos las entidades relacionadas del proyecto
-          const { data: entidades } = await supabase
-            .from('entidades_relacionadas')
-            .select('id')
-            .eq('id_proyecto', project.id);
-
-          if (!entidades || entidades.length === 0) {
-            return {
-              id: project.id,
-              nombre: project.nombre,
-              direccion: project.direccion,
-              precio_m2_actual: project.precio_m2_actual || 0,
-              tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0,
-              metraje_promedio: 0,
-              tiene_disponibles: false
-            };
-          }
-
-          const entidadIds = entidades.map(e => e.id);
-
-          // Luego las propiedades de esas entidades (incluyendo m2_interiores para calcular promedio)
-          const { data: propiedades } = await supabase
-            .from('propiedades')
-            .select('id, m2_interiores')
-            .in('id_entidad_relacionada_dueno', entidadIds);
-
-          if (!propiedades || propiedades.length === 0) {
-            return {
-              id: project.id,
-              nombre: project.nombre,
-              direccion: project.direccion,
-              precio_m2_actual: project.precio_m2_actual || 0,
-              tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0,
-              metraje_promedio: 0
-            };
-          }
-
-          // Calcular metraje promedio
-          const propiedadesConMetraje = propiedades.filter(p => p.m2_interiores && p.m2_interiores > 0);
-          const metraje_promedio = propiedadesConMetraje.length > 0
-            ? propiedadesConMetraje.reduce((sum, p) => sum + (p.m2_interiores || 0), 0) / propiedadesConMetraje.length
-            : 0;
-
-          const propiedadIds = propiedades.map(p => p.id);
-
-          // Luego las ofertas de esas propiedades (incluyendo id_producto para diferenciar)
-          let ofertasQuery = supabase
-            .from('ofertas')
-            .select('id, id_producto')
-            .in('id_propiedad', propiedadIds)
-            .eq('activo', true);
-
-          const { data: ofertas } = await ofertasQuery;
-
-          if (!ofertas || ofertas.length === 0) {
-            return {
-              id: project.id,
-              nombre: project.nombre,
-              direccion: project.direccion,
-              precio_m2_actual: project.precio_m2_actual || 0,
-              tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-              monto_total: 0,
-              metraje_promedio
-            };
-          }
-
-          // Separar ofertas de propiedades vs productos
-          const ofertasPropiedades = ofertas.filter(o => o.id_producto === null).map(o => o.id);
-          const ofertasProductos = ofertas.filter(o => o.id_producto !== null).map(o => o.id);
-
-          // Obtener montos de propiedades
-          let monto_propiedades = 0;
-          if (ofertasPropiedades.length > 0) {
-            const { data: cuentasPropiedades } = await supabase
-              .from('cuentas_cobranza')
-              .select('precio_final')
-              .eq('activo', true)
-              .in('id_oferta', ofertasPropiedades);
-            
-            monto_propiedades = (cuentasPropiedades || []).reduce((sum, c) => sum + Number(c.precio_final), 0);
-          }
-
-          // Obtener montos de productos
-          let monto_productos = 0;
-          if (ofertasProductos.length > 0) {
-            const { data: cuentasProductos } = await supabase
-              .from('cuentas_cobranza')
-              .select('precio_final')
-              .eq('activo', true)
-              .in('id_oferta', ofertasProductos);
-            
-            monto_productos = (cuentasProductos || []).reduce((sum, c) => sum + Number(c.precio_final), 0);
-          }
-
-          const monto_total = monto_propiedades + monto_productos;
-
-          // Check if project has available properties (id_estatus_disponibilidad = 2 is "Disponible")
-          const { data: disponibles } = await supabase
-            .from('propiedades')
-            .select('id')
-            .in('id_entidad_relacionada_dueno', entidadIds)
-            .eq('id_estatus_disponibilidad', 2)
-            .limit(1);
-
-          return {
-            id: project.id,
-            nombre: project.nombre,
-            direccion: project.direccion,
-            precio_m2_actual: project.precio_m2_actual || 0,
-            tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
-            monto_total,
-            metraje_promedio,
-            tiene_disponibles: (disponibles && disponibles.length > 0) || false
-          };
-        })
+      // 1) Entidades relacionadas de todos los proyectos
+      const entidades = await fetchAllChunked(projects.map(p => p.id), (chunk, from, to) =>
+        supabase
+          .from('entidades_relacionadas')
+          .select('id, id_proyecto')
+          .in('id_proyecto', chunk)
+          .order('id')
+          .range(from, to)
       );
+      const proyectoByEntidad = new Map<number, number>();
+      entidades.forEach(e => proyectoByEntidad.set(e.id, e.id_proyecto));
+
+      // 2) Propiedades de todas las entidades (m2 para promedio, estatus para disponibles)
+      const propiedades = await fetchAllChunked(entidades.map(e => e.id), (chunk, from, to) =>
+        supabase
+          .from('propiedades')
+          .select('id, m2_interiores, id_estatus_disponibilidad, id_entidad_relacionada_dueno')
+          .in('id_entidad_relacionada_dueno', chunk)
+          .order('id')
+          .range(from, to)
+      );
+      const proyectoByPropiedad = new Map<number, number>();
+      propiedades.forEach(p => {
+        const proyectoId = proyectoByEntidad.get(p.id_entidad_relacionada_dueno as number);
+        if (proyectoId !== undefined) proyectoByPropiedad.set(p.id, proyectoId);
+      });
+
+      // 3) Ofertas activas de todas las propiedades
+      const ofertas = await fetchAllChunked(propiedades.map(p => p.id), (chunk, from, to) =>
+        supabase
+          .from('ofertas')
+          .select('id, id_propiedad')
+          .in('id_propiedad', chunk)
+          .eq('activo', true)
+          .order('id')
+          .range(from, to)
+      );
+      const proyectoByOferta = new Map<number, number>();
+      ofertas.forEach(o => {
+        const proyectoId = proyectoByPropiedad.get(o.id_propiedad as number);
+        if (proyectoId !== undefined) proyectoByOferta.set(o.id, proyectoId);
+      });
+
+      // 4) Cuentas de cobranza activas de todas las ofertas
+      const cuentas = await fetchAllChunked(ofertas.map(o => o.id), (chunk, from, to) =>
+        supabase
+          .from('cuentas_cobranza')
+          .select('precio_final, id_oferta')
+          .in('id_oferta', chunk)
+          .eq('activo', true)
+          .order('id')
+          .range(from, to)
+      );
+
+      // Agregación en memoria por proyecto
+      const montoByProyecto = new Map<number, number>();
+      cuentas.forEach(c => {
+        const proyectoId = proyectoByOferta.get(c.id_oferta as number);
+        if (proyectoId === undefined) return;
+        montoByProyecto.set(proyectoId, (montoByProyecto.get(proyectoId) || 0) + Number(c.precio_final));
+      });
+
+      const metrajeAcc = new Map<number, { sum: number; count: number }>();
+      const disponiblesByProyecto = new Set<number>();
+      propiedades.forEach(p => {
+        const proyectoId = proyectoByPropiedad.get(p.id);
+        if (proyectoId === undefined) return;
+        if (p.m2_interiores && p.m2_interiores > 0) {
+          const acc = metrajeAcc.get(proyectoId) || { sum: 0, count: 0 };
+          acc.sum += p.m2_interiores;
+          acc.count += 1;
+          metrajeAcc.set(proyectoId, acc);
+        }
+        // id_estatus_disponibilidad = 2 es "Disponible"
+        if (p.id_estatus_disponibilidad === 2) disponiblesByProyecto.add(proyectoId);
+      });
+
+      const projectsWithAmounts = projects.map(project => {
+        const metraje = metrajeAcc.get(project.id);
+        return {
+          id: project.id,
+          nombre: project.nombre,
+          direccion: project.direccion,
+          precio_m2_actual: project.precio_m2_actual || 0,
+          tipo_uso: (project.tipos_uso as any)?.nombre || 'N/A',
+          monto_total: montoByProyecto.get(project.id) || 0,
+          metraje_promedio: metraje ? metraje.sum / metraje.count : 0,
+          tiene_disponibles: disponiblesByProyecto.has(project.id)
+        };
+      });
 
       // Filter out projects with 0 monto_total and sort by monto_total descending
       return projectsWithAmounts
         .filter(p => p.monto_total > 0)
         .sort((a, b) => b.monto_total - a.monto_total);
     },
-    enabled: !isLoadingAccess
+    enabled: !isLoadingAccess && !isLoadingSozu
   });
 
   // Filter projects to only show Sozu-managed ones (and accessible to user)

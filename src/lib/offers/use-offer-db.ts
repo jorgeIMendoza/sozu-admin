@@ -2,16 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
-import { expandirTramos, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { isValidRFC } from "@/utils/fiscalDataValidation";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const COUNTRY_DIAL: Record<string, string> = { MX: "52", US: "1", IN: "91" };
 
 function toDialCode(clave: string | null | undefined): string {
-  if (!clave) return "52";
-  if (/^\+?\d+$/.test(clave)) return clave.replace("+", "");
-  return COUNTRY_DIAL[clave.toUpperCase()] ?? "52";
+  // clave_pais_telefono es CHAR(n): puede venir con espacios de relleno ("MX   ")
+  // o como dial ("+52"/"52") o código de país ("MX"). Normalizar con trim.
+  const c = (clave ?? "").trim();
+  if (!c) return "52";
+  if (/^\+?\d+$/.test(c)) return c.replace("+", "");
+  return COUNTRY_DIAL[c.toUpperCase()] ?? "52";
 }
 
 function buildWhatsapp(clave: string | null | undefined, telefono: string): string {
@@ -63,6 +68,10 @@ function toOptimizedUrl(url: string, _width: number, quality = 80): string {
   const marker = "/storage/v1/object/public/";
   const idx = url.indexOf(marker);
   if (idx === -1) return url;
+  // El endpoint de transformación /render/image/ solo existe en Supabase Cloud
+  // (*.supabase.co). En self-hosted (dev: supabase-dev.sozu.com) 404ea y rompe
+  // las imágenes → devolver la URL pública original sin transformar.
+  if (!url.includes(".supabase.co/")) return url;
   const base = url.slice(0, idx) + "/storage/v1/render/image/public/" + url.slice(idx + marker.length);
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}quality=${quality}&format=webp`;
@@ -76,10 +85,11 @@ function calcPaymentPlans(
   fechaGeneracion?: string,
   fechaEntrega?: string | null,
 ): PaymentPlan[] {
-  const mesesEfectivos =
-    fechaGeneracion && fechaEntrega
-      ? mesesEntreFechas(fechaGeneracion, fechaEntrega)
-      : 0;
+  // Meses de mensualidades RESTANTES: de hoy a la entrega MENOS 1 mes (el mes de
+  // entrega es el Pago a escrituración, no mensualidad). Si ya estamos en/después
+  // del mes de entrega → 0 mensualidades → todo el saldo va a escrituración.
+  // (fechaGeneracion se ignora: el conteo baja conforme pasan los días).
+  const mesesEfectivos = mesesMensualidadesRestantes(fechaEntrega);
 
   return esquemas.map((e) => {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
@@ -98,15 +108,23 @@ function calcPaymentPlans(
     let finalPaymentAmount: number;
     let pctMensual: number;
     let pctEntrega: number;
+    let installmentsEndDate = "";
 
     if (isEscalonado) {
-      const tramosExpanded = expandirTramos(tramos);
-      nMensual = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
-      installmentsTotal = tramosExpanded.reduce((s: number, t: any) => {
-        return s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0);
-      }, 0);
-      monthlyAmount      = nMensual > 0 ? installmentsTotal / nMensual : 0;
-      finalPaymentAmount = Math.max(0, finalPrice - downPaymentAmount - installmentsTotal);
+      // Los esquemas dinámicos (no manuales) recalculan meses y fecha final contra
+      // la fecha de entrega ACTUAL del proyecto. Los manuales conservan sus tramos.
+      // Cálculo compartido con el diálogo de inventario de agentes (calcEscalonadoScheme).
+      const recomputeVsEntrega = e.es_manual !== true && !!fechaEntrega;
+      const esc = calcEscalonadoScheme(
+        e,
+        listPrice,
+        recomputeVsEntrega ? mesesEfectivos : 0
+      );
+      nMensual           = esc.meses;
+      monthlyAmount      = esc.mensualidad;
+      installmentsTotal  = esc.mensualidadesTotal;
+      finalPaymentAmount = esc.entrega;
+      installmentsEndDate = recomputeVsEntrega ? fechaEntrega! : "";
       pctMensual         = finalPrice > 0 ? Math.floor((installmentsTotal / finalPrice) * 100) : 0;
       pctEntrega         = finalPrice > 0 ? Math.floor((finalPaymentAmount / finalPrice) * 100) : 0;
     } else if (mesesEfectivos > 0 && Number(e.porcentaje_mensualidades ?? 0) > 0) {
@@ -137,7 +155,7 @@ function calcPaymentPlans(
       downPaymentPct: pctEnganche,
       downPaymentAmount,
       installments: nMensual > 0
-        ? { count: nMensual, monthlyAmount, endDate: "" }
+        ? { count: nMensual, monthlyAmount, endDate: installmentsEndDate }
         : undefined,
       installmentsPct: pctMensual,
       finalPaymentPct: pctEntrega,
@@ -172,7 +190,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // 2. Propiedad
   const { data: propiedad } = await supabase
     .from("propiedades")
-    .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, id_vista, url_imagen_portada")
+    .select("id, numero_propiedad, numero_piso, m2_interiores, m2_exteriores, precio_lista, id_edificio_modelo, id_vista, url_imagen_portada, clabe_stp_tmp_apartado")
     .eq("id", propiedadId)
     .maybeSingle();
 
@@ -199,6 +217,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: amenidadesProyecto },
     { data: vista },
     { data: esquemas },
+    { data: categoriasMultimedia },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -207,12 +226,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .maybeSingle(),
     supabase
       .from("multimedias_proyecto")
-      .select("url")
+      .select("url, id_categoria")
       .eq("id_proyecto", proyectoId)
       .eq("es_imagen", true)
       .eq("activo", true)
       .order("id", { ascending: false })
-      .limit(20),
+      .limit(50),
     supabase
       .from("videos_youtube")
       .select("id, nombre, link, fecha_creacion")
@@ -222,7 +241,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .limit(5),
     supabase
       .from("amenidades_proyectos")
-      .select("amenidades:amenidades_proyectos_id_amenidad_fkey(id, nombre, url)")
+      .select("url_imagen, amenidades:amenidades_proyectos_id_amenidad_fkey(id, nombre, url)")
       .eq("id_proyecto", proyectoId)
       .eq("activo", true),
     propiedad.id_vista
@@ -235,6 +254,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .eq("id_proyecto", proyectoId)
       .eq("activo", true)
       .order("orden", { ascending: true }),
+    supabase
+      .from("categorias_multimedia_proyecto")
+      .select("id, nombre")
+      .eq("activo", true),
   ]);
 
   if (!proyecto) return null;
@@ -250,6 +273,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: agentUser },
     { data: leadPersona },
     { data: multimediasModelo },
+    { data: bodegasRows },
+    { data: estacionamientosRows },
+    { data: tiposEstacionamiento },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -265,15 +291,17 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       : Promise.resolve({ data: null }),
     supabase
       .from("showrooms_proyecto")
-      .select("nombre, descripcion_direccion, horarios, latitud, longitud")
+      .select("nombre, descripcion_direccion, latitud, longitud")
       .eq("id_proyecto", proyectoId)
+      .eq("activo", true)
+      .order("fecha_actualizacion", { ascending: false })
       .limit(1)
       .maybeSingle(),
     // Agente: busca persona por email del creador de la oferta en el mismo batch
     oferta.email_creador
       ? supabase
           .from("usuarios")
-          .select("id_persona, foto_perfil_url, frase_perfil, personas:id_persona(id, nombre_legal, email, telefono, clave_pais_telefono)")
+          .select("nombre, id_persona, foto_perfil_url, frase_perfil, telefono, clave_pais_telefono")
           .eq("email", oferta.email_creador)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -281,7 +309,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     (oferta as any).id_persona_lead
       ? supabase
           .from("personas")
-          .select("email")
+          .select("email, rfc")
           .eq("id", (oferta as any).id_persona_lead)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -294,6 +322,25 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
           .eq("activo", true)
           .order("id", { ascending: true })
       : Promise.resolve({ data: [] }),
+    // Bodegas de la propiedad (extras vinculados a la unidad de la oferta)
+    (supabase as any)
+      .from("bodegas")
+      .select("id, nombre, ubicacion, m2, es_incluido, id_producto")
+      .eq("id_propiedad", propiedadId)
+      .eq("activo", true)
+      .order("id", { ascending: true }),
+    // Estacionamientos de la propiedad (con id_tipo → tipos_estacionamiento)
+    (supabase as any)
+      .from("estacionamientos")
+      .select("id, nombre, ubicacion, m2, es_incluido, id_tipo")
+      .eq("id_propiedad", propiedadId)
+      .eq("activo", true)
+      .order("id", { ascending: true }),
+    // Catálogo de tipos de estacionamiento (Normal, Tandem, Doble, Carlift)
+    (supabase as any)
+      .from("tipos_estacionamiento")
+      .select("id, nombre")
+      .eq("activo", true),
   ]);
 
   // Model media: floor plan + property images
@@ -306,8 +353,50 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     .filter((m) => m.ver_como_imagen_de_propiedad && m.url)
     .map((m) => toOptimizedUrl(m.url, 1200, 80));
 
-  // Construir agentId y datos del agente a partir del resultado paralelo
-  const agentPersona = (agentUser as any)?.personas ?? null;
+  // ── Plano de ubicación en el nivel (edificios_niveles_planos) para señalar la unidad ──
+  // Mismo dato que la Ficha Técnica del cliente: imagen del nivel + regiones (polígonos)
+  // que resaltan la unidad. FloorPlanCanvas hace el match del depto sobre estas regiones.
+  const numeroPisoNivel = (propiedad as any).numero_piso != null ? Number((propiedad as any).numero_piso) : null;
+  let planoUbicacionUrl: string | undefined;
+  let planoUbicacionRegiones: any[] = [];
+  if (edificio?.id && numeroPisoNivel) {
+    const { data: nivelPlano } = await (supabase as any)
+      .from("edificios_niveles_planos")
+      .select("imagen_url, regiones")
+      .eq("id_edificio", edificio.id)
+      .eq("nivel", numeroPisoNivel)
+      .eq("activo", true)
+      .maybeSingle();
+    if (nivelPlano) {
+      planoUbicacionUrl = (nivelPlano as any).imagen_url
+        ? toOptimizedUrl((nivelPlano as any).imagen_url, 1200, 85)
+        : undefined;
+      planoUbicacionRegiones = (nivelPlano as any).regiones || [];
+    }
+  }
+  // Depto derivado (numero_propiedad menos dígitos del piso) para el match del resaltado.
+  const rawPropNum = ((propiedad as any).numero_propiedad || "").toString().trim();
+  const propNumDigits = rawPropNum.replace(/\D/g, "");
+  const pisoDigits = (numeroPisoNivel?.toString() || "").replace(/\D/g, "");
+  const extractedDepto =
+    pisoDigits && propNumDigits.startsWith(pisoDigits) && propNumDigits.length > pisoDigits.length
+      ? propNumDigits.slice(pisoDigits.length)
+      : propNumDigits;
+  const unitDepto = extractedDepto.length === 1 ? extractedDepto.padStart(2, "0") : extractedDepto || rawPropNum;
+
+  // Construir agentId y datos del agente a partir del resultado paralelo.
+  // personas se trae en query APARTE (no embed) para no depender del schema-cache
+  // de PostgREST: en dev el embed falla y dejaba al agente null. Solo se consulta
+  // si el creador tiene persona vinculada (los super admin no la tienen).
+  let agentPersona: any = null;
+  if ((agentUser as any)?.id_persona) {
+    const { data: ap } = await supabase
+      .from("personas")
+      .select("id, nombre_legal, email, telefono, clave_pais_telefono")
+      .eq("id", (agentUser as any).id_persona)
+      .maybeSingle();
+    agentPersona = ap ?? null;
+  }
   let agentId = "AGT-SOZU";
   if ((agentUser as any)?.id_persona) agentId = `AGT-${(agentUser as any).id_persona}`;
 
@@ -316,6 +405,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const fotoRows  = (multimedias ?? []) as any[];
   const latestVideo = videoRows[0];
 
+  // Split project photos: "Avances de obra" → construcción; el resto → galería.
+  // (resolver id por nombre; los ids difieren dev/prod)
+  const catRows = (categoriasMultimedia ?? []) as { id: number; nombre: string }[];
+  const avancesId = catRows.find((c) => c.nombre === "Avances de obra")?.id ?? null;
+  const avanceFotos  = fotoRows.filter((f: any) => avancesId != null && f.id_categoria === avancesId);
+  const galleryFotos = fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
+
   const globalProgress = calcProgressFromDates(
     (proyecto as any).fecha_lanzamiento,
     (proyecto as any).fecha_entrega_proyecto ?? (proyecto as any).fecha_entrega,
@@ -323,7 +419,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   const milestones = applyProgressToMilestones(DEFAULT_MILESTONES, globalProgress);
 
-  const constructionPhotos = fotoRows.slice(0, 6).map((f: any) => ({
+  const constructionPhotos = avanceFotos.slice(0, 6).map((f: any) => ({
     src: toOptimizedUrl(f.url, 800, 75),
     alt: `${(proyecto as any).nombre}`,
   }));
@@ -335,7 +431,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const portadaRaw: string | undefined =
     (propiedad as any).url_imagen_portada || (modelo as any)?.url_imagen_portada || undefined;
 
-  const proyectoGalleryUrls: string[] = fotoRows
+  const proyectoGalleryUrls: string[] = galleryFotos
     .map((m: any) => toOptimizedUrl(m.url, 1200, 80))
     .filter(Boolean);
   if (proyectoGalleryUrls.length === 0 && (proyecto as any).url_imagen_portada) {
@@ -358,12 +454,55 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     .map((ap: any) => ap.amenidades?.nombre)
     .filter(Boolean);
 
+  // Bento enriquecido: foto real (url_imagen) + nombre. Sin foto → solo texto.
+  // El icono del catálogo NO se usa en la oferta (solo PDF).
+  const amenitiesEnriched = (amenidadesProyecto ?? [])
+    .map((ap: any, i: number) => {
+      const name = ap.amenidades?.nombre;
+      if (!name) return null;
+      return {
+        id: String(ap.amenidades?.id ?? i),
+        name,
+        shortDescription: "",
+        images: ap.url_imagen
+          ? [{ url: toOptimizedUrl(ap.url_imagen, 800, 80), caption: name }]
+          : [],
+        size: (ap.url_imagen && i % 5 === 0 ? "large" : "medium") as "large" | "medium" | "small",
+        iconName: "",
+      };
+    })
+    .filter(Boolean);
+
   // 9. Esquemas de pago
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
-  const allEsqs      = (esquemas ?? []).filter((e: any) => !e.es_manual);
+
+  // Si el esquema seleccionado fue VERSIONADO (desactivado al editarlo), no aparece en la
+  // lista activa del proyecto. Lo traemos aparte para que la oferta del cliente siga
+  // mostrando su plan CONGELADO (los porcentajes con los que lo aceptó).
+  let esquemasAug = (esquemas ?? []) as any[];
+  if (selectedId != null && !esquemasAug.some((e: any) => e.id === selectedId)) {
+    const { data: selEsq } = await (supabase as any)
+      .from("esquemas_pago")
+      .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden, tramos_mensualidad")
+      .eq("id", selectedId)
+      .maybeSingle();
+    if (selEsq) esquemasAug = [...esquemasAug, selEsq];
+  }
+
+  // ¿La oferta ya está formalizada con cuenta de cobranza (apartado/venta)? Entonces el
+  // plan queda congelado: se muestra SOLO el seleccionado (no el selector completo).
+  const { data: cuentasOferta } = await (supabase as any)
+    .from("cuentas_cobranza")
+    .select("id")
+    .eq("id_oferta", numId)
+    .eq("activo", true)
+    .limit(1);
+  const ofertaTieneCuenta = Array.isArray(cuentasOferta) && cuentasOferta.length > 0;
+
+  const allEsqs      = esquemasAug.filter((e: any) => !e.es_manual);
   const selectedIsManual = selectedId
-    ? (esquemas ?? []).some((e: any) => e.id === selectedId && e.es_manual)
+    ? esquemasAug.some((e: any) => e.id === selectedId && e.es_manual)
     : false;
 
   // Strip internal naming pattern (manual_NNNN_*) and show clean label
@@ -376,7 +515,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   let filteredEsqs: any[];
   if (selectedIsManual && selectedId) {
     // Manual selected: show it first (clean name) + all non-manual for comparison
-    const manualEsq = (esquemas ?? []).find((e: any) => e.id === selectedId);
+    const manualEsq = esquemasAug.find((e: any) => e.id === selectedId);
     filteredEsqs = [
       ...(manualEsq ? [normalizeManualName(manualEsq)] : []),
       ...allEsqs,
@@ -395,12 +534,235 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
 
   const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
 
-  // 10. Expiración (7 días desde generación)
-  // Vigencia siempre 7 días — calculado en código, sin campo en DB
-  const validUntilDate = new Date(oferta.fecha_generacion);
-  validUntilDate.setDate(validUntilDate.getDate() + 7);
+  // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
+  if (selectedIsManual && selectedId && paymentPlans.length > 0) {
+    const { data: cuentas } = await (supabase as any)
+      .from('cuentas_cobranza')
+      .select('id')
+      .eq('id_oferta', numId)
+      .eq('activo', true);
+
+    if (cuentas && cuentas.length > 0) {
+      const cuentaIds = (cuentas as any[]).map((c: any) => c.id);
+      const { data: acuerdos } = await (supabase as any)
+        .from('acuerdos_pago')
+        .select('id, monto, id_concepto')
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+
+      if (acuerdos && (acuerdos as any[]).length > 0) {
+        const conceptoIds = [...new Set((acuerdos as any[]).map((a: any) => a.id_concepto))] as number[];
+        const { data: conceptos } = await (supabase as any)
+          .from('conceptos_pago')
+          .select('id, nombre')
+          .in('id', conceptoIds);
+        const conceptoMap: Record<number, string> = {};
+        ((conceptos ?? []) as any[]).forEach((c: any) => { conceptoMap[c.id] = (c.nombre ?? '').toLowerCase(); });
+
+        let engancheTotal = 0, mensualidadesTotal = 0, entregaTotal = 0, nMensualidades = 0;
+        for (const a of acuerdos as any[]) {
+          const nombre = conceptoMap[a.id_concepto] ?? '';
+          const monto = Number(a.monto ?? 0);
+          if (nombre.includes('apartado') || nombre.includes('enganche')) {
+            engancheTotal += monto;
+          } else if (nombre.includes('parcialidad') || nombre.includes('mensualidad')) {
+            mensualidadesTotal += monto;
+            nMensualidades++;
+          } else if (nombre.includes('contra entrega') || nombre.includes('entrega')) {
+            entregaTotal += monto;
+          }
+        }
+
+        const tpl = paymentPlans[0];
+        const fp = tpl.finalPrice;
+        const pctE   = fp > 0 ? Number((engancheTotal   / fp * 100).toFixed(1)) : 0;
+        const pctP   = fp > 0 ? Number((mensualidadesTotal / fp * 100).toFixed(1)) : 0;
+        const pctEnt = fp > 0 ? Number((entregaTotal     / fp * 100).toFixed(1)) : 0;
+
+        const isModified =
+          Math.abs(tpl.downPaymentPct  - pctE)   > 0.5 ||
+          Math.abs(tpl.installmentsPct - pctP)   > 0.5 ||
+          Math.abs(tpl.finalPaymentPct - pctEnt) > 0.5 ||
+          (tpl.installments?.count ?? 0) !== nMensualidades;
+
+        if (isModified) {
+          const perPago = nMensualidades > 0 ? mensualidadesTotal / nMensualidades : 0;
+          const syntheticPlan: PaymentPlan = {
+            ...tpl,
+            name: `${tpl.name} modificado`,
+            downPaymentPct: pctE,
+            downPaymentAmount: engancheTotal,
+            installmentsPct: pctP,
+            installments: nMensualidades > 0
+              ? { count: nMensualidades, monthlyAmount: perPago, endDate: tpl.installments?.endDate ?? '' }
+              : undefined,
+            finalPaymentPct: pctEnt,
+            finalPaymentAmount: entregaTotal,
+          };
+          paymentPlans.splice(0, 1, syntheticPlan);
+        }
+      }
+    }
+  }
+
+  // 9c. Desglose financiero AUTORITATIVO server-side (RPC get_oferta_financials).
+  //     Fuente de verdad no manipulable desde consola: apartado $20k, enganche neto,
+  //     parcialidades (hoy→entrega−1 mes), pago a escrituración y vigencia.
+  //     Si el RPC aún no existe en la BD (DDL pendiente) → se conservan los montos
+  //     calculados en TS arriba (fallback graceful).
+  let vigenciaHasta: string | null = null;
+  let mesesRestantes: number | null = null;
+  let finAgente: any = null;
+  try {
+    const { data: fin, error: finErr } = await (supabase as any).rpc("get_oferta_financials", {
+      p_oferta_id: numId,
+    });
+    if (!finErr && fin) {
+      // Datos del creador vía RPC (usuarios tiene RLS que bloquea anon en la oferta pública)
+      finAgente = fin.agente ?? null;
+    }
+    if (!finErr && fin && Array.isArray(fin.planes)) {
+      const finById = new Map<string, any>(fin.planes.map((p: any) => [String(p.esquema_id), p]));
+      for (let i = 0; i < paymentPlans.length; i++) {
+        const pl = paymentPlans[i];
+        const f = finById.get(pl.id);
+        if (!f) continue;
+        paymentPlans[i] = {
+          ...pl,
+          finalPrice:            Number(f.precio_final),
+          downPaymentPct:        Number(f.pct_enganche),
+          downPaymentAmount:     Number(f.enganche_total),
+          apartado:              Number(f.apartado),
+          downPaymentNetAmount:  Number(f.enganche_neto),
+          installments: Number(f.meses) > 0
+            ? { count: Number(f.meses), monthlyAmount: Number(f.mensualidad_monto), endDate: pl.installments?.endDate ?? "" }
+            : undefined,
+          installmentsPct:       Number(f.pct_mensualidades),
+          finalPaymentPct:       Number(f.pct_escrituracion),
+          finalPaymentAmount:    Number(f.escrituracion_monto),
+        };
+      }
+      vigenciaHasta  = fin.vigencia_hasta ?? null;
+      mesesRestantes = fin.meses_restantes != null ? Number(fin.meses_restantes) : null;
+    }
+  } catch {
+    /* RPC ausente o error → fallback a montos calculados en TS */
+  }
+
+  // 9d. Normalizar porcentajes a enteros que SIEMPRE sumen 100% (UI/comprensión).
+  //     Enganche + Mensualidades se redondean; Escrituración absorbe el resto para
+  //     garantizar exactamente 100. Los MONTOS quedan intactos (precisión completa).
+  for (let i = 0; i < paymentPlans.length; i++) {
+    const pl = paymentPlans[i];
+    const eng = Math.round(pl.downPaymentPct ?? 0);
+    const mens = pl.installmentsPct > 0 ? Math.round(pl.installmentsPct) : 0;
+    const esc = Math.max(0, 100 - eng - mens);
+    paymentPlans[i] = {
+      ...pl,
+      downPaymentPct: eng,
+      installmentsPct: mens,
+      finalPaymentPct: esc,
+    };
+  }
+
+  // Congelado: si la oferta ya tiene cuenta de cobranza (aceptada/apartada), mostrar SOLO
+  // el plan seleccionado. Sin cuenta, se conserva el selector con los planes activos.
+  if (ofertaTieneCuenta && selectedId != null) {
+    const soloSel = paymentPlans.filter((pl) => pl.id === String(selectedId));
+    if (soloSel.length > 0) {
+      paymentPlans.length = 0;
+      paymentPlans.push(...soloSel);
+    }
+  }
+
+  // 10. Expiración (7 días desde generación).
+  // Autoritativa del RPC (vigencia_hasta) si disponible; si no, fallback en código.
+  const validUntilDate = vigenciaHasta
+    ? new Date(vigenciaHasta)
+    : (() => {
+        const d = new Date(oferta.fecha_generacion);
+        d.setDate(d.getDate() + 7);
+        return d;
+      })();
 
   const area = Number(propiedad.m2_interiores ?? 0) + Number(propiedad.m2_exteriores ?? 0);
+
+  // ── Extras reales de la unidad: bodegas + estacionamientos ──
+  const tipoEstacMap = new Map<number, string>(
+    ((tiposEstacionamiento as any[]) ?? []).map((t) => [t.id, t.nombre])
+  );
+  // ── Esquema de pago + CLABE por bodega ──
+  // La bodega se vende como "oferta de producto" (ofertas con id_producto). El esquema
+  // y la CLABE reales viven en ESA oferta, no en la bodega ni en la unidad. Tomamos la
+  // oferta de producto del MISMO lead que la oferta de la unidad (misma propiedad),
+  // que es la que corresponde a este comprador. Fuente: id_esquema_pago_seleccionado +
+  // clabe_stp_tmp_producto (ver NewProductOfferDialog).
+  // Gate CLABE: solo se muestra si el lead tiene RFC válido (oferta formalizada con
+  // datos fiscales del cliente). Mismo criterio que el PDF (offerPdfStorageService).
+  const leadRfcValido = isValidRFC((leadPersona as any)?.rfc);
+  const leadIdOferta = (oferta as any).id_persona_lead ?? null;
+  const bodegaPagoByProducto = new Map<
+    number,
+    { pctEnganche: number; pctEntrega: number; pctMensualidades: number; numMensualidades: number; clabeStp?: string }
+  >();
+  const bodegaProductoIds = Array.from(
+    new Set(((bodegasRows as any[]) ?? []).map((b) => b.id_producto).filter((v) => v != null))
+  );
+  if (leadIdOferta && bodegaProductoIds.length > 0) {
+    const { data: prodOfertas } = await (supabase as any)
+      .from("ofertas")
+      .select("id, id_producto, id_esquema_pago_seleccionado, clabe_stp_tmp_producto")
+      .eq("id_propiedad", propiedadId)
+      .eq("id_persona_lead", leadIdOferta)
+      .in("id_producto", bodegaProductoIds)
+      .order("id", { ascending: false });
+    const prodRows = (prodOfertas as any[]) ?? [];
+    const esquemaIds = Array.from(
+      new Set(prodRows.map((o) => o.id_esquema_pago_seleccionado).filter((v) => v != null))
+    );
+    const esqMap = new Map<number, any>();
+    if (esquemaIds.length > 0) {
+      const { data: esquemas } = await (supabase as any)
+        .from("esquemas_pago")
+        .select("id, porcentaje_enganche, porcentaje_entrega, porcentaje_mensualidades, numero_mensualidades")
+        .in("id", esquemaIds);
+      for (const e of (esquemas as any[]) ?? []) esqMap.set(e.id, e);
+    }
+    // Recorremos de más reciente a más antigua (order desc): la primera oferta con
+    // esquema para cada producto es la vigente.
+    for (const o of prodRows) {
+      if (bodegaPagoByProducto.has(o.id_producto)) continue;
+      const esq = o.id_esquema_pago_seleccionado ? esqMap.get(o.id_esquema_pago_seleccionado) : null;
+      if (!esq) continue;
+      bodegaPagoByProducto.set(o.id_producto, {
+        pctEnganche: Number(esq.porcentaje_enganche ?? 0),
+        pctEntrega: Number(esq.porcentaje_entrega ?? 0),
+        pctMensualidades: Number(esq.porcentaje_mensualidades ?? 0),
+        numMensualidades: Number(esq.numero_mensualidades ?? 0),
+        clabeStp: leadRfcValido ? o.clabe_stp_tmp_producto || undefined : undefined,
+      });
+    }
+  }
+
+  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
+    id: b.id,
+    nombre: b.nombre ?? "",
+    ubicacion: b.ubicacion ?? undefined,
+    m2: b.m2 != null ? Number(b.m2) : undefined,
+    incluido: !!b.es_incluido,
+    idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
+    pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
+  }));
+  const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
+    id: e.id,
+    nombre: e.nombre ?? "",
+    ubicacion: e.ubicacion ?? undefined,
+    m2: e.m2 != null ? Number(e.m2) : undefined,
+    incluido: !!e.es_incluido,
+    tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
+  }));
+  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido).
+  const clabeStp = leadRfcValido ? (propiedad as any).clabe_stp_tmp_apartado || undefined : undefined;
 
   const offer = {
     id: String(numId),
@@ -413,16 +775,22 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       unitNumber:     propiedad.numero_propiedad ?? "",
       level:          oferta.mostrar_piso_en_oferta ? (propiedad.numero_piso ?? undefined) : undefined,
       view:           (vista as any)?.nombre ?? undefined,
-      area:           area > 0 ? `${area.toFixed(1)} m²` : undefined,
+      // Metraje a precisión completa (hasta 2 decimales, sin redondear): así el
+      // metraje mostrado coincide con el divisor real usado en pricePerM2.
+      area:           area > 0 ? `${area.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²` : undefined,
       bedrooms:       Number(modelo?.numero_recamaras ?? 0),
       bathrooms:      Number(modelo?.numero_completo_banos ?? 0),
       halfBathrooms:  Number(modelo?.numero_medio_bano ?? 0),
-      parkingSpots:   1,
-      parkingType:    "incluido",
+      // Conteo y tipo reales desde la tabla estacionamientos (antes hardcode 1/incluido)
+      parkingSpots:   estacionamientos.length,
+      parkingType:    estacionamientos.every((e) => e.incluido) ? "incluido" : "no incluido",
       hasBalcony:     false,
       listPrice,
-      pricePerM2:     oferta.mostrar_precio_m2_en_oferta
-        ? Number((proyecto as any).precio_m2_actual ?? 0)
+      // $/m² = precio_lista / m² total (interiores + exteriores), consistente
+      // con PDFs y admin. NO usar proyecto.precio_m2_actual (valor de proyecto
+      // desligado del metraje real de la unidad → number mostrado no cuadra).
+      pricePerM2:     oferta.mostrar_precio_m2_en_oferta && area > 0
+        ? listPrice / area
         : undefined,
     },
     estimatedDelivery:       entregaFecha ? new Date(entregaFecha).toISOString() : undefined,
@@ -443,7 +811,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     constructionMilestones:  milestones,
     constructionDescription: undefined,
     amenities:               amenidadesNames,
-    amenitiesEnriched:       [],
+    amenitiesEnriched,
     location: {
       address: (proyecto as any).direccion ?? "",
       lat:     Number((proyecto as any).latitud ?? 0),
@@ -500,33 +868,51 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       : undefined,
     parkingSlots:        [],
     parkingLevelLayouts: [],
+    bodegas,
+    estacionamientos,
+    clabeStp,
+    planoUbicacionUrl,
+    planoUbicacionRegiones,
+    unitDepto,
+    ...(mesesRestantes != null ? { mesesRestantes } : {}),
   } as unknown as OfertaComercial;
 
-  // Construir Agent inline — datos ya disponibles — datos ya disponibles del batch paralelo
-  const agent: Agent | null = agentPersona
-    ? (() => {
-        const firstName = (agentPersona.nombre_legal ?? "").split(" ")[0];
-        const phone = agentPersona.telefono
-          ? `${agentPersona.clave_pais_telefono ?? "+52"} ${agentPersona.telefono}`
-          : "";
-        const whatsapp = agentPersona.telefono
-          ? buildWhatsapp(agentPersona.clave_pais_telefono, agentPersona.telefono)
-          : "";
-        return {
-          id: agentId,
-          fullName: agentPersona.nombre_legal ?? "",
-          firstName,
-          title: "Asesor SOZU",
-          photoUrl: (agentUser as any)?.foto_perfil_url ?? "",
-          bio: (agentUser as any)?.frase_perfil ?? "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!",
-          phone,
-          email: agentPersona.email ?? "",
-          whatsapp,
-          brokerage: "SOZU",
-          isAllied: false,
-        } as Agent;
-      })()
-    : null;
+  // Construir Agent inline. SIEMPRE se arma una tarjeta (nunca null) con los datos
+  // REALES del creador de la oferta (es el responsable): nombre, email y teléfono.
+  // Lo ÚNICO que cambia sin perfil es la foto → si no subió foto_perfil_url se usa
+  // el logo SOZU (AgentCard pinta AGENT_PHOTO_FALLBACK cuando photoUrl está vacío).
+  // Fuente preferida = RPC (finAgente, bypassa RLS de usuarios en la oferta pública).
+  // Fallback = agentUser/agentPersona del batch (solo visible con sesión interna).
+  const DEFAULT_BIO =
+    "Estoy aquí para acompañarte en cada paso de tu decisión de compra. ¡Contáctame sin compromiso!";
+  // Teléfono: RPC ya hace COALESCE(usuarios, personas). Fallback al batch con sesión.
+  const clavePais =
+    finAgente?.clave_pais ??
+    (agentUser as any)?.clave_pais_telefono ?? agentPersona?.clave_pais_telefono;
+  const tel =
+    finAgente?.telefono ??
+    (agentUser as any)?.telefono ?? agentPersona?.telefono ?? null;
+  const phone = tel ? `+${toDialCode(clavePais)} ${tel}` : "";
+  const whatsapp = tel ? buildWhatsapp(clavePais, tel) : "";
+  const nombre = (
+    finAgente?.nombre_legal ?? finAgente?.nombre ??
+    agentPersona?.nombre_legal ?? (agentUser as any)?.nombre ?? ""
+  ).trim();
+  const fotoUrl = finAgente?.foto_perfil_url ?? (agentUser as any)?.foto_perfil_url;
+
+  const agent: Agent = {
+    id: agentId,
+    fullName: nombre || "Asesor SOZU",
+    firstName: nombre ? nombre.split(" ")[0] : "equipo SOZU",
+    title: "Asesor SOZU",
+    photoUrl: fotoUrl ? normalizeAvatarUrl(fotoUrl) : "",
+    bio: finAgente?.frase_perfil ?? (agentUser as any)?.frase_perfil ?? DEFAULT_BIO,
+    phone,
+    email: finAgente?.email ?? agentPersona?.email ?? oferta.email_creador ?? "",
+    whatsapp,
+    brokerage: "SOZU",
+    isAllied: false,
+  } as Agent;
 
   return { offer, agent };
 }

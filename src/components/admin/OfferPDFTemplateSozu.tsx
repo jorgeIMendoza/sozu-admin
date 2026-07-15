@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { mesesEntreFechas, calcDynamicScheme } from '@/utils/escalonadoUtils';
+import { calcDynamicScheme, mesesMensualidadesRestantes } from '@/utils/escalonadoUtils';
 import recamarasIcon from '@/assets/icons/recamaras.png';
 import banosIcon from '@/assets/icons/banos.png';
 import mediosBanosIcon from '@/assets/icons/medios-banos.png';
@@ -520,7 +520,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                 const isSchemeEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
                 const fechaEntregaStr = propertyDetails.projectData?.fecha_entrega ?? null;
                 const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaStr && scheme.porcentaje_mensualidades > 0)
-                  ? mesesEntreFechas(offerData.fecha_generacion, fechaEntregaStr)
+                  ? mesesMensualidadesRestantes(fechaEntregaStr)
                   : 0;
                 const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
                 const isSelected = offerData.id_esquema_pago_seleccionado === scheme.id;

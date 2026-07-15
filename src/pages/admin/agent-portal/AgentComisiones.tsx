@@ -4,11 +4,12 @@ import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHe
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Lock, CheckCircle2, AlertCircle, DollarSign, Clock, FileText, CalendarCheck, Upload } from "lucide-react";
+import { Loader2, Lock, CheckCircle2, AlertCircle, DollarSign, Clock, FileText, CalendarCheck, Upload, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -35,6 +36,7 @@ const AgentComisiones = () => {
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { steps, percentage, isLoading: onboardingLoading, canAccessComisiones, missingForComisiones } = useAgentOnboardingStatus(personaId);
+  const { presentationMode, mask } = useAgentPresentation();
   const [activeTab, setActiveTab] = useState<TabKey>('todas');
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -239,10 +241,10 @@ const AgentComisiones = () => {
     return (
       <div className="pb-24">
         <AgentPortalHeader>
-          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Comisiones</h1>
+          <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Comisiones</h1>
         </AgentPortalHeader>
-        <div className="p-4 space-y-5">
-        <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-5 space-y-4">
+        <div className="mx-auto max-w-[920px] p-4 space-y-5">
+        <div className="rounded-2xl border border-[#ECEEF0] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
               <Lock className="h-5 w-5 text-amber-600" />
@@ -267,7 +269,7 @@ const AgentComisiones = () => {
               track({ page: 'agent_comisiones', elementId: 'btn_completar_perfil_comisiones', elementLabel: 'Completar perfil' });
               navigate('/admin/agent/perfil');
             }}
-            className="w-full py-2.5 rounded-xl bg-[hsl(var(--agent-primary))] text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+            className="w-full py-2.5 rounded-xl bg-[#16A45E] text-white text-sm font-semibold active:scale-[0.98] transition-transform"
           >
             Completar perfil
           </button>
@@ -281,38 +283,44 @@ const AgentComisiones = () => {
     <div className="pb-24">
       <AgentPortalHeader>
         <div>
-          <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">Comisiones</h1>
-          <p className="text-sm text-[hsl(var(--agent-text-secondary))]">Tu wallet de ingresos</p>
+          <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Comisiones</h1>
+          <p className="mt-1 text-[13px] font-medium text-[#9AA3AD]">Tu wallet de ingresos</p>
         </div>
       </AgentPortalHeader>
 
-      {/* Summary cards */}
-      <div className="px-4 grid grid-cols-2 gap-3 mb-4">
-        <div className="rounded-xl bg-[hsl(var(--agent-primary))] p-4 shadow-md">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] text-white/80">Total cobrado</p>
-            <CheckCircle2 className="h-4 w-4 text-white/60" />
+      {/* Banner modo presentación */}
+      {presentationMode && (
+        <div className="mx-auto mb-4 max-w-[920px] px-4">
+          <div className="flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
+            <span className="text-[12px] font-semibold text-[#B5601C]">
+              Modo presentación activo · tus ingresos están ocultos. Desactívalo en la barra superior para verlos.
+            </span>
           </div>
-          <p className="text-xl font-bold text-white">{formatCurrency(totalCobrado)}</p>
-          <p className="text-[10px] text-white/60 mt-0.5">MXN · acumulado</p>
         </div>
-        <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] text-[hsl(var(--agent-text-secondary))]">Por cobrar</p>
-            <DollarSign className="h-4 w-4 text-[hsl(var(--agent-muted))]" />
-          </div>
-          <p className="text-xl font-bold text-[hsl(var(--agent-text))]">{formatCurrency(totalPorCobrar)}</p>
-          <p className="text-[10px] text-[hsl(var(--agent-text-secondary))] mt-0.5">MXN · en proceso</p>
+      )}
+
+      {/* Summary cards */}
+      <div className="mx-auto mb-4 grid max-w-[920px] grid-cols-2 gap-3.5 px-4">
+        <div className="rounded-2xl bg-[#1F5A3D] p-[18px]">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-white/65">Total cobrado</p>
+          <p className="mt-2 text-[24px] font-extrabold tabular-nums text-white">{mask(formatCurrency(totalCobrado))}</p>
+          <p className="mt-1 text-[10px] font-semibold text-white/55">MXN · acumulado</p>
+        </div>
+        <div className="rounded-2xl border border-[#ECEEF0] bg-white p-[18px]">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
+          <p className="mt-2 text-[24px] font-extrabold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
+          <p className="mt-1 text-[10px] font-semibold text-[#9AA3AD]">MXN · en proceso</p>
         </div>
       </div>
 
       {/* Status tabs */}
-      <div className="px-4 mb-4">
+      <div className="mx-auto mb-4 max-w-[920px] px-4">
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex gap-2 pb-2">
             {visibleTabs.map(tab => {
-              const count = tab.key === 'todas' 
-                ? comisiones.length 
+              const count = tab.key === 'todas'
+                ? comisiones.length
                 : comisiones.filter((c: any) => c.detailed_status === tab.key).length;
               return (
                 <button
@@ -322,10 +330,10 @@ const AgentComisiones = () => {
                     setActiveTab(tab.key);
                   }}
                   className={cn(
-                    "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border",
+                    "whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-all tabular-nums",
                     activeTab === tab.key
-                      ? "bg-[hsl(var(--agent-primary))] text-white border-[hsl(var(--agent-primary))]"
-                      : "bg-white text-[hsl(var(--agent-text-secondary))] border-gray-200 hover:border-gray-300"
+                      ? "border-[#16A45E] bg-[#16A45E] text-white"
+                      : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
                   )}
                 >
                   {tab.label}{count > 0 ? ` (${count})` : ''}
@@ -338,7 +346,7 @@ const AgentComisiones = () => {
       </div>
 
       {/* List */}
-      <div className="px-4 space-y-2.5">
+      <div className="mx-auto max-w-[920px] space-y-2.5 px-4">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
@@ -352,14 +360,14 @@ const AgentComisiones = () => {
             const status = getStatusConfig(c.detailed_status);
             const StatusIcon = status.icon;
             return (
-              <div key={`${c.id_cuenta_cobranza}-${idx}`} className="rounded-xl bg-white border border-gray-100 shadow-sm p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="text-sm font-semibold text-[hsl(var(--agent-text))]">
+              <div key={`${c.id_cuenta_cobranza}-${idx}`} className="rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-[13.5px] font-bold text-[#171A1D]">
                       {c.proyecto || 'Sin proyecto'}
                       {c.propiedad ? ` · ${c.propiedad}` : ''}
                     </p>
-                    <p className="text-xs text-[hsl(var(--agent-text-secondary))] truncate">
+                    <p className="truncate text-[11px] font-medium text-[#9AA3AD]">
                       {c.cuenta_cobranza_label}
                       {' · '}
                       {c.productoNombre
@@ -367,8 +375,8 @@ const AgentComisiones = () => {
                         : c.propiedad ? `Departamento ${c.propiedad}` : 'Sin unidad'}
                     </p>
                   </div>
-                  <p className="text-base font-bold text-[hsl(var(--agent-text))] shrink-0">
-                    {formatCurrency(c.monto_comision || 0)}
+                  <p className="shrink-0 text-[16px] font-extrabold tabular-nums text-[#171A1D]">
+                    {mask(formatCurrency(c.monto_comision || 0))}
                   </p>
                 </div>
                 <div className="mt-2.5 flex items-center justify-between">
@@ -402,7 +410,7 @@ const AgentComisiones = () => {
                   </div>
                   {c.precio_final > 0 && (
                     <span className="text-[10px] text-[hsl(var(--agent-text-secondary))]">
-                      Venta: {formatCurrency(c.precio_final)}
+                      Venta: {mask(formatCurrency(c.precio_final))}
                     </span>
                   )}
                 </div>
@@ -445,8 +453,8 @@ function AgentFacturaUploadButton({
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `facturas-comision/${cuentaId}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file);
+      const path = `facturas-comision/${cuentaId}/${crypto.randomUUID()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
@@ -465,7 +473,7 @@ function AgentFacturaUploadButton({
       onUploaded();
     } catch (err: any) {
       console.error('Error uploading factura:', err);
-      toast.error('Error al subir la factura');
+      toast.error('Error al subir la factura: ' + (err.message || 'Error desconocido'));
     } finally {
       setUploading(false);
     }
@@ -491,7 +499,7 @@ function AgentFacturaUploadButton({
           track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
           fileRef.current?.click();
         }}
-        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[hsl(var(--agent-primary))] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
+        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[#16A45E] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
       >
         {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading ? 'Subiendo...' : 'Subir factura'}

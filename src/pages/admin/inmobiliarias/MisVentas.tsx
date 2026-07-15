@@ -490,13 +490,13 @@ type Venta = {
  
      try {
        const fileExt = file.name.split('.').pop();
-       const fileName = `factura_comision_${uploadingForCuenta}_${Date.now()}.${fileExt}`;
+       const fileName = `factura_comision_${uploadingForCuenta}_${crypto.randomUUID()}.${fileExt}`;
        const filePath = `facturas-comision/${fileName}`;
  
        // Upload file to storage
        const { error: uploadError } = await supabase.storage
          .from('documentos')
-         .upload(filePath, file);
+         .upload(filePath, file, { upsert: true });
  
        if (uploadError) throw uploadError;
  

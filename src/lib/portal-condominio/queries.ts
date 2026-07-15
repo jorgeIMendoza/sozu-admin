@@ -698,16 +698,22 @@ export async function fetchCondominioDataset(proyectoId: number): Promise<Condom
 async function fetchAmenidades(proyectoId: number): Promise<AmenidadCondominio[]> {
   const { data: rels, error } = await supabase
     .from("amenidades_proyectos")
-    .select("id_amenidad")
+    .select("id_amenidad, url_imagen")
     .eq("id_proyecto", proyectoId)
     .eq("activo", true);
   if (error) throw error;
   const amenidadIds = uniq((rels ?? []).map((r: any) => r.id_amenidad).filter(Boolean));
   if (amenidadIds.length === 0) return [];
+  // Foto real por proyecto (id_amenidad → url_imagen), tiene prioridad sobre el icono del catálogo
+  const perProjectImg: Record<string, string> = {};
+  (rels ?? []).forEach((r: any) => {
+    if (r.url_imagen) perProjectImg[String(r.id_amenidad)] = r.url_imagen;
+  });
   const ams = await fetchInChunks<{ id: number; nombre: string | null; url: string | null }>(amenidadIds, (chunk, from, to) =>
     supabase.from("amenidades").select("id, nombre, url").in("id", chunk as number[]).eq("activo", true).range(from, to),
   );
-  return ams.map((a) => ({ id: String(a.id), nombre: a.nombre ?? "—", url: a.url ?? null }));
+  // Solo foto real por proyecto; sin fallback al icono del catálogo (si no hay, no se muestra imagen)
+  return ams.map((a) => ({ id: String(a.id), nombre: a.nombre ?? "—", url: perProjectImg[String(a.id)] ?? null }));
 }
 
 export interface CondominioConfig {

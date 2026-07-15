@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Power, PowerOff, Plus, Upload, Play } from "lucide-react";
+import { Power, PowerOff, Plus, Upload, Play, X, Images, Youtube, ExternalLink, Tag, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
+import { optimizedImage } from "@/lib/image-transform";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,8 +35,10 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
   const [confirmYoutubeOpen, setConfirmYoutubeOpen] = useState(false);
   const [newMultimedia, setNewMultimedia] = useState({
     es_imagen: true,
-    url: ""
+    url: "",
+    id_categoria: null as number | null
   });
+  const [filterCategoria, setFilterCategoria] = useState<number | "all">("all");
   const [youtubeForm, setYoutubeForm] = useState({
     nombre: '',
     link: ''
@@ -55,6 +59,28 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
       return data || [];
     }
   });
+
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['categoriasMultimediaProyecto'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categorias_multimedia_proyecto')
+        .select('id, nombre, orden')
+        .eq('activo', true)
+        .order('orden');
+
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Default the uploader category to "General" (fallback to first) once loaded.
+  useEffect(() => {
+    if (newMultimedia.id_categoria == null && categorias.length > 0) {
+      const general = categorias.find(c => c.nombre === 'General') ?? categorias[0];
+      setNewMultimedia(prev => ({ ...prev, id_categoria: general.id }));
+    }
+  }, [categorias, newMultimedia.id_categoria]);
 
   const { data: youtubeVideos = [] } = useQuery({
     queryKey: ['projectYoutubeVideos', projectId],
@@ -110,7 +136,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
-      setNewMultimedia({ es_imagen: true, url: "" });
+      setNewMultimedia({ es_imagen: true, url: "", id_categoria: null });
       setIsAdding(false);
       toast({ title: "Multimedia agregado exitosamente" });
     },
@@ -172,6 +198,24 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
     },
     onError: () => {
       toast({ title: "Error al cambiar estado del multimedia", variant: "destructive" });
+    }
+  });
+
+  const updateCategoriaMutation = useMutation({
+    mutationFn: async ({ multimediaId, id_categoria }: { multimediaId: number; id_categoria: number }) => {
+      const { error } = await supabase
+        .from('multimedias_proyecto')
+        .update({ id_categoria })
+        .eq('id', multimediaId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
+      toast({ title: "Etiqueta actualizada exitosamente" });
+    },
+    onError: () => {
+      toast({ title: "Error al actualizar etiqueta", variant: "destructive" });
     }
   });
 
@@ -247,7 +291,8 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
             .insert([{
               es_imagen: file.type.startsWith('image/'),
               url: data.publicUrl,
-              id_proyecto: projectId
+              id_proyecto: projectId,
+              id_categoria: newMultimedia.id_categoria
             }]);
 
           if (insertError) throw insertError;
@@ -264,7 +309,7 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
 
       queryClient.invalidateQueries({ queryKey: ['projectMultimedia', projectId] });
       setSelectedFiles([]);
-      setNewMultimedia({ es_imagen: true, url: "" });
+      setNewMultimedia({ es_imagen: true, url: "", id_categoria: null });
       setIsAdding(false);
       setUploading(false);
 
@@ -301,31 +346,26 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Tabs defaultValue="multimedia" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="multimedia">Multimedia</TabsTrigger>
-          <TabsTrigger value="youtube">Videos YouTube (avances de obra)</TabsTrigger>
+          <TabsTrigger value="multimedia" className="gap-2"><Images className="h-4 w-4" /> Multimedia</TabsTrigger>
+          <TabsTrigger value="youtube" className="gap-2"><Youtube className="h-4 w-4" /> Videos YouTube</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="multimedia" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Multimedia del Proyecto</h3>
-            <Button
-              onClick={() => setIsAdding(true)}
-              disabled={isAdding}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Multimedia
-            </Button>
-          </div>
-
+        <TabsContent value="multimedia" className="mt-4">
+          <FormSection
+            title={`Multimedia del Proyecto (${multimedia.length})`}
+            icon={Images}
+            actions={
+              <Button size="sm" onClick={() => setIsAdding(true)} disabled={isAdding}>
+                <Plus className="w-4 h-4 mr-1" />
+                Agregar
+              </Button>
+            }
+          >
           {isAdding && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Multimedia del Proyecto</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="tipo">Tipo de Multimedia</Label>
@@ -341,6 +381,25 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                       <SelectContent>
                         <SelectItem value="imagen">Imagen</SelectItem>
                         <SelectItem value="video">Video</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="categoria">Categoría</Label>
+                    <Select
+                      value={newMultimedia.id_categoria != null ? String(newMultimedia.id_categoria) : undefined}
+                      onValueChange={(value) =>
+                        setNewMultimedia(prev => ({ ...prev, id_categoria: Number(value) }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona categoría" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -399,9 +458,10 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                               variant="destructive"
                               size="icon"
                               className="absolute top-1 right-1 h-6 w-6"
+                              aria-label="Quitar archivo"
                               onClick={() => handleRemoveFile(index)}
                             >
-                              ✕
+                              <X className="h-3 w-3" />
                             </Button>
                           </div>
                         ))}
@@ -454,9 +514,9 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                     >
                       {addMutation.isPending || uploading ? "Guardando..." : "Guardar"}
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={() => {
                         setIsAdding(false);
                         setSelectedFiles([]);
@@ -466,16 +526,34 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
 
+          <div className="mb-4 flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Select
+              value={filterCategoria === "all" ? "all" : String(filterCategoria)}
+              onValueChange={(value) => setFilterCategoria(value === "all" ? "all" : Number(value))}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {categorias.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {multimedia.map((item) => (
-              <Card key={item.id}>
-                 <CardContent className="p-4">
-                   <div className="flex justify-between items-start mb-2">
-                     <div className="flex gap-2">
+            {multimedia
+              .filter((item) => filterCategoria === "all" || item.id_categoria === filterCategoria)
+              .map((item) => (
+              <div key={item.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
+                   <div className="flex items-start justify-between gap-2 p-3">
+                     <div className="flex flex-wrap gap-1.5">
                        <Badge variant="outline">
                          {item.es_imagen ? "Imagen" : "Video"}
                        </Badge>
@@ -483,40 +561,35 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                          {item.activo ? "Activo" : "Inactivo"}
                        </Badge>
                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleStatusMutation.mutate({ 
-                          multimediaId: item.id, 
-                          newStatus: !item.activo 
-                        })}
-                        disabled={toggleStatusMutation.isPending}
-                      >
-                       {item.activo ? (
-                         <>
-                           <PowerOff className="w-4 h-4 mr-1" />
-                           Inactivar
-                         </>
-                       ) : (
-                         <>
-                           <Power className="w-4 h-4 mr-1" />
-                           Reactivar
-                         </>
-                       )}
-                     </Button>
+                     <IconTooltip label={item.activo ? "Inactivar" : "Reactivar"}>
+                       <Button
+                         type="button"
+                         variant="ghost"
+                         size="icon"
+                         className="h-8 w-8 shrink-0"
+                         aria-label={item.activo ? "Inactivar" : "Reactivar"}
+                         onClick={() => toggleStatusMutation.mutate({
+                           multimediaId: item.id,
+                           newStatus: !item.activo
+                         })}
+                         disabled={toggleStatusMutation.isPending}
+                       >
+                         {item.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                       </Button>
+                     </IconTooltip>
                    </div>
-                  
-                    <div className="aspect-video bg-muted rounded-md overflow-hidden">
+
+                    <div className="aspect-video bg-muted overflow-hidden">
                       {item.es_imagen && isImageUrl(item.url) ? (
-                        <img 
-                          src={item.url} 
-                          alt="Multimedia" 
+                        <img
+                          src={optimizedImage(item.url, { width: 640 })}
+                          alt="Multimedia"
+                          loading="lazy"
                           className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
                         />
                       ) : !item.es_imagen && isVideoUrl(item.url) ? (
-                        <video 
-                          src={item.url} 
+                        <video
+                          src={item.url}
                           controls={item.activo}
                           className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
                         />
@@ -528,47 +601,63 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                         </div>
                       )}
                     </div>
-                  
-                  <a 
-                    href={item.url} 
-                    target="_blank" 
+
+                  <div className="flex items-center gap-2 px-3 pt-3">
+                    <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <Select
+                      value={item.id_categoria != null ? String(item.id_categoria) : undefined}
+                      onValueChange={(value) =>
+                        updateCategoriaMutation.mutate({ multimediaId: item.id, id_categoria: Number(value) })
+                      }
+                      disabled={updateCategoriaMutation.isPending}
+                    >
+                      <SelectTrigger className="h-8 text-xs" aria-label="Etiqueta / categoría">
+                        <SelectValue placeholder="Sin etiqueta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <a
+                    href={item.url}
+                    target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline mt-2 block truncate"
+                    className="flex items-center gap-1 truncate p-3 text-xs text-primary hover:underline"
                   >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
                     Ver archivo original
                   </a>
-                </CardContent>
-              </Card>
+              </div>
             ))}
 
             {multimedia.length === 0 && !isAdding && (
-              <Card className="col-span-full">
-                <CardContent className="p-6 text-center">
-                  <p className="text-muted-foreground">No hay multimedia registrado</p>
-                </CardContent>
-              </Card>
+              <div className="col-span-full rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+                <Images className="mx-auto mb-2 h-10 w-10 opacity-40" />
+                <p className="text-sm">No hay multimedia registrado</p>
+              </div>
             )}
           </div>
+          </FormSection>
         </TabsContent>
 
-        <TabsContent value="youtube" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Videos de YouTube</h3>
-            <Button
-              onClick={() => setIsAddingYoutube(true)}
-              disabled={isAddingYoutube}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Video YouTube
-            </Button>
-          </div>
-
+        <TabsContent value="youtube" className="mt-4">
+          <FormSection
+            title={`Videos de YouTube (${youtubeVideos.length})`}
+            description="Avances de obra. Al agregar se puede notificar a los interesados."
+            icon={Youtube}
+            actions={
+              <Button size="sm" onClick={() => setIsAddingYoutube(true)} disabled={isAddingYoutube}>
+                <Plus className="w-4 h-4 mr-1" />
+                Agregar
+              </Button>
+            }
+          >
           {isAddingYoutube && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Video de YouTube</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="titulo">Título</Label>
@@ -593,80 +682,86 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                   </div>
 
                   <div className="flex gap-2">
-                    <Button 
+                    <Button
                       type="button"
                       onClick={handleYoutubeSubmit}
                       disabled={addYoutubeMutation.isPending}
                     >
                       {addYoutubeMutation.isPending ? 'Agregando...' : 'Agregar Video'}
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={() => setIsAddingYoutube(false)}
                     >
                       Cancelar
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {youtubeVideos.map((video) => (
-              <Card key={video.id} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Play className="h-4 w-4" />
-                    <h4 className="font-semibold truncate">{video.nombre}</h4>
+              <div key={video.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-red-600/10 text-red-600">
+                        <Play className="h-4 w-4" />
+                      </span>
+                      <h4 className="truncate font-medium">{video.nombre}</h4>
+                    </div>
+                    <IconTooltip label={video.activo ? "Desactivar" : "Activar"}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        aria-label={video.activo ? "Desactivar" : "Activar"}
+                        onClick={() => toggleYoutubeStatusMutation.mutate({
+                          videoId: video.id,
+                          newStatus: !video.activo
+                        })}
+                        disabled={toggleYoutubeStatusMutation.isPending}
+                      >
+                        {video.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                      </Button>
+                    </IconTooltip>
                   </div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mt-2 flex items-center justify-between gap-2">
                     <Badge variant={video.activo ? "default" : "secondary"}>
                       {video.activo ? 'Activo' : 'Inactivo'}
                     </Badge>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleYoutubeStatusMutation.mutate({ 
-                        videoId: video.id, 
-                        newStatus: !video.activo 
-                      })}
-                      disabled={toggleYoutubeStatusMutation.isPending}
+                    <a
+                      href={video.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-primary hover:underline"
                     >
-                      {video.activo ? 'Desactivar' : 'Activar'}
-                    </Button>
+                      <ExternalLink className="h-3 w-3" />
+                      Ver en YouTube
+                    </a>
                   </div>
-                  <a 
-                    href={video.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Ver en YouTube
-                  </a>
-                  {video.activo && (
-                    <div className="mt-2">
-                      <iframe
-                        src={getYouTubeEmbedUrl(video.link)}
-                        className="w-full h-48 rounded-md"
-                        allowFullScreen
-                        title={video.nombre}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
+                {video.activo && (
+                  <iframe
+                    src={getYouTubeEmbedUrl(video.link)}
+                    className="h-48 w-full border-0"
+                    allowFullScreen
+                    title={video.nombre}
+                  />
+                )}
+              </div>
             ))}
             {youtubeVideos.length === 0 && !isAddingYoutube && (
-              <Card className="col-span-full">
-                <CardContent className="p-6 text-center">
-                  <p className="text-muted-foreground">No hay videos de YouTube registrados</p>
-                </CardContent>
-              </Card>
+              <div className="col-span-full rounded-lg border border-dashed py-10 text-center text-muted-foreground">
+                <Youtube className="mx-auto mb-2 h-10 w-10 opacity-40" />
+                <p className="text-sm">No hay videos de YouTube registrados</p>
+              </div>
             )}
           </div>
+          </FormSection>
         </TabsContent>
       </Tabs>
 

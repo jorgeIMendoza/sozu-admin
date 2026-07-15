@@ -4,12 +4,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Edit, Trash2, MapPin, Copy, Search, CheckCircle, Grid3x3, Eye, Building2, Plus } from "lucide-react";
+import { Edit, Trash2, MapPin, Search, CheckCircle, Grid3x3, Eye, Building2, Plus, Info, SlidersHorizontal, Images, CalendarClock, Tag, BookOpen, ClipboardList, Calendar, Store, DollarSign, Package, PenLine, Globe, Image as ImageIcon, Check, ChevronsUpDown, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +23,6 @@ import { ProjectMultimediaSection } from "./ProjectMultimediaSection";
 import { ProjectReservableSpacesSection } from "./ProjectReservableSpacesSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { GoogleMapComponent } from "./GoogleMapComponent";
 import { NewAmenityDialog } from "./NewAmenityDialog";
 import { EditAmenityDialog } from "./EditAmenityDialog";
 import { ImageUploadField } from "./ImageUploadField";
@@ -28,6 +30,11 @@ import { ProjectLegalNoticesSection } from "./ProjectLegalNoticesSection";
 import { ProjectBrochuresSection } from "./ProjectBrochuresSection";
 import { ProjectFichaTecnicaSection } from "./ProjectFichaTecnicaSection";
 import { ProjectPuntosInteresSection } from "./ProjectPuntosInteresSection";
+import { FormSection } from "@/components/admin/project-form/FormSection";
+import { FieldGrid } from "@/components/admin/project-form/FieldGrid";
+import { MapLink } from "@/components/admin/project-form/MapLink";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
+import { optimizedImage } from "@/lib/image-transform";
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido"),
@@ -70,12 +77,14 @@ interface EditProjectDialogProps {
   projectId: number;
   onProjectUpdated: () => void;
   trigger?: React.ReactNode;
+  /** Texto del tooltip rápido sobre el trigger (nested asChild sobre DialogTrigger). */
+  triggerTooltip?: string;
   canCreate?: boolean;
   canUpdate?: boolean;
   canDelete?: boolean;
 }
 
-export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCreate = true, canUpdate = true, canDelete = true }: EditProjectDialogProps) => {
+export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, triggerTooltip, canCreate = true, canUpdate = true, canDelete = true }: EditProjectDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [showrooms, setShowrooms] = useState<Array<{ id?: number; nombre: string; descripcion_direccion: string; latitud: number | null; longitud: number | null }>>([]);
@@ -83,6 +92,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amenidadesSearchTerm, setAmenidadesSearchTerm] = useState("");
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [firmanteOpen, setFirmanteOpen] = useState(false);
+  // Foto real de cada amenidad EN ESTE proyecto (id_amenidad → url_imagen)
+  const [amenityImages, setAmenityImages] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -204,7 +216,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
           fecha_creacion,
           fecha_actualizacion,
           amenidades_proyectos (
-            id_amenidad
+            id_amenidad,
+            url_imagen
           )
         `)
         .eq("id", projectId)
@@ -331,10 +344,27 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         .select("*")
         .eq("activo", true)
         .order("nombre");
-      
+
       if (error) throw error;
       return data;
     },
+  });
+
+  // Usuarios internos para elegir el firmante de recibos: se excluyen externos (4 Inmobiliaria,
+  // 23 Cliente). Correo derivado del usuario (solo lectura).
+  const { data: usuariosFirmante } = useQuery({
+    queryKey: ["usuarios-firmante"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("usuarios")
+        .select("nombre, email")
+        .eq("activo", true)
+        .not("rol_id", "in", "(4,23)")
+        .order("nombre");
+      if (error) throw error;
+      return (data as Array<{ nombre: string; email: string | null }>) ?? [];
+    },
+    enabled: open,
   });
 
   const { data: paises } = useQuery({
@@ -429,6 +459,13 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
       });
       
       setSelectedCountry(project.direccion_id_pais || "");
+
+      // Cargar fotos reales de amenidad por proyecto
+      const imgs: Record<string, string> = {};
+      (project.amenidades_proyectos ?? []).forEach((ap: any) => {
+        if (ap.url_imagen) imgs[ap.id_amenidad.toString()] = ap.url_imagen;
+      });
+      setAmenityImages(imgs);
     }
   }, [project, form]);
 
@@ -496,6 +533,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         const amenityRelations = values.amenidades.map(amenidadId => ({
           id_proyecto: projectId,
           id_amenidad: parseInt(amenidadId),
+          url_imagen: amenityImages[amenidadId] || null,
         }));
 
         const { error: amenityError } = await supabase
@@ -602,36 +640,46 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
         </DialogTrigger>
       )}
       {trigger && (
-        <DialogTrigger asChild>
-          {trigger}
-        </DialogTrigger>
+        triggerTooltip ? (
+          <IconTooltip label={triggerTooltip}>
+            <DialogTrigger asChild>
+              {trigger}
+            </DialogTrigger>
+          </IconTooltip>
+        ) : (
+          <DialogTrigger asChild>
+            {trigger}
+          </DialogTrigger>
+        )
       )}
-      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[min(1140px,96vw)] w-full h-[85vh] p-0 gap-0 flex flex-col overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle>Editar Proyecto</DialogTitle>
         </DialogHeader>
         {isLoadingProject ? (
-          <div className="flex justify-center py-4">
-            <p>Cargando...</p>
+          <div className="flex-1 grid place-items-center">
+            <p className="text-muted-foreground">Cargando...</p>
           </div>
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" id="edit-project-form">
-              <Tabs defaultValue="information" className="w-full">
-                <TabsList className={`grid w-full ${isSpecialProject ? 'grid-cols-3' : 'grid-cols-10'}`}>
-                  <TabsTrigger value="information">Información</TabsTrigger>
-                  {!isSpecialProject && <TabsTrigger value="images">Config. general</TabsTrigger>}
-                  {!isSpecialProject && <TabsTrigger value="multimedia">Multimedia</TabsTrigger>}
-                  <TabsTrigger value="legal-entities">Entidades Legales</TabsTrigger>
-                  {!isSpecialProject && <TabsTrigger value="reservable-spaces">Espacios</TabsTrigger>}
-                  {!isSpecialProject && <TabsTrigger value="offer-config">Config. oferta</TabsTrigger>}
-                  {!isSpecialProject && <TabsTrigger value="vistas">Vistas</TabsTrigger>}
-                  <TabsTrigger value="brochures">Brochures</TabsTrigger>
-                  {!isSpecialProject && <TabsTrigger value="ficha-tecnica">Ficha Técnica</TabsTrigger>}
-                  {!isSpecialProject && <TabsTrigger value="puntos-interes">Puntos Interés</TabsTrigger>}
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 min-h-0 flex flex-col" id="edit-project-form">
+              <Tabs defaultValue="information" orientation="vertical" className="flex flex-col md:flex-row w-full flex-1 min-h-0 gap-0">
+                <TabsList className="shrink-0 h-auto md:h-full w-full md:w-52 flex md:flex-col md:items-stretch md:justify-start gap-1 bg-muted/40 border-b md:border-b-0 md:border-r p-2 md:p-3 rounded-none overflow-x-auto md:overflow-y-auto">
+                  <TabsTrigger value="information" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><Info className="h-4 w-4 shrink-0" /> Información</TabsTrigger>
+                  {!isSpecialProject && <TabsTrigger value="images" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><SlidersHorizontal className="h-4 w-4 shrink-0" /> Config. general</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="multimedia" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><Images className="h-4 w-4 shrink-0" /> Multimedia</TabsTrigger>}
+                  <TabsTrigger value="legal-entities" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><Building2 className="h-4 w-4 shrink-0" /> Entidades Legales</TabsTrigger>
+                  {!isSpecialProject && <TabsTrigger value="reservable-spaces" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><CalendarClock className="h-4 w-4 shrink-0" /> Espacios</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="offer-config" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><Tag className="h-4 w-4 shrink-0" /> Config. oferta</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="vistas" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><Eye className="h-4 w-4 shrink-0" /> Vistas</TabsTrigger>}
+                  <TabsTrigger value="brochures" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><BookOpen className="h-4 w-4 shrink-0" /> Brochures</TabsTrigger>
+                  {!isSpecialProject && <TabsTrigger value="ficha-tecnica" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><ClipboardList className="h-4 w-4 shrink-0" /> Ficha Técnica</TabsTrigger>}
+                  {!isSpecialProject && <TabsTrigger value="puntos-interes" className="justify-start gap-2 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm"><MapPin className="h-4 w-4 shrink-0" /> Puntos Interés</TabsTrigger>}
                 </TabsList>
-                
-                <TabsContent value="information" className="mt-6">
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4">
+
+                <TabsContent value="information" className="mt-0 space-y-5">
+                  <FormSection title="Datos generales" icon={Info}>
                   <FormField
                     control={form.control}
                     name="nombre"
@@ -651,6 +699,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                     )}
                   />
 
+                  <FieldGrid cols={2}>
                   <FormField
                     control={form.control}
                     name="id_tipo_uso"
@@ -681,7 +730,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                 />
 
                 {!isSpecialProject && (
-                  <>
                     <FormField
                         control={form.control}
                         name="id_estatus_proyecto"
@@ -710,7 +758,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           </FormItem>
                         )}
                       />
-
+                )}
+                  </FieldGrid>
+                {!isSpecialProject && (
+                  <>
                       <FormField
                         control={form.control}
                         name="descripcion"
@@ -718,51 +769,57 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           <FormItem>
                             <FormLabel>Descripción</FormLabel>
                             <FormControl>
-                              <Textarea placeholder="Descripción del proyecto" {...field} />
+                              <Textarea placeholder="Descripción del proyecto" rows={6} className="resize-none" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="precio_m2_actual"
-                            render={({ field }) => {
-                              const formattedValue = field.value 
-                                ? parseFloat(field.value).toLocaleString('es-MX', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                  })
-                                : '';
-                              
-                              return (
-                                <FormItem>
-                                  <FormLabel>
-                                    Precio por m² actual
-                                    {!todasVendidas && " (se habilita cuando todas las propiedades estén vendidas)"}
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input 
-                                      type="text" 
-                                      placeholder="0.00" 
-                                      value={formattedValue}
-                                      disabled={!todasVendidas}
-                                      className={!todasVendidas ? "bg-muted" : ""}
-                                      readOnly={!todasVendidas}
-                                      onChange={(e) => {
-                                        const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                        field.onChange(raw);
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              );
-                            }}
-                          />
+                        <FormField
+                          control={form.control}
+                          name="precio_m2_actual"
+                          render={({ field }) => {
+                            const formattedValue = field.value
+                              ? parseFloat(field.value).toLocaleString('es-MX', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2
+                                })
+                              : '';
 
+                            return (
+                              <FormItem>
+                                <FormLabel>
+                                  Precio por m² actual
+                                  {!todasVendidas && " (se habilita cuando todas las propiedades estén vendidas)"}
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="text"
+                                    placeholder="0.00"
+                                    value={formattedValue}
+                                    disabled={!todasVendidas}
+                                    className={!todasVendidas ? "bg-muted" : ""}
+                                    readOnly={!todasVendidas}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                      field.onChange(raw);
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
+                        />
+                    </>
+                  )}
+                  </FormSection>
+
+                  {!isSpecialProject && (
+                    <>
+                      <FormSection title="Fechas" icon={Calendar}>
+                        <FieldGrid cols={3}>
                          <FormField
                            control={form.control}
                            name="fecha_lanzamiento"
@@ -770,15 +827,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                              <FormItem>
                                <FormLabel>Fecha de Lanzamiento</FormLabel>
                                <FormControl>
-                                 <Input type="date" {...field} />
+                                 <Input type="date" {...field} className="block [&::-webkit-calendar-picker-indicator]:ml-auto" />
                                </FormControl>
                                <FormMessage />
                              </FormItem>
                            )}
                          />
-                       </div>
-
-                       <div className="grid grid-cols-2 gap-4">
                          <FormField
                            control={form.control}
                            name="fecha_inicio_construccion"
@@ -786,7 +840,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                              <FormItem>
                                <FormLabel>Fecha de Inicio Construcción</FormLabel>
                                <FormControl>
-                                 <Input type="date" {...field} />
+                                 <Input type="date" {...field} className="block [&::-webkit-calendar-picker-indicator]:ml-auto" />
                                </FormControl>
                                <FormMessage />
                              </FormItem>
@@ -800,16 +854,18 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                              <FormItem>
                                <FormLabel>Fecha de Entrega</FormLabel>
                                <FormControl>
-                                 <Input type="date" {...field} />
+                                 <Input type="date" {...field} className="block [&::-webkit-calendar-picker-indicator]:ml-auto" />
                                </FormControl>
                                <FormMessage />
                              </FormItem>
                            )}
                          />
-                       </div>
+                        </FieldGrid>
+                      </FormSection>
 
+                      <FormSection title="Ubicación" icon={MapPin}>
                        {/* Address Fields */}
-                       <div className="grid grid-cols-1 gap-4">
+                       <FieldGrid cols={3}>
                          <FormField
                            control={form.control}
                            name="direccion_id_pais"
@@ -906,10 +962,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                              />
                            </>
                          )}
-                       </div>
+                       </FieldGrid>
 
                       {/* Location and Address Section */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="space-y-4">
                         <div className="space-y-4">
                           <FormField
                             control={form.control}
@@ -926,58 +982,21 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           />
                           
                           {selectedLocation && (
-                            <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                              <div className="flex items-center space-x-2">
-                                <MapPin className="w-4 h-4" />
-                                <div>
-                                  <p className="font-medium">Coordenadas seleccionadas:</p>
-                                  <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
-                                  <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
-                                </div>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const coordinates = `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`;
-                                  navigator.clipboard.writeText(coordinates);
-                                  toast({
-                                    title: "Coordenadas copiadas",
-                                    description: coordinates,
-                                  });
-                                }}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <MapLink
+                              lat={selectedLocation.lat}
+                              lng={selectedLocation.lng}
+                              onCopy={() => toast({ title: "Coordenadas copiadas", description: `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}` })}
+                            />
                           )}
                         </div>
-                        
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <MapPin className="w-4 h-4" />
-                            <label className="text-sm font-medium">Ubicación en Google Maps</label>
-                          </div>
-                          <GoogleMapComponent
-                            onLocationSelect={setSelectedLocation}
-                            onAddressSelect={(address) => form.setValue('direccion', address)}
-                            initialLocation={selectedLocation}
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Haz clic en el mapa para seleccionar la ubicación del proyecto
-                          </p>
-                        </div>
                       </div>
+                      </FormSection>
 
                       {/* Showrooms Section */}
-                      <div className="space-y-4 border-t pt-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Building2 className="w-4 h-4" />
-                            <label className="text-sm font-medium">Showrooms ({showrooms.length})</label>
-                          </div>
+                      <FormSection
+                        title={`Showrooms (${showrooms.length})`}
+                        icon={Store}
+                        actions={
                           <Button
                             type="button"
                             variant="outline"
@@ -986,23 +1005,28 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           >
                             <Plus className="h-4 w-4 mr-1" /> Agregar Showroom
                           </Button>
-                        </div>
+                        }
+                      >
                         {showrooms.map((showroom, idx) => (
-                          <div key={idx} className="space-y-3 border rounded-lg p-3 relative">
+                          <div key={idx} className="space-y-4 rounded-lg border border-border bg-card p-4 relative">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium">Showroom {idx + 1}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => setShowrooms(showrooms.filter((_, i) => i !== idx))}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <IconTooltip label="Eliminar showroom">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  aria-label="Eliminar showroom"
+                                  onClick={() => setShowrooms(showrooms.filter((_, i) => i !== idx))}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </IconTooltip>
                             </div>
-                            <div>
-                              <label className="text-sm text-muted-foreground">Nombre</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium">Nombre</label>
                               <Input
                                 placeholder="Ej: Showroom Guadalajara"
                                 value={showroom.nombre}
@@ -1011,11 +1035,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                   updated[idx] = { ...updated[idx], nombre: e.target.value };
                                   setShowrooms(updated);
                                 }}
-                                className="mt-1"
                               />
                             </div>
-                            <div>
-                              <label className="text-sm text-muted-foreground">Dirección</label>
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium">Dirección</label>
                               <Input
                                 placeholder="Escribe la dirección del showroom"
                                 value={showroom.descripcion_direccion}
@@ -1030,57 +1053,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                     geocodeAddress(e.target.value, idx);
                                   }
                                 }}
-                                className="mt-1"
                               />
                             </div>
-                            <div className="space-y-2">
-                              <GoogleMapComponent
-                                onLocationSelect={(loc) => {
-                                  setShowrooms(prev => {
-                                    const updated = [...prev];
-                                    if (updated[idx]) {
-                                      updated[idx] = { ...updated[idx], latitud: loc.lat, longitud: loc.lng };
-                                    }
-                                    return updated;
-                                  });
-                                }}
-                                onAddressSelect={(address) => {
-                                  setShowrooms(prev => {
-                                    const updated = [...prev];
-                                    if (updated[idx]) {
-                                      updated[idx] = { ...updated[idx], descripcion_direccion: address };
-                                    }
-                                    return updated;
-                                  });
-                                }}
-                                initialLocation={showroom.latitud && showroom.longitud ? { lat: showroom.latitud, lng: showroom.longitud } : undefined}
-                              />
-                              {showroom.latitud && showroom.longitud && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <div className="flex-1 grid grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Latitud</label>
-                                      <Input value={showroom.latitud.toFixed(6)} readOnly className="text-xs h-8 bg-muted cursor-default" />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Longitud</label>
-                                      <Input value={showroom.longitud.toFixed(6)} readOnly className="text-xs h-8 bg-muted cursor-default" />
-                                    </div>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="mt-4"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(`${showroom.latitud!.toFixed(6)}, ${showroom.longitud!.toFixed(6)}`);
-                                    }}
-                                  >
-                                    <Copy className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              )}
                             </div>
+                            {showroom.latitud && showroom.longitud && (
+                              <MapLink lat={showroom.latitud} lng={showroom.longitud} />
+                            )}
                             {(showroom.descripcion_direccion && (!showroom.latitud || !showroom.longitud)) || (!showroom.descripcion_direccion && showroom.latitud && showroom.longitud) ? (
                               <p className="text-xs text-destructive">
                                 Debes llenar tanto la dirección como la ubicación en el mapa.
@@ -1088,25 +1066,29 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                             ) : null}
                           </div>
                         ))}
-                      </div>
+                      </FormSection>
 
                       {/* Building Management Section */}
-                      <div className="space-y-3">
+                      <FormSection title="Edificios del Proyecto" icon={Building2}>
                         <BuildingManagement projectId={projectId} />
-                      </div>
+                      </FormSection>
 
                       {/* Payment Scheme Management Section */}
-                      <div className="space-y-3">
-                        <PaymentSchemeManagement 
+                      <FormSection title="Esquemas de Pago del Proyecto" icon={DollarSign}>
+                        <PaymentSchemeManagement
                           projectId={projectId}
                           canCreate={canCreate}
                           canUpdate={canUpdate}
                           canDelete={canDelete}
                         />
-                      </div>
+                      </FormSection>
 
                       {/* Amenidades Section - Con separación adicional */}
-                      <div className="pt-6">
+                      <FormSection
+                        title="Amenidades"
+                        icon={Package}
+                        actions={<NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />}
+                      >
                       <FormField
                         control={form.control}
                         name="amenidades"
@@ -1124,10 +1106,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           
                           return (
                             <FormItem>
-                              <div className="flex items-center justify-between">
-                                <FormLabel>Amenidades</FormLabel>
-                                <NewAmenityDialog onAmenityCreated={() => queryClient.invalidateQueries({ queryKey: ['amenidades'] })} />
-                              </div>
                               
                               <div className="flex gap-2">
                                 <div className="relative flex-1">
@@ -1160,7 +1138,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                 </Button>
                               </div>
                               
-                              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-2">
                                 {filteredAmenidades.length > 0 ? (
                                   filteredAmenidades.map((amenidad) => (
                                     <FormField
@@ -1171,10 +1149,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                         return (
                                           <FormItem
                                             key={amenidad.id}
-                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                            className={`flex flex-row items-center gap-2.5 space-y-0 rounded-lg border px-3 py-2 transition-colors cursor-pointer ${field.value?.includes(amenidad.id.toString()) ? 'border-primary/40 bg-primary/5' : 'border-border hover:bg-muted/50'}`}
                                           >
                                             <FormControl>
                                               <Checkbox
+                                                className="shrink-0"
                                                 checked={field.value?.includes(amenidad.id.toString())}
                                                 onCheckedChange={(checked) => {
                                                   return checked
@@ -1187,15 +1166,30 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                                 }}
                                               />
                                             </FormControl>
-                                            <div className="flex items-center space-x-2">
-                                              <span className="text-sm">{amenidad.nombre}</span>
-                                              <EditAmenityDialog 
-                                                amenityId={amenidad.id}
-                                                amenityName={amenidad.nombre}
-                                                onAmenityUpdated={() => {
-                                                  queryClient.invalidateQueries({ queryKey: ['amenidades'] })
-                                                }}
-                                              />
+                                            <div className="flex flex-1 items-center gap-2 min-w-0">
+                                              <span className="text-sm truncate flex-1 min-w-0 leading-tight">{amenidad.nombre}</span>
+                                              {amenityImages[amenidad.id.toString()] && (
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Con foto real" />
+                                              )}
+                                              <div className="shrink-0">
+                                                <EditAmenityDialog
+                                                  amenityId={amenidad.id}
+                                                  amenityName={amenidad.nombre}
+                                                  projectId={projectId}
+                                                  onAmenityUpdated={() => {
+                                                    queryClient.invalidateQueries({ queryKey: ['amenidades'] })
+                                                  }}
+                                                  projectImageUrl={amenityImages[amenidad.id.toString()] || ""}
+                                                  onProjectImageChange={(url) =>
+                                                    setAmenityImages((prev) => {
+                                                      const next = { ...prev };
+                                                      if (url) next[amenidad.id.toString()] = url;
+                                                      else delete next[amenidad.id.toString()];
+                                                      return next;
+                                                    })
+                                                  }
+                                                />
+                                              </div>
                                             </div>
                                           </FormItem>
                                         )
@@ -1203,7 +1197,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                                     />
                                   ))
                                 ) : (
-                                  <p className="col-span-2 text-sm text-muted-foreground text-center py-4">
+                                  <p className="col-span-full text-sm text-muted-foreground text-center py-4">
                                     No se encontraron amenidades
                                   </p>
                                 )}
@@ -1213,21 +1207,23 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           )
                         }}
                       />
-                      </div>
+                      </FormSection>
                     </>
                   )}
                 </TabsContent>
 
-                <TabsContent value="images" className="mt-6">
-                  <div className="space-y-6">
+                <TabsContent value="images" className="mt-0 space-y-5">
+                  <FormSection title="Identidad" icon={ImageIcon}>
+                    <FieldGrid cols={2}>
                     <FormField
                       control={form.control}
                       name="url_logo"
                       render={({ field }) => (
                         <FormItem>
                           <FormControl>
-                            <ImageUploadField 
+                            <ImageUploadField
                               label="Logo del Proyecto"
+                              variant="card"
                               value={field.value}
                               onChange={field.onChange}
                               accept="image/*"
@@ -1244,8 +1240,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                       render={({ field }) => (
                         <FormItem>
                           <FormControl>
-                            <ImageUploadField 
+                            <ImageUploadField
                               label="Imagen de Portada"
+                              variant="card"
                               value={field.value}
                               onChange={field.onChange}
                               accept="image/*"
@@ -1255,16 +1252,80 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                         </FormItem>
                       )}
                     />
+                    </FieldGrid>
+                  </FormSection>
 
-                    <div className="grid grid-cols-2 gap-4">
+                  <FormSection title="Firma de recibos" icon={PenLine}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                      {/* Izquierda: firmante (usuario interno). Correo/tel derivados, no editables. */}
+                      <FormField
+                        control={form.control}
+                        name="nombre_firmante_recibos"
+                        render={({ field }) => {
+                          const sel = (usuariosFirmante ?? []).find((u) => u.nombre === field.value);
+                          return (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Firmante (usuario interno)</FormLabel>
+                              <Popover open={firmanteOpen} onOpenChange={setFirmanteOpen}>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      role="combobox"
+                                      className={cn("w-full justify-between font-normal", !field.value && "text-muted-foreground")}
+                                    >
+                                      <span className="truncate">{field.value || "Buscar firmante..."}</span>
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                  <Command>
+                                    <CommandInput placeholder="Buscar por nombre..." />
+                                    <CommandList className="max-h-64 overflow-y-auto">
+                                      <CommandEmpty>Sin usuarios.</CommandEmpty>
+                                      <CommandGroup>
+                                        {(usuariosFirmante ?? []).map((u) => (
+                                          <CommandItem
+                                            key={u.email}
+                                            value={u.nombre}
+                                            onSelect={() => { field.onChange(u.nombre); setFirmanteOpen(false); }}
+                                          >
+                                            <Check className={cn("mr-2 h-4 w-4", field.value === u.nombre ? "opacity-100" : "opacity-0")} />
+                                            <span className="truncate">{u.nombre}</span>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+
+                              {/* Correo derivado del usuario, solo lectura */}
+                              <div className="mt-2 space-y-1.5">
+                                <label className="text-sm font-medium">Correo</label>
+                                <div className="relative">
+                                  <Mail className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                  <Input readOnly value={sel ? (sel.email || "Sin dato") : ""} placeholder="Se toma del usuario" className={cn("pl-8 bg-muted cursor-default", sel && !sel.email && "text-muted-foreground")} />
+                                </div>
+                              </div>
+                            </FormItem>
+                          );
+                        }}
+                      />
+
+                      {/* Derecha: imagen de la firma como card */}
                       <FormField
                         control={form.control}
                         name="url_firma_recibos"
                         render={({ field }) => (
                           <FormItem>
                             <FormControl>
-                              <ImageUploadField 
-                                label="Imagen de Firma para Recibos"
+                              <ImageUploadField
+                                label="Firma para recibos"
+                                variant="card"
                                 value={field.value}
                                 onChange={field.onChange}
                                 accept="image/*"
@@ -1274,185 +1335,164 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           </FormItem>
                         )}
                       />
+                    </div>
+                  </FormSection>
 
+                  <FormSection title="Costos" icon={DollarSign}>
+                    <FieldGrid cols={3}>
                       <FormField
                         control={form.control}
-                        name="nombre_firmante_recibos"
+                        name="costo_mantenimiento_m2"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Nombre del Firmante</FormLabel>
+                            <FormLabel>Costo Mantenimiento M²</FormLabel>
                             <FormControl>
-                              <Input placeholder="Nombre completo del firmante" {...field} />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="costo_mantenimiento_m2"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Costo Mantenimiento M²</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00" 
-                                  {...field} 
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={form.control}
-                          name="monto_mensual_cuota_extraordinaria"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto mensual de cuota extraordinaria</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00" 
-                                  {...field} 
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                      <FormField
+                        control={form.control}
+                        name="monto_mensual_cuota_extraordinaria"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Monto mensual de cuota extraordinaria</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
+                      <FormField
+                        control={form.control}
+                        name="monto_garantia_renta"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Monto mensual de garantía de renta</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </FieldGrid>
+                  </FormSection>
 
-                        <FormField
-                          control={form.control}
-                          name="monto_garantia_renta"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto mensual de garantía de renta</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                    </div>
-
-                    <div className="col-span-2 mt-4">
-                      <h3 className="text-base font-semibold mb-3">Presencia Digital</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="slogan"
-                          render={({ field }) => (
-                            <FormItem className="col-span-2">
-                              <FormLabel>Slogan</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Slogan del proyecto" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="url_sitio_web"
-                          render={({ field }) => (
-                            <FormItem className="col-span-2">
-                              <FormLabel>Sitio Web Oficial</FormLabel>
-                              <FormControl>
-                                <Input placeholder="https://..." {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="instagram_handle"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Instagram</FormLabel>
-                              <FormControl>
-                                <Input placeholder="@usuario" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="facebook_handle"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Facebook</FormLabel>
-                              <FormControl>
-                                <Input placeholder="@usuario o URL" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="youtube_handle"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>YouTube</FormLabel>
-                              <FormControl>
-                                <Input placeholder="@canal o URL" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </div>
-
-                     <div className="flex justify-end space-x-2">
-                       <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                         Cancelar
-                       </Button>
-                     </div>
-                  </div>
+                  <FormSection title="Presencia digital" icon={Globe}>
+                    <FieldGrid cols={2}>
+                      <FormField
+                        control={form.control}
+                        name="slogan"
+                        render={({ field }) => (
+                          <FormItem className="col-span-2">
+                            <FormLabel>Slogan</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Slogan del proyecto" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="url_sitio_web"
+                        render={({ field }) => (
+                          <FormItem className="col-span-2">
+                            <FormLabel>Sitio Web Oficial</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="instagram_handle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Instagram</FormLabel>
+                            <FormControl>
+                              <Input placeholder="@usuario" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="facebook_handle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Facebook</FormLabel>
+                            <FormControl>
+                              <Input placeholder="@usuario o URL" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="youtube_handle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>YouTube</FormLabel>
+                            <FormControl>
+                              <Input placeholder="@canal o URL" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </FieldGrid>
+                  </FormSection>
                 </TabsContent>
-                
-                <TabsContent value="multimedia" className="mt-6">
+
+                <TabsContent value="multimedia" className="mt-0 space-y-5">
                   <ProjectMultimediaSection projectId={projectId} />
                 </TabsContent>
-                
-                <TabsContent value="legal-entities" className="mt-6">
+
+                <TabsContent value="legal-entities" className="mt-0 space-y-5">
                   <ProjectLegalEntitiesSection projectId={projectId} isProductosOrServicios={isSpecialProject} />
                 </TabsContent>
-                
-                <TabsContent value="reservable-spaces" className="mt-6">
+
+                <TabsContent value="reservable-spaces" className="mt-0 space-y-5">
                   <ProjectReservableSpacesSection projectId={projectId} />
                 </TabsContent>
                 
-                <TabsContent value="offer-config" className="mt-6 space-y-6">
+                <TabsContent value="offer-config" className="mt-0 space-y-5">
                   <div>
                     <ProjectLegalNoticesSection projectId={projectId} />
                   </div>
-                  
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Mostrar en oferta</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Selecciona qué elementos aparecerán en el PDF de la oferta.
-                    </p>
-                    
-                    <div className="grid grid-cols-2 gap-4">
+
+                  <FormSection
+                    title="Mostrar en la oferta"
+                    description="Selecciona qué elementos aparecerán en el PDF de la oferta."
+                    icon={Eye}
+                  >
+                    <FieldGrid cols={3}>
                       <FormField
                         control={form.control}
                         name="mostrar_precio_m2_en_oferta"
@@ -1506,40 +1546,35 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                           </FormItem>
                         )}
                       />
-                    </div>
-                  </div>
+                    </FieldGrid>
+                  </FormSection>
                 </TabsContent>
 
-                <TabsContent value="vistas" className="mt-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Eye className="h-5 w-5" />
-                      <h3 className="text-lg font-semibold">Vistas del Proyecto</h3>
-                    </div>
-                    
+                <TabsContent value="vistas" className="mt-0 space-y-5">
+                  <FormSection title="Vistas" icon={Eye}>
                     {vistas && vistas.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <FieldGrid cols={3}>
                         {vistas.map((vista: any) => (
-                          <div key={vista.id} className="border rounded-lg p-4 space-y-2">
-                            <div className="font-medium">{vista.nombre}</div>
-                            {vista.url && (
-                              <img 
-                                src={vista.url} 
+                          <div key={vista.id} className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/40">
+                            {vista.url ? (
+                              <img
+                                src={optimizedImage(vista.url, { width: 480, height: 256, resize: "cover" })}
                                 alt={vista.nombre}
-                                className="w-full h-32 object-cover rounded-md"
+                                loading="lazy"
+                                className="h-32 w-full object-cover"
                                 onError={(e) => {
                                   e.currentTarget.src = '/placeholder.svg';
                                 }}
                               />
-                            )}
-                            {!vista.url && (
-                              <div className="w-full h-32 bg-muted rounded-md flex items-center justify-center text-muted-foreground text-sm">
+                            ) : (
+                              <div className="flex h-32 w-full items-center justify-center bg-muted text-sm text-muted-foreground">
                                 Sin imagen
                               </div>
                             )}
+                            <div className="truncate px-3 py-2 text-sm font-medium">{vista.nombre}</div>
                           </div>
                         ))}
-                      </div>
+                      </FieldGrid>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground border rounded-lg">
                         <Eye className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -1547,29 +1582,30 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, canCre
                         <p className="text-sm mt-1">Puedes agregar vistas desde la sección "Vistas" en el menú de Inventarios</p>
                       </div>
                     )}
-                  </div>
+                  </FormSection>
                 </TabsContent>
 
-                <TabsContent value="brochures" className="mt-6">
+                <TabsContent value="brochures" className="mt-0 space-y-5">
                   <ProjectBrochuresSection projectId={projectId} />
                 </TabsContent>
 
                 {!isSpecialProject && (
-                  <TabsContent value="ficha-tecnica" className="mt-6">
+                  <TabsContent value="ficha-tecnica" className="mt-0 space-y-5">
                     <ProjectFichaTecnicaSection projectId={projectId} />
                   </TabsContent>
                 )}
 
                 {!isSpecialProject && (
-                  <TabsContent value="puntos-interes" className="mt-6">
+                  <TabsContent value="puntos-interes" className="mt-0 space-y-5">
                     <ProjectPuntosInteresSection projectId={projectId} />
                   </TabsContent>
                 )}
+                </div>
               </Tabs>
             </form>
           </Form>
         )}
-        <DialogFooter className="px-6 pb-6 pt-6 border-t mt-12">
+        <DialogFooter className="px-6 py-4 border-t shrink-0 bg-background">
           <div className="flex items-center justify-end gap-2 w-full">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar

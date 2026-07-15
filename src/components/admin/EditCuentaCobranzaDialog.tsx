@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,7 +19,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText, ExternalLink, CheckCircle, Banknote } from 'lucide-react';
+import { CalendarIcon, Edit, Trash2, Plus, HeartHandshake, FileText, ExternalLink, CheckCircle, Banknote, Building2, Hash, Layers, Ruler, Tag, User, Mail, Phone, Landmark, Briefcase, GripVertical, Check, Clock, Circle, CreditCard, Users, MapPin, Car } from 'lucide-react';
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
 import { isFiscalDataComplete } from '@/utils/fiscalDataValidation';
 import { format } from "date-fns";
@@ -27,6 +27,7 @@ import { es } from "date-fns/locale";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCuentaCobranzaId, formatOfertaId } from "@/utils/cuentaCobranzaUtils";
+import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DndContext,
@@ -49,6 +50,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { PersonForm } from './PersonForm';
 import { DocumentsTab } from './DocumentsTab';
+import { InfoRow, EstadoBadge, fmtCurrency as fmtMXN, fmtDate as fmtFecha } from '@/pages/admin/portal-cobranza/cuentaDetalleShared';
 import { ConfirmEscrituraDialog } from './ConfirmEscrituraDialog';
 import { FacturasTab } from './FacturasTab';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
@@ -182,6 +184,55 @@ const ReadOnlyBanner = ({ isEnDemanda = false }: { isEnDemanda?: boolean }) => (
   </div>
 );
 
+// Tarjeta de plan estilo página padre: % grande + label + monto, en 3-4 columnas.
+function PlanResumenRow({
+  label, active = true,
+  pctEnganche, montoEnganche,
+  numParc, pctParc, montoParc,
+  pctEntrega, montoEntrega,
+  numEsp = 0, pctEsp = 0, montoEsp = 0,
+}: {
+  label?: string; active?: boolean;
+  pctEnganche: number; montoEnganche: number;
+  numParc: number; pctParc: number; montoParc: number;
+  pctEntrega: number; montoEntrega: number;
+  numEsp?: number; pctEsp?: number; montoEsp?: number;
+}) {
+  const perPago = numParc > 0 ? montoParc / numParc : 0;
+  const hasEsp = numEsp > 0;
+  return (
+    <div className={cn('rounded-lg border px-4 py-3', active ? 'border-emerald-500/50 bg-emerald-50/30' : 'border-border bg-muted/10 opacity-70')}>
+      {label && (
+        <p className={cn('text-[10px] font-semibold uppercase tracking-wider mb-2', active ? 'text-emerald-600' : 'text-muted-foreground')}>{label}</p>
+      )}
+      <div className={cn('grid gap-3 text-center', hasEsp ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3')}>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none mb-1">{pctEnganche > 0 ? `${pctEnganche}%` : '-'}</p>
+          <p className="text-[11px] font-medium text-muted-foreground">Enganche</p>
+          <p className="text-[12px] font-semibold tabular-nums text-foreground/70">{pctEnganche > 0 ? fmtMXN(montoEnganche) : '-'}</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none mb-1">{pctParc > 0 ? `${pctParc}%` : '-'}</p>
+          <p className="text-[11px] font-medium text-muted-foreground">Parcialidades</p>
+          <p className="text-[12px] font-semibold tabular-nums text-foreground/70">{numParc > 0 && pctParc > 0 ? `${numParc} pagos de ${fmtMXN(perPago)}` : '-'}</p>
+        </div>
+        {hasEsp && (
+          <div>
+            <p className="text-2xl font-bold tabular-nums leading-none mb-1">{pctEsp > 0 ? `${pctEsp}%` : '-'}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Pagos especiales</p>
+            <p className="text-[12px] font-semibold tabular-nums text-foreground/70">{numEsp > 0 ? `${numEsp} pago(s) de ${fmtMXN(montoEsp / numEsp)}` : '-'}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none mb-1">{pctEntrega > 0 ? `${pctEntrega}%` : '-'}</p>
+          <p className="text-[11px] font-medium text-muted-foreground">Pago final</p>
+          <p className="text-[12px] font-semibold tabular-nums text-foreground/70">{pctEntrega > 0 ? fmtMXN(montoEntrega) : '-'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface EditCuentaCobranzaDialogProps {
   cuenta: CuentaCobranza;
   onClose: () => void;
@@ -244,6 +295,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
   const [isEditingPrecioFinal, setIsEditingPrecioFinal] = useState(false);
   const [editingPrecioFinal, setEditingPrecioFinal] = useState<string>('');
   const [showPrecioFinalConfirmDialog, setShowPrecioFinalConfirmDialog] = useState(false);
+
+  // Guardado por lote: los campos editables se quedan en estado local y solo se
+  // persisten al presionar "Actualizar" en el footer (se habilita solo si hay cambios).
+  const [buyerPctDraft, setBuyerPctDraft] = useState<Record<number, string>>({});
+  const [acuerdoDraft, setAcuerdoDraft] = useState<Record<number, { fecha?: string; monto?: string }>>({});
+  const [precioFinalDraft, setPrecioFinalDraft] = useState<string | null>(null);
+  const [isSavingChanges, setIsSavingChanges] = useState(false);
 
   // Estados para edición de comprador
   const [isEditBuyerDialogOpen, setIsEditBuyerDialogOpen] = useState(false);
@@ -934,6 +992,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     selectedPaymentScheme.numero_mensualidades !== currentPaymentPlan.numero_mensualidades
   ) : false;
 
+  // El esquema original solo es "historial" real si trae datos (no un placeholder 0_0_0_0).
+  const originalPlanHasData = !!selectedPaymentScheme && (
+    (selectedPaymentScheme.porcentaje_enganche || 0) > 0 ||
+    (selectedPaymentScheme.porcentaje_mensualidades || 0) > 0 ||
+    (selectedPaymentScheme.porcentaje_entrega || 0) > 0 ||
+    (selectedPaymentScheme.numero_mensualidades || 0) > 0
+  );
+  // Mostrar comparación Original vs Modificado solo cuando hay historial real.
+  const showPlanComparison = isPaymentPlanModified && originalPlanHasData;
+
   // Calculate if cuenta has pending payments and get last pending acuerdo
   const hasPendingPayments = useMemo(() => {
     return acuerdos?.some(a => !a.pago_completado) || false;
@@ -963,16 +1031,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
   // Get payment schemes
   const { data: esquemasPago } = useQuery({
-    queryKey: ["esquemas_pago"],
+    queryKey: ["esquemas_pago", ofertaProductoData.id_producto, propiedadDetalle?.id],
     queryFn: async () => {
+      // Cuenta tipo Producto: sólo esquemas ligados a este producto, incluyendo los
+      // manuales (es_manual=true) — los esquemas de producto se crean así y excluirlos
+      // deja el dropdown sin el esquema correcto; n8n rechaza el acuerdo si el esquema
+      // no corresponde al producto de la oferta.
+      if (ofertaProductoData.id_producto) {
+        const { data } = await supabase
+          .from('esquemas_pago')
+          .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+          .eq('id_producto', ofertaProductoData.id_producto)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        return data || [];
+      }
+
       if (!propiedadDetalle) return [];
-      
+
       const { data: entidad } = await supabase
         .from('entidades_relacionadas')
         .select('id_proyecto')
         .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
         .single();
-        
+
       if (!entidad?.id_proyecto) return [];
 
       const { data } = await supabase
@@ -985,7 +1068,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
       return data || [];
     },
-    enabled: !!propiedadDetalle
+    enabled: !!propiedadDetalle || !!ofertaProductoData.id_producto
   });
 
   // Get inmobiliaria name for the project (Type 5 = Inmobiliaria)
@@ -2338,13 +2421,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
   });
 
   // Handler for precio final edit
-  const handlePrecioFinalEdit = () => {
+  const handlePrecioFinalEdit = (override?: string) => {
     if (cuentaDetalle?.precio_final == null || !lastAcuerdo) {
       toast.error("No se puede editar el precio final: no hay datos suficientes");
       return;
     }
 
-    const newPrecio = parseFloat(editingPrecioFinal);
+    const newPrecio = parseFloat(override ?? editingPrecioFinal);
     if (isNaN(newPrecio) || newPrecio <= 0) {
       toast.error("Por favor ingrese un precio válido");
       return;
@@ -2787,175 +2870,249 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
       const newAcuerdos = arrayMove(acuerdos, oldIndex, newIndex);
       setAcuerdos(newAcuerdos);
       updateOrderMutation.mutate(newAcuerdos);
-      
+
       // Update payment dates after reordering to maintain chronological order
       updatePaymentDatesAfterReorder(newAcuerdos);
     }
   };
 
+  // ── Guardado por lote ────────────────────────────────────────────────────
+  // Formatea una fecha a YYYY-MM-DD en horario local (mismo criterio que la mutation).
+  const fmtLocalIso = (d: Date | undefined) => {
+    if (!d) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Cambios pendientes por campo (comparados contra los valores almacenados).
+  const valorUmaChanged = tipoCuenta === 'Propiedad'
+    && valorUma !== ''
+    && parseFloat(valorUma) !== Number(cuentaDetalle?.valor_uma ?? NaN);
+  const fechaCompraChanged = !!fechaCompra
+    && fmtLocalIso(fechaCompra) !== (cuentaDetalle?.fecha_compra ?? null);
+  const comisionChanged = porcentajeComision !== (cuentaDetalle?.porcentaje_comision_venta || 0)
+    || ivaIncluido !== ((cuentaDetalle as any)?.iva_incluido || false);
+  const buyerPctChanged = compradoresExistentes?.some((c) => {
+    const id = c.personas?.id;
+    if (id == null || buyerPctDraft[id] === undefined) return false;
+    return Math.abs((parseFloat(buyerPctDraft[id]) || 0) - (c.porcentaje_copropiedad || 0)) > 0.001;
+  }) || false;
+
+  const acuerdoChanged = (acuerdos || []).some((a) => {
+    const d = acuerdoDraft[a.id];
+    if (!d) return false;
+    const montoDiff = d.monto !== undefined && Math.abs((parseFloat(d.monto) || 0) - (a.monto || 0)) > 0.001;
+    const fechaDiff = d.fecha !== undefined && d.fecha !== (a.fecha_pago || '');
+    return montoDiff || fechaDiff;
+  });
+
+  const precioFinalChanged = precioFinalDraft !== null
+    && precioFinalDraft !== ''
+    && Math.abs((parseFloat(precioFinalDraft) || 0) - Number(cuentaDetalle?.precio_final ?? 0)) > 0.001;
+
+  const hasUnsavedChanges = valorUmaChanged || fechaCompraChanged || comisionChanged || buyerPctChanged || acuerdoChanged || precioFinalChanged;
+
+  // Persiste todos los cambios pendientes en un solo lote.
+  const handleActualizar = async () => {
+    // Validar reparto de copropiedad si se tocaron porcentajes.
+    if (buyerPctChanged) {
+      const total = (compradoresExistentes || []).reduce((sum, c) => {
+        const id = c.personas?.id;
+        const val = id != null && buyerPctDraft[id] !== undefined
+          ? (parseFloat(buyerPctDraft[id]) || 0)
+          : (c.porcentaje_copropiedad || 0);
+        return sum + val;
+      }, 0);
+      if (Math.abs(total - 100) > 0.01) {
+        toast.error('Los porcentajes de copropiedad deben sumar exactamente 100%');
+        return;
+      }
+    }
+
+    setIsSavingChanges(true);
+    try {
+      if (fechaCompraChanged && fechaCompra) {
+        await updateFechaCompraMutation.mutateAsync(fechaCompra);
+      }
+      if (valorUmaChanged) {
+        await updateValorUmaMutation.mutateAsync(parseFloat(valorUma));
+      }
+      if (comisionChanged) {
+        await updateComisionMutation.mutateAsync({ porcentaje: porcentajeComision, ivaIncluido });
+      }
+      if (buyerPctChanged) {
+        for (const c of compradoresExistentes || []) {
+          const id = c.personas?.id;
+          if (id == null || buyerPctDraft[id] === undefined) continue;
+          const newPct = parseFloat(buyerPctDraft[id]) || 0;
+          if (Math.abs(newPct - (c.porcentaje_copropiedad || 0)) > 0.001) {
+            await updateBuyerPercentageMutation.mutateAsync({ buyerId: id, newPercentage: newPct });
+          }
+        }
+        setBuyerPctDraft({});
+      }
+      if (acuerdoChanged) {
+        // Aplicar cambios de acuerdos vía sus handlers existentes (conservan la lógica de cascada).
+        for (const a of acuerdos || []) {
+          const d = acuerdoDraft[a.id];
+          if (!d) continue;
+          if (d.monto !== undefined) {
+            const monto = parseFloat(d.monto);
+            if (!isNaN(monto) && monto > 0 && Math.abs(monto - (a.monto || 0)) > 0.001) {
+              handleAmountUpdate(a.id, monto);
+            }
+          }
+          if (d.fecha !== undefined && d.fecha !== (a.fecha_pago || '')) {
+            handleDateUpdate(a.id, new Date(d.fecha + 'T00:00:00'));
+          }
+        }
+        setAcuerdoDraft({});
+      }
+      if (precioFinalChanged && precioFinalDraft !== null) {
+        // El precio final puede requerir confirmación (cascada al último acuerdo) → su propio flujo.
+        handlePrecioFinalEdit(precioFinalDraft);
+        setPrecioFinalDraft(null);
+      }
+      toast.success('Cambios actualizados correctamente');
+      onUpdate?.();
+    } catch (e) {
+      // Cada mutation ya muestra su propio toast de error.
+      console.error('Error al actualizar cambios:', e);
+    } finally {
+      setIsSavingChanges(false);
+    }
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-[1325px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[calc(100%-2rem)] sm:max-w-4xl h-[80vh] p-0 gap-0 overflow-hidden flex flex-col">
+        {/* Header */}
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/60 shrink-0">
           <div className="flex flex-col gap-3">
-            <DialogTitle className="flex items-center gap-2">
-              <span>Editar Cuenta de Cobranza - {formatCuentaCobranzaId(cuenta.id, tipoCuenta)}</span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <DialogTitle className="text-[15px] font-semibold leading-tight">
+                Editar Cuenta de Cobranza
+              </DialogTitle>
+              <span className="text-[13px] font-mono text-muted-foreground bg-muted/60 border border-border/50 rounded px-2 py-0.5">
+                {formatCuentaCobranzaId(cuenta.id, tipoCuenta)}
+              </span>
               {cuentaDetalle?.collection_id && (
                 <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Badge variant="outline" className="text-xs">
+                  <Tooltip delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-[11px] font-mono cursor-default">
                         {cuentaDetalle.collection_id}
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-sm">Cuenta anterior: {cuentaDetalle.collection_id}</p>
+                      <p className="text-xs">Cuenta anterior: {cuentaDetalle.collection_id}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
-            </DialogTitle>
-            
-            {/* Timeline de progreso - solo para cuentas de Propiedad */}
-            {tipoCuenta === 'Propiedad' && propiedadDetalle && estatusPropiedad && (
-              <PropertyProgressTimeline 
-                cuentaId={cuenta.id}
-                propiedadId={propiedadDetalle.id}
-                estatusActual={estatusPropiedad.id_estatus_disponibilidad}
-                restante={restanteCalculado}
-                cuentaDetalle={cuentaDetalle}
-              />
-            )}
+            </div>
+
           </div>
         </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto p-5 pt-4 min-h-[320px] text-[13px]">
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className={`grid w-full ${tipoCuenta === 'Propiedad' ? (hasFacturas ? 'grid-cols-8' : 'grid-cols-7') : 'grid-cols-6'}`}>
-            <TabsTrigger value="propiedad">Datos de la Propiedad</TabsTrigger>
-            {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && (
-              <TabsTrigger value="producto">Detalles {tipoCuenta}</TabsTrigger>
-            )}
-            <TabsTrigger value="vendedor">Datos del Vendedor</TabsTrigger>
-            <TabsTrigger value="compradores">Datos del Comprador</TabsTrigger>
-            {tipoCuenta === 'Propiedad' && (
-              <TabsTrigger value="escrituracion">Datos de escrituración</TabsTrigger>
-            )}
-            {tipoCuenta === 'Propiedad' && (
-              <TabsTrigger value="documentos">Documentos</TabsTrigger>
-            )}
-            {tipoCuenta === 'Propiedad' && hasFacturas && (
-              <TabsTrigger value="facturas">Facturas</TabsTrigger>
-            )}
-            <TabsTrigger value="acuerdo">Acuerdo de Pago</TabsTrigger>
-            <TabsTrigger value="comisiones">Comisiones</TabsTrigger>
-          </TabsList>
+          {/* Tabs: portal-style border-bottom */}
+          <div className="overflow-x-auto -mx-5 px-5 mb-4">
+            <div className="flex border-b border-border min-w-max">
+              {[
+                { value: 'propiedad', label: 'Propiedad', show: true },
+                { value: 'producto', label: `Detalles ${tipoCuenta}`, show: tipoCuenta === 'Producto' || tipoCuenta === 'Servicio' },
+                { value: 'vendedor', label: 'Vendedor', show: true },
+                { value: 'compradores', label: 'Comprador', show: true },
+                { value: 'progreso', label: 'Progreso', show: tipoCuenta === 'Propiedad' },
+                { value: 'escrituracion', label: 'Escrituración', show: tipoCuenta === 'Propiedad' },
+                { value: 'documentos', label: 'Documentos', show: tipoCuenta === 'Propiedad' },
+                { value: 'facturas', label: 'Facturas', show: tipoCuenta === 'Propiedad' && hasFacturas },
+                { value: 'acuerdo', label: 'Acuerdo de pago', show: true },
+                { value: 'comisiones', label: 'Comisiones', show: true },
+              ].filter(t => t.show).map(tab => (
+                <button key={tab.value} onClick={() => handleTabChange(tab.value)}
+                  className={cn(
+                    'px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors duration-100 whitespace-nowrap shrink-0',
+                    activeTab === tab.value
+                      ? 'border-primary text-primary bg-primary/5'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <TabsContent value="propiedad" className="space-y-4">
+          <TabsContent value="propiedad" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
             <Card>
-              <CardHeader>
-                <CardTitle>Información de la Propiedad</CardTitle>
+              <CardHeader className="px-4 py-3 border-b border-border/40">
+                <CardTitle className="text-[13px] font-semibold">Información de la Propiedad</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="px-4 pb-4 pt-3 space-y-3">
                 {propiedadDetalle ? (
                   <>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
                       <div>
-                        <Label>Proyecto</Label>
-                        <Input value={propiedadDetalle.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto'} readOnly />
+                        <InfoRow icon={Building2} label="Proyecto" value={propiedadDetalle.edificios_modelos?.edificios?.proyectos?.nombre || 'Sin proyecto'} />
+                        <InfoRow icon={Building2} label="Edificio" value={propiedadDetalle.edificios_modelos?.edificios?.nombre || 'Sin edificio'} />
+                        <InfoRow icon={Hash} label="No. Propiedad" value={propiedadDetalle.numero_propiedad || '-'} />
                       </div>
                       <div>
-                        <Label>Edificio</Label>
-                        <Input value={propiedadDetalle.edificios_modelos?.edificios?.nombre || 'Sin edificio'} readOnly />
-                      </div>
-                      <div>
-                        <Label>Número de Propiedad</Label>
-                        <Input value={propiedadDetalle.numero_propiedad || ''} readOnly />
-                      </div>
-                      <div>
-                        <Label>Nivel</Label>
-                        <Input value={propiedadDetalle.numero_piso || ''} readOnly />
-                      </div>
-                      <div>
-                        <Label>Metros Cuadrados</Label>
-                        <Input value={`${((propiedadDetalle.m2_interiores || 0) + (propiedadDetalle.m2_exteriores || 0)).toFixed(2)} m²`} readOnly />
-                      </div>
-                      <div>
-                        <Label>Precio de Lista</Label>
-                        <Input value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(propiedadDetalle.precio_lista || 0)} readOnly />
-                      </div>
-                      <div className="col-span-2">
-                        <Label>Descripción</Label>
-                        <Textarea value={propiedadDetalle.descripcion || 'Sin descripción'} readOnly />
+                        <InfoRow icon={Layers} label="Nivel" value={propiedadDetalle.numero_piso != null ? String(propiedadDetalle.numero_piso) : '-'} />
+                        <InfoRow icon={Ruler} label="Metraje" value={`${((propiedadDetalle.m2_interiores || 0) + (propiedadDetalle.m2_exteriores || 0)).toFixed(2)} m²`} />
+                        <InfoRow icon={Tag} label="Precio de lista" value={fmtMXN(propiedadDetalle.precio_lista || 0)} />
                       </div>
                     </div>
+                    {propiedadDetalle.descripcion && (
+                      <div className="pt-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-1.5">Descripción</p>
+                        <p className="text-[12px] text-foreground/80 leading-relaxed">{propiedadDetalle.descripcion}</p>
+                      </div>
+                    )}
 
                     {/* Estacionamientos Section */}
                     {estacionamientosDetalle && estacionamientosDetalle.length > 0 && (
-                      <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-                        <h4 className="font-medium text-foreground mb-4">Estacionamientos</h4>
-                        <div className="grid gap-3">
+                      <div className="pt-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">Estacionamientos</p>
+                        <div className="space-y-2">
                           {estacionamientosDetalle.map((estacionamiento) => (
-                            <div key={estacionamiento.id} className="p-3 bg-background rounded border">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div key={estacionamiento.id} className="rounded-lg border border-border/60 p-3">
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
                                 <div>
-                                  <p className="text-sm text-muted-foreground">Nombre</p>
-                                  <p className="font-medium">{estacionamiento.nombre}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Tipo</p>
-                                  <p className="font-medium">{estacionamiento.tipos_estacionamiento?.nombre || 'N/A'}</p>
+                                  <InfoRow icon={Hash} label="Nombre" value={estacionamiento.nombre} />
+                                  <InfoRow icon={Car} label="Tipo" value={estacionamiento.tipos_estacionamiento?.nombre || 'N/A'} />
+                                  <InfoRow icon={Ruler} label="Metraje" value={`${estacionamiento.m2} m²`} />
                                 </div>
                                 <div>
-                                  <p className="text-sm text-muted-foreground">M²</p>
-                                  <p className="font-medium">{estacionamiento.m2} m²</p>
+                                  <InfoRow icon={MapPin} label="Ubicación" value={estacionamiento.ubicacion || 'N/E'} />
+                                  <InfoRow icon={Tag} label="Precio / m²" value={estacionamiento.precio_m2 !== null ? fmtMXN(estacionamiento.precio_m2) : 'N/A'} />
+                                  <InfoRow icon={CreditCard} label="Precio final" value={estacionamiento.precio_final !== null ? fmtMXN(estacionamiento.precio_final) : 'N/A'} />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Ubicación</p>
-                                  <p className="font-medium">{estacionamiento.ubicacion || 'No especificada'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Precio por M²</p>
-                                  <p className="font-medium">
-                                    {estacionamiento.precio_m2 !== null 
-                                      ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(estacionamiento.precio_m2)
-                                      : 'N/A'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Precio Final</p>
-                                  <p className="font-medium">
-                                    {estacionamiento.precio_final !== null 
-                                      ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(estacionamiento.precio_final)
-                                      : 'N/A'}
-                                  </p>
-                                </div>
-                                <div className="col-span-2">
-                                  <p className="text-sm text-muted-foreground">Forma de adquisición:</p>
-                                  {estacionamiento.cuenta_cobranza_id ? (
-                                    <Badge 
-                                      variant="secondary" 
-                                      className="mt-1 cursor-pointer hover:bg-secondary/80"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto'));
-                                        toast.success('ID de cuenta copiado al portapapeles');
-                                      }}
-                                    >
-                                      Cuenta: {formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto')}
-                                    </Badge>
-                                  ) : estacionamiento.precio_final === 0 ? (
-                                    <Badge variant="default" className="mt-1 bg-green-600">
-                                      Incluido con el departamento
-                                    </Badge>
-                                  ) : (
-                                    <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-                                      Aún no se adquiere. Costo: {estacionamiento.precio_final !== null 
-                                        ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(estacionamiento.precio_final)
-                                        : 'N/A'}
-                                    </div>
-                                  )}
-                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 pt-2">
+                                <Landmark className="size-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-[12px] text-muted-foreground w-28 shrink-0">Adquisición</span>
+                                {estacionamiento.cuenta_cobranza_id ? (
+                                  <button
+                                    className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto'));
+                                      toast.success('ID de cuenta copiado al portapapeles');
+                                    }}
+                                  >
+                                    Cuenta: {formatCuentaCobranzaId(estacionamiento.cuenta_cobranza_id, 'Producto')}
+                                  </button>
+                                ) : estacionamiento.precio_final === 0 ? (
+                                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                    Incluido con el departamento
+                                  </span>
+                                ) : (
+                                  <span className="text-[12px] text-amber-600 dark:text-amber-400">
+                                    Sin adquirir — {estacionamiento.precio_final !== null ? fmtMXN(estacionamiento.precio_final) : 'N/A'}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -2965,65 +3122,44 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
                     {/* Bodegas Section */}
                     {bodegasDetalle && bodegasDetalle.length > 0 && (
-                      <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-                        <h4 className="font-medium text-foreground mb-4">Bodegas</h4>
-                        <div className="grid gap-3">
+                      <div className="pt-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">Bodegas</p>
+                        <div className="space-y-2">
                           {bodegasDetalle.map((bodega) => (
-                            <div key={bodega.id} className="p-3 bg-background rounded border">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div key={bodega.id} className="rounded-lg border border-border/60 p-3">
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
                                 <div>
-                                  <p className="text-sm text-muted-foreground">Nombre</p>
-                                  <p className="font-medium">{bodega.nombre}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">M²</p>
-                                  <p className="font-medium">{bodega.m2} m²</p>
+                                  <InfoRow icon={Hash} label="Nombre" value={bodega.nombre} />
+                                  <InfoRow icon={Ruler} label="Metraje" value={`${bodega.m2} m²`} />
+                                  <InfoRow icon={MapPin} label="Ubicación" value={bodega.ubicacion || 'N/E'} />
                                 </div>
                                 <div>
-                                  <p className="text-sm text-muted-foreground">Ubicación</p>
-                                  <p className="font-medium">{bodega.ubicacion || 'No especificada'}</p>
+                                  <InfoRow icon={Tag} label="Precio / m²" value={bodega.precio_m2 !== null ? fmtMXN(bodega.precio_m2) : 'N/A'} />
+                                  <InfoRow icon={CreditCard} label="Precio final" value={bodega.precio_final !== null ? fmtMXN(bodega.precio_final) : 'N/A'} />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Precio por M²</p>
-                                  <p className="font-medium">
-                                    {bodega.precio_m2 !== null 
-                                      ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(bodega.precio_m2)
-                                      : 'N/A'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Precio Final</p>
-                                  <p className="font-medium">
-                                    {bodega.precio_final !== null 
-                                      ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(bodega.precio_final)
-                                      : 'N/A'}
-                                  </p>
-                                </div>
-                                <div className="col-span-2">
-                                  <p className="text-sm text-muted-foreground">Forma de adquisición:</p>
-                                  {bodega.cuenta_cobranza_id ? (
-                                    <Badge 
-                                      variant="secondary" 
-                                      className="mt-1 cursor-pointer hover:bg-secondary/80"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto'));
-                                        toast.success('ID de cuenta copiado al portapapeles');
-                                      }}
-                                    >
-                                      Cuenta: {formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto')}
-                                    </Badge>
-                                  ) : bodega.precio_final === 0 ? (
-                                    <Badge variant="default" className="mt-1 bg-green-600">
-                                      Incluido con el departamento
-                                    </Badge>
-                                  ) : (
-                                    <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-                                      Aún no se adquiere. Costo: {bodega.precio_final !== null 
-                                        ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(bodega.precio_final)
-                                        : 'N/A'}
-                                    </div>
-                                  )}
-                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 pt-2">
+                                <Landmark className="size-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-[12px] text-muted-foreground w-28 shrink-0">Adquisición</span>
+                                {bodega.cuenta_cobranza_id ? (
+                                  <button
+                                    className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto'));
+                                      toast.success('ID de cuenta copiado al portapapeles');
+                                    }}
+                                  >
+                                    Cuenta: {formatCuentaCobranzaId(bodega.cuenta_cobranza_id, 'Producto')}
+                                  </button>
+                                ) : bodega.precio_final === 0 ? (
+                                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                    Incluido con el departamento
+                                  </span>
+                                ) : (
+                                  <span className="text-[12px] text-amber-600 dark:text-amber-400">
+                                    Sin adquirir — {bodega.precio_final !== null ? fmtMXN(bodega.precio_final) : 'N/A'}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -3040,65 +3176,66 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
           {/* New tab for Product/Service details */}
           {(tipoCuenta === 'Producto' || tipoCuenta === 'Servicio') && productoServicioInfo && (
-            <TabsContent value="producto" className="space-y-4">
+            <TabsContent value="producto" className="space-y-3">
               <Card>
-                <CardHeader>
-                  <CardTitle>Detalles del {tipoCuenta}</CardTitle>
+                <CardHeader className="px-4 py-3 border-b border-border/40">
+                  <CardTitle className="text-[13px] font-semibold">Detalles del {tipoCuenta}</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <CardContent className="px-4 pb-4 pt-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>Nombre</Label>
-                      <Input 
-                        value={bodegaEstacionamientoData?.nombre || productoServicioInfo.nombre || ''} 
-                        readOnly 
+                      <Label className="text-[12px] font-medium text-muted-foreground">Nombre</Label>
+                      <Input
+                        value={bodegaEstacionamientoData?.nombre || productoServicioInfo.nombre || ''}
+                        readOnly className="h-8 text-[13px]"
                       />
                     </div>
                     <div>
-                      <Label>Categoría</Label>
-                      <Input value={productoServicioInfo.categorias_producto?.nombre || ''} readOnly />
+                      <Label className="text-[12px] font-medium text-muted-foreground">Categoría</Label>
+                      <Input value={productoServicioInfo.categorias_producto?.nombre || ''} readOnly className="h-8 text-[13px]" />
                     </div>
                     {bodegaEstacionamientoData ? (
                       <>
                         <div>
-                          <Label>Precio por M²</Label>
-                          <Input 
-                            value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)} 
-                            readOnly 
+                          <Label className="text-[12px] font-medium text-muted-foreground">Precio por M²</Label>
+                          <Input
+                            value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(productoServicioInfo.precio_lista || 0)}
+                            readOnly className="h-8 text-[13px]"
                           />
                         </div>
                         <div>
-                          <Label>Metraje</Label>
-                          <Input 
-                            value={bodegaEstacionamientoData.m2 ? `${Number(bodegaEstacionamientoData.m2).toFixed(2)} m²` : 'N/A'} 
-                            readOnly 
+                          <Label className="text-[12px] font-medium text-muted-foreground">Metraje</Label>
+                          <Input
+                            value={bodegaEstacionamientoData.m2 ? `${Number(bodegaEstacionamientoData.m2).toFixed(2)} m²` : 'N/A'}
+                            readOnly className="h-8 text-[13px]"
                           />
                         </div>
                         <div>
-                          <Label>Precio Final</Label>
-                          <Input 
+                          <Label className="text-[12px] font-medium text-muted-foreground">Precio Final</Label>
+                          <Input
                             value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
                               (productoServicioInfo.precio_lista || 0) * (bodegaEstacionamientoData.m2 || 0)
-                            )} 
-                            readOnly 
+                            )}
+                            readOnly className="h-8 text-[13px]"
                           />
                         </div>
                       </>
                     ) : (
                       <div>
-                        <Label>Precio de Lista</Label>
-                        <Input 
-                          value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle?.precio_final || 0)} 
-                          readOnly 
+                        <Label className="text-[12px] font-medium text-muted-foreground">Precio de Lista</Label>
+                        <Input
+                          value={new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle?.precio_final || 0)}
+                          readOnly className="h-8 text-[13px]"
                         />
                       </div>
                     )}
                     <div className="col-span-2">
-                      <Label>Descripción</Label>
-                      <Textarea 
-                        value={productoServicioInfo.descripcion || 'Sin descripción'} 
-                        readOnly 
-                        rows={4}
+                      <Label className="text-[12px] font-medium text-muted-foreground">Descripción</Label>
+                      <Textarea
+                        value={productoServicioInfo.descripcion || 'Sin descripción'}
+                        readOnly
+                        rows={5}
+                        className="resize-none text-[13px]"
                       />
                     </div>
                   </div>
@@ -3107,52 +3244,29 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </TabsContent>
           )}
 
-          <TabsContent value="vendedor" className="space-y-4">
+          <TabsContent value="vendedor" className="space-y-3">
             <Card>
-              <CardHeader>
-                <CardTitle>Información del Vendedor</CardTitle>
+              <CardHeader className="px-4 py-3 border-b border-border/40">
+                <CardTitle className="text-[13px] font-semibold">Información del Vendedor</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="px-4 pb-4 pt-3 space-y-3">
                  {vendedorDetalle?.personas ? (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
                     <div>
-                      <Label>Nombre Legal</Label>
-                      <Input value={vendedorDetalle.personas.nombre_legal || ''} readOnly />
+                      <InfoRow icon={Briefcase} label="Nombre legal" value={vendedorDetalle.personas.nombre_legal || '-'} />
+                      <InfoRow icon={Hash} label="RFC" value={vendedorDetalle.personas.rfc || '-'} />
+                      <InfoRow icon={User} label="Tipo de persona" value={getTipoPersonaLabel(vendedorDetalle.personas.tipo_persona || '')} />
                     </div>
                     <div>
-                      <Label>RFC</Label>
-                      <Input value={vendedorDetalle.personas.rfc || ''} readOnly />
+                      <InfoRow icon={Mail} label="Email" value={vendedorDetalle.personas.email || '-'} />
+                      <InfoRow icon={Phone} label="Teléfono" value={vendedorDetalle.personas.telefono || '-'} />
+                      {vendedorDetalle.personas.tipo_persona === 'pm' && vendedorDetalle.personas.nombre_comercial && (
+                        <InfoRow icon={Building2} label="Nombre comercial" value={vendedorDetalle.personas.nombre_comercial} />
+                      )}
+                      {vendedorDetalle.personas.tipo_persona === 'pm' && representanteLegal && (
+                        <InfoRow icon={User} label="Representante legal" value={representanteLegal.personas?.nombre_legal || '-'} />
+                      )}
                     </div>
-                    <div>
-                      <Label>Email</Label>
-                      <Input value={vendedorDetalle.personas.email || ''} readOnly />
-                    </div>
-                    <div>
-                      <Label>Teléfono</Label>
-                      <Input value={vendedorDetalle.personas.telefono || ''} readOnly />
-                    </div>
-                    <div>
-                      <Label>Tipo de Persona</Label>
-                      <Input value={getTipoPersonaLabel(vendedorDetalle.personas.tipo_persona || '')} readOnly />
-                    </div>
-                    
-                    {/* Campos adicionales para Persona Moral */}
-                    {vendedorDetalle.personas.tipo_persona === 'pm' && (
-                      <>
-                        {vendedorDetalle.personas.nombre_comercial && (
-                          <div>
-                            <Label>Nombre Comercial</Label>
-                            <Input value={vendedorDetalle.personas.nombre_comercial} readOnly />
-                          </div>
-                        )}
-                        {representanteLegal && (
-                          <div>
-                            <Label>Representante Legal</Label>
-                            <Input value={representanteLegal.personas?.nombre_legal || ''} readOnly />
-                          </div>
-                        )}
-                      </>
-                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8">Cargando información del vendedor...</div>
@@ -3161,14 +3275,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </Card>
           </TabsContent>
 
-          <TabsContent value="compradores" className="space-y-4">
+          <TabsContent value="compradores" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
             <Card>
-              <CardHeader>
+              <CardHeader className="px-4 py-3 border-b border-border/40">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="flex items-center gap-2">
-                      <CardTitle>Compradores</CardTitle>
+                      <CardTitle className="text-[13px] font-semibold">Compradores</CardTitle>
                       {/* Check if any compradores are spouses */}
                       {compradoresExistentes && compradoresExistentes.length >= 2 && compradoresExistentes.some((comprador) => {
                         const spouseId = comprador.personas?.id_conyuge;
@@ -3186,57 +3300,68 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                         </TooltipProvider>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Total asignado: {totalPorcentajes.toFixed(2)}%
-                      {!isValidTotal && (
-                        <span className="text-destructive ml-2 font-medium">
-                          ¡Debe sumar exactamente 100%!
-                        </span>
-                      )}
-                    </p>
+                    {(() => {
+                      const displayTotal = (compradoresExistentes || []).reduce((sum, c) => {
+                        const id = c.personas?.id;
+                        const v = id != null && buyerPctDraft[id] !== undefined
+                          ? (parseFloat(buyerPctDraft[id]) || 0)
+                          : (c.porcentaje_copropiedad || 0);
+                        return sum + v;
+                      }, 0);
+                      const valid = Math.abs(displayTotal - 100) < 0.01;
+                      return (
+                        <p className="text-[12px] text-muted-foreground mt-1">
+                          Total asignado: <span className={cn('font-medium tabular-nums', valid ? 'text-emerald-600' : 'text-destructive')}>{displayTotal.toFixed(2)}%</span>
+                          {!valid && (
+                            <span className="text-destructive ml-2 font-medium">
+                              ¡Debe sumar exactamente 100%!
+                            </span>
+                          )}
+                        </p>
+                      );
+                    })()}
                   </div>
-                  <Button 
+                  <button
                     onClick={() => setShowPersonForm(true)}
                     disabled={isReadOnly}
+                    className="inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nuevo Comprador
-                  </Button>
+                    <Plus className="size-3.5" />Nuevo Comprador
+                  </button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 pb-4 pt-3">
                 {compradoresExistentes && compradoresExistentes.length > 0 ? (
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold">Nombre</TableHead>
-                          <TableHead className="font-semibold">RFC</TableHead>
-                          <TableHead className="font-semibold">Email</TableHead>
-                          <TableHead className="font-semibold">Tipo</TableHead>
-                          <TableHead className="font-semibold">Datos Fiscales</TableHead>
-                          <TableHead className="font-semibold">Porcentaje (%)</TableHead>
-                          <TableHead className="font-semibold text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  <div className="overflow-x-auto rounded-lg border border-border/60">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="sozu-thead">
+                          {['Nombre', 'RFC', 'Email', 'Tipo', 'Datos fiscales', '% Copropiedad', ''].map((h, i) => (
+                            <th key={i} className={cn('px-3 py-2.5 text-[10px] whitespace-nowrap', i === 6 && 'w-20', i >= 4 && 'text-center')}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
                           {compradoresExistentes.map((comprador, index) => {
                             // Estado civil 2 = Casado(a) bienes mancomunados
                             const esCasadoMancomunados = comprador.personas?.id_estado_civil === 2;
                             const datosFiscalesCompletos = isFiscalDataComplete(comprador.personas);
-                            
+                            const buyerId = comprador.personas?.id ?? 0;
+                            const pctValue = buyerPctDraft[buyerId] !== undefined
+                              ? buyerPctDraft[buyerId]
+                              : comprador.porcentaje_copropiedad.toFixed(2);
+
                             return (
                             <React.Fragment key={index}>
-                           <TableRow className="hover:bg-muted/30 transition-colors">
-                              <TableCell className="font-medium">
+                           <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                              <td className="px-3 py-2.5 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="link"
-                                    className="p-0 h-auto font-medium hover:underline"
+                                  <button
+                                    className="text-[12px] font-medium text-emerald-600 hover:underline underline-offset-2 text-left"
                                     onClick={() => handleNavigateToCompradores(comprador.personas?.rfc || undefined)}
                                   >
                                     {comprador.personas?.nombre_legal}
-                                  </Button>
+                                  </button>
                                   {esCasadoMancomunados && comprador.personas?.id_conyuge && (
                                     <TooltipProvider>
                                       <Tooltip>
@@ -3245,8 +3370,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                         </TooltipTrigger>
                                         <TooltipContent>
                                           <p className="font-medium">
-                                            Cónyuge: {comprador.personas.conyuge && typeof comprador.personas.conyuge === 'object' && 'nombre_legal' in comprador.personas.conyuge 
-                                              ? comprador.personas.conyuge.nombre_legal 
+                                            Cónyuge: {comprador.personas.conyuge && typeof comprador.personas.conyuge === 'object' && 'nombre_legal' in comprador.personas.conyuge
+                                              ? comprador.personas.conyuge.nombre_legal
                                               : 'Sin asignar'}
                                           </p>
                                         </TooltipContent>
@@ -3254,86 +3379,86 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                     </TooltipProvider>
                                   )}
                                 </div>
-                              </TableCell>
-                              <TableCell className="text-muted-foreground">
-                                {comprador.personas?.rfc || 'N/A'}
-                              </TableCell>
-                             <TableCell className="text-muted-foreground">
-                               {comprador.personas?.email || 'N/A'}
-                             </TableCell>
-                             <TableCell className="text-muted-foreground">
+                              </td>
+                              <td className="px-3 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                                {comprador.personas?.rfc || '-'}
+                              </td>
+                             <td className="px-3 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                               {comprador.personas?.email || '-'}
+                             </td>
+                             <td className="px-3 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
                                {getTipoPersonaLabel(comprador.personas?.tipo_persona || '')}
-                             </TableCell>
-                             <TableCell>
-                               <Badge variant={datosFiscalesCompletos ? "default" : "destructive"} className="text-xs">
-                                 {datosFiscalesCompletos ? "Completa" : "Incompleta"}
-                               </Badge>
-                             </TableCell>
-                              <TableCell>
+                             </td>
+                             <td className="px-3 py-2.5 text-center">
+                               <span className={cn(
+                                 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                                 datosFiscalesCompletos ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                               )}>
+                                 {datosFiscalesCompletos ? 'Completa' : 'Incompleta'}
+                               </span>
+                             </td>
+                              <td className="px-3 py-2.5 text-center">
                                 <Input
                                   type="number"
                                   min="0"
                                   max="100"
                                   step="0.01"
-                                  value={comprador.porcentaje_copropiedad.toFixed(2)}
-                                  onChange={(e) => handlePercentageChange(comprador.personas?.id || 0, e.target.value)}
-                                  className="w-20 h-8 text-sm"
-                                  disabled={updateBuyerPercentageMutation.isPending || isReadOnly}
+                                  value={pctValue}
+                                  onChange={(e) => setBuyerPctDraft(prev => ({ ...prev, [buyerId]: e.target.value }))}
+                                  className="w-20 h-8 text-[13px] text-center mx-auto tabular-nums"
+                                  disabled={isReadOnly}
                                 />
-                              </TableCell>
-                              <TableCell className="text-right">
+                              </td>
+                              <td className="px-3 py-2.5">
                                 <div className="flex items-center justify-end gap-1">
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
+                                  <button
                                     onClick={() => handleEditBuyer(comprador.personas?.id || 0)}
                                     disabled={isReadOnly}
-                                    className="hover:bg-primary/10 hover:border-primary hover:text-primary transition-colors"
+                                    title="Editar datos del comprador"
+                                    className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors disabled:opacity-40"
                                   >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
+                                    <Edit className="size-3.5" />
+                                  </button>
+                                  <button
                                     onClick={() => handleDeleteBuyer(comprador.personas?.id || 0, comprador.personas?.nombre_legal || '')}
                                     disabled={deleteBuyerMutation.isPending || isReadOnly}
-                                    className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
+                                    title="Eliminar comprador"
+                                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
                                   >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
+                                    <Trash2 className="size-3.5" />
+                                  </button>
                                 </div>
-                              </TableCell>
-                           </TableRow>
-                           
+                              </td>
+                           </tr>
+
                             {/* Selector de cónyuge para compradores casados por bienes mancomunados */}
                             {esCasadoMancomunados && (() => {
                               const conyugeData = comprador.personas?.conyuge;
-                              const tieneConyugeAsignado = comprador.personas?.id_conyuge && 
-                                                          conyugeData && 
-                                                          typeof conyugeData === 'object' && 
+                              const tieneConyugeAsignado = comprador.personas?.id_conyuge &&
+                                                          conyugeData &&
+                                                          typeof conyugeData === 'object' &&
                                                           !Array.isArray(conyugeData) &&
                                                           'nombre_legal' in conyugeData;
-                              
+
                               // Check if spouse is already added as comprador
                               const conyugeYaAgregado = compradoresExistentes?.some(c => c.personas?.id === comprador.personas?.id_conyuge);
-                              
+
                               return (
                                 <>
                                   {tieneConyugeAsignado && !conyugeYaAgregado && (
-                                    <TableRow className="bg-blue-50 dark:bg-blue-950/20">
-                                      <TableCell colSpan={6}>
-                                        <div className="p-3">
-                                          <div className="bg-background p-3 rounded border">
-                                            <div className="flex justify-between items-start">
-                                              <div className="flex-1">
-                                                <p className="font-medium text-sm">
+                                    <tr className="border-b border-border/50 bg-blue-50/60 dark:bg-blue-950/20">
+                                      <td colSpan={7} className="px-3 py-3">
+                                          <div className="rounded-md border border-blue-200 bg-background p-3">
+                                            <div className="flex justify-between items-start gap-3">
+                                              <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-[13px]">
                                                   {(conyugeData as { nombre_legal: string; rfc?: string; email: string }).nombre_legal}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p className="text-[11px] text-muted-foreground">
                                                   {(conyugeData as { nombre_legal: string; rfc?: string; email: string }).rfc && `RFC: ${(conyugeData as { nombre_legal: string; rfc?: string; email: string }).rfc} | `}
                                                   {(conyugeData as { nombre_legal: string; rfc?: string; email: string }).email}
                                                 </p>
-                                                <div className="mt-2 text-xs text-muted-foreground">
+                                                <div className="mt-2 text-[11px] text-muted-foreground">
                                                   <p>• Se agregará como comprador automáticamente</p>
                                                   <p>• Los porcentajes se redistribuirán equitativamente</p>
                                                 </div>
@@ -3342,7 +3467,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                                 size="sm"
                                                 onClick={() => {
                                                   if (comprador.personas?.id_conyuge) {
-                                                    addCompradorMutation.mutate({ 
+                                                    addCompradorMutation.mutate({
                                                       personaId: comprador.personas.id_conyuge
                                                     });
                                                   }
@@ -3354,21 +3479,18 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                               </Button>
                                             </div>
                                           </div>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
+                                      </td>
+                                    </tr>
                                   )}
-                                  
+
                                   {!tieneConyugeAsignado && (
-                                    <TableRow className="bg-yellow-50 dark:bg-yellow-950/20">
-                                      <TableCell colSpan={6}>
-                                        <div className="p-3">
-                                          <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                                            ⚠️ Este comprador no tiene un cónyuge asignado. Ve a la vista de Compradores para asignar el cónyuge.
+                                    <tr className="border-b border-border/50 bg-yellow-50/60 dark:bg-yellow-950/20">
+                                      <td colSpan={7} className="px-3 py-2.5">
+                                          <p className="text-[11px] text-yellow-700 dark:text-yellow-400">
+                                            Este comprador no tiene un cónyuge asignado. Ve a la vista de Compradores para asignar el cónyuge.
                                           </p>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
+                                      </td>
+                                    </tr>
                                   )}
                                 </>
                               );
@@ -3376,8 +3498,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                             </React.Fragment>
                            );
                           })}
-                      </TableBody>
-                    </Table>
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
@@ -3387,7 +3509,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
                 <div className="mt-6 space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label>Buscar Persona para Agregar como Comprador</Label>
+                    <Label className="text-[12px] font-medium text-muted-foreground">Buscar Persona para Agregar como Comprador</Label>
                   </div>
                   
                   <Input
@@ -3409,7 +3531,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           }}
                         >
                           <p className="font-medium">{persona.nombre_legal}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-[12px] text-muted-foreground">
                             {persona.rfc && `RFC: ${persona.rfc}`}
                             {persona.curp && `${persona.rfc ? ' | ' : ''}CURP: ${persona.curp}`}
                             {` | Email: ${persona.email}`}
@@ -3423,13 +3545,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                     <div className="p-4 border rounded bg-muted">
                       <p className="font-medium mb-2">Persona Seleccionada:</p>
                       <p>{selectedPersona.nombre_legal}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-[12px] text-muted-foreground">
                         {selectedPersona.rfc && `RFC: ${selectedPersona.rfc}`}
                         {selectedPersona.curp && `${selectedPersona.rfc ? ' | ' : ''}CURP: ${selectedPersona.curp}`}
                         {` | Email: ${selectedPersona.email}`}
                       </p>
                       
-                      <div className="mt-4 text-sm text-muted-foreground bg-muted/50 p-3 rounded">
+                      <div className="mt-4 text-[12px] text-muted-foreground bg-muted/50 p-3 rounded">
                         <p>
                           Al agregar este comprador, el porcentaje de propiedad se distribuirá automáticamente 
                           entre todos los compradores ({((compradoresExistentes?.length || 0) + 1)} compradores = {(100 / ((compradoresExistentes?.length || 0) + 1)).toFixed(2)}% cada uno).
@@ -3440,7 +3562,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                       <Button
                         onClick={handleAddComprador}
                         disabled={addCompradorMutation.isPending || isReadOnly}
-                        className="w-full"
+                        className="w-full text-[13px]"
                       >
                           Agregar Comprador
                         </Button>
@@ -3453,16 +3575,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           </TabsContent>
 
           {tipoCuenta === 'Propiedad' && (
-            <TabsContent value="escrituracion" className="space-y-4">
+            <TabsContent value="escrituracion" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
               <Card>
-                <CardHeader>
-                  <CardTitle>Datos de escrituración</CardTitle>
+                <CardHeader className="px-4 py-3 border-b border-border/40">
+                  <CardTitle className="text-[13px] font-semibold">Datos de escrituración</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <CardContent className="px-4 pb-4 pt-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
-                      <Label>Notario asignado</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Notario asignado</Label>
                       <Combobox
                         value={selectedNotario}
                         onValueChange={handleNotarioChange}
@@ -3481,7 +3603,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                     {selectedNotario && (
                       <>
                         <div>
-                          <Label>Clave Catastral</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Clave Catastral</Label>
                           <Input 
                             value={claveCatastral} 
                             onChange={(e) => setClaveCatastral(e.target.value)}
@@ -3491,7 +3613,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           />
                         </div>
                         <div>
-                          <Label>Libro</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Libro</Label>
                           <Input 
                             value={libro} 
                             onChange={(e) => setLibro(e.target.value)}
@@ -3501,7 +3623,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           />
                         </div>
                         <div>
-                          <Label>Hoja</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Hoja</Label>
                           <Input 
                             value={hoja} 
                             onChange={(e) => setHoja(e.target.value)}
@@ -3511,7 +3633,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           />
                         </div>
                         <div>
-                          <Label>Fecha de Escritura</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Fecha de Escritura</Label>
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button
@@ -3541,7 +3663,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           </Popover>
                         </div>
                         <div>
-                          <Label>Número de Unidad Privativa</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Número de Unidad Privativa</Label>
                           <Input 
                             value={numeroUnidadPrivativa} 
                             onChange={(e) => setNumeroUnidadPrivativa(e.target.value)}
@@ -3551,7 +3673,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           />
                         </div>
                         <div>
-                          <Label>Número de Escritura</Label>
+                          <Label className="text-[12px] font-medium text-muted-foreground">Número de Escritura</Label>
                           <div className="relative">
                             <Input 
                               value={numeroEscritura} 
@@ -3609,118 +3731,118 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
           {/* Nueva pestaña: Datos de facturación - OCULTA */}
           {false && (
-            <TabsContent value="facturacion" className="space-y-4">
+            <TabsContent value="facturacion" className="space-y-3">
             <Card>
-              <CardHeader>
-                <CardTitle>Datos de facturación</CardTitle>
+              <CardHeader className="px-4 py-3 border-b border-border/40">
+                <CardTitle className="text-[13px] font-semibold">Datos de facturación</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="px-4 pb-4 pt-3 space-y-3">
                 {primerComprador?.personas ? (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>RFC</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">RFC</Label>
                       <Input 
                         value={primerComprador.personas.rfc || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.rfc ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.rfc ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Régimen Fiscal</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Régimen Fiscal</Label>
                       <Input 
                         value={primerComprador.personas.regimen || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.regimen ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.regimen ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Uso del CFDI</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Uso del CFDI</Label>
                       <Input 
                         value={primerComprador.personas.uso_cfdi || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.uso_cfdi ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.uso_cfdi ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Razón Social / Nombre Legal</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Razón Social / Nombre Legal</Label>
                       <Input 
                         value={primerComprador.personas.nombre_legal || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.nombre_legal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.nombre_legal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     
                     <div className="col-span-2">
-                      <h4 className="font-semibold text-sm mb-3 mt-2">Dirección Fiscal</h4>
+                      <h4 className="text-[13px] font-semibold mb-2 mt-1">Dirección Fiscal</h4>
                     </div>
                     
                     <div>
-                      <Label>Calle</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Calle</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_calle || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_calle ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_calle ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Número Exterior</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Número Exterior</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_num_ext || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_num_ext ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_num_ext ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Número Interior</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Número Interior</Label>
                       <Input 
-                        value={primerComprador.personas.direccion_fiscal_num_int || 'Opcional'} 
-                        readOnly 
-                        className="bg-muted" 
+                        value={primerComprador.personas.direccion_fiscal_num_int || 'Opcional'}
+                        readOnly
+                        className="h-8 text-[13px] bg-muted"
                       />
                     </div>
                     <div>
-                      <Label>Colonia/Barrio</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Colonia/Barrio</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_colonia || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_colonia ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_colonia ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Código Postal</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Código Postal</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_codigo_postal || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_codigo_postal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_codigo_postal ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Estado</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Estado</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_estado ? 'Ver en sistema' : 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_id_estado ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_id_estado ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>Municipio</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Municipio</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_municipio ? 'Ver en sistema' : 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_id_municipio ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_id_municipio ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
                     <div>
-                      <Label>País</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">País</Label>
                       <Input 
                         value={primerComprador.personas.direccion_fiscal_id_pais || 'No registrado'} 
                         readOnly 
-                        className={`${!primerComprador.personas.direccion_fiscal_id_pais ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
+                        className={`h-8 text-[13px] ${!primerComprador.personas.direccion_fiscal_id_pais ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted'}`} 
                       />
                     </div>
 
-                    <div className="col-span-2 mt-4 p-4 bg-muted/50 rounded-lg">
-                      <p className="text-sm text-muted-foreground">
+                    <div className="col-span-2 mt-2 p-3 bg-muted/50 rounded-lg">
+                      <p className="text-[12px] text-muted-foreground">
                         <strong>Nota:</strong> Estos datos corresponden al primer comprador registrado en esta cuenta. 
                         Para modificarlos, edite el perfil del comprador en la sección correspondiente.
                       </p>
@@ -3738,16 +3860,16 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
           {/* Documentos Tab - Only for properties */}
           {tipoCuenta === 'Propiedad' && (
-            <TabsContent value="documentos" className="space-y-4">
+            <TabsContent value="documentos" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
+                <CardHeader className="px-4 py-3 border-b border-border/40">
+                  <CardTitle className="text-[13px] font-semibold flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
                     Documentos
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-4 pb-4 pt-3">
                   {cuenta?.id ? (
                     <DocumentsTab
                       entityId={cuenta.id}
@@ -3953,9 +4075,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </TabsContent>
           )}
 
+          {/* Progreso Tab */}
+          {tipoCuenta === 'Propiedad' && propiedadDetalle && estatusPropiedad && (
+            <TabsContent value="progreso" className="flex-1">
+              <PropertyProgressTimeline
+                cuentaId={cuenta.id}
+                propiedadId={propiedadDetalle.id}
+                estatusActual={estatusPropiedad.id_estatus_disponibilidad}
+                restante={restanteCalculado}
+                cuentaDetalle={cuentaDetalle}
+              />
+            </TabsContent>
+          )}
+
           {/* Facturas Tab - Only for properties with facturas */}
           {tipoCuenta === 'Propiedad' && hasFacturas && (
-            <TabsContent value="facturas" className="space-y-4">
+            <TabsContent value="facturas" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
               <FacturasTab
                 cuentaCobranzaId={cuenta.id}
@@ -4124,20 +4259,20 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </TabsContent>
           )}
 
-          <TabsContent value="acuerdo" className="space-y-4">
+          <TabsContent value="acuerdo" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="px-4 pb-4 pt-3">
                 {/* Purchase and UMA Information Section */}
-                <div className="mb-6 p-4 bg-muted/30 rounded-lg">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="fecha-compra" className="font-medium text-foreground mb-2 block">Fecha de Compra</Label>
+                      <Label htmlFor="fecha-compra" className="text-[12px] font-medium text-muted-foreground mb-1 block">Fecha de Compra</Label>
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
-                            className="w-full justify-start text-left font-normal"
+                            className="w-full justify-start text-left font-normal h-9 text-[13px]"
                             disabled={isReadOnly}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -4151,7 +4286,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                             onSelect={(date) => {
                               if (date) {
                                 setFechaCompra(date);
-                                updateFechaCompraMutation.mutate(date);
                               }
                             }}
                             initialFocus
@@ -4162,43 +4296,37 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                     </div>
                     {tipoCuenta === 'Propiedad' && (
                       <div>
-                        <Label className="font-medium text-foreground mb-1">Valor de la UMA</Label>
+                        <Label className="text-[12px] font-medium text-muted-foreground mb-1 flex items-baseline gap-1.5">
+                          <span>Valor de la UMA</span>
+                          <span className="text-[10px] font-normal text-muted-foreground/70">· Unidad de Medida y Actualización vigente</span>
+                        </Label>
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">$</span>
+                          <span className="text-muted-foreground text-[13px]">$</span>
                           <Input
                             type="number"
                             step="0.01"
                             value={valorUma}
                             onChange={(e) => setValorUma(e.target.value)}
-                            onBlur={() => {
-                              const numValue = parseFloat(valorUma);
-                              if (!isNaN(numValue) && numValue >= 0) {
-                                updateValorUmaMutation.mutate(numValue);
-                              }
-                            }}
                             disabled={isReadOnly}
-                            className="w-32"
+                            className="w-32 h-9 text-[13px] tabular-nums"
                             placeholder="0.00"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Unidad de Medida y Actualización vigente
-                        </p>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Acuerdo de Pago Title */}
-                <div className="mb-4">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-semibold text-foreground">Acuerdo de Pago</h3>
+                <div className="mb-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[13px] font-semibold text-foreground">Acuerdo de Pago</h3>
                     {esComisionEfectivo && cuentaDetalle && porcentajeComision > 0 && (() => {
                       const precioLista = tipoCuenta === 'Propiedad' ? propiedadDetalle?.precio_lista : productoServicioInfo?.precio_lista;
                       const montoComision = precioLista ? precioLista * (porcentajeComision / 100) : 0;
                       return (
                         <Badge variant="outline" className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200">
-                          💰 Comisión en efectivo: -{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}
+                          Comisión en efectivo: -{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}
                         </Badge>
                       );
                     })()}
@@ -4212,29 +4340,29 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
                 {/* Selected Payment Scheme Information */}
                 {selectedPaymentScheme && cuentaDetalle?.id_oferta && (
-                  <Card className="mb-6">
-                    <CardHeader>
+                  <Card className="mb-3">
+                    <CardHeader className="px-4 py-3 border-b border-border/40">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-muted-foreground">Plan de pagos:</span>
-                          <Badge 
-                            variant={isPaymentPlanModified ? "outline" : "secondary"}
-                            className={isPaymentPlanModified ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
+                          <span className="text-[12px] font-medium text-muted-foreground">Plan de pagos:</span>
+                          <Badge
+                            variant={showPlanComparison ? "outline" : "secondary"}
+                            className={showPlanComparison ? "bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300" : ""}
                           >
                             {formatOfertaId(cuentaDetalle.id_oferta)} - {selectedPaymentScheme.nombre}
-                            {isPaymentPlanModified && " modificado"}
+                            {showPlanComparison && " modificado"}
                           </Badge>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-4 pb-4 pt-3">
 
-                      {!isPaymentPlanModified ? (
-                        // Original unchanged plan - show current database values
+                      {!showPlanComparison ? (
+                        // Sin historial real: mostrar un solo plan (valores actuales)
                         <div>
                           {/* Price Summary Section */}
-                          <div className="mb-6 p-4 bg-muted/20 rounded-lg">
-                            <div className={`grid grid-cols-1 gap-4 ${
+                          <div className="mb-3">
+                            <div className={`grid grid-cols-1 gap-3 ${
                               (() => {
                                 const precioListaCalculado = tipoCuenta === 'Propiedad' 
                                   ? propiedadDetalle?.precio_lista 
@@ -4248,8 +4376,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 : 'md:grid-cols-2'
                             }`}>
                               <div>
-                                <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-[11px] text-muted-foreground mb-0.5">Precio de Lista</p>
+                                <p className="text-[13px] font-medium text-foreground">
                                   {(() => {
                                     if (tipoCuenta === 'Propiedad') {
                                       return propiedadDetalle?.precio_lista 
@@ -4267,70 +4395,29 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 </p>
                               </div>
                               <div>
-                                <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                                <p className="text-[11px] text-muted-foreground mb-0.5">Precio Final</p>
                                 <div className="flex items-center gap-2">
-                                  {isEditingPrecioFinal ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-muted-foreground">$</span>
+                                  {canEditPrecioFinal ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[12px] text-muted-foreground">$</span>
                                       <Input
                                         type="number"
                                         step="0.01"
-                                        value={editingPrecioFinal}
-                                        onChange={(e) => setEditingPrecioFinal(e.target.value)}
-                                        className="w-40 h-8"
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handlePrecioFinalEdit();
-                                          if (e.key === 'Escape') {
-                                            setIsEditingPrecioFinal(false);
-                                            setEditingPrecioFinal('');
-                                          }
-                                        }}
+                                        value={precioFinalDraft ?? (cuentaDetalle?.precio_final != null ? String(cuentaDetalle.precio_final) : '')}
+                                        onChange={(e) => setPrecioFinalDraft(e.target.value)}
+                                        className="w-40 h-8 text-[13px] tabular-nums"
+                                        placeholder="0.00"
                                       />
-                                      <Button
-                                        size="sm"
-                                        variant="default"
-                                        className="h-8"
-                                        onClick={handlePrecioFinalEdit}
-                                      >
-                                        Guardar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-8"
-                                        onClick={() => {
-                                          setIsEditingPrecioFinal(false);
-                                          setEditingPrecioFinal('');
-                                        }}
-                                      >
-                                        Cancelar
-                                      </Button>
                                     </div>
                                   ) : (
-                                    <>
-                                      <p className="text-sm font-semibold text-foreground">
-                                        {cuentaDetalle?.precio_final ? 
-                                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
-                                          'No definido'
-                                        }
-                                      </p>
-                                      {canEditPrecioFinal && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 w-6 p-0"
-                                          onClick={() => {
-                                            setEditingPrecioFinal(cuentaDetalle?.precio_final?.toString() || '');
-                                            setIsEditingPrecioFinal(true);
-                                          }}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                      )}
-                                    </>
+                                    <p className="text-[13px] font-semibold text-foreground">
+                                      {cuentaDetalle?.precio_final ?
+                                        new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) :
+                                        'No definido'
+                                      }
+                                    </p>
                                   )}
-                                  {!isEditingPrecioFinal && esComisionEfectivo && porcentajeComision > 0 && (() => {
+                                  {esComisionEfectivo && porcentajeComision > 0 && (() => {
                                     // Calcular precio antes de comisión usando fórmula inversa
                                     const precioAntesComision = cuentaDetalle?.precio_final 
                                       ? cuentaDetalle.precio_final / (1 - porcentajeComision / 100) 
@@ -4382,10 +4469,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 
                                 return (
                                   <div>
-                                    <h4 className="font-medium text-foreground mb-1">
+                                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                                       {difference < 0 ? 'Ahorro' : 'Interés'}
                                     </h4>
-                                    <p className={`text-sm font-semibold ${
+                                    <p className={`text-[13px] font-semibold ${
                                       difference < 0 
                                         ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
                                         : 'text-orange-600'
@@ -4401,53 +4488,26 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div>
-                            <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
-                            <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_enganche?.toFixed(2)}%</p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_enganche !== undefined && (
-                              <p className="text-xs text-muted-foreground">
-                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  currentPaymentPlan.monto_enganche
-                                )}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(2)}%
-                            </p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_mensualidades !== undefined && (
-                              <p className="text-xs text-muted-foreground">
-                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  currentPaymentPlan.monto_mensualidades
-                                )}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                            <p className="text-sm text-muted-foreground">{currentPaymentPlan?.porcentaje_entrega?.toFixed(2)}%</p>
-                            {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_entrega !== undefined && (
-                              <p className="text-xs text-muted-foreground">
-                                {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                  currentPaymentPlan.monto_entrega
-                                )}
-                              </p>
-                            )}
-                          </div>
-                         </div>
+                          {currentPaymentPlan && (
+                            <PlanResumenRow
+                              pctEnganche={currentPaymentPlan.porcentaje_enganche}
+                              montoEnganche={currentPaymentPlan.monto_enganche}
+                              numParc={currentPaymentPlan.numero_mensualidades}
+                              pctParc={currentPaymentPlan.porcentaje_mensualidades}
+                              montoParc={currentPaymentPlan.monto_mensualidades}
+                              pctEntrega={currentPaymentPlan.porcentaje_entrega}
+                              montoEntrega={currentPaymentPlan.monto_entrega}
+                              numEsp={currentPaymentPlan.numero_pagos_especiales}
+                              pctEsp={currentPaymentPlan.porcentaje_pagos_especiales}
+                              montoEsp={currentPaymentPlan.monto_pagos_especiales}
+                            />
+                          )}
                         </div>
                       ) : (
                         // Modified plan - show both original (disabled) and current
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           {/* Price Summary Section */}
-                          <div className="mb-4 p-4 bg-muted/20 rounded-lg">
+                          <div className="mb-3">
                             <div className={`grid grid-cols-1 gap-4 ${
                               (() => {
                                 const precioListaCalculado = tipoCuenta === 'Propiedad' 
@@ -4462,8 +4522,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 : 'md:grid-cols-2'
                             }`}>
                               <div>
-                                <h4 className="font-medium text-foreground mb-1">Precio de Lista</h4>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-[11px] text-muted-foreground mb-0.5">Precio de Lista</p>
+                                <p className="text-[13px] font-medium text-foreground">
                                   {(() => {
                                     if (tipoCuenta === 'Propiedad') {
                                       return propiedadDetalle?.precio_lista 
@@ -4481,68 +4541,27 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 </p>
                               </div>
                               <div>
-                                <h4 className="font-medium text-foreground mb-1">Precio Final</h4>
+                                <p className="text-[11px] text-muted-foreground mb-0.5">Precio Final</p>
                                 <div className="flex items-center gap-2">
-                                  {isEditingPrecioFinal ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-muted-foreground">$</span>
+                                  {canEditPrecioFinal ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[12px] text-muted-foreground">$</span>
                                       <Input
                                         type="number"
                                         step="0.01"
-                                        value={editingPrecioFinal}
-                                        onChange={(e) => setEditingPrecioFinal(e.target.value)}
-                                        className="w-40 h-8"
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handlePrecioFinalEdit();
-                                          if (e.key === 'Escape') {
-                                            setIsEditingPrecioFinal(false);
-                                            setEditingPrecioFinal('');
-                                          }
-                                        }}
+                                        value={precioFinalDraft ?? (cuentaDetalle?.precio_final != null ? String(cuentaDetalle.precio_final) : '')}
+                                        onChange={(e) => setPrecioFinalDraft(e.target.value)}
+                                        className="w-40 h-8 text-[13px] tabular-nums"
+                                        placeholder="0.00"
                                       />
-                                      <Button
-                                        size="sm"
-                                        variant="default"
-                                        className="h-8"
-                                        onClick={handlePrecioFinalEdit}
-                                      >
-                                        Guardar
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-8"
-                                        onClick={() => {
-                                          setIsEditingPrecioFinal(false);
-                                          setEditingPrecioFinal('');
-                                        }}
-                                      >
-                                        Cancelar
-                                      </Button>
                                     </div>
                                   ) : (
-                                    <>
-                                      <p className="text-sm font-semibold text-foreground">
-                                        {cuentaDetalle?.precio_final ? 
-                                          new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) : 
-                                          'No definido'
-                                        }
-                                      </p>
-                                      {canEditPrecioFinal && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 w-6 p-0"
-                                          onClick={() => {
-                                            setEditingPrecioFinal(cuentaDetalle?.precio_final?.toString() || '');
-                                            setIsEditingPrecioFinal(true);
-                                          }}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                      )}
-                                    </>
+                                    <p className="text-[13px] font-semibold text-foreground">
+                                      {cuentaDetalle?.precio_final ?
+                                        new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cuentaDetalle.precio_final) :
+                                        'No definido'
+                                      }
+                                    </p>
                                   )}
                                 </div>
                               </div>
@@ -4576,10 +4595,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 
                                 return (
                                   <div>
-                                    <h4 className="font-medium text-foreground mb-1">
+                                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                                       {difference < 0 ? 'Ahorro' : 'Interés'}
                                     </h4>
-                                    <p className={`text-sm font-semibold ${
+                                    <p className={`text-[13px] font-semibold ${
                                       difference < 0 
                                         ? 'text-green-600 bg-green-100 px-2 py-1 rounded-md' 
                                         : 'text-orange-600'
@@ -4598,113 +4617,36 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           </div>
                           </div>
 
-                          {/* Original Plan - Disabled */}
-                          <div className="opacity-50 pointer-events-none border rounded p-3 bg-muted/20">
-                            <label className="text-xs text-muted-foreground mb-2 block">Plan Original</label>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
-                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.nombre}</p>
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_enganche?.toFixed(2)}%</p>
-                                {propiedadDetalle?.precio_lista && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_enganche) / 100
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
-                                <p className="text-sm text-muted-foreground">
-                                  {selectedPaymentScheme.numero_mensualidades} pagos de {selectedPaymentScheme.porcentaje_mensualidades?.toFixed(2)}%
-                                </p>
-                                {propiedadDetalle?.precio_lista && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_mensualidades) / 100
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                                <p className="text-sm text-muted-foreground">{selectedPaymentScheme.porcentaje_entrega?.toFixed(2)}%</p>
-                                {propiedadDetalle?.precio_lista && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      (propiedadDetalle.precio_lista * selectedPaymentScheme.porcentaje_entrega) / 100
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          {/* Plan Original */}
+                          <PlanResumenRow
+                            label="Plan Original"
+                            active={false}
+                            pctEnganche={Number(selectedPaymentScheme.porcentaje_enganche || 0)}
+                            montoEnganche={((propiedadDetalle?.precio_lista || 0) * (selectedPaymentScheme.porcentaje_enganche || 0)) / 100}
+                            numParc={Number(selectedPaymentScheme.numero_mensualidades || 0)}
+                            pctParc={Number(selectedPaymentScheme.porcentaje_mensualidades || 0)}
+                            montoParc={((propiedadDetalle?.precio_lista || 0) * (selectedPaymentScheme.porcentaje_mensualidades || 0)) / 100}
+                            pctEntrega={Number(selectedPaymentScheme.porcentaje_entrega || 0)}
+                            montoEntrega={((propiedadDetalle?.precio_lista || 0) * (selectedPaymentScheme.porcentaje_entrega || 0)) / 100}
+                          />
 
-                          {/* Modified Plan - Active */}
-                          <div className="border-2 border-primary rounded p-3">
-                            <label className="text-xs text-primary font-semibold mb-2 block">Plan Modificado</label>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Nombre del Plan</h4>
-                                <p className="text-sm font-semibold">{selectedPaymentScheme.nombre} modificado</p>
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Enganche</h4>
-                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_enganche?.toFixed(2)}%</p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_enganche !== undefined && (
-                                  <p className="text-xs font-medium text-primary">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      currentPaymentPlan.monto_enganche
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Mensualidades</h4>
-                                <p className="text-sm font-semibold">
-                                  {currentPaymentPlan?.numero_mensualidades} pagos de {currentPaymentPlan?.porcentaje_mensualidades?.toFixed(2)}%
-                                </p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_mensualidades !== undefined && (
-                                  <p className="text-xs font-medium text-primary">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      currentPaymentPlan.monto_mensualidades
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              {/* Pagos Especiales - only show if there are any */}
-                              {currentPaymentPlan?.numero_pagos_especiales && currentPaymentPlan.numero_pagos_especiales > 0 && (
-                                <div>
-                                  <h4 className="font-medium text-foreground mb-1">Pagos Especiales</h4>
-                                  <p className="text-sm font-semibold">
-                                    {currentPaymentPlan.numero_pagos_especiales} pago(s) de {currentPaymentPlan.porcentaje_pagos_especiales?.toFixed(2)}%
-                                  </p>
-                                  {cuentaDetalle?.precio_final && currentPaymentPlan.monto_pagos_especiales !== undefined && (
-                                    <p className="text-xs font-medium text-primary">
-                                      {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                        currentPaymentPlan.monto_pagos_especiales
-                                      )}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                              <div>
-                                <h4 className="font-medium text-foreground mb-1">Entrega</h4>
-                                <p className="text-sm font-semibold">{currentPaymentPlan?.porcentaje_entrega?.toFixed(2)}%</p>
-                                {cuentaDetalle?.precio_final && currentPaymentPlan?.monto_entrega !== undefined && (
-                                  <p className="text-xs font-medium text-primary">
-                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
-                                      currentPaymentPlan.monto_entrega
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          {/* Plan Modificado */}
+                          {currentPaymentPlan && (
+                            <PlanResumenRow
+                              label="Plan Modificado"
+                              active={true}
+                              pctEnganche={currentPaymentPlan.porcentaje_enganche}
+                              montoEnganche={currentPaymentPlan.monto_enganche}
+                              numParc={currentPaymentPlan.numero_mensualidades}
+                              pctParc={currentPaymentPlan.porcentaje_mensualidades}
+                              montoParc={currentPaymentPlan.monto_mensualidades}
+                              pctEntrega={currentPaymentPlan.porcentaje_entrega}
+                              montoEntrega={currentPaymentPlan.monto_entrega}
+                              numEsp={currentPaymentPlan.numero_pagos_especiales}
+                              pctEsp={currentPaymentPlan.porcentaje_pagos_especiales}
+                              montoEsp={currentPaymentPlan.monto_pagos_especiales}
+                            />
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -4712,208 +4654,90 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                 )}
 
                 {acuerdos && acuerdos.length > 0 ? (
-                  <DndContext
-                    sensors={isReadOnly ? [] : sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                  >
                      <Table>
                        <TableHeader>
-                           <TableRow>
-                             <TableHead>Concepto</TableHead>
-                             <TableHead>Fecha de Pago</TableHead>
-                             <TableHead>Monto</TableHead>
-                             <TableHead>Porcentaje</TableHead>
-                             <TableHead>Pagado</TableHead>
-                             <TableHead>Estatus</TableHead>
-                             <TableHead>Acciones</TableHead>
+                           <TableRow className="sozu-thead hover:bg-transparent border-b border-border">
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">Concepto</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">Fecha límite</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">Monto</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">%</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">Pagado</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center">Estatus</TableHead>
+                             <TableHead className="px-3 py-2.5 text-[10px] text-center w-12"></TableHead>
                            </TableRow>
                         </TableHeader>
                       <TableBody>
-                        <SortableContext
-                          items={acuerdos.map(a => a.id.toString())}
-                          strategy={verticalListSortingStrategy}
-                        >
-                           {acuerdos.map((acuerdo, index) => (
-                               <SortableItem 
-                                 key={acuerdo.id} 
-                                 id={acuerdo.id.toString()}
-                                 disabled={isReadOnly || acuerdo.pago_completado}
-                               >
-                                <TableCell>{acuerdo.concepto_nombre}</TableCell>
-                                  <TableCell>
-                                     {editingAcuerdo === acuerdo.id ? (
-                                        <Input
-                                          type="date"
-                                          value={editingDate ? 
-                                            `${editingDate.getFullYear()}-${String(editingDate.getMonth() + 1).padStart(2, '0')}-${String(editingDate.getDate()).padStart(2, '0')}` : 
-                                            (acuerdo.fecha_pago || '')
-                                          }
-                                          onChange={(e) => {
-                                            console.log('Date input changed:', e.target.value);
-                                            // Create date object using the exact date value without timezone conversion
-                                            const selectedDate = e.target.value ? new Date(e.target.value + 'T00:00:00') : undefined;
-                                            setEditingDate(selectedDate);
-                                          }}
-                                         className="w-40"
-                                         onBlur={() => {
-                                           console.log('Date input blur, editingDate:', editingDate);
-                                           if (editingDate) {
-                                             handleDateUpdate(acuerdo.id, editingDate);
-                                           } else {
-                                             setEditingAcuerdo(null);
-                                             setEditingDate(undefined);
-                                           }
-                                         }}
-                                         onKeyDown={(e) => {
-                                           if (e.key === 'Enter') {
-                                             console.log('Enter pressed, editingDate:', editingDate);
-                                             if (editingDate) {
-                                               handleDateUpdate(acuerdo.id, editingDate);
-                                             }
-                                           }
-                                           if (e.key === 'Escape') {
-                                             console.log('Escape pressed');
-                                             setEditingAcuerdo(null);
-                                             setEditingDate(undefined);
-                                           }
-                                         }}
-                                         autoFocus
-                                       />
-                                     ) : (
-                                       <div className="flex items-center gap-2">
-                                         <span>
-                                           {acuerdo.fecha_pago ? (() => {
-                                             const dateStr = acuerdo.fecha_pago;
-                                             const [year, month, day] = dateStr.split('-');
-                                             return `${day}/${month}/${year}`;
-                                           })() : 'Sin fecha'}
-                                         </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              console.log('Date edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
-                              setEditingAcuerdo(acuerdo.id);
-                              // Create date from the stored date string to avoid timezone issues
-                              setEditingDate(acuerdo.fecha_pago ? new Date(acuerdo.fecha_pago + 'T00:00:00') : undefined);
-                            }}
-                           disabled={acuerdo.pago_completado || isReadOnly}
-                         >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                <TableCell>
-                                  {editingAmount === acuerdo.id ? (
-                                     <Input
-                                       type="number"
-                                       step="0.01"
-                                       value={editingMonto}
-                                       onChange={(e) => {
-                                         console.log('Amount input changed:', e.target.value);
-                                         setEditingMonto(e.target.value);
-                                       }}
-                                       className="w-32"
-                                       onBlur={() => {
-                                         console.log('Amount input blur, editingMonto:', editingMonto);
-                                         const monto = parseFloat(editingMonto);
-                                         if (!isNaN(monto) && monto > 0) {
-                                           handleAmountUpdate(acuerdo.id, monto);
-                                         } else {
-                                           setEditingAmount(null);
-                                           setEditingMonto('');
-                                         }
-                                       }}
-                                       onKeyDown={(e) => {
-                                         if (e.key === 'Enter') {
-                                           console.log('Enter pressed on amount, editingMonto:', editingMonto);
-                                           const monto = parseFloat(editingMonto);
-                                           if (!isNaN(monto) && monto > 0) {
-                                             handleAmountUpdate(acuerdo.id, monto);
-                                           }
-                                         }
-                                         if (e.key === 'Escape') {
-                                           console.log('Escape pressed on amount');
-                                           setEditingAmount(null);
-                                           setEditingMonto('');
-                                         }
-                                       }}
-                                       autoFocus
-                                     />
+                           {acuerdos.map((acuerdo) => {
+                             const editable = !acuerdo.pago_completado && !isReadOnly;
+                             const draftFecha = acuerdoDraft[acuerdo.id]?.fecha ?? (acuerdo.fecha_pago || '');
+                             const draftMonto = acuerdoDraft[acuerdo.id]?.monto ?? String(acuerdo.monto);
+                             const montoNum = parseFloat(draftMonto) || 0;
+                             return (
+                               <TableRow key={acuerdo.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                                <TableCell className="px-3 py-2 text-center text-[12px] font-medium">{acuerdo.concepto_nombre}</TableCell>
+                                <TableCell className="px-3 py-2 text-center">
+                                  {editable ? (
+                                    <Input
+                                      type="date"
+                                      value={draftFecha}
+                                      onChange={(e) => setAcuerdoDraft(prev => ({ ...prev, [acuerdo.id]: { ...prev[acuerdo.id], fecha: e.target.value } }))}
+                                      className="w-36 h-8 text-[12px] mx-auto"
+                                    />
                                   ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span>
-                                        {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto)}
-                                      </span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          console.log('Amount edit button clicked for acuerdo:', acuerdo.id, 'pago_completado:', acuerdo.pago_completado);
-                                          setEditingAmount(acuerdo.id);
-                                          setEditingMonto(acuerdo.monto.toString());
-                                        }}
-                                        disabled={acuerdo.pago_completado || isReadOnly}
-                                      >
-                                        <Edit className="h-4 w-4" />
-                                      </Button>
-                                    </div>
+                                    <span className="text-[12px] tabular-nums text-muted-foreground">
+                                      {acuerdo.fecha_pago ? fmtFecha(acuerdo.fecha_pago) : 'Sin fecha'}
+                                    </span>
                                   )}
                                 </TableCell>
-                                <TableCell>{cuentaDetalle?.precio_final ? ((acuerdo.monto / cuentaDetalle.precio_final) * 100).toFixed(2) : 0}%</TableCell>
-                                <TableCell>
-                                  {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(acuerdo.monto_pagado || 0)}
+                                <TableCell className="px-3 py-2 text-center">
+                                  {editable ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={draftMonto}
+                                      onChange={(e) => setAcuerdoDraft(prev => ({ ...prev, [acuerdo.id]: { ...prev[acuerdo.id], monto: e.target.value } }))}
+                                      className="w-32 h-8 text-[12px] tabular-nums text-center mx-auto"
+                                    />
+                                  ) : (
+                                    <span className="text-[12px] font-medium tabular-nums">{fmtMXN(acuerdo.monto)}</span>
+                                  )}
                                 </TableCell>
-                                 <TableCell>
-                                   <div className="flex items-center justify-center">
-                                     {acuerdo.pago_completado ? (
-                                       <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium">
-                                         Pagado
-                                       </span>
-                                     ) : (
-                                       <span className="px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
-                                         Pendiente
-                                       </span>
-                                     )}
-                                   </div>
+                                <TableCell className="px-3 py-2 text-center text-[12px] tabular-nums text-muted-foreground">
+                                  {cuentaDetalle?.precio_final ? ((montoNum / cuentaDetalle.precio_final) * 100).toFixed(2) : '0.00'}%
+                                </TableCell>
+                                <TableCell className="px-3 py-2 text-center text-[12px] tabular-nums">
+                                  <span className={cn(acuerdo.monto_pagado > 0 ? 'text-emerald-600 font-medium' : 'text-muted-foreground/40')}>
+                                    {fmtMXN(acuerdo.monto_pagado || 0)}
+                                  </span>
+                                </TableCell>
+                                 <TableCell className="px-3 py-2 text-center">
+                                   <EstadoBadge estado={acuerdo.pago_completado ? 'pagado' : 'pendiente'} />
                                  </TableCell>
-                                 <TableCell>
-                                   <div className="flex items-center justify-center">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          handleDeleteAcuerdo(acuerdo.id, acuerdo.concepto_nombre, acuerdo.monto);
-                                        }}
-                                        disabled={deleteAcuerdoMutation.isPending || (acuerdo.monto_pagado > 0) || isReadOnly}
-                                        className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
-                                   </div>
+                                 <TableCell className="px-3 py-2 text-center">
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDeleteAcuerdo(acuerdo.id, acuerdo.concepto_nombre, acuerdo.monto);
+                                      }}
+                                      disabled={deleteAcuerdoMutation.isPending || (acuerdo.monto_pagado > 0) || isReadOnly}
+                                      title="Eliminar acuerdo"
+                                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </button>
                                  </TableCell>
-                             </SortableItem>
-                           ))}
-                        </SortableContext>
+                             </TableRow>
+                             );
+                           })}
                       </TableBody>
                     </Table>
-                  </DndContext>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <p className="text-muted-foreground">No hay acuerdo de pago configurado</p>
                     
                     <div className="space-y-2">
-                      <Label>Seleccionar Plan de Pago</Label>
+                      <Label className="text-[12px] font-medium text-muted-foreground">Seleccionar Plan de Pago</Label>
                       <Select value={selectedEsquema} onValueChange={setSelectedEsquema} disabled={isReadOnly}>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona un plan de pago" />
@@ -4929,9 +4753,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                         </SelectContent>
                       </Select>
                       
-                      <Button 
-                        onClick={handleCreateAcuerdo} 
+                      <Button
+                        onClick={handleCreateAcuerdo}
                         disabled={!selectedEsquema || createAcuerdoMutation.isPending || isReadOnly}
+                        className="text-[13px]"
                       >
                         Crear Acuerdo de Pago
                       </Button>
@@ -4942,22 +4767,22 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </Card>
           </TabsContent>
 
-          <TabsContent value="comisiones" className="space-y-4">
+          <TabsContent value="comisiones" className="space-y-3">
             {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
             <Card>
-              <CardHeader>
-                <CardTitle>Información de Comisiones</CardTitle>
+              <CardHeader className="px-4 py-3 border-b border-border/40">
+                <CardTitle className="text-[13px] font-semibold">Información de Comisiones</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
+              <CardContent className="px-4 pb-4 pt-3">
+                <div className="space-y-3">
                   {/* Comisión en Efectivo Toggle */}
-                  <div className="p-4 border rounded-lg bg-muted/30">
+                  <div className="p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
-                        <Label htmlFor="comision-efectivo" className="text-base font-semibold">
+                        <Label htmlFor="comision-efectivo" className="text-[13px] font-semibold">
                           Comisión en Efectivo
                         </Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-[12px] text-muted-foreground">
                           {esComisionEfectivo 
                             ? 'La comisión se pagará en efectivo (sin IVA)'
                             : 'Activar si la comisión se pagará en efectivo'}
@@ -4978,20 +4803,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                     </div>
                     {esComisionEfectivo && (
                       <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-yellow-800 dark:text-yellow-200">
-                        ⚠️ Esta configuración no se puede revertir
+                        Esta configuración no se puede revertir
                       </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="porcentajeComision" className="flex items-center gap-2 flex-wrap">
-                        <span>Porcentaje de Comisión de Venta{inmobiliariaProyecto ? ` para` : ' (%)'}</span>
+                  <div className={cn('grid grid-cols-1 gap-4 items-start', esComisionEfectivo ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')}>
+                    {/* Porcentaje */}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="porcentajeComision" className="h-5 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground leading-none whitespace-nowrap">
+                        <span>% comisión de venta</span>
                         {inmobiliariaProyecto && (
-                          <Badge variant="secondary" className="text-xs">{inmobiliariaProyecto}</Badge>
+                          <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-1.5 py-px text-[9px] font-semibold text-muted-foreground max-w-[90px] truncate" title={inmobiliariaProyecto}>{inmobiliariaProyecto}</span>
                         )}
                       </Label>
-                      <Input 
+                      <Input
                         id="porcentajeComision"
                         type="number"
                         min="4"
@@ -5009,10 +4835,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                           }
                           handlePorcentajeComisionChange(value);
                         }}
-                        onBlur={handleComisionBlur}
                         disabled={isReadOnly || isComisionLockedByEnganche}
+                        className="h-9 text-[13px] tabular-nums"
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground leading-snug">
                         {aplicaBloqueoComisionPorEnganche && canSuperAdminEditComision
                           ? 'Editable por Super Admin (factura aún no generada)'
                           : aplicaBloqueoComisionPorEnganche
@@ -5021,49 +4847,45 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                       </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="montoComision">Monto de Comisión</Label>
-                      <Input 
+                    {/* Monto (solo lectura) */}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="montoComision" className="h-5 flex items-center text-[12px] font-medium text-muted-foreground leading-none">Monto de comisión</Label>
+                      <Input
                         id="montoComision"
-                        value={cuentaDetalle?.precio_final && porcentajeComision ? 
-                          new Intl.NumberFormat('es-MX', { 
-                            style: 'currency', 
-                            currency: 'MXN' 
-                          }).format(((cuentaDetalle.precio_final * porcentajeComision) / 100) * (esComisionEfectivo ? 1 : (ivaIncluido ? 1.16 : 1))) 
+                        value={cuentaDetalle?.precio_final && porcentajeComision ?
+                          new Intl.NumberFormat('es-MX', {
+                            style: 'currency',
+                            currency: 'MXN'
+                          }).format(((cuentaDetalle.precio_final * porcentajeComision) / 100) * (esComisionEfectivo ? 1 : (ivaIncluido ? 1.16 : 1)))
                           : '$0.00'
-                        } 
-                        readOnly 
-                        className="bg-muted"
+                        }
+                        readOnly
+                        className="bg-muted h-9 text-[13px] tabular-nums font-medium"
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground leading-snug">
                         {esComisionEfectivo ? 'Sin IVA (Efectivo)' : (ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA')}
                       </p>
                     </div>
 
+                    {/* Desglosar IVA */}
                     {!esComisionEfectivo && (
-                      <div className="space-y-2">
-                        <Label>Desglosar IVA</Label>
-                        <div className="flex items-center space-x-3 h-10 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="h-5 flex items-center text-[12px] font-medium text-muted-foreground leading-none">Desglosar IVA</Label>
+                        <div className="flex items-center gap-3 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent/50 transition-colors">
                           <Checkbox
                             id="iva-incluido"
                             checked={ivaIncluido}
-                            onCheckedChange={(checked) => {
-                              setIvaIncluido(checked === true);
-                              updateComisionMutation.mutate({ 
-                                porcentaje: porcentajeComision, 
-                                ivaIncluido: checked === true 
-                              });
-                            }}
+                            onCheckedChange={(checked) => setIvaIncluido(checked === true)}
                             disabled={isReadOnly || isComisionLockedByEnganche}
                           />
                           <Label
                             htmlFor="iva-incluido"
-                            className="text-sm font-medium cursor-pointer select-none"
+                            className="text-[13px] font-medium cursor-pointer select-none"
                           >
                             Desglosar IVA (16%)
                           </Label>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground leading-snug">
                           {(() => {
                             const fmt = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
                             const base = (cuentaDetalle?.precio_final && porcentajeComision)
@@ -5082,37 +4904,47 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
             {/* Comisionistas Section */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+              <CardHeader className="px-4 py-3 border-b border-border/40">
+                <CardTitle className="text-[13px] font-semibold flex items-center justify-between">
                   <span>Comisionistas</span>
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="text-[11px]">
                     {totalPorcentajeComisionistas.toFixed(4)}% / {porcentajeComision}%
                   </Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="px-4 pb-4 pt-3">
+                <div className="space-y-3">
                   {aplicaBloqueoComisionPorEnganche && (
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                       <p className="text-sm text-blue-700 dark:text-blue-300">
-                        ℹ️ El enganche está completamente pagado. Solo se pueden agregar nuevos comisionistas, no editar porcentajes existentes.
+                        El enganche esta completamente pagado. Solo se pueden agregar nuevos comisionistas, no editar porcentajes existentes.
                       </p>
                     </div>
                   )}
                   
                   {/* Add Comisionista Form */}
                   {!isReadOnly && (
-                    <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
-                      <h4 className="font-medium">Agregar Comisionista</h4>
-                      
+                    <div className="p-3 border rounded-lg space-y-3 bg-muted/30">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-[13px] font-semibold">Agregar Comisionista</h4>
+                        <button
+                          onClick={handleAddComisionista}
+                          disabled={!selectedUsuario || !porcentajeComisionista || addComisionistaMutation.isPending}
+                          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none shrink-0"
+                        >
+                          <Plus className="size-3.5" />Agregar Comisionista
+                        </button>
+                      </div>
+
                       {/* Campo de búsqueda solo */}
                       <div className="space-y-2">
-                        <Label>Buscar Usuario o Inmobiliaria</Label>
+                        <Label className="text-[12px] font-medium text-muted-foreground">Buscar Usuario o Inmobiliaria</Label>
                         <div className="relative">
                           <Input
                             placeholder="Buscar por email o nombre..."
                             value={searchUsuario}
                             onChange={(e) => setSearchUsuario(e.target.value)}
+                            className="h-8 text-[13px]"
                           />
                           {combinedSearchResults && combinedSearchResults.length > 0 && searchUsuario && !selectedUsuario && (
                             <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto">
@@ -5133,7 +4965,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                       </Badge>
                                     )}
                                   </div>
-                                  <p className="text-sm text-muted-foreground">{item.email}</p>
+                                  <p className="text-[12px] text-muted-foreground">{item.email}</p>
                                 </div>
                               ))}
                             </div>
@@ -5143,9 +4975,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
                       {/* Usuario seleccionado + Porcentaje + Monto en la misma fila */}
                       {selectedUsuario && (
-                        <div className="grid grid-cols-3 gap-4 items-start">
+                        <div className="grid grid-cols-3 gap-3 items-start">
                           <div className="space-y-1">
-                            <Label className="text-xs invisible">Usuario</Label>
+                            <Label className="text-[12px] invisible">Usuario</Label>
                             <div className="flex items-center justify-between p-2 bg-accent/50 rounded-md h-10">
                               <p className="text-sm font-medium truncate">{selectedUsuario.nombre || selectedUsuario.email}</p>
                               <Button
@@ -5163,7 +4995,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                             <p className="text-xs text-transparent">-</p>
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Porcentaje de Comisión (%)</Label>
+                            <Label className="text-[12px] font-medium text-muted-foreground">Porcentaje (%)</Label>
                             <Input
                               type="number"
                               min="0.0001"
@@ -5171,17 +5003,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                               step="0.0001"
                               placeholder="0.0000"
                               value={porcentajeComisionista}
+                              className="h-8 text-[13px]"
                               onChange={(e) => {
                                 const inputValue = e.target.value;
-                                
-                                // Validar máximo 4 decimales
                                 if (inputValue.includes('.')) {
                                   const [, decimals] = inputValue.split('.');
                                   if (decimals && decimals.length > 4) {
                                     return;
                                   }
                                 }
-                                
                                 const value = parseFloat(inputValue);
                                 if (value > porcentajeComision) {
                                   toast.error(`El porcentaje no puede ser mayor al ${porcentajeComision}% de comisión por venta`);
@@ -5193,7 +5023,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                             <p className="text-xs text-muted-foreground">Máximo: {porcentajeComision}% (hasta 4 decimales)</p>
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Monto</Label>
+                            <Label className="text-[12px] font-medium text-muted-foreground">Monto</Label>
                             <Input
                               value={cuentaDetalle?.precio_final && porcentajeComisionista ? 
                                 new Intl.NumberFormat('es-MX', { 
@@ -5203,7 +5033,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                 : '$0.00'
                               }
                               readOnly
-                              className="bg-muted"
+                              className="h-8 text-[13px] bg-muted"
                             />
                             <p className="text-xs text-muted-foreground">
                               {esComisionEfectivo ? 'Sin IVA (Efectivo)' : (ivaIncluido ? 'Incluye IVA (16%)' : 'Sin IVA')}
@@ -5212,13 +5042,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                         </div>
                       )}
 
-                      <Button 
-                        onClick={handleAddComisionista}
-                        disabled={!selectedUsuario || !porcentajeComisionista || addComisionistaMutation.isPending}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Agregar Comisionista
-                      </Button>
                     </div>
                   )}
 
@@ -5226,31 +5049,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   {comisionistas && comisionistas.length > 0 ? (
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Nombre</TableHead>
-                          <TableHead>Usuario</TableHead>
-                          <TableHead className="text-right">% Comisión</TableHead>
-                          <TableHead className="text-right">Monto</TableHead>
-                          <TableHead className="text-center">Estado</TableHead>
-                          {!isReadOnly && <TableHead className="text-center">Acciones</TableHead>}
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-[12px] font-semibold">Nombre</TableHead>
+                          <TableHead className="text-[12px] font-semibold">Usuario</TableHead>
+                          <TableHead className="text-[12px] font-semibold text-right">% Comisión</TableHead>
+                          <TableHead className="text-[12px] font-semibold text-right">Monto</TableHead>
+                          <TableHead className="text-[12px] font-semibold text-center">Estado</TableHead>
+                          {!isReadOnly && <TableHead className="text-[12px] font-semibold text-center">Acciones</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {comisionistas.map((comisionista) => (
                           <TableRow key={comisionista.email_usuario}>
-                            <TableCell className="font-medium">
+                            <TableCell className="text-[12px] font-medium">
                               <div className="flex items-center gap-2">
                                 {comisionista.usuarios?.nombre || 'N/A'}
                                 {comisionista.usuarios?.esInmobiliaria && (
-                                  <Badge variant="secondary" className="text-xs">Inmobiliaria</Badge>
+                                  <Badge variant="secondary" className="text-[11px]">Inmobiliaria</Badge>
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>{comisionista.email_usuario}</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-[12px]">{comisionista.email_usuario}</TableCell>
+                            <TableCell className="text-[12px] text-right">
                               {comisionista.porcentaje_comision.toFixed(4)}%
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-[12px] text-right">
                               {cuentaDetalle?.precio_final ? 
                                 new Intl.NumberFormat('es-MX', { 
                                   style: 'currency', 
@@ -5294,7 +5117,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   {totalPorcentajeComisionistas > porcentajeComision && (
                     <div className="p-3 bg-destructive/10 border border-destructive rounded-lg">
                       <p className="text-sm text-destructive font-medium">
-                        ⚠️ La suma de porcentajes de comisionistas ({totalPorcentajeComisionistas.toFixed(2)}%) 
+                        La suma de porcentajes de comisionistas ({totalPorcentajeComisionistas.toFixed(2)}%) 
                         excede el porcentaje de comisión de venta ({porcentajeComision}%)
                       </p>
                     </div>
@@ -5304,6 +5127,30 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </Card>
           </TabsContent>
         </Tabs>
+        </div>{/* end scrollable body */}
+
+        {/* Footer — guardado por lote */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border/60 shrink-0 bg-background">
+          <span className={cn(
+            'text-[11px] transition-colors',
+            hasUnsavedChanges ? 'text-amber-600 font-medium' : 'text-muted-foreground'
+          )}>
+            {hasUnsavedChanges ? 'Tienes cambios sin guardar' : 'Sin cambios pendientes'}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="text-[13px]" onClick={handleCloseModal} disabled={isSavingChanges}>
+              Cerrar
+            </Button>
+            <Button
+              size="sm"
+              className="text-[13px]"
+              onClick={handleActualizar}
+              disabled={!hasUnsavedChanges || isSavingChanges || isReadOnly}
+            >
+              {isSavingChanges ? 'Actualizando...' : 'Actualizar'}
+            </Button>
+          </div>
+        </div>
 
         {/* Modal de confirmación para comisión en efectivo */}
         <AlertDialog open={showComisionEfectivoDialog} onOpenChange={setShowComisionEfectivoDialog}>
@@ -5319,7 +5166,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   <li>Esta acción es <strong className="text-destructive">IRREVERSIBLE</strong></li>
                 </ul>
                 <p className="text-destructive font-semibold mt-4">
-                  ⚠️ Una vez confirmado, no podrás desactivar esta opción.
+                  Una vez confirmado, no podrás desactivar esta opción.
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -5580,7 +5427,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   <>
                     <br /><br />
                     <span className="text-amber-600 dark:text-amber-400 font-medium">
-                      ⚠️ También se eliminará al cónyuge <strong>"{buyerToDelete.conyugeName}"</strong>.
+                      También se eliminará al cónyuge <strong>"{buyerToDelete.conyugeName}"</strong>.
                     </span>
                   </>
                 )}
@@ -5642,14 +5489,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   </p>
                   <div className="p-3 bg-muted rounded-lg">
                     <p className="font-medium">Se actualizará el pago "{pendingPrecioFinalChange?.lastAcuerdoConcepto}":</p>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-[12px] text-muted-foreground mt-1">
                       Monto actual: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(pendingPrecioFinalChange?.lastAcuerdoMonto || 0)}
                     </p>
-                    <p className="text-sm font-semibold mt-1">
+                    <p className="text-[13px] font-semibold mt-1">
                       Nuevo monto: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((pendingPrecioFinalChange?.lastAcuerdoMonto || 0) + (pendingPrecioFinalChange?.difference || 0))}
                     </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[12px] text-muted-foreground">
                     ¿Deseas continuar con esta actualización?
                   </p>
                 </div>
@@ -5703,11 +5550,6 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           </DialogContent>
         </Dialog>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={handleCloseModal}>
-            Cerrar
-          </Button>
-        </div>
       </DialogContent>
     </Dialog>
   );

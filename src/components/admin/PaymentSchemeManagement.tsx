@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewPaymentSchemeDialog } from "./NewPaymentSchemeDialog";
 import { EditPaymentSchemeDialog } from "./EditPaymentSchemeDialog";
+import { IconTooltip } from "@/components/admin/project-form/IconTooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   DndContext,
@@ -151,17 +152,19 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
   const DeletePaymentSchemeDialog = ({ scheme }: { scheme: any }) => {
     return (
       <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            disabled={!canDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Eliminar
-          </Button>
-        </AlertDialogTrigger>
+        <IconTooltip label="Eliminar esquema">
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              aria-label="Eliminar esquema"
+              disabled={!canDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </AlertDialogTrigger>
+        </IconTooltip>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar esquema de pago?</AlertDialogTitle>
@@ -195,12 +198,13 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
 
     return (
       <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Eye className="h-4 w-4 mr-1" />
-            Ver Detalles
-          </Button>
-        </DialogTrigger>
+        <IconTooltip label="Ver detalles">
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver detalles">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+        </IconTooltip>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Detalles de {scheme.nombre}</DialogTitle>
@@ -292,36 +296,34 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Esquemas de Pago del Proyecto</h3>
-        <NewPaymentSchemeDialog 
-          projectId={projectId} 
-          onSchemeAdded={handleSchemeAdded}
-          canCreate={canCreate}
-        />
+        <div className="flex items-center justify-end gap-3 mb-3">
+          <NewPaymentSchemeDialog
+            projectId={projectId}
+            onSchemeAdded={handleSchemeAdded}
+            canCreate={canCreate}
+          />
         </div>
-        <div>Cargando esquemas de pago...</div>
+        <div className="text-xs text-muted-foreground">Cargando esquemas de pago...</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Esquemas de Pago del Proyecto</h3>
-      <NewPaymentSchemeDialog 
-        projectId={projectId} 
-        onSchemeAdded={handleSchemeAdded}
-        canCreate={canCreate}
-      />
+      <div className="flex items-center justify-end gap-3 mb-3">
+        <NewPaymentSchemeDialog
+          projectId={projectId}
+          onSchemeAdded={handleSchemeAdded}
+          canCreate={canCreate}
+        />
       </div>
 
       {orderedSchemes && orderedSchemes.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted-foreground">
               {orderedSchemes.length} esquema{orderedSchemes.length !== 1 ? 's' : ''} encontrado{orderedSchemes.length !== 1 ? 's' : ''}
-              <span className="ml-2 text-xs italic">(arrastra las tarjetas para reordenar)</span>
+              <span className="ml-2 italic">(arrastra las tarjetas para reordenar)</span>
             </p>
             {isSavingOrder && (
               <span className="text-xs text-muted-foreground">Guardando orden…</span>
@@ -336,7 +338,7 @@ export const PaymentSchemeManagement = ({ projectId, canCreate = true, canUpdate
               items={orderedSchemes.map((s) => s.id)}
               strategy={rectSortingStrategy}
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
                 {orderedSchemes.map((scheme, idx) => (
                   <SortablePaymentSchemeCard
                     key={scheme.id}
@@ -397,42 +399,21 @@ const SortablePaymentSchemeCard = ({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <Card className="relative">
-        <Badge
-          variant="secondary"
-          className="absolute top-2 right-2 h-6 min-w-6 px-2 flex items-center justify-center text-xs font-semibold"
-        >
-          #{displayOrder}
-        </Badge>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center justify-between pr-10">
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 rounded hover:bg-muted text-muted-foreground"
-                aria-label="Arrastrar para reordenar"
-                {...attributes}
-                {...listeners}
-              >
-                <GripVertical className="h-4 w-4" />
-              </button>
-              <CreditCard className="h-4 w-4" />
-              <span>{scheme.nombre}</span>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex space-x-2">
-            <DetailsDialog scheme={scheme} />
-            <EditPaymentSchemeDialog
-              scheme={scheme}
-              onSchemeUpdated={onUpdated}
-              canUpdate={canUpdate}
-            />
-            <DeleteDialog scheme={scheme} />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
+        <div className="flex items-center gap-2 min-w-0">
+          <button type="button" className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 rounded hover:bg-muted text-muted-foreground shrink-0" aria-label="Arrastrar para reordenar" {...attributes} {...listeners}>
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <Badge variant="secondary" className="h-6 min-w-6 px-2 shrink-0 flex items-center justify-center text-xs font-semibold">#{displayOrder}</Badge>
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><CreditCard className="h-4 w-4" /></span>
+          <span className="text-sm font-semibold truncate">{scheme.nombre}</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <DetailsDialog scheme={scheme} />
+          <EditPaymentSchemeDialog scheme={scheme} onSchemeUpdated={onUpdated} canUpdate={canUpdate} />
+          <DeleteDialog scheme={scheme} />
+        </div>
+      </div>
     </div>
   );
 };

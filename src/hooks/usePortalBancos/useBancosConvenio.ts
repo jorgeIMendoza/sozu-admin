@@ -19,6 +19,11 @@ export interface BancoConvenio {
   color_marca: string | null;
   producto_nombre: string | null;
   tasa_desde: number | null;
+  // Rangos que alimenta el banco para la estimación (null = no mostrar estimación)
+  tasa_min: number | null;
+  tasa_max: number | null;
+  cat_min: number | null;
+  cat_max: number | null;
   orden: number;
   activo: boolean;
 }
@@ -31,22 +36,36 @@ export interface BancoCatalogo {
 
 const CONVENIO_KEY = ["bancos-convenio"] as const;
 
+const FK = "bancos!bancos_convenio_id_banco_fkey(nombre)";
+const SEL_FULL = `id, id_banco, color_marca, producto_nombre, tasa_desde, tasa_min, tasa_max, cat_min, cat_max, orden, activo, ${FK}`;
+const SEL_BASE = `id, id_banco, color_marca, producto_nombre, tasa_desde, orden, activo, ${FK}`;
+
 async function fetchBancosConvenio(): Promise<BancoConvenio[]> {
-  const { data, error } = await (supabase as any)
+  // Intento con columnas de tasas; si el DDL aún no se aplicó, reintento sin ellas.
+  let { data, error } = await (supabase as any)
     .from("bancos_convenio")
-    .select(
-      "id, id_banco, color_marca, producto_nombre, tasa_desde, orden, activo, bancos!bancos_convenio_id_banco_fkey(nombre)",
-    )
+    .select(SEL_FULL)
     .order("orden", { ascending: true });
+  if (error) {
+    ({ data, error } = await (supabase as any)
+      .from("bancos_convenio")
+      .select(SEL_BASE)
+      .order("orden", { ascending: true }));
+  }
   // Tabla inexistente / error → degradar a lista vacía (no romper el portal).
   if (error || !data) return [];
+  const num = (v: any) => (v != null ? Number(v) : null);
   return (data as any[]).map((r) => ({
     id: r.id,
     id_banco: r.id_banco,
     nombre: r.bancos?.nombre ?? `Banco ${r.id_banco}`,
     color_marca: r.color_marca ?? null,
     producto_nombre: r.producto_nombre ?? null,
-    tasa_desde: r.tasa_desde != null ? Number(r.tasa_desde) : null,
+    tasa_desde: num(r.tasa_desde),
+    tasa_min: num(r.tasa_min),
+    tasa_max: num(r.tasa_max),
+    cat_min: num(r.cat_min),
+    cat_max: num(r.cat_max),
     orden: r.orden ?? 100,
     activo: !!r.activo,
   }));

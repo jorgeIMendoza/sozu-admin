@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
-import { mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { mesesEntreFechas, calcDynamicScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
 
 // Icon imports - we'll convert them to base64 on load
 import recamarasIcon from "@/assets/icons/recamaras.png";
@@ -228,7 +228,8 @@ export class OfertaPdfNativeService {
     const getEscalonadoDisplayData = (
       scheme: PaymentScheme,
       amounts: ReturnType<typeof calculatePaymentAmounts>,
-      fechaGeneracion: string
+      fechaGeneracion: string,
+      fechaEntrega?: string | null
     ) => {
       const isEscalonado =
         Array.isArray(scheme.tramos_mensualidad) &&
@@ -240,29 +241,15 @@ export class OfertaPdfNativeService {
           (tramo) => (tramo.monto_mensualidad ?? 0) > 0
         );
 
-      const totalFixedMens = hasFixedAmountTramos
-        ? scheme.tramos_mensualidad!.reduce(
-            (sum, tramo) =>
-              sum +
-              ((tramo.monto_mensualidad ?? 0) / 100) *
-                (tramo.numero_mensualidades || 0),
-            0
-          )
+      // Los esquemas dinámicos (no manuales) recalculan meses y fecha final
+      // contra la fecha de entrega ACTUAL del proyecto. Los manuales conservan
+      // los tramos capturados a mano (tienen prioridad tal cual se guardaron).
+      const recomputeVsEntrega = isEscalonado && !scheme.es_manual && !!fechaEntrega;
+
+      // Monto mensual fijo (primer tramo con importe), en pesos.
+      const montoMensualFijo = hasFixedAmountTramos
+        ? ((scheme.tramos_mensualidad!.find((t) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad ?? 0) / 100)
         : 0;
-
-      const montoMensualText = hasFixedAmountTramos
-        ? Array.from(
-            new Set(
-              scheme.tramos_mensualidad!.map((tramo) =>
-                formatCurrency((tramo.monto_mensualidad ?? 0) / 100)
-              )
-            )
-          ).join(" / ")
-        : formatCurrency(amounts.mensualidad);
-
-      const montoEntrega = hasFixedAmountTramos
-        ? Math.max(0, amounts.finalPrice - amounts.enganche - totalFixedMens)
-        : amounts.entrega;
 
       // Calculate end date and total months
       let fechaFinalText = '';
@@ -270,7 +257,11 @@ export class OfertaPdfNativeService {
       if (isEscalonado) {
         const tramos = scheme.tramos_mensualidad!;
         const lastTramo = tramos[tramos.length - 1];
-        if (lastTramo.fecha_limite) {
+        if (recomputeVsEntrega) {
+          totalMeses = mesesEntreFechas(fechaGeneracion, fechaEntrega!);
+          const d = new Date(fechaEntrega!);
+          fechaFinalText = `hasta ${d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+        } else if (lastTramo.fecha_limite) {
           const d = new Date(lastTramo.fecha_limite + 'T00:00:00');
           fechaFinalText = `hasta ${d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
           totalMeses = mesesEntreFechas(fechaGeneracion, lastTramo.fecha_limite);
@@ -281,6 +272,34 @@ export class OfertaPdfNativeService {
           fechaFinalText = `hasta ${startDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
         }
       }
+
+      const totalFixedMens = hasFixedAmountTramos
+        ? (recomputeVsEntrega
+            ? montoMensualFijo * totalMeses
+            : scheme.tramos_mensualidad!.reduce(
+                (sum, tramo) =>
+                  sum +
+                  ((tramo.monto_mensualidad ?? 0) / 100) *
+                    (tramo.numero_mensualidades || 0),
+                0
+              ))
+        : 0;
+
+      const montoMensualText = hasFixedAmountTramos
+        ? (recomputeVsEntrega
+            ? formatCurrency(montoMensualFijo)
+            : Array.from(
+                new Set(
+                  scheme.tramos_mensualidad!.map((tramo) =>
+                    formatCurrency((tramo.monto_mensualidad ?? 0) / 100)
+                  )
+                )
+              ).join(" / "))
+        : formatCurrency(amounts.mensualidad);
+
+      const montoEntrega = hasFixedAmountTramos
+        ? Math.max(0, amounts.finalPrice - amounts.enganche - totalFixedMens)
+        : amounts.entrega;
 
       const porcentajeEntrega = amounts.finalPrice > 0 ? (montoEntrega / amounts.finalPrice) * 100 : 0;
 
@@ -580,10 +599,12 @@ export class OfertaPdfNativeService {
     y += 6;
 
     // === PAYMENT SCHEMES ===
-    const selectedScheme = data.paymentSchemes[0];
-    const filteredSchemes = selectedScheme?.es_manual
-      ? data.paymentSchemes.filter((s) => s.es_manual)
-      : data.paymentSchemes.filter((s) => !s.es_manual);
+    // fetchPaymentSchemes ya decide el conjunto y el orden (manual primero cuando
+    // la oferta usa un esquema manual, seguido del resto de esquemas aplicables).
+    // Aquí solo garantizamos que el manual quede al frente por si acaso.
+    const filteredSchemes = [...data.paymentSchemes].sort(
+      (a, b) => Number(b.es_manual) - Number(a.es_manual)
+    );
 
     if (filteredSchemes.length > 0) {
       pdf.setFontSize(12);
@@ -607,12 +628,14 @@ export class OfertaPdfNativeService {
           data.offerData.id_esquema_pago_seleccionado === scheme.id;
         const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
         const fechaEntregaProyecto = data.propertyDetails.projectData?.fecha_entrega;
+        // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración).
+        // Misma regla que la oferta digital (mesesMensualidadesRestantes).
         const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
-          ? mesesEntreFechas(data.offerData.fecha_generacion, fechaEntregaProyecto)
+          ? mesesMensualidadesRestantes(fechaEntregaProyecto)
           : 0;
         const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
         const hasSavings = amounts.adjustment < 0;
-        const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, data.offerData.fecha_generacion);
+        const escalonadoDisplay = getEscalonadoDisplayData(scheme, amounts, data.offerData.fecha_generacion, fechaEntregaProyecto);
 
         // Background
         if (isSelected) {

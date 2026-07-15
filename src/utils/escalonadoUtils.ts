@@ -15,6 +15,22 @@ export function mesesEntreFechas(desde: Date | string, hasta: Date | string): nu
 }
 
 /**
+ * Meses de mensualidades RESTANTES para una oferta (regla de negocio SOZU):
+ * de `desde` (hoy por defecto) a la fecha de entrega, MENOS 1 mes — el mes de
+ * entrega es el Pago a escrituración, no una mensualidad. Si ya estamos en/después
+ * del mes de entrega devuelve 0 → todo el saldo pasa al Pago a escrituración.
+ *
+ * Fuente única para oferta digital, PDF comercial y vistas de agente.
+ */
+export function mesesMensualidadesRestantes(
+  fechaEntrega: Date | string | null | undefined,
+  desde: Date | string = new Date()
+): number {
+  if (!fechaEntrega) return 0;
+  return Math.max(0, mesesEntreFechas(desde, fechaEntrega) - 1);
+}
+
+/**
  * Returns a copy of `tramos` with `numero_mensualidades` resolved.
  * If a tramo has `fecha_limite` set, its number of payments is recalculated
  * from `fechaReferencia` (defaults to today) to that date using
@@ -120,6 +136,67 @@ export function calcDynamicScheme(
     meses,
     porcentajeMensualidades,
     porcentajeEntrega,
+  };
+}
+
+/**
+ * Calculates amounts for an escalonado scheme (fixed monthly amount stored in
+ * `tramos_mensualidad`, in centavos). Single source of truth shared by the
+ * digital offer / PDF (`calcPaymentPlans`) and the agent inventory dialog.
+ *
+ * Dynamic (non-manual) schemes recompute the number of months against the
+ * project's delivery date: pass `mesesEfectivos = mesesEntreFechas(gen, entrega)`.
+ * Pass 0 (or a manual scheme) to keep the tramos' own month counts.
+ */
+export function calcEscalonadoScheme(
+  scheme: {
+    porcentaje_enganche?: number;
+    porcentaje_descuento_aumento?: number;
+    es_manual?: boolean;
+    tramos_mensualidad?: any[] | null;
+  },
+  precioLista: number,
+  mesesEfectivos: number
+): DynamicSchemeResult {
+  const pctDesc = Number(scheme.porcentaje_descuento_aumento ?? 0);
+  const precioFinal = precioLista * (1 + pctDesc / 100);
+  const adjustment = precioFinal - precioLista;
+  const enganche = precioFinal * (Number(scheme.porcentaje_enganche ?? 0) / 100);
+  const tramos = Array.isArray(scheme.tramos_mensualidad) ? scheme.tramos_mensualidad : [];
+  const montoMensualFijo =
+    (tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100;
+
+  let meses: number;
+  let mensualidad: number;
+  let mensualidadesTotal: number;
+
+  if (scheme.es_manual !== true && mesesEfectivos > 0) {
+    // Dinámico: monto mensual fijo × meses recalculados contra fecha de entrega
+    meses = mesesEfectivos;
+    mensualidad = montoMensualFijo;
+    mensualidadesTotal = mensualidad * meses;
+  } else {
+    // Manual o sin fecha de entrega: conservar los tramos definidos
+    const tramosExp = expandirTramos(tramos);
+    meses = tramosExp.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+    mensualidadesTotal = tramosExp.reduce(
+      (s: number, t: any) => s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0),
+      0
+    );
+    mensualidad = meses > 0 ? mensualidadesTotal / meses : 0;
+  }
+
+  const entrega = Math.max(0, precioFinal - enganche - mensualidadesTotal);
+  return {
+    enganche,
+    mensualidad,
+    mensualidadesTotal,
+    entrega,
+    precioFinal,
+    adjustment,
+    meses,
+    porcentajeMensualidades: precioFinal > 0 ? (mensualidadesTotal / precioFinal) * 100 : 0,
+    porcentajeEntrega: precioFinal > 0 ? (entrega / precioFinal) * 100 : 0,
   };
 }
 

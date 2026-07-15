@@ -1070,7 +1070,84 @@ class HTMLToPDFService {
           return [];
         }
 
-        schemes = manualScheme ? [manualScheme] : [];
+        if (manualScheme) {
+          // Dual-flow: check if acuerdos_pago were modified vs template
+          const { data: cuentas } = await (supabase as any)
+            .from('cuentas_cobranza')
+            .select('id')
+            .eq('id_oferta', offerId)
+            .eq('activo', true);
+
+          if (cuentas && cuentas.length > 0) {
+            const cuentaIds = (cuentas as any[]).map((c: any) => c.id);
+            const { data: acuerdos } = await (supabase as any)
+              .from('acuerdos_pago')
+              .select('id, monto, id_concepto')
+              .in('id_cuenta_cobranza', cuentaIds)
+              .eq('activo', true);
+
+            if (acuerdos && (acuerdos as any[]).length > 0) {
+              const conceptoIds = [...new Set((acuerdos as any[]).map((a: any) => a.id_concepto))] as number[];
+              const { data: conceptos } = await (supabase as any)
+                .from('conceptos_pago').select('id, nombre').in('id', conceptoIds);
+              const conceptoMap: Record<number, string> = {};
+              ((conceptos ?? []) as any[]).forEach((c: any) => { conceptoMap[c.id] = (c.nombre ?? '').toLowerCase(); });
+
+              // Get precio_final from first cuenta
+              const { data: cuentaData } = await (supabase as any)
+                .from('cuentas_cobranza').select('precio_final').eq('id', cuentaIds[0]).single();
+              const precioFinal = Number(cuentaData?.precio_final ?? 0);
+
+              let engancheTotal = 0, mensualidadesTotal = 0, entregaTotal = 0, nMensualidades = 0;
+              for (const a of acuerdos as any[]) {
+                const nombre = conceptoMap[a.id_concepto] ?? '';
+                const monto = Number(a.monto ?? 0);
+                if (nombre.includes('apartado') || nombre.includes('enganche')) {
+                  engancheTotal += monto;
+                } else if (nombre.includes('parcialidad') || nombre.includes('mensualidad')) {
+                  mensualidadesTotal += monto;
+                  nMensualidades++;
+                } else if (nombre.includes('contra entrega') || nombre.includes('entrega')) {
+                  entregaTotal += monto;
+                }
+              }
+
+              if (precioFinal > 0) {
+                const pctE   = Number((engancheTotal   / precioFinal * 100).toFixed(1));
+                const pctP   = Number((mensualidadesTotal / precioFinal * 100).toFixed(1));
+                const pctEnt = Number((entregaTotal     / precioFinal * 100).toFixed(1));
+
+                const isModified =
+                  Math.abs(manualScheme.porcentaje_enganche  - pctE)   > 0.5 ||
+                  Math.abs(manualScheme.porcentaje_mensualidades - pctP)   > 0.5 ||
+                  Math.abs(manualScheme.porcentaje_entrega    - pctEnt) > 0.5 ||
+                  manualScheme.numero_mensualidades !== nMensualidades;
+
+                if (isModified) {
+                  manualScheme.nombre = `${manualScheme.nombre} modificado`;
+                  manualScheme.porcentaje_enganche = pctE;
+                  manualScheme.porcentaje_mensualidades = pctP;
+                  manualScheme.porcentaje_entrega = pctEnt;
+                  manualScheme.numero_mensualidades = nMensualidades;
+                }
+              }
+            }
+          }
+        }
+
+        // Manual tiene prioridad: se muestra primero (esquema enviado al cliente)
+        // seguido del resto de esquemas dinámicos aplicables a la propiedad.
+        const { data: otrosEsquemas } = await supabase
+          .from('esquemas_pago')
+          .select('*')
+          .eq('id_proyecto', projectId)
+          .eq('es_manual', false)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        schemes = manualScheme
+          ? [manualScheme, ...(otrosEsquemas || [])]
+          : (otrosEsquemas || []);
       } else {
         // If not manual: show all non-manual schemes from the project
         const { data: nonManualSchemes, error } = await supabase

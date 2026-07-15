@@ -3,19 +3,21 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2, Store, Target, GitBranch, Users, DollarSign, UserCheck,
   SlidersHorizontal, Calculator, TrendingUp, BarChart3, Wallet,
-  ArrowLeftRight, Shield,
+  ArrowLeftRight, Shield, IdCard,
   ArrowLeft, LogOut, ChevronDown, ChevronRight, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useProjectAdminImpersonation, ProjectAdminImpersonationProvider } from "@/contexts/ProjectAdminImpersonationContext";
 import { ProjectAdminImpersonationSelector } from "./ProjectAdminImpersonationSelector";
 import { SimulatorProvider } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { InventoryProvider } from "@/lib/portal-estructura-comisiones/stores/InventoryContext";
 import { CompetitorsProvider } from "@/lib/portal-estructura-comisiones/stores/CompetitorsContext";
 import { AmbassadorsProvider as PECAmbassadorsProvider } from "@/lib/portal-estructura-comisiones/stores/AmbassadorsContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 
 interface NavLeaf { label: string; path: string; icon: LucideIcon }
 interface NavParent { label: string; icon: LucideIcon; children: { label: string; path: string }[] }
@@ -39,6 +41,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Organigrama", path: `${BASE}/org-chart`, icon: GitBranch },
       { label: "Roles y Sueldos", path: `${BASE}/structure`, icon: Users },
+      { label: "Directorio de Personal", path: `${BASE}/directorio`, icon: IdCard },
       { label: "Comisiones", path: `${BASE}/commissions`, icon: DollarSign },
       { label: "Incentivos Dinámicos", path: `${BASE}/broker-incentives`, icon: UserCheck },
     ],
@@ -85,7 +88,8 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { impersonatedUser, isImpersonating } = useProjectAdminImpersonation();
-  const isSuperAdmin = profile?.rol_id === 1;
+  const canImpersonate = profile?.puede_impersonar === true;
+  const { canReturnToAdmin } = useCanReturnToAdmin();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -107,7 +111,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
   const sidebarContent = (
     <>
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] text-gray-500">
           Estructura de comisiones
         </p>
@@ -192,7 +196,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          {isSuperAdmin && (
+          {canReturnToAdmin && (
             <button
               onClick={() => handleNavigate("/admin")}
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -204,7 +208,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
             onClick={signOut}
             className={cn(
               "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10",
-              isSuperAdmin ? "flex-1" : "w-full"
+              canReturnToAdmin ? "flex-1" : "w-full"
             )}
           >
             <LogOut className="size-4" /> Cerrar sesión
@@ -239,7 +243,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
                   <span className="text-muted-foreground">{currentSection}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {isSuperAdmin && <ProjectAdminImpersonationSelector />}
+                  {canImpersonate && <ProjectAdminImpersonationSelector />}
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="min-w-0 text-right">
                       <p className="text-sm font-medium text-foreground truncate">{activeUserName}</p>
@@ -264,7 +268,7 @@ const PortalEstructuraComisionesLayoutInner = () => {
                 </div>
               </header>
 
-              <main className="p-4 lg:px-10 lg:py-8 bg-background min-h-[calc(100vh-56px)]">
+              <main className="px-8 py-4 bg-background min-h-[calc(100vh-56px)]">
                 <Outlet />
               </main>
             </div>

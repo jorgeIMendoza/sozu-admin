@@ -3,20 +3,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
-import { useBankStore } from "@/lib/portal-bancos/bank-store";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
   HEALTH_DESCRIPTOR, deriveHealth, closedDescriptor, fmtMXN, fmtDate,
   type BankLead, type LeadStatus,
 } from "@/lib/portal-bancos/bank-leads";
+import {
+  useSolicitudesBanco, useActualizarSolicitud, usePagosCuentaBanco,
+} from "@/hooks/usePortalBancos/useSolicitudesBanco";
 import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
 import { useCurrentBanco } from "@/contexts/BankImpersonationContext";
 import {
@@ -25,6 +32,7 @@ import {
 } from "@/hooks/usePortalBancos/useBancosConvenio";
 import {
   useBancosAgentes, useCrearAgente, useActualizarAgente, useSetActivoAgente,
+  useCurrentBancoAgente,
   type BancoAgente, type AgenteRol,
 } from "@/hooks/usePortalBancos/useBancosAgentes";
 import {
@@ -32,8 +40,9 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert,
+  Plus, Save, Power, ShieldAlert, Users, Loader2,
 } from "lucide-react";
+import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 
 // ------------------------------ Helpers UI ------------------------------
 function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive") {
@@ -46,18 +55,30 @@ function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive"
   }[t];
 }
 
-/** Solo Super Admin (rol_id=1) administra agentes/bancos del Portal Bancos. */
-function useIsBancosAdmin() {
-  const { profile } = useAuth();
-  return profile?.rol_id === 1;
+/**
+ * Acceso a una ruta administrativa del Portal Bancos (Equipo / Bancos) según
+ * los permisos reales del rol (`submenus_permisos` · 'leer'). Super Admin
+ * siempre tiene acceso. Reemplaza el gate hardcodeado a rol_id=1, que ocultaba
+ * estas secciones a roles con permiso explícito (ej. Supervisor Bancos).
+ */
+function useBancosPathAllowed(path: string) {
+  const { isPathAllowed, isLoading } = useAllowedMenus();
+  return { allowed: isPathAllowed(path), isLoading };
 }
 
 function useBankScopedLeads(): BankLead[] {
   const banco = useCurrentBanco();
-  const leads = useBankStore((s) => s.leads);
-  if (!banco) return [];
-  // Aún no hay fuente real de solicitudes → la lista queda vacía (estado real).
-  return leads.filter((l) => l.bankId === String(banco.id_banco));
+  // Fuente real: bancos_solicitudes del banco seleccionado (lo que el cliente
+  // envía desde Pago Final). Reemplaza el store mock.
+  const { data = [] } = useSolicitudesBanco(banco?.id_banco);
+  // Alcance por rol de equipo: un ejecutivo con rol 'agente' solo ve las
+  // solicitudes asignadas a su usuario; 'admin' (y quien no sea del equipo,
+  // p.ej. Super Admin) ve todas.
+  const agente = useCurrentBancoAgente(banco?.id_banco);
+  if (agente && agente.rol === "agente") {
+    return data.filter((l) => l.assignedAgentId === String(agente.id));
+  }
+  return data;
 }
 
 function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => void }) {
@@ -82,38 +103,84 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
           {closed ? null : <Badge className={toneClass(hd.tone)} variant="outline">{hd.label}</Badge>}
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>Score: <strong className="text-foreground">{lead.sozu.score}</strong></span>
+      <div className="mt-3 flex items-center justify-end text-[11px] text-muted-foreground">
         <span>Escr. {fmtDate(lead.property.fechaEscrituracion)}</span>
       </div>
     </button>
   );
 }
 
+// Estados donde el banco ya emitió una respuesta/propuesta → sella
+// fecha_respuesta_banco la primera vez que se alcanza uno de ellos.
+const ESTADOS_CON_RESPUESTA: LeadStatus[] = [
+  "pre_aprobado", "oferta_vinculante", "en_coordinacion", "formalizado", "rechazado",
+];
+
 function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onClose: () => void }) {
-  const { profile } = useAuth();
-  const author = profile?.nombre || "Super Admin";
-  const lead = useBankStore((s) => (leadId ? s.getLead(leadId) : undefined));
-  const updateStatus = useBankStore((s) => s.updateStatus);
-  const addNote = useBankStore((s) => s.addNote);
-  const assignLead = useBankStore((s) => s.assignLead);
   const banco = useCurrentBanco();
+  const { data: leads = [] } = useSolicitudesBanco(banco?.id_banco);
+  const lead = leadId ? leads.find((l) => l.id === leadId) : undefined;
   const { data: agents = [] } = useBancosAgentes(banco?.id_banco);
+  const actualizar = useActualizarSolicitud();
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
+  const [verCliente, setVerCliente] = useState(false);
+  const [verPagos, setVerPagos] = useState(false);
 
   if (!lead || !banco) return null;
+  const idNum = Number(lead.id);
+  const idBanco = banco.id_banco;
   const desc = STATUS_DESCRIPTORS[lead.status];
   const transitions = VALID_TRANSITIONS[lead.status] || [];
 
   const doTransition = (to: LeadStatus) => {
-    let reason: string | undefined;
+    let reason: string | null = null;
     if (to === "rechazado" || to === "desistido") {
       reason = closeReason || (to === "rechazado" ? REJECTION_REASONS[0] : DESIST_REASONS[0]);
     }
-    updateStatus(lead.id, to, author, reason);
-    toast({ title: "Estado actualizado", description: `${desc.label} → ${STATUS_DESCRIPTORS[to].label}` });
+    actualizar.mutate(
+      {
+        id: idNum,
+        idBanco,
+        patch: {
+          estatus: to,
+          motivo_cierre: reason,
+          fecha_respuesta_banco: ESTADOS_CON_RESPUESTA.includes(to)
+            ? new Date().toISOString()
+            : undefined,
+        },
+      },
+      {
+        onSuccess: () =>
+          toast({ title: "Estado actualizado", description: `${desc.label} → ${STATUS_DESCRIPTORS[to].label}` }),
+        onError: (e: any) =>
+          toast({ title: "No se pudo actualizar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
   };
+
+  const assignLead = (agentId: string) =>
+    actualizar.mutate(
+      { id: idNum, idBanco, patch: { id_agente: agentId ? Number(agentId) : null } },
+      {
+        onSuccess: () => toast({ title: "Ejecutivo asignado" }),
+        onError: (e: any) =>
+          toast({ title: "No se pudo asignar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+
+  const saveNote = () =>
+    actualizar.mutate(
+      { id: idNum, idBanco, patch: { notas_banco: note.trim() } },
+      {
+        onSuccess: () => {
+          setNote("");
+          toast({ title: "Nota guardada" });
+        },
+        onError: (e: any) =>
+          toast({ title: "No se pudo guardar la nota", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
 
   return (
     <Sheet open={!!leadId} onOpenChange={(o) => !o && onClose()}>
@@ -128,22 +195,77 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
             <p className="text-xs text-muted-foreground">{lead.property.address}</p>
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge className={toneClass(desc.tone)} variant="secondary">{desc.label}</Badge>
-              <Badge variant="outline">Score {lead.sozu.score}</Badge>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Monto a financiar" value={fmtMXN(lead.credit.montoFinanciar)} />
             <Stat label="Plazo" value={`${lead.credit.plazoAnios} años`} />
-            <Stat label="Mensualidad est." value={`${fmtMXN(lead.credit.estMonthlyMin)} – ${fmtMXN(lead.credit.estMonthlyMax)}`} />
-            <Stat label="Tasa est." value={`${lead.credit.estRateMin}% – ${lead.credit.estRateMax}%`} />
-            <Stat label="Avance obra" value={`${lead.property.avanceObra}% · ${lead.property.etapa}`} />
-            <Stat label="Fecha escrituración" value={fmtDate(lead.property.fechaEscrituracion)} />
+            <Stat
+              label="Fecha de venta"
+              value={lead.sale?.fechaVenta ? fmtDate(lead.sale.fechaVenta) : "—"}
+            />
+            <Stat
+              label="Valor de escrituración"
+              value={lead.sale ? fmtMXN(lead.sale.valorEscrituracion) : "—"}
+            />
+            <Stat
+              label="Total pagado"
+              value={lead.sale ? fmtMXN(lead.sale.totalPagado) : "—"}
+              onClick={
+                lead.sale && lead.idCuentaCobranza != null
+                  ? () => setVerPagos(true)
+                  : undefined
+              }
+              linkLabel="Ver pagos realizados"
+            />
+            <Stat
+              label="Saldo pendiente"
+              value={lead.sale ? fmtMXN(lead.sale.saldoPendiente) : "—"}
+            />
           </div>
+
+          {lead.sale && lead.sale.compradores.length > 1 && (
+            <div className="rounded-md border border-border p-3 space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Compradores
+              </p>
+              {lead.sale.compradores.map((c, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-foreground">{c.nombre}</span>
+                  {c.porcentaje > 0 && (
+                    <span className="tabular-nums text-muted-foreground">{c.porcentaje}%</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {lead.idCuentaCobranza != null && (lead.clientes?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                {(lead.clientes?.length ?? 0) > 1 ? "Datos de los clientes" : "Datos del cliente"}
+              </p>
+              <Button
+                data-cta="bancos.solicitud.ver-datos-cliente"
+                variant="outline"
+                className="w-full justify-start h-9"
+                onClick={() => setVerCliente(true)}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                {(lead.clientes?.length ?? 0) > 1
+                  ? `Ver datos de los ${lead.clientes!.length} clientes`
+                  : "Ver datos personales, dirección, fiscal y documentos"}
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Información validada, solo lectura.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Asignación</p>
-            <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(lead.id, v, author)}>
+            <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(v)}>
               <SelectTrigger className="h-9"><SelectValue placeholder="Asignar ejecutivo" /></SelectTrigger>
               <SelectContent>
                 {agents.filter((a) => a.activo).map((a) => (
@@ -179,7 +301,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Agregar nota</p>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Resumen del contacto, próximos pasos..." />
-            <Button size="sm" disabled={!note.trim()} onClick={() => { addNote(lead.id, author, note.trim()); setNote(""); toast({ title: "Nota agregada" }); }}>
+            <Button size="sm" disabled={!note.trim() || actualizar.isPending} onClick={saveNote}>
               Guardar nota
             </Button>
           </div>
@@ -201,15 +323,141 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           </div>
         </div>
       </SheetContent>
+
+      {lead.idCuentaCobranza != null && (lead.clientes?.length ?? 0) > 0 && (
+        <CompradorDetalleSheet
+          open={verCliente}
+          onOpenChange={setVerCliente}
+          idCuentaCobranza={lead.idCuentaCobranza}
+          compradores={lead.clientes!}
+          readOnly
+        />
+      )}
+
+      {lead.idCuentaCobranza != null && (
+        <PagosRealizadosSheet
+          open={verPagos}
+          onOpenChange={setVerPagos}
+          idCuentaCobranza={lead.idCuentaCobranza}
+          total={lead.sale?.totalPagado ?? 0}
+        />
+      )}
     </Sheet>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/**
+ * Panel lateral (solo lectura) con el desglose de pagos que componen el
+ * "Total pagado" de la solicitud — para que el banco revise montos y formas
+ * de pago. Se apila sobre el detalle: al cerrarlo se regresa a la solicitud.
+ */
+function PagosRealizadosSheet({
+  open,
+  onOpenChange,
+  idCuentaCobranza,
+  total,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  idCuentaCobranza: number;
+  total: number;
+}) {
+  const { data: pagos = [], isLoading } = usePagosCuentaBanco(open ? idCuentaCobranza : null);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Pagos realizados</SheetTitle>
+          <SheetDescription>
+            Aplicaciones de pago que componen el total pagado de la cuenta.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4">
+          {isLoading ? (
+            <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando pagos…
+            </div>
+          ) : pagos.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              Sin pagos registrados para esta cuenta.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {pagos.length} {pagos.length === 1 ? "pago" : "pagos"}
+                </span>
+                <span>
+                  Total: <strong className="text-foreground tabular-nums">{fmtMXN(total)}</strong>
+                </span>
+              </div>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Fecha pago</TableHead>
+                      <TableHead className="text-xs">Método</TableHead>
+                      <TableHead className="text-xs text-right">Monto aplicado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagos.map((p, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {p.fechaPago ? fmtDate(p.fechaPago) : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.metodo}</TableCell>
+                        <TableCell className="text-sm text-right tabular-nums font-medium whitespace-nowrap">
+                          {fmtMXN(p.montoAplicado)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2">
+                      <TableCell className="text-sm font-semibold" colSpan={2}>
+                        Total pagado
+                      </TableCell>
+                      <TableCell className="text-sm text-right font-bold tabular-nums whitespace-nowrap">
+                        {fmtMXN(total)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  onClick,
+  linkLabel,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  linkLabel?: string;
+}) {
   return (
     <div className="rounded-md border border-border p-2">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold text-foreground">{value}</p>
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          {linkLabel ?? "Ver detalle"}
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -410,7 +658,7 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
 
 // ============================== EQUIPO (Agentes por banco — real) ==============================
 export function BancosEquipo() {
-  const isAdmin = useIsBancosAdmin();
+  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/equipo");
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
   const crear = useCrearAgente();
   const actualizar = useActualizarAgente();
@@ -424,7 +672,8 @@ export function BancosEquipo() {
   const { data: agents = [], isLoading } = useBancosAgentes(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as AgenteRol });
 
-  if (!isAdmin) return <AccessDenied />;
+  if (cargandoPermisos) return null;
+  if (!allowed) return <AccessDenied />;
 
   if (!cargandoBancos && convenios.length === 0) {
     return (
@@ -543,7 +792,7 @@ function Avatar2({ name }: { name: string }) {
 
 // ============================== BANCOS (convenio — real) ==============================
 export function BancosBancos() {
-  const isAdmin = useIsBancosAdmin();
+  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/bancos");
   const { data: convenios = [], isLoading } = useBancosConvenio();
   const { data: catalogo = [] } = useBancosCatalogo();
   const agregar = useAgregarBancoConvenio();
@@ -551,7 +800,8 @@ export function BancosBancos() {
 
   const [nuevo, setNuevo] = useState({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" });
 
-  if (!isAdmin) return <AccessDenied />;
+  if (cargandoPermisos) return null;
+  if (!allowed) return <AccessDenied />;
 
   const disponibles = catalogo.filter((c) => !convenios.some((cv) => cv.id_banco === c.id));
 

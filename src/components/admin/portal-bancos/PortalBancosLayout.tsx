@@ -6,11 +6,14 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { APP_VERSION, SOZU_LOGO_URL } from "@/lib/config";
+import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { APP_VERSION } from "@/lib/config";
+import { SozuLogo } from "@/components/ui/SozuLogo";
 import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { usePortalNav, type PortalNavItem } from "@/hooks/usePortalNav";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 
 const BANCOS_MENU_ID = 32;
 
@@ -44,10 +47,19 @@ export const PortalBancosLayout = () => {
 
   const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
   const isSuperAdmin = profile?.rol_id === 1;
-  // Operativo (todos): lo que viene de BD sin las rutas de administración.
-  const operativos = navAll.filter((i) => !ADMIN_ONLY_PATHS.has(i.path));
-  // Super Admin ve además Equipo y Bancos (garantizados aunque falte el submenu en BD).
-  const NAV = isSuperAdmin ? [...operativos, ...ADMIN_ITEMS] : operativos;
+  const { isPathAllowed } = useAllowedMenus();
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  // Las rutas operativas se muestran siempre; las de administración
+  // (Equipo / Bancos) se muestran según los permisos reales del rol
+  // (submenus_permisos · 'leer'), no solo para Super Admin. Así un rol con
+  // permiso explícito (ej. Supervisor Bancos con Equipo) sí ve el menú.
+  const visibles = navAll.filter(
+    (i) => !ADMIN_ONLY_PATHS.has(i.path) || isPathAllowed(i.path),
+  );
+  // Super Admin: garantizar Equipo y Bancos aunque el submenu no exista en BD.
+  const NAV = isSuperAdmin
+    ? [...visibles, ...ADMIN_ITEMS.filter((a) => !visibles.some((v) => v.path === a.path))]
+    : visibles;
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";
@@ -63,7 +75,7 @@ export const PortalBancosLayout = () => {
     <>
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
-        <img src={SOZU_LOGO_URL} alt="SOZU" className="h-6 w-auto object-contain object-left dark:invert" />
+        <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Bancos
         </p>
@@ -111,16 +123,18 @@ export const PortalBancosLayout = () => {
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={() => go("/admin")}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          >
-            <ArrowLeft className="size-4 shrink-0" />
-            Regresar
-          </button>
+          {canReturnToAdmin && (
+            <button
+              onClick={() => go("/admin")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <ArrowLeft className="size-4 shrink-0" />
+              Regresar
+            </button>
+          )}
           <button
             onClick={() => signOut()}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors"
+            className={`${canReturnToAdmin ? "flex-1" : "w-full"} flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors`}
           >
             <LogOut className="size-4 shrink-0" />
             Cerrar sesión
@@ -186,7 +200,7 @@ export const PortalBancosLayout = () => {
               </div>
             </header>
 
-            <main className="p-4 lg:px-8 lg:py-6 bg-background min-h-[calc(100vh-56px)]">
+            <main className="px-8 py-4 bg-background min-h-[calc(100vh-56px)]">
               <BankImpersonationSelector />
               <Outlet />
             </main>

@@ -1,10 +1,10 @@
-import { Suspense, lazy, useEffect, type ComponentType } from "react";
+import { Suspense, lazy, useEffect, type ComponentType, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DevelopmentBanner } from "@/components/DevelopmentBanner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext";
@@ -45,6 +45,9 @@ const ForgotPassword = lazyRetry(() => import("./pages/auth/ForgotPassword"));
 // Lazy load non-critical route components
 const Proyectos = lazyRetry(() => import("./pages/admin/Proyectos"));
 const Propiedades = lazyRetry(() => import("./pages/admin/Propiedades"));
+const ActivosComerciales = lazyRetry(() => import("./pages/admin/ActivosComerciales"));
+const ActivosComercialesNuevo = lazyRetry(() => import("./pages/admin/ActivosComercialesNuevo"));
+const ActivosComercialesDetalle = lazyRetry(() => import("./pages/admin/ActivosComercialesDetalle"));
 const Modelos = lazyRetry(() => import("./pages/admin/Modelos"));
 const Vistas = lazyRetry(() => import("./pages/admin/Vistas"));
 const Estacionamientos = lazyRetry(() => import("./pages/admin/Estacionamientos"));
@@ -101,6 +104,7 @@ const ReportesFinanzas = lazyRetry(() => import("./pages/admin/reportes/Finanzas
 const ValidacionContratosPDF = lazyRetry(() => import("./pages/admin/ValidacionContratosPDF"));
 const ValidacionPagos = lazyRetry(() => import("./pages/admin/ValidacionPagos"));
 const EstadosCuenta = lazyRetry(() => import("./pages/admin/finanzas/EstadosCuenta"));
+const InformacionFinanciera = lazyRetry(() => import("./pages/admin/finanzas/InformacionFinanciera"));
 const ReporteViewer = lazyRetry(() => import("./pages/admin/reportes/ReporteViewer"));
 const MiInformacion = lazyRetry(() => import("./pages/admin/inmobiliarias/MiInformacion"));
 const MisAgentes = lazyRetry(() => import("./pages/admin/inmobiliarias/MisAgentes"));
@@ -160,21 +164,19 @@ const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente
 const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
 
 // Portal Cobranza pages
-const CobranzaDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaDashboard"));
-const CobranzaBandeja = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaBandeja"));
+const CollectionDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionDashboard"));
+const CollectionInbox = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionInbox"));
 const CobranzaAtencion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAtencion"));
-const CobranzaPagos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPagos"));
-const CobranzaCeps = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCeps"));
+const CollectionPayments = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionPayments"));
+const CollectionProductsMaintenance = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionProductsMaintenance"));
 const CobranzaConciliaciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConciliaciones"));
 const CobranzaPromesas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPromesas"));
 const CobranzaAdminAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaAdminAvisos"));
 const CobranzaEnviarAvisos = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEnviarAvisos"));
 const CobranzaEjecuciones = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaEjecuciones"));
 const CobranzaPlantillas = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaPlantillas"));
-const CobranzaInputsObra = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaInputsObra"));
 const CobranzaReportes = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaReportes"));
-const CobranzaConfiguracion = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaConfiguracion"));
-const CobranzaExpediente = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaExpediente"));
+const CobranzaCuentaDetalle = lazyRetry(() => import("./pages/admin/portal-cobranza/CobranzaCuentaDetalle"));
 const PECComingSoon = lazyRetry(() => import("./pages/admin/portal-estructura-comisiones/PECComingSoon"));
 const PECDashboard = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DashboardTab"));
 const PECExecutiveDashboard = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ExecutiveDashboardTab"));
@@ -182,6 +184,7 @@ const PECProjects = lazyRetry(() => import("./components/admin/portal-estructura
 const PECChannels = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ChannelsTab"));
 const PECOrgChart = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/OrgChartTab"));
 const PECStructure = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/StructureTab"));
+const PECDirectorio = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DirectorioPuestosTab"));
 const PECCommissions = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/CommissionsTab"));
 const PECPaymentPolicies = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/PaymentPoliciesTab"));
 const PECUnitCommission = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/UnitCommissionTab"));
@@ -415,6 +418,7 @@ const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
+const RegistroEmbajador = lazyRetry(() => import("./pages/public/RegistroEmbajador"));
 const AgentesLanding = lazyRetry(() => import("./pages/public/AgentesLanding"));
 const OfferPage = lazyRetry(() => import("./pages/public/OfferPage"));
 const CapturaDatosPage = lazyRetry(() => import("./pages/public/CapturaDatosPage"));
@@ -472,18 +476,34 @@ const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajad
 };
 const portalContext = getPortalContext();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider 
-      attribute="class" 
-      defaultTheme="system" 
+// Solo el panel admin principal soporta dark/light/system. Cualquier sub-portal
+// (/admin/portal-*, /admin/agent, /admin/legal-flow) y todo lo público se fuerza
+// a tema claro siempre, sin importar el sistema ni la preferencia guardada.
+const SPECIALIZED_PORTAL_RE = /^\/admin\/(portal-|agent|legal-flow)/;
+
+const ThemedShell = ({ children }: { children: ReactNode }) => {
+  const { pathname } = useLocation();
+  const isAdminPanel = pathname.startsWith("/admin") && !SPECIALIZED_PORTAL_RE.test(pathname);
+  return (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
       enableSystem
+      forcedTheme={isAdminPanel ? undefined : "light"}
       disableTransitionOnChange={false}
     >
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+      {children}
+    </ThemeProvider>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <ThemedShell>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner position="top-right" />
           <DevelopmentBanner />
           <AuthProvider>
             <AgentImpersonationProvider>
@@ -556,6 +576,7 @@ const App = () => (
                 </Routes>
               ) : isEmbajadoresSubdomain ? (
                 <Routes>
+                  <Route path="/registro" element={<RegistroEmbajador />} />
                   <Route path="/login" element={<Login portalContext="embajadores" />} />
                   <Route path="/auth/login" element={<Login portalContext="embajadores" />} />
                   <Route path="/auth/change-password" element={<ChangePassword />} />
@@ -696,6 +717,10 @@ const App = () => (
                   <Route path="access-denied" element={<AccessDenied />} />
                   <Route path="proyectos" element={<Proyectos />} />
                   <Route path="propiedades" element={<Propiedades />} />
+                  <Route path="activos-comerciales" element={<ActivosComerciales />} />
+                  <Route path="activos-comerciales/nuevo" element={<ActivosComercialesNuevo />} />
+                 <Route path="activos-comerciales/:id/editar" element={<ActivosComercialesNuevo />} />
+                <Route path="activos-comerciales/:id" element={<ActivosComercialesDetalle />} />
                   <Route path="usuarios" element={<Usuarios />} />
                   <Route path="usuarios/nuevo" element={<NuevoUsuario />} />
                   <Route path="usuarios-directivos" element={<UsuariosDirectivos />} />
@@ -754,6 +779,7 @@ const App = () => (
                   <Route path="validacion-contratos" element={<ValidacionContratosPDF />} />
                   <Route path="validacion-pagos" element={<ValidacionPagos />} />
                   <Route path="estados-cuenta" element={<EstadosCuenta />} />
+                  <Route path="informacion-financiera" element={<InformacionFinanciera />} />
                   <Route path="reportes/ver/:id" element={<ReporteViewer />} />
                   <Route element={<InmobiliariasThemeWrapper />}>
                     <Route path="inmobiliarias/mi-informacion" element={<MiInformacion />} />
@@ -817,22 +843,22 @@ const App = () => (
                   <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                   <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
                   {/* Portal Cobranza Routes */}
-                  <Route path="portal-cobranza/dashboard" element={<CobranzaDashboard />} />
-                  <Route path="portal-cobranza/bandeja" element={<CobranzaBandeja />} />
-                  <Route path="portal-cobranza/atencion" element={<CobranzaAtencion />} />
-                  <Route path="portal-cobranza/pagos" element={<CobranzaPagos />} />
-                  <Route path="portal-cobranza/ceps" element={<CobranzaCeps />} />
+                  <Route path="portal-cobranza/inmuebles" element={<CollectionDashboard />} />
+                  <Route path="portal-cobranza/cuentas-cobranza" element={<CollectionInbox />} />
+                  <Route path="portal-cobranza/atencion-clientes" element={<CobranzaAtencion />} />
+                  <Route path="portal-cobranza/relacion-pagos" element={<CollectionPayments />} />
+                  <Route path="portal-cobranza/complementos" element={<CollectionProductsMaintenance />} />
+                  {/* CEPs Pendientes fusionado en Relación de Pagos → redirige con filtro Sin CEP */}
+                  <Route path="portal-cobranza/ceps-pendientes" element={<Navigate to="/admin/portal-cobranza/relacion-pagos?cep=sin" replace />} />
                   <Route path="portal-cobranza/conciliaciones" element={<CobranzaConciliaciones />} />
-                  <Route path="portal-cobranza/promesas" element={<CobranzaPromesas />} />
+                  <Route path="portal-cobranza/promesas-pago" element={<CobranzaPromesas />} />
                   <Route path="portal-cobranza/comunicacion/avisos" element={<CobranzaAdminAvisos />} />
                   <Route path="portal-cobranza/comunicacion/enviar" element={<CobranzaEnviarAvisos />} />
                   <Route path="portal-cobranza/comunicacion/ejecuciones" element={<CobranzaEjecuciones />} />
                   <Route path="portal-cobranza/comunicacion/plantillas" element={<CobranzaPlantillas />} />
-                  <Route path="portal-cobranza/inputs-obra" element={<CobranzaInputsObra />} />
                   <Route path="portal-cobranza/reportes" element={<CobranzaReportes />} />
                   <Route path="portal-cobranza/reportes/ver/:id" element={<ReporteViewer />} />
-                  <Route path="portal-cobranza/configuracion" element={<CobranzaConfiguracion />} />
-                  <Route path="portal-cobranza/expediente/:id" element={<CobranzaExpediente />} />
+                  <Route path="portal-cobranza/cuentas-cobranza/:id/detalle" element={<CobranzaCuentaDetalle />} />
                   {/* Portal Estructura de Comisiones */}
                   <Route path="portal-estructura-comisiones" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
                   <Route path="portal-estructura-comisiones/dashboard" element={<Navigate to="/admin/portal-estructura-comisiones/projects" replace />} />
@@ -842,6 +868,7 @@ const App = () => (
                   <Route path="portal-estructura-comisiones/channels" element={<PECChannels />} />
                   <Route path="portal-estructura-comisiones/org-chart" element={<PECOrgChart />} />
                   <Route path="portal-estructura-comisiones/structure" element={<PECStructure />} />
+                  <Route path="portal-estructura-comisiones/directorio" element={<PECDirectorio />} />
                   <Route path="portal-estructura-comisiones/commissions" element={<PECCommissions />} />
                   <Route path="portal-estructura-comisiones/payment-policies" element={<PECPaymentPolicies />} />
                   <Route path="portal-estructura-comisiones/unit-commission" element={<PECUnitCommission />} />
@@ -1103,9 +1130,9 @@ const App = () => (
             </ClienteImpersonationProvider>
             </AgentImpersonationProvider>
           </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
+        </TooltipProvider>
+      </ThemedShell>
+    </BrowserRouter>
   </QueryClientProvider>
 );
 

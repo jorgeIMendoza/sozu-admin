@@ -245,6 +245,30 @@ export type Database = {
         }
         Relationships: []
       }
+      amenidades_oficina: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       amenidades_proyectos: {
         Row: {
           activo: boolean
@@ -253,6 +277,7 @@ export type Database = {
           id: number
           id_amenidad: number
           id_proyecto: number
+          url_imagen: string | null
         }
         Insert: {
           activo?: boolean
@@ -261,6 +286,7 @@ export type Database = {
           id?: number
           id_amenidad: number
           id_proyecto: number
+          url_imagen?: string | null
         }
         Update: {
           activo?: boolean
@@ -269,6 +295,7 @@ export type Database = {
           id?: number
           id_amenidad?: number
           id_proyecto?: number
+          url_imagen?: string | null
         }
         Relationships: [
           {
@@ -3381,6 +3408,33 @@ export type Database = {
         }
         Relationships: []
       }
+      categorias_multimedia_proyecto: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
       categorias_producto: {
         Row: {
           activo: boolean
@@ -3725,6 +3779,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      clases_edificio: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+        }
+        Relationships: []
       }
       comentarios_verificacion_documento: {
         Row: {
@@ -6009,6 +6087,33 @@ export type Database = {
         }
         Relationships: []
       }
+      estados_acabados: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       estados_civil: {
         Row: {
           activo: boolean | null
@@ -6028,6 +6133,30 @@ export type Database = {
           activo?: boolean | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
+      estados_conservacion: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
           id?: never
           nombre?: string
         }
@@ -6090,6 +6219,33 @@ export type Database = {
           },
         ]
       }
+      estados_entrega_comercio: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       estados_mx: {
         Row: {
           activo: boolean
@@ -6127,6 +6283,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      estandares_medicion: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
       }
       estatus_aprobacion: {
         Row: {
@@ -6283,6 +6463,33 @@ export type Database = {
         }
         Relationships: []
       }
+      estatus_renta: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       estatus_reserva: {
         Row: {
           activo: boolean
@@ -6330,6 +6537,57 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      facturas_mantenimientos: {
+        Row: {
+          facturado: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_cuenta_cobranza: number | null
+          id_pago: number | null
+          monto: number
+          url_factura_pdf: string | null
+          url_factura_xml: string | null
+        }
+        Insert: {
+          facturado?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto: number
+          url_factura_pdf?: string | null
+          url_factura_xml?: string | null
+        }
+        Update: {
+          facturado?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_cuenta_cobranza?: number | null
+          id_pago?: number | null
+          monto?: number
+          url_factura_pdf?: string | null
+          url_factura_xml?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facturas_mantenimientos_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "pagos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "facturas_mantenimientos_id_pago_fkey"
+            columns: ["id_pago"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_pago"]
+          },
+        ]
       }
       firmas_digitales: {
         Row: {
@@ -6383,6 +6641,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      giros_comerciales: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
+      hvac_tipo: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
+      indexaciones_renta: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
       }
       inmob_kpi_mensual: {
         Row: {
@@ -7173,6 +7509,7 @@ export type Database = {
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
+          id_categoria: number | null
           id_proyecto: number
           url: string
         }
@@ -7182,6 +7519,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_categoria?: number | null
           id_proyecto: number
           url: string
         }
@@ -7191,6 +7529,7 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
+          id_categoria?: number | null
           id_proyecto?: number
           url?: string
         }
@@ -7200,6 +7539,13 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "multimedias_proyecto_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "categorias_multimedia_proyecto"
             referencedColumns: ["id"]
           },
         ]
@@ -7290,6 +7636,81 @@ export type Database = {
           url_template_proyecto_contrato?: string | null
         }
         Relationships: []
+      }
+      notificaciones_cliente: {
+        Row: {
+          activo: boolean
+          categoria: string
+          descartada: boolean
+          descripcion: string
+          email_cliente: string
+          etiqueta_accion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_descarte: string | null
+          fecha_lectura: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          leida: boolean
+          metadata: Json | null
+          tipo: string
+          titulo: string
+          url_accion: string | null
+        }
+        Insert: {
+          activo?: boolean
+          categoria: string
+          descartada?: boolean
+          descripcion: string
+          email_cliente: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo: string
+          titulo: string
+          url_accion?: string | null
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string
+          descartada?: boolean
+          descripcion?: string
+          email_cliente?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo?: string
+          titulo?: string
+          url_accion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificaciones_cliente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificaciones_cliente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
       }
       notificaciones_configuracion: {
         Row: {
@@ -7523,9 +7944,145 @@ export type Database = {
           },
         ]
       }
+      ofertas_renta: {
+        Row: {
+          activa: boolean
+          cam: number | null
+          cam_es_porcentaje: boolean
+          comision_corretaje: number | null
+          comision_es_porcentaje: boolean
+          cuota_publicidad: number | null
+          deposito_meses: number | null
+          disponible_desde: string | null
+          escalacion_anual: number | null
+          exclusividad: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_fin_contrato_actual: string | null
+          id: number
+          id_estatus_renta: number | null
+          id_giro_permitido: number | null
+          id_indexacion: number | null
+          id_propiedad: number
+          id_tipo_contrato: number | null
+          id_tipo_garantia: number | null
+          inquilino_actual: string | null
+          iva_aplica: boolean
+          meses_gracia: number | null
+          moneda: string
+          plazo_forzoso_meses: number | null
+          porcentaje_ocupacion: number | null
+          precio_m2_mes: number | null
+          renta_mensual: number
+        }
+        Insert: {
+          activa?: boolean
+          cam?: number | null
+          cam_es_porcentaje?: boolean
+          comision_corretaje?: number | null
+          comision_es_porcentaje?: boolean
+          cuota_publicidad?: number | null
+          deposito_meses?: number | null
+          disponible_desde?: string | null
+          escalacion_anual?: number | null
+          exclusividad?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin_contrato_actual?: string | null
+          id?: never
+          id_estatus_renta?: number | null
+          id_giro_permitido?: number | null
+          id_indexacion?: number | null
+          id_propiedad: number
+          id_tipo_contrato?: number | null
+          id_tipo_garantia?: number | null
+          inquilino_actual?: string | null
+          iva_aplica?: boolean
+          meses_gracia?: number | null
+          moneda?: string
+          plazo_forzoso_meses?: number | null
+          porcentaje_ocupacion?: number | null
+          precio_m2_mes?: number | null
+          renta_mensual: number
+        }
+        Update: {
+          activa?: boolean
+          cam?: number | null
+          cam_es_porcentaje?: boolean
+          comision_corretaje?: number | null
+          comision_es_porcentaje?: boolean
+          cuota_publicidad?: number | null
+          deposito_meses?: number | null
+          disponible_desde?: string | null
+          escalacion_anual?: number | null
+          exclusividad?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin_contrato_actual?: string | null
+          id?: never
+          id_estatus_renta?: number | null
+          id_giro_permitido?: number | null
+          id_indexacion?: number | null
+          id_propiedad?: number
+          id_tipo_contrato?: number | null
+          id_tipo_garantia?: number | null
+          inquilino_actual?: string | null
+          iva_aplica?: boolean
+          meses_gracia?: number | null
+          moneda?: string
+          plazo_forzoso_meses?: number | null
+          porcentaje_ocupacion?: number | null
+          precio_m2_mes?: number | null
+          renta_mensual?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ofertas_renta_id_estatus_renta_fkey"
+            columns: ["id_estatus_renta"]
+            isOneToOne: false
+            referencedRelation: "estatus_renta"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_renta_id_giro_permitido_fkey"
+            columns: ["id_giro_permitido"]
+            isOneToOne: false
+            referencedRelation: "giros_comerciales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_renta_id_indexacion_fkey"
+            columns: ["id_indexacion"]
+            isOneToOne: false
+            referencedRelation: "indexaciones_renta"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_renta_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_renta_id_tipo_contrato_fkey"
+            columns: ["id_tipo_contrato"]
+            isOneToOne: false
+            referencedRelation: "tipos_contrato_renta"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_renta_id_tipo_garantia_fkey"
+            columns: ["id_tipo_garantia"]
+            isOneToOne: false
+            referencedRelation: "tipos_garantia_renta"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pago_validaciones: {
         Row: {
-          estado: string
+          estado: string | null
           fecha_creacion: string
           fuente_pdf: string | null
           id: number
@@ -7535,7 +8092,7 @@ export type Database = {
           motivo: string | null
         }
         Insert: {
-          estado: string
+          estado?: string | null
           fecha_creacion?: string
           fuente_pdf?: string | null
           id?: number
@@ -7545,7 +8102,7 @@ export type Database = {
           motivo?: string | null
         }
         Update: {
-          estado?: string
+          estado?: string | null
           fecha_creacion?: string
           fuente_pdf?: string | null
           id?: number
@@ -7558,14 +8115,14 @@ export type Database = {
           {
             foreignKeyName: "pago_validaciones_id_pago_fkey"
             columns: ["id_pago"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "pagos"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "pago_validaciones_id_pago_fkey"
             columns: ["id_pago"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_pago"]
           },
@@ -8975,6 +9532,472 @@ export type Database = {
           },
         ]
       }
+      propiedades_activo_comercial: {
+        Row: {
+          anio_construccion: number | null
+          clave_catastral: string | null
+          codigo_interno: string | null
+          cuenta_predial: string | null
+          cuota_condominio_mensual: number | null
+          dominio_pleno: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          folio_real: string | null
+          gravamen_descripcion: string | null
+          id_estado_conservacion: number | null
+          id_propiedad: number
+          id_regimen_propiedad: number | null
+          libre_gravamen: boolean
+          monto_predial_anual: number | null
+          origen_ejidal: boolean
+          predial_al_corriente: boolean
+          subtipo_condominio: string | null
+          ubicacion_ciudad: string | null
+          ubicacion_direccion: string | null
+          ubicacion_lat: number | null
+          ubicacion_lng: number | null
+          url_recorrido_virtual: string | null
+          valor_catastral: number | null
+        }
+        Insert: {
+          anio_construccion?: number | null
+          clave_catastral?: string | null
+          codigo_interno?: string | null
+          cuenta_predial?: string | null
+          cuota_condominio_mensual?: number | null
+          dominio_pleno?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          folio_real?: string | null
+          gravamen_descripcion?: string | null
+          id_estado_conservacion?: number | null
+          id_propiedad: number
+          id_regimen_propiedad?: number | null
+          libre_gravamen?: boolean
+          monto_predial_anual?: number | null
+          origen_ejidal?: boolean
+          predial_al_corriente?: boolean
+          subtipo_condominio?: string | null
+          ubicacion_ciudad?: string | null
+          ubicacion_direccion?: string | null
+          ubicacion_lat?: number | null
+          ubicacion_lng?: number | null
+          url_recorrido_virtual?: string | null
+          valor_catastral?: number | null
+        }
+        Update: {
+          anio_construccion?: number | null
+          clave_catastral?: string | null
+          codigo_interno?: string | null
+          cuenta_predial?: string | null
+          cuota_condominio_mensual?: number | null
+          dominio_pleno?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          folio_real?: string | null
+          gravamen_descripcion?: string | null
+          id_estado_conservacion?: number | null
+          id_propiedad?: number
+          id_regimen_propiedad?: number | null
+          libre_gravamen?: boolean
+          monto_predial_anual?: number | null
+          origen_ejidal?: boolean
+          predial_al_corriente?: boolean
+          subtipo_condominio?: string | null
+          ubicacion_ciudad?: string | null
+          ubicacion_direccion?: string | null
+          ubicacion_lat?: number | null
+          ubicacion_lng?: number | null
+          url_recorrido_virtual?: string | null
+          valor_catastral?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_activo_comercial_id_estado_conservacion_fkey"
+            columns: ["id_estado_conservacion"]
+            isOneToOne: false
+            referencedRelation: "estados_conservacion"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_activo_comercial_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: true
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_activo_comercial_id_regimen_propiedad_fkey"
+            columns: ["id_regimen_propiedad"]
+            isOneToOne: false
+            referencedRelation: "regimenes_propiedad"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propiedades_atributos_comercio: {
+        Row: {
+          aforo_vehicular: number | null
+          altura_libre: number | null
+          andenes_carga: number | null
+          area_privativa: number | null
+          cajones_estacionamiento: number | null
+          capacidad_carga_piso: number | null
+          esquina: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fondo: number | null
+          foot_traffic: number | null
+          frente_exhibicion: number | null
+          gla: number | null
+          id_estado_entrega: number | null
+          id_propiedad: number
+          id_tipo_centro: number | null
+          id_tipo_comercio: number | null
+          kva_energia: number | null
+          licencia_funcionamiento: boolean
+          mezzanine: number | null
+          nivel: string | null
+          numero_local: string | null
+          patio_maniobras: number | null
+          plaza: string | null
+          terraza: number | null
+          visibilidad: string | null
+        }
+        Insert: {
+          aforo_vehicular?: number | null
+          altura_libre?: number | null
+          andenes_carga?: number | null
+          area_privativa?: number | null
+          cajones_estacionamiento?: number | null
+          capacidad_carga_piso?: number | null
+          esquina?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fondo?: number | null
+          foot_traffic?: number | null
+          frente_exhibicion?: number | null
+          gla?: number | null
+          id_estado_entrega?: number | null
+          id_propiedad: number
+          id_tipo_centro?: number | null
+          id_tipo_comercio?: number | null
+          kva_energia?: number | null
+          licencia_funcionamiento?: boolean
+          mezzanine?: number | null
+          nivel?: string | null
+          numero_local?: string | null
+          patio_maniobras?: number | null
+          plaza?: string | null
+          terraza?: number | null
+          visibilidad?: string | null
+        }
+        Update: {
+          aforo_vehicular?: number | null
+          altura_libre?: number | null
+          andenes_carga?: number | null
+          area_privativa?: number | null
+          cajones_estacionamiento?: number | null
+          capacidad_carga_piso?: number | null
+          esquina?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fondo?: number | null
+          foot_traffic?: number | null
+          frente_exhibicion?: number | null
+          gla?: number | null
+          id_estado_entrega?: number | null
+          id_propiedad?: number
+          id_tipo_centro?: number | null
+          id_tipo_comercio?: number | null
+          kva_energia?: number | null
+          licencia_funcionamiento?: boolean
+          mezzanine?: number | null
+          nivel?: string | null
+          numero_local?: string | null
+          patio_maniobras?: number | null
+          plaza?: string | null
+          terraza?: number | null
+          visibilidad?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_atributos_comercio_id_estado_entrega_fkey"
+            columns: ["id_estado_entrega"]
+            isOneToOne: false
+            referencedRelation: "estados_entrega_comercio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_comercio_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: true
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_comercio_id_tipo_centro_fkey"
+            columns: ["id_tipo_centro"]
+            isOneToOne: false
+            referencedRelation: "tipos_centro"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_comercio_id_tipo_comercio_fkey"
+            columns: ["id_tipo_comercio"]
+            isOneToOne: false
+            referencedRelation: "tipos_comercio"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propiedades_atributos_oficina: {
+        Row: {
+          altura_libre: number | null
+          area_rentable: number | null
+          area_util: number | null
+          cajones_estacionamiento: number | null
+          certificacion_leed: string | null
+          control_acceso: boolean
+          corredor: string | null
+          divisible: boolean
+          edificio: string | null
+          elevadores: number | null
+          factor_eficiencia: number | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fibra: boolean
+          id_clase_edificio: number | null
+          id_estado_acabados: number | null
+          id_estandar_medicion: number | null
+          id_hvac: number | null
+          id_propiedad: number
+          minimo_rentable: number | null
+          niveles: number | null
+          numero_oficina: string | null
+          piso: string | null
+          planta_luz: boolean
+          ratio_estacionamiento: string | null
+          seguridad_cctv: boolean
+        }
+        Insert: {
+          altura_libre?: number | null
+          area_rentable?: number | null
+          area_util?: number | null
+          cajones_estacionamiento?: number | null
+          certificacion_leed?: string | null
+          control_acceso?: boolean
+          corredor?: string | null
+          divisible?: boolean
+          edificio?: string | null
+          elevadores?: number | null
+          factor_eficiencia?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fibra?: boolean
+          id_clase_edificio?: number | null
+          id_estado_acabados?: number | null
+          id_estandar_medicion?: number | null
+          id_hvac?: number | null
+          id_propiedad: number
+          minimo_rentable?: number | null
+          niveles?: number | null
+          numero_oficina?: string | null
+          piso?: string | null
+          planta_luz?: boolean
+          ratio_estacionamiento?: string | null
+          seguridad_cctv?: boolean
+        }
+        Update: {
+          altura_libre?: number | null
+          area_rentable?: number | null
+          area_util?: number | null
+          cajones_estacionamiento?: number | null
+          certificacion_leed?: string | null
+          control_acceso?: boolean
+          corredor?: string | null
+          divisible?: boolean
+          edificio?: string | null
+          elevadores?: number | null
+          factor_eficiencia?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fibra?: boolean
+          id_clase_edificio?: number | null
+          id_estado_acabados?: number | null
+          id_estandar_medicion?: number | null
+          id_hvac?: number | null
+          id_propiedad?: number
+          minimo_rentable?: number | null
+          niveles?: number | null
+          numero_oficina?: string | null
+          piso?: string | null
+          planta_luz?: boolean
+          ratio_estacionamiento?: string | null
+          seguridad_cctv?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_atributos_oficina_id_clase_edificio_fkey"
+            columns: ["id_clase_edificio"]
+            isOneToOne: false
+            referencedRelation: "clases_edificio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_oficina_id_estado_acabados_fkey"
+            columns: ["id_estado_acabados"]
+            isOneToOne: false
+            referencedRelation: "estados_acabados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_oficina_id_estandar_medicion_fkey"
+            columns: ["id_estandar_medicion"]
+            isOneToOne: false
+            referencedRelation: "estandares_medicion"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_oficina_id_hvac_fkey"
+            columns: ["id_hvac"]
+            isOneToOne: false
+            referencedRelation: "hvac_tipo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_oficina_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: true
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propiedades_atributos_terreno: {
+        Row: {
+          cas: number | null
+          cos: number | null
+          cus: number | null
+          densidad: number | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fondo: number | null
+          forma: string | null
+          frente: number | null
+          id_propiedad: number
+          id_tipo_terreno: number | null
+          id_uso_suelo: number | null
+          lote: string | null
+          manzana: string | null
+          niveles_permitidos: number | null
+          numero_frentes: number | null
+          restricciones: string | null
+          serv_agua: boolean
+          serv_alumbrado: boolean
+          serv_banquetas: boolean
+          serv_calles_pavimentadas: boolean
+          serv_drenaje: boolean
+          serv_electricidad: boolean
+          serv_factibilidad_agua: boolean
+          serv_factibilidad_cfe: boolean
+          serv_fibra: boolean
+          serv_gas: boolean
+          serv_urbanizado: boolean
+          superficie_construida: number | null
+          superficie_terreno: number | null
+          topografia: string | null
+        }
+        Insert: {
+          cas?: number | null
+          cos?: number | null
+          cus?: number | null
+          densidad?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fondo?: number | null
+          forma?: string | null
+          frente?: number | null
+          id_propiedad: number
+          id_tipo_terreno?: number | null
+          id_uso_suelo?: number | null
+          lote?: string | null
+          manzana?: string | null
+          niveles_permitidos?: number | null
+          numero_frentes?: number | null
+          restricciones?: string | null
+          serv_agua?: boolean
+          serv_alumbrado?: boolean
+          serv_banquetas?: boolean
+          serv_calles_pavimentadas?: boolean
+          serv_drenaje?: boolean
+          serv_electricidad?: boolean
+          serv_factibilidad_agua?: boolean
+          serv_factibilidad_cfe?: boolean
+          serv_fibra?: boolean
+          serv_gas?: boolean
+          serv_urbanizado?: boolean
+          superficie_construida?: number | null
+          superficie_terreno?: number | null
+          topografia?: string | null
+        }
+        Update: {
+          cas?: number | null
+          cos?: number | null
+          cus?: number | null
+          densidad?: number | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fondo?: number | null
+          forma?: string | null
+          frente?: number | null
+          id_propiedad?: number
+          id_tipo_terreno?: number | null
+          id_uso_suelo?: number | null
+          lote?: string | null
+          manzana?: string | null
+          niveles_permitidos?: number | null
+          numero_frentes?: number | null
+          restricciones?: string | null
+          serv_agua?: boolean
+          serv_alumbrado?: boolean
+          serv_banquetas?: boolean
+          serv_calles_pavimentadas?: boolean
+          serv_drenaje?: boolean
+          serv_electricidad?: boolean
+          serv_factibilidad_agua?: boolean
+          serv_factibilidad_cfe?: boolean
+          serv_fibra?: boolean
+          serv_gas?: boolean
+          serv_urbanizado?: boolean
+          superficie_construida?: number | null
+          superficie_terreno?: number | null
+          topografia?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_atributos_terreno_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: true
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_terreno_id_tipo_terreno_fkey"
+            columns: ["id_tipo_terreno"]
+            isOneToOne: false
+            referencedRelation: "tipos_terreno"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_atributos_terreno_id_uso_suelo_fkey"
+            columns: ["id_uso_suelo"]
+            isOneToOne: false
+            referencedRelation: "usos_suelo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       propiedades_caracteristicas: {
         Row: {
           activo: boolean
@@ -9010,6 +10033,62 @@ export type Database = {
           },
           {
             foreignKeyName: "propiedades_caracteristicas_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propiedades_comercio_tiendas_ancla: {
+        Row: {
+          id: number
+          id_propiedad: number
+          nombre: string
+        }
+        Insert: {
+          id?: never
+          id_propiedad: number
+          nombre: string
+        }
+        Update: {
+          id?: never
+          id_propiedad?: number
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_comercio_tiendas_ancla_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propiedades_oficina_amenidades: {
+        Row: {
+          id_amenidad_oficina: number
+          id_propiedad: number
+        }
+        Insert: {
+          id_amenidad_oficina: number
+          id_propiedad: number
+        }
+        Update: {
+          id_amenidad_oficina?: number
+          id_propiedad?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propiedades_oficina_amenidades_id_amenidad_oficina_fkey"
+            columns: ["id_amenidad_oficina"]
+            isOneToOne: false
+            referencedRelation: "amenidades_oficina"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propiedades_oficina_amenidades_id_propiedad_fkey"
             columns: ["id_propiedad"]
             isOneToOne: false
             referencedRelation: "propiedades"
@@ -9350,6 +10429,33 @@ export type Database = {
           id?: string
           nombre?: string | null
           tipo?: string | null
+        }
+        Relationships: []
+      }
+      regimenes_propiedad: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
         }
         Relationships: []
       }
@@ -9741,12 +10847,14 @@ export type Database = {
       roles: {
         Row: {
           activo: boolean | null
+          administrar_app_clientes: boolean
           configurar_citas: boolean
           es_rol_interno: boolean
           fecha_actualizacion: string | null
           fecha_creacion: string | null
           id: number
           nombre: string
+          puede_impersonar: boolean
           ver_filtros_avanzados_eliminados: boolean
           ver_todos_duenos: boolean
           ver_todos_prospectos_compradores: boolean | null
@@ -9754,12 +10862,14 @@ export type Database = {
         }
         Insert: {
           activo?: boolean | null
+          administrar_app_clientes?: boolean
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
           id?: never
           nombre: string
+          puede_impersonar?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
@@ -9767,12 +10877,14 @@ export type Database = {
         }
         Update: {
           activo?: boolean | null
+          administrar_app_clientes?: boolean
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
           id?: never
           nombre?: string
+          puede_impersonar?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
@@ -10191,6 +11303,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tipos_centro: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       tipos_cep: {
         Row: {
           activo: boolean | null
@@ -10274,6 +11413,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tipos_comercio: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
+      tipos_contrato_renta: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
       }
       tipos_documento: {
         Row: {
@@ -10418,6 +11611,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tipos_garantia_renta: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+        }
+        Relationships: []
+      }
       tipos_multa: {
         Row: {
           activo: boolean
@@ -10514,6 +11734,33 @@ export type Database = {
           id?: number
           nombre?: string
           tipo?: string | null
+        }
+        Relationships: []
+      }
+      tipos_terreno: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
         }
         Relationships: []
       }
@@ -10654,6 +11901,36 @@ export type Database = {
           fecha_creacion?: string
           nombre?: string | null
           tipo?: string | null
+        }
+        Relationships: []
+      }
+      usos_suelo: {
+        Row: {
+          activo: boolean
+          codigo: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          grupo: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          grupo: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          grupo?: string
+          id?: never
+          nombre?: string
         }
         Relationships: []
       }
@@ -11082,6 +12359,7 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: undefined
       }
+      crear_activo_comercial: { Args: { payload: Json }; Returns: number }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string
@@ -11436,6 +12714,7 @@ export type Database = {
         Args: never
         Returns: {
           activo: boolean
+          administrar_app_clientes: boolean
           debe_cambiar_password: boolean
           email: string
           id_notario: number
@@ -11444,6 +12723,7 @@ export type Database = {
           nombre: string
           notaria_nombre: string
           perfil_juridico_nombre: string
+          puede_impersonar: boolean
           rol_id: number
           rol_nombre: string
           ver_filtros_avanzados_eliminados: boolean
@@ -11711,46 +12991,20 @@ export type Database = {
         }[]
       }
       get_proyectos_publicados: { Args: never; Returns: Json }
-      get_relacion_pagos:
-        | {
-            Args: {
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_metodos_permitidos?: string[]
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_has_aplicaciones?: boolean
-              p_has_cep?: boolean
-              p_limit?: number
-              p_metodo_pago?: string
-              p_metodos_permitidos?: string[]
-              p_offset?: number
-              p_proyecto_id?: number
-              p_search?: string
-              p_tipo_cuenta?: string
-            }
-            Returns: Json
-          }
+      get_relacion_pagos: {
+        Args: {
+          p_clabe?: string
+          p_cliente?: string
+          p_cuenta?: string
+          p_estatus?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_proyecto_id?: number
+          p_tipos?: string[]
+          p_unidad?: string
+        }
+        Returns: Json
+      }
       get_showrooms_contacto: { Args: never; Returns: Json }
       get_stats_respaldo: { Args: never; Returns: Json }
       get_totales_comisiones_sozu: {

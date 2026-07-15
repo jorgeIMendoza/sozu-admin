@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { mesesMensualidadesRestantes, calcDynamicScheme, calcEscalonadoScheme, expandirTramos } from "@/utils/escalonadoUtils";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
@@ -239,7 +239,64 @@ const AgentUnidadesProyecto = () => {
   const getSchemesForProperty = (prop: any) => prop.esquemas_pago || [];
 
   const calcSchemeAmounts = (scheme: any, precioLista: number, mesesEfectivos: number = 0) => {
+    // Escalonado con monto fijo: tramos_mensualidad trae montos en centavos y las
+    // columnas planas (porcentaje_mensualidades=0) no reflejan las mensualidades.
+    // Mismo cálculo que calcPaymentPlans en use-offer-db.ts.
+    const tramos = scheme.tramos_mensualidad;
+    const isEscalonadoConMontoFijo = Array.isArray(tramos) && tramos.length > 0
+      && tramos.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
+
+    if (isEscalonadoConMontoFijo) {
+      const pctDesc = Number(scheme.porcentaje_descuento_aumento ?? 0);
+      const precioFinal = precioLista * (1 + pctDesc / 100);
+      const enganche = precioFinal * (Number(scheme.porcentaje_enganche ?? 0) / 100);
+
+      let meses: number;
+      let mensualidadesTotal: number;
+      let mensualidad: number;
+      if (mesesEfectivos > 0) {
+        // Esquema dinámico: recalcular meses contra la fecha de entrega actual del proyecto
+        meses = mesesEfectivos;
+        mensualidad = ((tramos.find((t: any) => (t.monto_mensualidad ?? 0) > 0)?.monto_mensualidad || 0) / 100);
+        mensualidadesTotal = mensualidad * meses;
+      } else {
+        const tramosExpanded = expandirTramos(tramos);
+        meses = tramosExpanded.reduce((s: number, t: any) => s + (Number(t.numero_mensualidades) || 0), 0);
+        mensualidadesTotal = tramosExpanded.reduce((s: number, t: any) =>
+          s + ((t.monto_mensualidad || 0) / 100) * (Number(t.numero_mensualidades) || 0), 0);
+        mensualidad = meses > 0 ? mensualidadesTotal / meses : 0;
+      }
+
+      const entrega = Math.max(0, precioFinal - enganche - mensualidadesTotal);
+      return {
+        precioAjustado: precioFinal,
+        enganche,
+        mensualidadesTotal,
+        entrega,
+        mensualidad,
+        numMensualidades: meses,
+        porcentajeMensualidades: precioFinal > 0 ? (mensualidadesTotal / precioFinal) * 100 : 0,
+        porcentajeEntrega: precioFinal > 0 ? (entrega / precioFinal) * 100 : 0,
+      };
+    }
+
     const result = calcDynamicScheme(scheme, precioLista, mesesEfectivos);
+    return {
+      precioAjustado: result.precioFinal,
+      enganche: result.enganche,
+      mensualidadesTotal: result.mensualidadesTotal,
+      entrega: result.entrega,
+      mensualidad: result.mensualidad,
+      numMensualidades: result.meses,
+      porcentajeMensualidades: result.porcentajeMensualidades,
+      porcentajeEntrega: result.porcentajeEntrega,
+    };
+  };
+
+  // Esquema escalonado: el monto mensual vive en tramos_mensualidad. Usa el mismo
+  // cálculo que la oferta digital / PDF (calcEscalonadoScheme, compartido en escalonadoUtils).
+  const calcEscalonadoAmounts = (scheme: any, precioLista: number, mesesEfectivos: number = 0) => {
+    const result = calcEscalonadoScheme(scheme, precioLista, mesesEfectivos);
     return {
       precioAjustado: result.precioFinal,
       enganche: result.enganche,
@@ -255,12 +312,38 @@ const AgentUnidadesProyecto = () => {
   const { data: selectedProjectData } = useQuery({
     queryKey: ["proyecto-fecha-entrega", selectedProperty?.proyecto_id],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id, fecha_entrega").eq("id", selectedProperty.proyecto_id).maybeSingle();
+      const { data } = await (supabase as any).from("proyectos").select("id, fecha_entrega, fecha_entrega_proyecto").eq("id", selectedProperty.proyecto_id).maybeSingle();
       return data;
     },
     enabled: !!selectedProperty?.proyecto_id,
   });
-  const efectivaMesesAgente = selectedProjectData?.fecha_entrega ? mesesEntreFechas(new Date(), selectedProjectData.fecha_entrega) : 0;
+  // Misma prioridad que la oferta digital: fecha_entrega_proyecto ?? fecha_entrega
+  const fechaEntregaEfectiva = selectedProjectData?.fecha_entrega_proyecto ?? selectedProjectData?.fecha_entrega;
+  // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración),
+  // misma regla que la oferta digital / PDF (mesesMensualidadesRestantes).
+  const efectivaMesesAgente = mesesMensualidadesRestantes(fechaEntregaEfectiva);
+
+  // Esquemas del proyecto traídos directo de la tabla (incluye tramos_mensualidad),
+  // igual que la oferta digital. El RPC del listado no devuelve tramos, así que los
+  // esquemas escalonados solo pueden calcular sus mensualidades con estos datos.
+  const { data: schemesDirect } = useQuery({
+    queryKey: ["esquemas-proyecto-agente", selectedProperty?.proyecto_id],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("esquemas_pago")
+        .select("id, nombre, porcentaje_descuento_aumento, porcentaje_enganche, porcentaje_mensualidades, numero_mensualidades, porcentaje_entrega, es_manual, orden, tramos_mensualidad")
+        .eq("id_proyecto", selectedProperty.proyecto_id)
+        .eq("activo", true)
+        .eq("es_manual", false)
+        .order("orden", { ascending: true });
+      return data || [];
+    },
+    enabled: !!selectedProperty?.proyecto_id,
+  });
+  // Preferir esquemas directos (con tramos); si aún no cargan, usar los del RPC como fallback.
+  const dialogSchemes = (schemesDirect && schemesDirect.length > 0)
+    ? schemesDirect
+    : (selectedProperty ? getSchemesForProperty(selectedProperty) : []);
 
   useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange, normalizedSearchQuery]);
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
@@ -293,7 +376,7 @@ const AgentUnidadesProyecto = () => {
   const chipClass = (active: boolean) =>
     `px-3.5 py-2 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
       active
-        ? "bg-emerald-600 text-white border-emerald-600"
+        ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
         : "bg-white border-gray-200 text-foreground hover:bg-gray-50"
     }`;
 
@@ -424,7 +507,7 @@ const AgentUnidadesProyecto = () => {
           <button onClick={() => navigate("/admin/agent/inventario")} className="h-9 w-9 rounded-full bg-white border border-gray-200 flex items-center justify-center">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] flex items-center justify-center shrink-0">
             {initials ? (
               <span className="text-sm font-bold text-white leading-none">{initials}</span>
             ) : (
@@ -432,8 +515,8 @@ const AgentUnidadesProyecto = () => {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[hsl(var(--agent-text))]">{nombreCompleto}</p>
-            <p className="text-xs text-emerald-700">{totalCount} unidades disponibles</p>
+            <p className="text-sm font-medium text-[hsl(var(--agent-text,0_0%_10%))]">{nombreCompleto}</p>
+            <p className="text-xs text-[hsl(var(--agent-primary,147_33%_29%))]">{totalCount} unidades disponibles</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -445,7 +528,7 @@ const AgentUnidadesProyecto = () => {
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
             {activeFilterCount > 0 && (
-              <span className="ml-0.5 h-5 min-w-[20px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+              <span className="ml-0.5 h-5 min-w-[20px] px-1 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] text-white text-[10px] font-bold flex items-center justify-center">
                 {activeFilterCount}
               </span>
             )}
@@ -464,7 +547,7 @@ const AgentUnidadesProyecto = () => {
             onClick={cycleSortOrder}
             className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-colors ${
               sortOrder !== "none"
-                ? "bg-emerald-600 text-white border-emerald-600"
+                ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
                 : "bg-white border-gray-200 text-muted-foreground"
             }`}
             title={sortOrder === "none" ? "Ordenar por precio" : sortOrder === "asc" ? "Precio: menor a mayor" : "Precio: mayor a menor"}
@@ -527,7 +610,7 @@ const AgentUnidadesProyecto = () => {
           </DrawerHeader>
           <div className="overflow-y-auto px-4 pb-6 max-h-[65vh]">{filterContent}</div>
           <div className="px-4 py-3 border-t">
-            <Button className="w-full rounded-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setFiltersDrawerOpen(false)}>
+            <Button className="w-full rounded-full gap-2 bg-[hsl(var(--agent-primary,147_33%_29%))] hover:brightness-110 text-white" onClick={() => setFiltersDrawerOpen(false)}>
               <Search className="h-4 w-4" /> Ver {totalCount} unidades
             </Button>
           </div>
@@ -629,57 +712,104 @@ const AgentUnidadesProyecto = () => {
                 )}
                 <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-xl p-4 text-center">
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400">Precio de Lista</p>
-                    <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">{formatPrice(selectedProperty.precio_lista)}</p>
+                  <div className="relative overflow-hidden rounded-2xl p-5 text-center bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/15">
+                    <div className="absolute inset-x-0 top-0 h-1 bg-[hsl(var(--agent-primary,147_33%_29%))]/40" />
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--agent-primary,147_33%_29%))]/80">Precio de Lista</p>
+                    <p className="mt-1 text-2xl font-bold text-[hsl(var(--agent-primary,147_33%_29%))]">{formatPrice(selectedProperty.precio_lista)}</p>
                   </div>
                 )}
-                {getSchemesForProperty(selectedProperty).length > 0 && (
+                {dialogSchemes.length > 0 && (
                   <Collapsible open={schemesOpen} onOpenChange={setSchemesOpen}>
                     <CollapsibleTrigger className="flex items-center justify-between w-full py-2 group">
-                      <p className="text-sm font-semibold text-foreground">Esquemas de Pago ({getSchemesForProperty(selectedProperty).length})</p>
+                      <p className="text-sm font-semibold text-[hsl(var(--agent-text,0_0%_10%))] flex items-center gap-2">
+                        <span className="h-4 w-1 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))]" />
+                        Esquemas de Pago
+                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))]/10 text-[11px] font-semibold text-[hsl(var(--agent-primary,147_33%_29%))]">{dialogSchemes.length}</span>
+                      </p>
                       <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${schemesOpen ? "rotate-180" : ""}`} />
                     </CollapsibleTrigger>
-                    <CollapsibleContent className="space-y-2 pt-1">
-                      {getSchemesForProperty(selectedProperty).map((scheme: any) => {
-                        const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
-                        const mesesParaScheme = (!isSchemeEscalonado && scheme.porcentaje_mensualidades > 0 && efectivaMesesAgente > 0) ? efectivaMesesAgente : 0;
-                        const amounts = calcSchemeAmounts(scheme, selectedProperty.precio_lista, mesesParaScheme);
+                    <CollapsibleContent className="space-y-2.5 pt-1.5">
+                      {dialogSchemes.map((scheme: any) => {
+                        const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad)
+                          && scheme.tramos_mensualidad.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
+                        const mesesParaScheme = (scheme.porcentaje_mensualidades > 0 && efectivaMesesAgente > 0) ? efectivaMesesAgente : 0;
+                        const amounts = isSchemeEscalonado
+                          ? calcEscalonadoAmounts(scheme, selectedProperty.precio_lista, efectivaMesesAgente)
+                          : calcSchemeAmounts(scheme, selectedProperty.precio_lista, mesesParaScheme);
                         const isSelected = selectedSchemeId === scheme.id;
                         return (
                           <button
                             key={scheme.id}
                             type="button"
                             onClick={() => setSelectedSchemeId(prev => prev === scheme.id ? null : scheme.id)}
-                            className={`w-full text-left rounded-xl border p-4 shadow-sm space-y-2 transition-all duration-200 ${
-                              isSelected ? "border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/20" : "border-border/60 bg-gradient-to-br from-card to-muted/30 hover:border-emerald-600/40"
+                            className={`relative w-full text-left rounded-2xl border p-4 space-y-3 transition-all duration-200 ${
+                              isSelected
+                                ? "border-[hsl(var(--agent-primary,147_33%_29%))] bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.05] ring-2 ring-[hsl(var(--agent-primary,147_33%_29%))]/20 shadow-sm"
+                                : "border-border/60 bg-card hover:border-[hsl(var(--agent-primary,147_33%_29%))]/40 hover:shadow-sm"
                             }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                {isSelected && <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />}
-                                <p className="font-semibold text-sm text-foreground">{scheme.nombre}</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${isSelected ? "bg-[hsl(var(--agent-primary,147_33%_29%))]" : "bg-muted-foreground/25"}`} />
+                                <p className="font-semibold text-sm text-[hsl(var(--agent-text,0_0%_10%))] truncate">{scheme.nombre}</p>
                               </div>
                               {scheme.porcentaje_descuento_aumento !== 0 && scheme.porcentaje_descuento_aumento != null && (
                                 <Badge variant="outline" className={scheme.porcentaje_descuento_aumento < 0
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-700 text-xs"
-                                  : "border-destructive/30 bg-destructive/10 text-destructive text-xs"}>
+                                  ? "shrink-0 border-[hsl(var(--agent-primary,147_33%_29%))]/30 bg-[hsl(var(--agent-primary,147_33%_29%))]/10 text-[hsl(var(--agent-primary,147_33%_29%))] text-[11px] font-semibold"
+                                  : "shrink-0 border-destructive/30 bg-destructive/10 text-destructive text-[11px] font-semibold"}>
                                   {scheme.porcentaje_descuento_aumento > 0 ? "+" : ""}{scheme.porcentaje_descuento_aumento}%
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                              {scheme.porcentaje_enganche > 0 && <span><span className="font-medium text-foreground">{scheme.porcentaje_enganche}%</span> Enganche</span>}
-                              {scheme.porcentaje_mensualidades > 0 && <span><span className="font-medium text-foreground">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades</span>}
-                              {scheme.porcentaje_entrega > 0 && <span><span className="font-medium text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega</span>}
-                              {scheme.numero_mensualidades > 0 && <span><span className="font-medium text-foreground">{amounts.numMensualidades}</span> meses</span>}
+                            <div className="flex flex-wrap gap-1.5">
+                              {scheme.porcentaje_enganche > 0 && (
+                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{scheme.porcentaje_enganche}%</span> Enganche
+                                </span>
+                              )}
+                              {amounts.porcentajeMensualidades > 0 && (
+                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
+                                </span>
+                              )}
+                              {amounts.porcentajeEntrega > 0 && (
+                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
+                                </span>
+                              )}
+                              {amounts.numMensualidades > 0 && (
+                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-[hsl(var(--agent-primary,147_33%_29%))]/10 px-2 py-1 text-[11px] text-[hsl(var(--agent-primary,147_33%_29%))]/80">
+                                  <span className="font-semibold text-[hsl(var(--agent-primary,147_33%_29%))]">{amounts.numMensualidades}</span> meses
+                                </span>
+                              )}
                             </div>
                             {selectedProperty.precio_lista > 0 && (
-                              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/40 mt-1">
-                                {amounts.enganche > 0 && <div className="text-[11px]"><span className="text-muted-foreground">Enganche:</span><span className="ml-1 font-medium text-foreground">{formatPrice(amounts.enganche)}</span></div>}
-                                {amounts.mensualidadesTotal > 0 && <div className="text-[11px]"><span className="text-muted-foreground">Mensualidad:</span><span className="ml-1 font-medium text-foreground">{formatPrice(amounts.mensualidad)}</span></div>}
-                                {amounts.entrega > 0 && <div className="text-[11px]"><span className="text-muted-foreground">Entrega:</span><span className="ml-1 font-medium text-foreground">{formatPrice(amounts.entrega)}</span></div>}
-                                <div className="text-[11px]"><span className="text-muted-foreground">Precio final:</span><span className="ml-1 font-medium text-foreground">{formatPrice(amounts.precioAjustado)}</span></div>
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3 border-t border-border/50">
+                                {amounts.enganche > 0 && (
+                                  <div className="space-y-0.5">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Enganche</p>
+                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.enganche)}</p>
+                                  </div>
+                                )}
+                                {amounts.mensualidadesTotal > 0 && (
+                                  <div className="space-y-0.5">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Mensualidad</p>
+                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">
+                                      {formatPrice(amounts.mensualidad)}
+                                      {amounts.numMensualidades > 0 && <span className="font-normal text-muted-foreground"> × {amounts.numMensualidades}</span>}
+                                    </p>
+                                  </div>
+                                )}
+                                {amounts.entrega > 0 && (
+                                  <div className="space-y-0.5">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Entrega</p>
+                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.entrega)}</p>
+                                  </div>
+                                )}
+                                <div className="space-y-0.5">
+                                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--agent-primary,147_33%_29%))]/70">Precio final</p>
+                                  <p className="text-xs font-bold text-[hsl(var(--agent-primary,147_33%_29%))]">{formatPrice(amounts.precioAjustado)}</p>
+                                </div>
                               </div>
                             )}
                           </button>
@@ -689,9 +819,9 @@ const AgentUnidadesProyecto = () => {
                   </Collapsible>
                 )}
                 {selectedSchemeId && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700 font-medium flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5" />
-                    Plan seleccionado: {getSchemesForProperty(selectedProperty).find((s: any) => s.id === selectedSchemeId)?.nombre || ""}
+                  <div className="bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/20 rounded-xl px-3 py-2.5 text-xs text-[hsl(var(--agent-primary,147_33%_29%))] font-medium flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Plan seleccionado: <span className="font-semibold">{dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre || ""}</span></span>
                   </div>
                 )}
               </div>
@@ -713,12 +843,12 @@ const AgentUnidadesProyecto = () => {
                       forceLight={true}
                       enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-emerald-600 text-white font-semibold text-sm shadow-lg hover:bg-emerald-700 active:scale-[0.98] transition-all">
+                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] text-white font-semibold text-sm shadow-lg shadow-[hsl(var(--agent-primary,147_33%_29%))]/20 hover:brightness-110 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
                           <span>
                             Configurar Oferta
                             {selectedSchemeId && (
-                              <span className="ml-1 text-xs opacity-80">({getSchemesForProperty(selectedProperty).find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
+                              <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
                             )}
                           </span>
                         </button>

@@ -6,7 +6,7 @@ import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, MapPin, Loader2, ChevronLeft, ChevronRight, BedDouble, Bath, ShowerHead, Star, ArrowLeft, Maximize2, CheckCircle, Search, UserPlus, CalendarDays, User, Bell, LogOut, Check, SlidersHorizontal, Eye } from "lucide-react";
+import { Building2, MapPin, Loader2, ChevronLeft, ChevronRight, BedDouble, Bath, ShowerHead, ArrowLeft, Maximize2, CheckCircle, Search, UserPlus, CalendarDays, User, Bell, LogOut, Check, SlidersHorizontal, Eye } from "lucide-react";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import useEmblaCarousel from "embla-carousel-react";
@@ -177,7 +177,7 @@ const MiProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("amenidades_proyectos")
-        .select("id, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
+        .select("id, url_imagen, amenidades!amenidades_proyectos_id_amenidad_fkey (id, nombre, url)")
         .eq("id_proyecto", projectId)
         .eq("activo", true);
       if (error) return [];
@@ -308,7 +308,7 @@ const MiProyectoDetalle = () => {
       {/* Header for simplified roles */}
       {isSimplifiedRole && (
         <div className={`sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/50 -mx-4 px-4 py-2.5 sm:-mx-6 sm:px-6 -mt-4 sm:-mt-6 transition-transform duration-300 overflow-hidden ${showHeaderBar ? "translate-y-0" : "-translate-y-full"}`}>
-          {profile?.rol_nombre === "Super Administrador" && <AgentImpersonationSelector />}
+          {profile?.puede_impersonar === true && <AgentImpersonationSelector />}
           <div className="flex items-center gap-1.5">
             <span className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
               Hola, <span className="font-medium text-foreground">{profile?.nombre?.split(" ")[0] || "Usuario"}</span>
@@ -424,10 +424,8 @@ const MiProyectoDetalle = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {amenidades.map((ap: any) => (
               <div key={ap.id} className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
-                {ap.amenidades?.url ? (
-                  <img src={ap.amenidades.url} alt={ap.amenidades.nombre} className="h-7 w-7 object-contain" />
-                ) : (
-                  <Star className="h-5 w-5 text-muted-foreground" />
+                {ap.url_imagen && (
+                  <img src={ap.url_imagen} alt={ap.amenidades?.nombre} className="h-9 w-9 object-cover rounded" />
                 )}
                 <span className="text-xs font-medium text-foreground">{ap.amenidades?.nombre}</span>
               </div>

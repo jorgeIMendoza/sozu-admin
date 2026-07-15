@@ -14,11 +14,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw, Stamp } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, CalendarDays, ChevronDown, ChevronUp, Trash2, Plus, AlertTriangle, Eye, CreditCard, ArrowRight, Home, Warehouse, Car, Banknote, Download, HeartHandshake, MessageSquare, CheckCircle, Edit, Loader2, AlertCircle, FileCheck, Upload, Scale, Gavel, X, Save, Info, RefreshCcw, Stamp, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
+import { EliminarPagoDialog } from "@/components/admin/portal-cobranza/EliminarPagoDialog";
+import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/useEliminarPago";
 import { NewMultaDialog } from "@/components/admin/NewMultaDialog";
 import { EditMultaDialog } from "@/components/admin/EditMultaDialog";
 import { AddCepDialog } from "@/components/admin/AddCepDialog";
@@ -128,11 +130,6 @@ interface OfferData {
   lead_rfc?: string | null;
 }
 
-interface AplicacionToDelete {
-  id: number;
-  monto: number;
-  conceptoNombre: string;
-}
 
 interface Multa {
   id: number;
@@ -493,15 +490,11 @@ export default function DetalleCuentaCobranza() {
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
   const [compradoresOpen, setCompradoresOpen] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{ 
-    isOpen: boolean; 
-    aplicacion: AplicacionToDelete | null;
-    warningMessage?: string;
-  }>({
-    isOpen: false,
-    aplicacion: null,
-    warningMessage: ""
-  });
+  // Eliminar pago = SOFT DELETE vía RPC eliminar_pago (unificado con portal-cobranza /
+  // validación de pagos). El borrado es del PAGO (tabla pagos), no de una aplicación suelta.
+  const { eliminarPago, isDeleting: isDeletingPago } = useEliminarPago();
+  const [deletePagoDialog, setDeletePagoDialog] = useState<{ pagoId: number; monto: number; concepto: string } | null>(null);
+  const [deletePagoImpacto, setDeletePagoImpacto] = useState<PagoImpacto | null>(null);
   const [multaDialog, setMultaDialog] = useState<{ 
     isOpen: boolean; 
     acuerdoId: number | null;
@@ -865,8 +858,24 @@ export default function DetalleCuentaCobranza() {
 
   // Fetch available payment schemes for the project
   const { data: availableSchemes } = useQuery({
-    queryKey: ["payment_schemes", cuentaDetalle?.proyecto_id],
+    queryKey: ["payment_schemes", cuentaDetalle?.proyecto_id, offerData?.id_producto],
     queryFn: async () => {
+      // Cuenta tipo Producto: sólo esquemas ligados al producto de la oferta,
+      // incluyendo manuales (así se crean los esquemas de producto). Ofrecer
+      // esquemas genéricos de proyecto aquí apunta la oferta a un esquema sin
+      // producto y n8n rechaza la generación del acuerdo.
+      if (offerData?.id_producto) {
+        const { data: schemes, error } = await supabase
+          .from('esquemas_pago')
+          .select('id, nombre, porcentaje_enganche, porcentaje_mensualidades, porcentaje_entrega, numero_mensualidades')
+          .eq('id_producto', offerData.id_producto)
+          .eq('activo', true)
+          .order('orden', { ascending: true });
+
+        if (error) throw error;
+        return schemes || [];
+      }
+
       if (!cuentaDetalle?.proyecto_id) return [];
 
       const { data: schemes, error } = await supabase
@@ -880,7 +889,7 @@ export default function DetalleCuentaCobranza() {
       if (error) throw error;
       return schemes || [];
     },
-    enabled: !!cuentaDetalle?.proyecto_id,
+    enabled: !!cuentaDetalle?.proyecto_id || !!offerData?.id_producto,
   });
 
   // Fetch original payment scheme details
@@ -1009,11 +1018,31 @@ export default function DetalleCuentaCobranza() {
       // 1. Obtener el esquema seleccionado para acceder a porcentaje_descuento_aumento
       const { data: esquema, error: esquemaError } = await supabase
         .from('esquemas_pago')
-        .select('porcentaje_descuento_aumento')
+        .select('porcentaje_descuento_aumento, id_producto')
         .eq('id', schemeId)
         .single();
 
       if (esquemaError) throw esquemaError;
+
+      // Validación: el esquema debe corresponder al producto de la oferta (o no tener
+      // producto si la oferta es de propiedad). Un esquema equivocado deja la cuenta
+      // sin acuerdos porque n8n rechaza la generación.
+      if (offerData.id_producto && esquema?.id_producto !== offerData.id_producto) {
+        toast({
+          title: "Esquema incompatible",
+          description: "El plan seleccionado no pertenece al producto de esta oferta. Selecciona un esquema del producto.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!offerData.id_producto && esquema?.id_producto) {
+        toast({
+          title: "Esquema incompatible",
+          description: "El plan seleccionado pertenece a un producto y esta oferta es de propiedad.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // 2. Determinar precio_lista (propiedad o producto)
       let precioLista = 0;
@@ -2194,146 +2223,37 @@ export default function DetalleCuentaCobranza() {
   };
 
   // Mutation to delete payment application (physical deletion)
-  const deletePaymentMutation = useMutation({
-    mutationFn: async (aplicacionId: number) => {
-      // Get the application to find its payment
-      const { data: aplicacion, error: aplicacionError } = await supabase
-        .from('aplicaciones_pago')
-        .select('id_pago, id_acuerdo_pago, monto')
-        .eq('id', aplicacionId)
-        .single();
+  // Abrir el diálogo de eliminación de pago (soft delete). Precarga el impacto.
+  const handleDeletePayment = (pagoId: number, monto: number, concepto: string) => {
+    setDeletePagoDialog({ pagoId, monto, concepto });
+    setDeletePagoImpacto(null);
+    fetchPagoImpacto(pagoId).then(setDeletePagoImpacto).catch(() => setDeletePagoImpacto(null));
+  };
 
-      if (aplicacionError) throw aplicacionError;
-      if (!aplicacion) throw new Error("Aplicación no encontrada");
+  const confirmDeletePayment = async (motivo: string) => {
+    if (!deletePagoDialog) return;
+    try {
+      await eliminarPago(deletePagoDialog.pagoId, motivo);
+      toast({ title: "Pago eliminado", description: "El pago se marcó como eliminado. Recalculando aplicaciones..." });
+      setDeletePagoDialog(null);
+      setDeletePagoImpacto(null);
 
-      // Get the payment with clave_rastreo for STP cleanup
-      const { data: pago, error: pagoError } = await supabase
-        .from('pagos')
-        .select('id_metodos_pago, clave_rastreo')
-        .eq('id', aplicacion.id_pago)
-        .single();
-
-      if (pagoError) throw pagoError;
-      if (!pago) throw new Error("Pago no encontrado");
-
-      // Get all applications for this payment to update related acuerdos
-      const { data: todasAplicaciones, error: aplicacionesError } = await supabase
-        .from('aplicaciones_pago')
-        .select('id, id_acuerdo_pago')
-        .eq('id_pago', aplicacion.id_pago);
-
-      if (aplicacionesError) throw aplicacionesError;
-
-      // 1. PHYSICALLY DELETE all applications for this payment
-      const { error: deleteAplicacionesError } = await supabase
-        .from('aplicaciones_pago')
-        .delete()
-        .eq('id_pago', aplicacion.id_pago);
-
-      if (deleteAplicacionesError) throw deleteAplicacionesError;
-
-      // 2. PHYSICALLY DELETE the payment
-      const { error: deletePagoError } = await supabase
-        .from('pagos')
-        .delete()
-        .eq('id', aplicacion.id_pago);
-
-      if (deletePagoError) throw deletePagoError;
-
-      // 3. If it was an STP payment, clean up related records
-      if (pago.clave_rastreo) {
-        // 3a. Delete the tabla_datos_cep record (allows regeneration on reload)
-        await supabase
-          .from('tabla_datos_cep')
-          .delete()
-          .eq('claverastreo', pago.clave_rastreo);
-
-        // 3b. Mark pagos_stp_raw as not applied (allows reprocessing)
-        await supabase
-          .from('pagos_stp_raw')
-          .update({ es_pago_aplicado: false })
-          .eq('claverastreo', pago.clave_rastreo);
-      }
-
-      // 4. Mark all affected payment agreements as incomplete
-      if (todasAplicaciones && todasAplicaciones.length > 0) {
-        const acuerdosIds = [...new Set(todasAplicaciones.map(a => a.id_acuerdo_pago))];
-        
-        const { error: acuerdosError } = await supabase
-          .from('acuerdos_pago')
-          .update({ pago_completado: false })
-          .in('id', acuerdosIds);
-
-        if (acuerdosError) throw acuerdosError;
-      }
-    },
-    onSuccess: async () => {
-      toast({
-        title: "Pago eliminado",
-        description: "El pago ha sido eliminado. Recalculando aplicaciones...",
-      });
-
-      // Call edge function proxy to redistribute remaining payments (avoids CORS issues)
+      // Redistribuir los pagos restantes (recalcular-aplicaciones excluye pagos con activo=false).
       try {
-        await supabase.functions.invoke('recalcular-aplicaciones', {
-          body: { id_cuenta_cobranza: cuentaId }
-        });
+        await supabase.functions.invoke('recalcular-aplicaciones', { body: { id_cuenta_cobranza: cuentaId } });
       } catch (webhookError) {
         console.error('Error calling recalcular-aplicaciones:', webhookError);
       }
 
-      // Invalidate queries after a short delay to allow webhook to complete
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
         queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
       }, 2000);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el pago",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleDeletePayment = async (aplicacion: AplicacionToDelete) => {
-    // Check if payment method is STP
-    const acuerdo = acuerdosPago?.find(a => 
-      (a.aplicaciones || []).some(app => app.id === aplicacion.id)
-    );
-    const aplicacionData = acuerdo?.aplicaciones?.find(app => app.id === aplicacion.id);
-    
-    // STP payments can now be deleted
-
-    // Get the number of applications for this payment
-    if (aplicacionData) {
-      const { data: todasAplicaciones } = await supabase
-        .from('aplicaciones_pago')
-        .select('id')
-        .eq('id_pago', aplicacionData.pago.id)
-        .eq('activo', true);
-      
-      const numAplicaciones = todasAplicaciones?.length || 0;
-      let warningMessage = "";
-      
-      if (numAplicaciones > 1) {
-        warningMessage = `Este pago tiene ${numAplicaciones} aplicaciones. Al eliminarlo, se eliminarán todas sus aplicaciones y los acuerdos de pago relacionados quedarán como Pendientes.`;
-      }
-      
-      setDeleteDialog({ isOpen: true, aplicacion, warningMessage });
-    } else {
-      setDeleteDialog({ isOpen: true, aplicacion, warningMessage: "" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message ?? "No se pudo eliminar el pago", variant: "destructive" });
     }
-  };
-
-  const confirmDeletePayment = () => {
-    if (deleteDialog.aplicacion) {
-      deletePaymentMutation.mutate(deleteDialog.aplicacion.id);
-    }
-    setDeleteDialog({ isOpen: false, aplicacion: null, warningMessage: "" });
   };
 
   const handleEditPayment = async (aplicacionId: number) => {
@@ -2592,6 +2512,123 @@ export default function DetalleCuentaCobranza() {
     setNewPaymentRows(prev => prev.filter(row => row.id !== id));
   };
 
+  // true si el dinero recibido (pagos activos) no coincide con lo dispersado en
+  // aplicaciones_pago (tolerancia ±$0.01), consultando BD directo (a diferencia de
+  // hayDiscrepanciaAplicaciones, que usa el estado de las queries en memoria).
+  // null si no se pudo verificar.
+  const verificarDiscrepanciaAplicaciones = async (): Promise<boolean | null> => {
+    const { data: pagosData, error: pagosError } = await supabase
+      .from('pagos')
+      .select('id, monto')
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true);
+    if (pagosError || !pagosData) {
+      console.error('Error verificando pagos de la cuenta:', pagosError);
+      return null;
+    }
+    if (pagosData.length === 0) return false;
+
+    const { data: aplicacionesData, error: aplicacionesError } = await supabase
+      .from('aplicaciones_pago')
+      .select('monto')
+      .in('id_pago', pagosData.map(p => p.id))
+      .eq('activo', true);
+    if (aplicacionesError || !aplicacionesData) {
+      console.error('Error verificando aplicaciones de la cuenta:', aplicacionesError);
+      return null;
+    }
+
+    const totalPagos = pagosData.reduce((sum, p) => sum + Number(p.monto), 0);
+    const totalAplicado = aplicacionesData.reduce((sum, a) => sum + Number(a.monto), 0);
+    return Math.abs(totalPagos - totalAplicado) > 0.01;
+  };
+
+  // Webhook n8n que redistribuye las aplicaciones tras un ajuste. fetch solo lanza en
+  // errores de red: un 4xx/5xx pasa silencioso, por eso se valida response.ok.
+  const llamarWebhookAjuste = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
+      });
+      if (!response.ok) {
+        console.error('Adjustment webhook returned non-OK status:', response.status);
+        return false;
+      }
+      return true;
+    } catch (webhookError) {
+      console.error('Error calling adjustment webhook:', webhookError);
+      return false;
+    }
+  };
+
+  // La redistribución de aplicaciones tras un ajuste la hace el webhook n8n de forma
+  // asíncrona; si falla o se omite, los pagos quedan sin dispersar y nadie se entera.
+  // Esta verificación en background detecta la discrepancia y la corrige invocando
+  // recalcular-aplicaciones (idempotente: redistribuye todos los pagos FIFO), dejando
+  // rastro en el log de actividades en ambos casos.
+  const asegurarDispersionTrasAjuste = async (workflow: string, webhookFallo: boolean) => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let via: 'webhook' | 'recalculo' | null = null;
+
+    if (!webhookFallo) {
+      // Dar tiempo al webhook asíncrono antes de intervenir
+      for (let intento = 0; intento < 3 && !via; intento++) {
+        await wait(3000);
+        if ((await verificarDiscrepanciaAplicaciones()) === false) via = 'webhook';
+      }
+    }
+
+    if (!via) {
+      const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+        body: { id_cuenta_cobranza: cuentaId }
+      });
+      if (recalcError) {
+        console.error('Error en recalcular-aplicaciones (fallback):', recalcError);
+      } else {
+        // La función corre async del lado servidor
+        await wait(2000);
+        if ((await verificarDiscrepanciaAplicaciones()) === false) via = 'recalculo';
+      }
+    }
+
+    const datosAuditoria = {
+      id_cuenta_cobranza: cuentaId,
+      via: via ?? 'sin_dispersar',
+      webhook_fallo: webhookFallo,
+    };
+
+    if (via) {
+      await registrarActualizacion('aplicaciones_pago', null, datosAuditoria, workflow, 'exito');
+      if (via === 'recalculo') {
+        toast({
+          title: "Dispersión recuperada",
+          description: "El webhook de ajuste falló; las aplicaciones se recalcularon automáticamente.",
+        });
+      }
+    } else {
+      await registrarActualizacion(
+        'aplicaciones_pago',
+        null,
+        datosAuditoria,
+        workflow,
+        'error',
+        'Ajuste guardado pero las aplicaciones no coinciden con los pagos tras webhook y recálculo'
+      );
+      toast({
+        title: "Aplicaciones sin sincronizar",
+        description: "Los ajustes se guardaron pero las aplicaciones no reflejan los pagos. Usa \"Recalcular aplicaciones\" o contacta a soporte.",
+        variant: "destructive",
+      });
+    }
+
+    // Refrescar de nuevo para reflejar la redistribución
+    queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+    queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
+    queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+  };
+
   const handleConfirmAdjustments = async () => {
     if (!montoAdjustments) return;
 
@@ -2626,15 +2663,7 @@ export default function DetalleCuentaCobranza() {
       }
 
       // 3. Llamar al webhook para recalcular aplicaciones
-      try {
-        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
-        });
-      } catch (webhookError) {
-        console.error('Error calling adjustment webhook:', webhookError);
-      }
+      const webhookOk = await llamarWebhookAjuste();
 
       toast({
         title: "Ajustes guardados",
@@ -2650,6 +2679,10 @@ export default function DetalleCuentaCobranza() {
       queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+
+      // Verificación en background: garantiza que los pagos queden dispersados
+      // aunque el webhook falle (ver asegurarDispersionTrasAjuste).
+      void asegurarDispersionTrasAjuste('ajuste_montos_pago', !webhookOk);
     } catch (error) {
       console.error("Error saving adjustments:", error);
       toast({
@@ -2702,15 +2735,7 @@ export default function DetalleCuentaCobranza() {
       }
 
       // 3. Llamar al webhook para recalcular aplicaciones
-      try {
-        await fetch(`${N8N_WEBHOOK_BASE_URL}/ajustaAplicacionesPagoCuentaEspecifica`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id_cuenta_cobranza: cuentaId })
-        });
-      } catch (webhookError) {
-        console.error('Error calling adjustment webhook:', webhookError);
-      }
+      const webhookOk = await llamarWebhookAjuste();
 
       toast({
         title: "Ajustes guardados",
@@ -2726,6 +2751,10 @@ export default function DetalleCuentaCobranza() {
       queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
+
+      // Verificación en background: garantiza que los pagos queden dispersados
+      // aunque el webhook falle (ver asegurarDispersionTrasAjuste).
+      void asegurarDispersionTrasAjuste('ajuste_aplicaciones_pago', !webhookOk);
     } catch (error) {
       console.error("Error saving application adjustments:", error);
       toast({
@@ -3625,28 +3654,44 @@ export default function DetalleCuentaCobranza() {
               <label className="text-sm font-medium">No. Propiedad</label>
               <p className="text-sm text-muted-foreground">{cuentaDetalle.numero_propiedad}</p>
             </div>
-            {cuentaDetalle.oferta_id && (
-            <div>
-              <label className="text-sm font-medium">Oferta</label>
+            {cuentaDetalle.oferta_id && (() => {
+              const ofertaSlug = cuentaDetalle.tipo_cuenta === 'Propiedad'
+                ? `O-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`
+                : `OP-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`;
+              return (
               <div>
-                <Button
-                  variant="link"
-                  className="p-0 h-auto text-sm"
-                  disabled={downloadingOferta}
-                  onClick={handleDownloadOferta}
-                >
-                  {downloadingOferta ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 mr-1" />
-                  )}
-                  {cuentaDetalle.tipo_cuenta === 'Propiedad'
-                    ? `O-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`
-                    : `OP-${String(cuentaDetalle.oferta_id).padStart(6, '0')}`}
-                </Button>
+                <label className="text-sm font-medium">Oferta</label>
+                <div className="flex flex-col gap-0.5">
+                  {/* Oferta digital — abre la página pública de la oferta */}
+                  <a
+                    href={`${window.location.origin}/oferta/${ofertaSlug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm text-primary hover:underline"
+                    title="Ver oferta digital"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    {ofertaSlug} <span className="text-muted-foreground ml-1">(digital)</span>
+                  </a>
+                  {/* Oferta PDF — descarga/genera el PDF */}
+                  <button
+                    type="button"
+                    disabled={downloadingOferta}
+                    onClick={handleDownloadOferta}
+                    title="Descargar PDF de oferta"
+                    className="inline-flex items-center text-sm text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingOferta ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-1" />
+                    )}
+                    {ofertaSlug} <span className="text-muted-foreground ml-1">(PDF)</span>
+                  </button>
+                </div>
               </div>
-            </div>
-            )}
+              );
+            })()}
             
             {cuentaDetalle.tipo_cuenta === 'Propiedad' ? (
               <>
@@ -4536,18 +4581,14 @@ export default function DetalleCuentaCobranza() {
                                                       variant="destructive"
                                                       size="icon"
                                                       className="h-6 w-6"
-                                                      onClick={() => handleDeletePayment({
-                                                        id: aplicacion.id,
-                                                        monto: aplicacion.monto,
-                                                        conceptoNombre: conceptoDisplay
-                                                      })}
-                                                      disabled={deletePaymentMutation.isPending || esCuentaCancelada || isReadOnly || isEnDemanda}
+                                                      onClick={() => handleDeletePayment(aplicacion.pago.id, aplicacion.monto, conceptoDisplay)}
+                                                      disabled={isDeletingPago || esCuentaCancelada || isReadOnly || isEnDemanda || aplicacion.pago.metodo_pago === 'STP'}
                                                     >
                                                       <Trash2 className="h-3 w-3" />
                                                     </Button>
                                                   </TooltipTrigger>
                                                   <TooltipContent>
-                                                    <p>Eliminar Pago</p>
+                                                    <p>{aplicacion.pago.metodo_pago === 'STP' ? "Pago STP: no se puede eliminar" : "Eliminar Pago"}</p>
                                                   </TooltipContent>
                                                 </Tooltip>
                                               )}
@@ -5286,22 +5327,15 @@ export default function DetalleCuentaCobranza() {
             </CardContent>
           </Card>
 
-      <DeleteConfirmationDialog
-        open={deleteDialog.isOpen}
-        onOpenChange={(open) => setDeleteDialog({ 
-          isOpen: open, 
-          aplicacion: open ? deleteDialog.aplicacion : null,
-          warningMessage: open ? deleteDialog.warningMessage : ""
-        })}
+      <EliminarPagoDialog
+        open={deletePagoDialog !== null}
+        onOpenChange={(open) => { if (!open) { setDeletePagoDialog(null); setDeletePagoImpacto(null); } }}
         onConfirm={confirmDeletePayment}
-        title="Eliminar Pago y sus Aplicaciones"
-        description={
-          deleteDialog.aplicacion
-            ? `Al eliminar esta aplicación de pago de ${formatCurrency(deleteDialog.aplicacion.monto)} para el concepto "${deleteDialog.aplicacion.conceptoNombre}", se eliminará el pago completo y todas sus aplicaciones asociadas. Esta acción no se puede deshacer.`
-            : ""
-        }
-        warningMessage={deleteDialog.warningMessage}
-        isLoading={deletePaymentMutation.isPending}
+        isLoading={isDeletingPago}
+        impacto={deletePagoImpacto}
+        encabezado={deletePagoDialog
+          ? `pago de ${formatCurrency(deletePagoDialog.monto)} (${deletePagoDialog.concepto})`
+          : undefined}
       />
 
       <DeleteConfirmationDialog

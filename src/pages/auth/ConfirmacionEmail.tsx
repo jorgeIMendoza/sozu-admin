@@ -13,6 +13,8 @@ const resolvePortalKey = (portal: string | null): PortalKey => {
       return 'agentes';
     case 'admin':
       return 'admin';
+    case 'embajadores':
+      return 'embajadores';
     case 'inmobiliarias':
     default:
       return 'inmobiliarias';

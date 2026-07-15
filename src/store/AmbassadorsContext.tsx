@@ -27,7 +27,7 @@ function mapAmbassador(row: any): Ambassador {
     clavePaisTelefono: row.personas?.clave_pais_telefono ?? 'MX',
     email: row.personas?.email ?? '',
     company: cfg?.empresa ?? undefined,
-    type: Number(cfg?.tipo) || 0,
+    type: Number(cfg?.id_tipo_embajador) || 0,
     status: (cfg?.estatus ?? 'pendiente') as AmbassadorStatus,
     createdAt: row.fecha_creacion ?? new Date().toISOString(),
     code: cfg?.codigo ?? `EMB-${String(row.id).padStart(4, '0')}`,
@@ -107,7 +107,7 @@ interface Ctx {
   refresh: () => Promise<void>;
   updateSettings: (patch: Partial<AmbassadorsSettings>) => void;
   updateAdvisor: (id: string, patch: Partial<Advisor>) => void;
-  updateAmbassador: (id: string, patch: Partial<Ambassador>) => void;
+  updateAmbassador: (id: string, patch: Partial<Ambassador>) => Promise<void>;
   deleteAmbassador: (id: string) => void;
   setDocumentStatus: (ambassadorId: string, key: string, status: DocumentStatus, fileName?: string) => void;
   updateReferralStatus: (id: string, status: ReferralStatus, actor?: 'admin' | 'embajador') => void;
@@ -176,7 +176,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
         id, id_persona, activo, fecha_creacion,
         personas!entidades_relacionadas_id_persona_fkey(nombre_legal, email, telefono, clave_pais_telefono),
         embajadores_config(
-          codigo, empresa, tipo, pct_comision, monto_fijo, trigger_comision,
+          codigo, empresa, id_tipo_embajador, pct_comision, monto_fijo, trigger_comision,
           dias_proteccion, notas, estatus, documentos_pago
         )
       `)
@@ -265,8 +265,7 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
 
   // Updates fields in embajadores_config (keyed by id_entidad_relacionada = Ambassador.id)
   const dbUpdateAmbassadorConfig = (id: string, patch: Record<string, any>) => {
-    supabase.from('embajadores_config').update(patch as any).eq('id_entidad_relacionada', Number(id))
-      .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
+    return supabase.from('embajadores_config').update(patch as any).eq('id_entidad_relacionada', Number(id));
   };
 
   const STATUS_NOTIF: Partial<Record<ReferralStatus, string>> = {
@@ -297,11 +296,11 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       }
     },
 
-    updateAmbassador: (id, patch) => {
+    updateAmbassador: async (id, patch) => {
       setAmbassadors(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
       const dbPatch: Record<string, any> = {};
       if (patch.company !== undefined) dbPatch.empresa = patch.company;
-      if (patch.type !== undefined) dbPatch.tipo = patch.type;
+      if (patch.type !== undefined) dbPatch.id_tipo_embajador = patch.type;
       if (patch.status !== undefined) dbPatch.estatus = patch.status;
       if (patch.commissionPct !== undefined) dbPatch.pct_comision = patch.commissionPct;
       if (patch.fixedAmount !== undefined) dbPatch.monto_fijo = patch.fixedAmount;
@@ -309,7 +308,10 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
       if (patch.protectionDays !== undefined) dbPatch.dias_proteccion = patch.protectionDays;
       if (patch.notes !== undefined) dbPatch.notas = patch.notes;
       if (patch.paymentDocs !== undefined) dbPatch.documentos_pago = patch.paymentDocs;
-      if (Object.keys(dbPatch).length) dbUpdateAmbassadorConfig(id, dbPatch);
+      if (Object.keys(dbPatch).length) {
+        const { error } = await dbUpdateAmbassadorConfig(id, dbPatch);
+        if (error) throw error;
+      }
     },
 
     deleteAmbassador: (id) => {
@@ -326,7 +328,8 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
             ? { ...d, status, fileName: fileName ?? d.fileName, uploadedAt: fileName ? new Date().toISOString() : d.uploadedAt }
             : d,
         );
-        dbUpdateAmbassadorConfig(ambassadorId, { documentos_pago: docs });
+        dbUpdateAmbassadorConfig(ambassadorId, { documentos_pago: docs })
+          .then(({ error }) => { if (error) { console.error(error); toast.error('Error al guardar cambio'); } });
         return { ...a, paymentDocs: docs };
       }));
     },

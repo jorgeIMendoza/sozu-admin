@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { activityLoggerService } from "@/services/activityLoggerService";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
+import { clearCollectionFilters } from "@/lib/portal-cobranza/collection-inbox-store";
 
 interface UserProfile {
   email: string;
@@ -16,7 +17,13 @@ interface UserProfile {
   ver_filtros_avanzados_eliminados: boolean;
   id_notario: number | null;
   notaria_nombre: string | null;
+  id_banco: number | null;
+  banco_nombre: string | null;
   id_perfil_juridico: number | null;
+  puede_impersonar: boolean;
+  administrar_app_clientes: boolean;
+  foto_perfil_url: string | null;
+  frase_perfil: string | null;
 }
 
 interface AuthContextType {
@@ -71,7 +78,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && data.length > 0) {
-        setProfile(data[0] as UserProfile);
+        const base = data[0] as UserProfile;
+        // La RPC get_current_user_profile no devuelve la foto/frase de perfil;
+        // se traen por separado desde usuarios para el avatar del header.
+        let foto_perfil_url: string | null = null;
+        let frase_perfil: string | null = null;
+        try {
+          const { data: u } = await (supabase as any)
+            .from("usuarios")
+            .select("foto_perfil_url, frase_perfil")
+            .eq("email", base.email)
+            .maybeSingle();
+          foto_perfil_url = u?.foto_perfil_url ?? null;
+          frase_perfil = u?.frase_perfil ?? null;
+        } catch (e) {
+          console.error("Error fetching perfil foto:", e);
+        }
+        setProfile({ ...base, foto_perfil_url, frase_perfil });
       } else {
         setProfile(null);
       }
@@ -322,6 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await supabase.auth.signOut();
+    clearCollectionFilters(); // collection filters must not survive a user switch
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -340,6 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Error during inactivity signOut:", err);
     }
+    clearCollectionFilters();
     // Siempre redirigir, sin importar si signOut falló
     window.location.href = "/auth/login?reason=inactivity";
   }, []);

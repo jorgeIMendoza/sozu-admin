@@ -857,7 +857,7 @@ All colors MUST be HSL.
 
 @layer components {
   .sozu-kpi-card {
-    @apply bg-card rounded-xl border border-border p-6 transition-shadow duration-150;
+    @apply bg-card rounded-md border border-border p-6 transition-shadow duration-150;
   }
   .sozu-kpi-card:hover {
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
@@ -873,7 +873,7 @@ All colors MUST be HSL.
     background: hsl(var(--background));
   }
   .sozu-thead th {
-    @apply text-left text-[11px] font-semibold uppercase tracking-wider;
+    @apply text-center text-[11px] font-semibold uppercase tracking-wider;
     color: hsl(var(--text-secondary));
     padding: 14px 16px;
     line-height: 1.6;
@@ -1130,5 +1130,10 @@ All colors MUST be HSL.
   box-shadow: var(--sz-shadow-md);
   border-color: #D1D5DB;
   transform: translateY(-1px);
+}
+
+/* Icono del selector de fecha siempre alineado a la derecha del input */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  margin-left: auto;
 }
 

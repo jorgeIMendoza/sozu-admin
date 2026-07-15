@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 export interface PagoRecord {
   pago_id: number;
@@ -14,25 +14,33 @@ export interface PagoRecord {
   metodo_pago: string | null;
   clabe_stp: string | null;
   cliente: string | null;
+  cliente_email: string | null;
   num_propiedad: string | null;
+  modelo: string | null;
+  estatus_propiedad: string | null;
   producto: string | null;
+  // Estado del acuerdo de pago ligado (vía aplicaciones_pago). Lo llena el RPC.
+  estado_acuerdo: 'pagado' | 'vencido' | 'proximo' | 'pendiente' | null;
   tipo_cuenta: 'propiedad' | 'producto' | null;
+  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
+  estatus: 'valido' | 'invalido' | 'error' | 'sin_revisar';
+  // Estado de validación CRUDO (P27 §E.2). Mientras la RPC no lo devuelva es undefined;
+  // el filtro "Estatus pago" (6 estados) no recorta hasta que llegue la migración.
+  estado_validacion?: 'coincide' | 'no_coincide' | 'error' | 'sin_evidencia' | 'monto_ilegible' | 'monto_ausente_db' | null;
+  atraso: number;
   proyecto: string | null;
   proyecto_id: number | null;
   tiene_cep: boolean;
-  monto_aplicado: number;
-  num_aplicaciones: number;
-  aplicaciones_detalle: Array<{ concepto: string | null; orden: number | null; monto: number }>;
 }
 
 export interface RelacionPagosFilters {
   proyectoId?: number | null;
-  metodoPago?: string | null;
-  metodosPermitidos?: string[] | null;
-  search?: string;
-  hasCep?: boolean | null;
-  hasAplicaciones?: boolean | null;
-  tipoCuenta?: 'propiedad' | 'producto' | null;
+  clabe?: string;
+  cliente?: string;
+  unidad?: string;
+  cuenta?: string;
+  tipos?: string[] | null;
+  estatus?: string[] | null;
   page: number;
   pageSize: number;
   enabled?: boolean;
@@ -42,72 +50,79 @@ export interface RelacionPagosResult {
   pagos: PagoRecord[];
   total: number;
   totalMonto: number;
-  totalConCep: number;
-  totalSinCep: number;
-  totalAplicados: number;
-  totalSinAplicar: number;
+  totalValidos: number;
+  totalSinValidar: number;
   isLoading: boolean;
   error: string | null;
 }
 
-export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosResult {
-  const [debouncedSearch, setDebouncedSearch] = useState(filters.search || '');
-
+// Debounce de los campos de texto (CLABE, Cliente, Unidad, Cuenta).
+function useDebounced<T>(value: T, delay = 300): T {
+  const [v, setV] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(filters.search || ''), 300);
+    const t = setTimeout(() => setV(value), delay);
     return () => clearTimeout(t);
-  }, [filters.search]);
+  }, [value, delay]);
+  return v;
+}
+
+export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosResult {
+  const clabe = useDebounced(filters.clabe || '');
+  const cliente = useDebounced(filters.cliente || '');
+  const unidad = useDebounced(filters.unidad || '');
+  const cuenta = useDebounced(filters.cuenta || '');
+
+  const tipos = filters.tipos && filters.tipos.length > 0 ? filters.tipos : null;
+  const estatus = filters.estatus && filters.estatus.length > 0 ? filters.estatus : null;
 
   const queryKey = useMemo(() => [
     'relacion-pagos',
-    filters.proyectoId,
-    filters.metodoPago,
-    filters.metodosPermitidos,
-    debouncedSearch,
-    filters.hasCep,
-    filters.hasAplicaciones,
-    filters.tipoCuenta,
-    filters.page,
-    filters.pageSize,
-  ], [filters.proyectoId, filters.metodoPago, filters.metodosPermitidos, debouncedSearch, filters.hasCep, filters.hasAplicaciones, filters.tipoCuenta, filters.page, filters.pageSize]);
+    filters.proyectoId, clabe, cliente, unidad, cuenta,
+    tipos, estatus, filters.page, filters.pageSize,
+  ], [filters.proyectoId, clabe, cliente, unidad, cuenta, tipos, estatus, filters.page, filters.pageSize]);
 
   const { data, isLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_relacion_pagos', {
+      // RPC del portal cobranza — prefijo `pcobranza` (estándar de nombres del
+      // portal). Cast a any: el nombre nuevo aún no está en los tipos generados.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('get_pcobranza_relacion_pagos', {
         p_proyecto_id: filters.proyectoId ?? null,
-        p_metodo_pago: filters.metodoPago ?? null,
-        p_metodos_permitidos: filters.metodosPermitidos ?? null,
-        p_search: debouncedSearch || null,
-        p_has_cep: filters.hasCep ?? null,
-        p_has_aplicaciones: filters.hasAplicaciones ?? null,
-        p_tipo_cuenta: filters.tipoCuenta ?? null,
         p_limit: filters.pageSize,
         p_offset: (filters.page - 1) * filters.pageSize,
-      });
+        p_clabe: clabe || null,
+        p_cliente: cliente || null,
+        p_unidad: unidad || null,
+        p_cuenta: cuenta || null,
+        p_tipos: tipos,
+        p_estatus: estatus,
+      } as any);
       if (error) throw error;
       return data as unknown as {
         total: number;
         total_monto: number;
-        total_con_cep: number;
-        total_sin_cep: number;
-        total_aplicados: number;
-        total_sin_aplicar: number;
+        total_validos: number;
+        total_sin_validar: number;
+        // Conteo por estado de validación crudo (P27 §E.3), universo completo.
+        // { coincide, no_coincide, error, sin_evidencia, monto_ilegible, monto_ausente_db, sin_validar }
+        total_por_estado?: Record<string, number> | null;
         pagos: PagoRecord[];
       };
     },
     staleTime: 30_000,
     enabled: filters.enabled !== false,
+    // Mantener resultados previos al cambiar filtros/página (evita parpadeo).
+    placeholderData: keepPreviousData,
   });
 
   return {
     pagos: data?.pagos ?? [],
     total: Number(data?.total ?? 0),
     totalMonto: Number(data?.total_monto ?? 0),
-    totalConCep: Number(data?.total_con_cep ?? 0),
-    totalSinCep: Number(data?.total_sin_cep ?? 0),
-    totalAplicados: Number(data?.total_aplicados ?? 0),
-    totalSinAplicar: Number(data?.total_sin_aplicar ?? 0),
+    totalValidos: Number(data?.total_validos ?? 0),
+    totalSinValidar: Number(data?.total_sin_validar ?? 0),
+    totalPorEstado: (data?.total_por_estado ?? null) as Record<string, number> | null,
     isLoading,
     error: error ? (error as Error).message : null,
   };
