@@ -211,15 +211,54 @@ export function useNotariaCuentaDetalle({
         }
       }
 
+      // ── Paso 3.5: Resolver cuenta principal para el contrato ──────────────
+      // El contrato firmado (tipo_documento=18) siempre reside en la cuenta
+      // principal (ofertas.id_producto IS NULL). Si la cuenta recibida es una
+      // accesoria (estacionamiento / bodega), el query de Paso 4 no encontraría
+      // el contrato. Misma regla institucional que Paso 0.5 en RelacionPagos.
+      let cuentaIdParaContrato: number = cuentaId!;
+
+      if (idPropiedad) {
+        const { data: todasCuentas } = await (supabase as any)
+          .from('cuentas_cobranza')
+          .select('id, id_oferta')
+          .eq('id_propiedad', idPropiedad)
+          .eq('activo', true);
+
+        const ofertaIdsDetalle = ((todasCuentas ?? []) as { id: number; id_oferta: number | null }[])
+          .map(c => c.id_oferta)
+          .filter((id): id is number => id != null);
+
+        if (ofertaIdsDetalle.length) {
+          const { data: ofertasDetalle } = await supabase
+            .from('ofertas')
+            .select('id, id_producto')
+            .in('id', ofertaIdsDetalle);
+
+          const ofertaMapDetalle: Record<number, { id_producto: number | null }> = {};
+          for (const o of ofertasDetalle ?? []) ofertaMapDetalle[(o as any).id] = o as any;
+
+          const cuentaPrincipal = ((todasCuentas ?? []) as { id: number; id_oferta: number | null }[]).find(c => {
+            const of = c.id_oferta != null ? ofertaMapDetalle[c.id_oferta] : undefined;
+            return of !== undefined && of.id_producto === null;
+          });
+
+          if (typeof cuentaPrincipal?.id === 'number') {
+            cuentaIdParaContrato = cuentaPrincipal.id;
+          }
+        }
+      }
+
       // ── Paso 4: Contrato firmado (tipo_documento = 18) ─────────────────────
       // El contrato está vinculado a la CUENTA (id_persona = NULL), no a la persona.
       // Misma regla que DocumentsTab con entityType = 'cuenta_cobranza'.
+      // Se usa cuentaIdParaContrato (cuenta principal resuelta) no la cuenta recibida.
       let contratoFirmadoUrl: string | null = null;
 
       const { data: contratos } = await (supabase as any)
         .from('documentos')
         .select('url, id_estatus_verificacion, fecha_creacion')
-        .eq('id_cuenta_cobranza', cuentaId!)
+        .eq('id_cuenta_cobranza', cuentaIdParaContrato)
         .eq('id_tipo_documento', 18)
         .eq('activo', true)
         .eq('es_draft', false)
