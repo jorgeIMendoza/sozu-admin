@@ -55,6 +55,7 @@ export interface UseNotariaRelacionPagosResult {
   pagosEst: NotariaRpPagoRow[];
   aplicacionesEst: NotariaRpAplicacionRow[];
   idPropiedad: number | null;
+  cuentaIdPrincipal: number | null;
   isLoading: boolean;
   isError: boolean;
 }
@@ -151,28 +152,80 @@ export function useNotariaRelacionPagos({
   const idPropiedad = cuentaBase?.idPropiedad ?? null;
   const securityPassed = cuentaBase !== undefined && cuentaBase !== null;
 
+  // ── Paso 0.5: Resolver cuenta principal — regla institucional del RPC ─────
+  // El RPC get_relacion_pagos identifica la cuenta principal con:
+  //   tipo_cuenta = 'propiedad'  ↔  cc.id_propiedad IS NOT NULL
+  //   producto = null             ↔  ofertas.id_producto IS NULL
+  // Esta query replica fielmente esa lógica sin necesidad del RPC de búsqueda.
+  // Fallback controlado: si no se resuelve, se usa la cuenta recibida (cuentaId).
+  const { data: cuentaIdPrincipalResolved, isLoading: isLoadingPrincipal } = useQuery({
+    queryKey: ['notaria-rp-cuenta-principal', idPropiedad],
+    enabled: !!idPropiedad,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: cuentas } = await (supabase as any)
+        .from('cuentas_cobranza')
+        .select('id, id_oferta')
+        .eq('id_propiedad', idPropiedad!)
+        .eq('activo', true);
+
+      if (!cuentas?.length) return null;
+
+      const ofertaIds = (cuentas as { id: number; id_oferta: number | null }[])
+        .map(c => c.id_oferta)
+        .filter((id): id is number => id != null);
+
+      if (!ofertaIds.length) return null;
+
+      const { data: ofertas } = await supabase
+        .from('ofertas')
+        .select('id, id_producto')
+        .in('id', ofertaIds);
+
+      const ofertaMap: Record<number, { id_producto: number | null }> = {};
+      for (const o of ofertas ?? []) ofertaMap[(o as any).id] = o as any;
+
+      const principal = (cuentas as { id: number; id_oferta: number | null }[]).find(c => {
+        const oferta = c.id_oferta != null ? ofertaMap[c.id_oferta] : undefined;
+        return oferta !== undefined && oferta.id_producto === null;
+      });
+
+      return typeof principal?.id === 'number' ? (principal.id as number) : null;
+    },
+  });
+
+  // La cuenta efectiva para el waterfall de pagos principales:
+  // — Si se resolvió una cuenta principal distinta a la recibida (caso accesoria), usarla.
+  // — Fallback controlado: usar la cuenta recibida si no hay resolución.
+  const cuentaIdPrincipal: number | null = idPropiedad
+    ? (typeof cuentaIdPrincipalResolved === 'number' ? cuentaIdPrincipalResolved : null)
+    : null;
+  const effectiveCuentaId: number = cuentaIdPrincipal ?? cuentaId!;
+  // Paso 1 y 2 esperan a que Paso 0.5 haya completado (evita flash de datos incorrectos)
+  const principalReady = !idPropiedad || cuentaIdPrincipalResolved !== undefined;
+
   // ── Paso 1: pagos de la cuenta principal ─────────────────────────────────
   const { data: pagosPrincipalRaw = [], isLoading: isLoadingPrincipalPagos } = useQuery({
-    queryKey: ['notaria-rp-principal-pagos', cuentaId],
-    enabled: !!cuentaId && securityPassed,
+    queryKey: ['notaria-rp-principal-pagos', effectiveCuentaId],
+    enabled: !!effectiveCuentaId && securityPassed && principalReady,
     staleTime: 30_000,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('pagos')
         .select(PAGO_SELECT)
-        .eq('id_cuenta_cobranza', cuentaId!)
+        .eq('id_cuenta_cobranza', effectiveCuentaId)
         .eq('activo', true)
         .order('fecha_pago', { ascending: true });
       return (data ?? []) as RawPago[];
     },
   });
 
-  const pagosPrincipal = pagosPrincipalRaw.map(p => toRpPagoRow(p, cuentaId!));
+  const pagosPrincipal = pagosPrincipalRaw.map(p => toRpPagoRow(p, effectiveCuentaId));
 
   // ── Paso 2: aplicaciones de la cuenta principal ───────────────────────────
   const { data: aplicacionesPrincipalRaw = [], isLoading: isLoadingPrincipalApl } = useQuery({
-    queryKey: ['notaria-rp-principal-aplicaciones', cuentaId],
-    enabled: !!cuentaId && securityPassed && pagosPrincipalRaw.length > 0,
+    queryKey: ['notaria-rp-principal-aplicaciones', effectiveCuentaId],
+    enabled: !!effectiveCuentaId && securityPassed && principalReady && pagosPrincipalRaw.length > 0,
     staleTime: 30_000,
     queryFn: async () => {
       const pagoIds = pagosPrincipalRaw.map(p => p.id);
@@ -313,7 +366,7 @@ export function useNotariaRelacionPagos({
   const aplicacionesEst = aplicacionesEstRaw.map(toAplicacionRow);
 
   const isLoading =
-    cuentaBaseLoading ||
+    cuentaBaseLoading || isLoadingPrincipal ||
     isLoadingPrincipalPagos || isLoadingPrincipalApl ||
     isLoadingBodegaPagos || isLoadingBodegaApl ||
     isLoadingEstPagos || isLoadingEstApl;
@@ -326,6 +379,7 @@ export function useNotariaRelacionPagos({
     pagosEst,
     aplicacionesEst,
     idPropiedad,
+    cuentaIdPrincipal,
     isLoading,
     isError,
   };
