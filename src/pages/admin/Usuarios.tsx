@@ -159,9 +159,14 @@ function UsersTable({
                         <p className="text-xs text-amber-600">
                           Agente independiente
                         </p>
-                      ) : usuario.rol_id === ROLE_NOTARIO && usuario.notarios?.notaria ? (
-                        <p className="text-[11px] text-muted-foreground">
+                      ) : usuario.id_notario && usuario.notarios?.notaria ? (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                           Notaría: {usuario.notarios.notaria}
+                          {usuario.es_usuario_principal && (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
+                              Principal
+                            </Badge>
+                          )}
                         </p>
                       ) : usuario.personas?.nombre_legal && (usuario.rol_id === ROLE_AGENTE_INTERNO) && (
                         <p className="text-xs text-muted-foreground">
@@ -176,8 +181,8 @@ function UsersTable({
                     {usuario.email}
                     {usuario.es_usuario_principal && (
                       <span 
-                        className="relative inline-block w-0 h-0 border-l-[6px] border-l-transparent border-b-[10px] border-b-green-500 border-r-[6px] border-r-transparent" 
-                        title="Usuario Principal de la Inmobiliaria"
+                        className="relative inline-block w-0 h-0 border-l-[6px] border-l-transparent border-b-[10px] border-b-green-500 border-r-[6px] border-r-transparent"
+                        title={usuario.id_notario ? "Usuario Principal de la Notaría" : "Usuario Principal de la Inmobiliaria"}
                       />
                     )}
                   </div>
@@ -505,14 +510,31 @@ export default function Usuarios() {
         }
       }
       
+      // Notarios: el usuario principal es el que usa el correo registrado de la notaría
+      const notarioEmailById = new Map<number, string>();
+      {
+        const notarioIds: number[] = Array.from(new Set((data || []).filter(u => u.id_notario).map(u => u.id_notario as number)));
+        if (notarioIds.length > 0) {
+          const { data: notariosData } = await supabase
+            .from('notarios')
+            .select('id, email')
+            .in('id', notarioIds);
+          (notariosData || []).forEach((n: any) => {
+            if (n.email) notarioEmailById.set(n.id, String(n.email).toLowerCase().trim());
+          });
+        }
+      }
+
       // Add inmobiliaria info to users (filtering already done at DB level)
       return ((data || []) as (Usuario & { roles: { nombre: string; es_rol_interno: boolean } | null })[])
         .map(u => {
           // Check if user with Inmobiliaria role (4) is the main user:
           // 1) rol_id must be 4, 2) email matches persona email, 3) persona is a real inmobiliaria in entidades_relacionadas
-          const esUsuarioPrincipal = u.rol_id === ROLE_INMOBILIARIA 
+          const esUsuarioPrincipal = u.rol_id === ROLE_INMOBILIARIA
             ? (u.personas?.email && u.email.toLowerCase() === u.personas.email.toLowerCase() && u.id_persona && inmobiliariaPersonaIds.has(u.id_persona)) === true
-            : undefined; // Non-Inmobiliaria users don't have this concept
+            : u.id_notario
+              ? notarioEmailById.get(u.id_notario) === u.email.toLowerCase().trim()
+              : undefined; // Other users don't have this concept
           
           // Get inmobiliaria name: first from persona map, then from email-based lookup for users without persona
           const inmobiliariaNombre = u.id_persona 
@@ -564,6 +586,8 @@ export default function Usuarios() {
   // Rol seleccionado en el formulario de nuevo usuario (por nombre)
   const selectedRolNombre = availableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
   const isBancoRoleSelected = BANCO_ROLE_NAMES.includes(selectedRolNombre);
+  // Igual que bancos: cualquier rol cuyo nombre contenga "Notario" requiere notaría
+  const isNotarioRoleSelected = selectedRolNombre.includes('Notario');
 
   // Fetch agents and inmobiliarias for combobox
   const { data: personasConTipo = [] } = useQuery({
@@ -633,6 +657,23 @@ export default function Usuarios() {
       return (data || []) as { id: number; nombre: string | null; notaria: string | null; email: string | null }[];
     },
   });
+
+  // Usuario principal por notaría: usuario activo cuyo email es el correo registrado de la notaría
+  const notarioPrincipalByNotaria = useMemo(() => {
+    const map = new Map<number, Usuario>();
+    const emailById = new Map(notariosOptions.map(n => [n.id, n.email?.toLowerCase().trim() || '']));
+    usuarios.forEach(u => {
+      const notariaEmail = u.id_notario ? emailById.get(u.id_notario) : '';
+      if (u.activo && u.id_notario && notariaEmail && u.email.toLowerCase().trim() === notariaEmail) {
+        map.set(u.id_notario, u);
+      }
+    });
+    return map;
+  }, [usuarios, notariosOptions]);
+
+  const selectedNotarioPrincipal = newUserForm.id_notario
+    ? notarioPrincipalByNotaria.get(parseInt(newUserForm.id_notario)) ?? null
+    : null;
 
   // Fetch bancos for the selector shown when creating a Supervisor/Operador Banco user
   const { data: bancosOptions = [] } = useQuery({
@@ -885,8 +926,8 @@ export default function Usuarios() {
       return;
     }
 
-    // Validate notaría is required for Notario role; email must be the notaría's email
-    if (rolId === ROLE_NOTARIO) {
+    // Validate notaría is required for Notario roles; the principal user must use the notaría's email
+    if (isNotarioRoleSelected) {
       if (!newUserForm.id_notario) {
         toast({
           title: "Error",
@@ -895,22 +936,25 @@ export default function Usuarios() {
         });
         return;
       }
-      const selectedNotario = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
-      if (!selectedNotario?.email) {
-        toast({
-          title: "Error",
-          description: "La notaría seleccionada no tiene correo registrado. Captúralo primero en el módulo de Notarías.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (newUserForm.email.toLowerCase().trim() !== selectedNotario.email.toLowerCase().trim()) {
-        toast({
-          title: "Error",
-          description: `El correo del usuario Notario debe ser el de la notaría: ${selectedNotario.email}`,
-          variant: "destructive",
-        });
-        return;
+      // Si la notaría aún no tiene usuario principal, este usuario debe serlo (correo de la notaría)
+      if (!selectedNotarioPrincipal) {
+        const selectedNotario = notariosOptions.find(n => n.id.toString() === newUserForm.id_notario);
+        if (!selectedNotario?.email) {
+          toast({
+            title: "Error",
+            description: "La notaría seleccionada no tiene correo registrado. Captúralo primero en el módulo de Notarías.",
+            variant: "destructive",
+          });
+          return;
+        }
+        if (newUserForm.email.toLowerCase().trim() !== selectedNotario.email.toLowerCase().trim()) {
+          toast({
+            title: "Error",
+            description: `Para crear el usuario principal de la notaría usa su correo registrado: ${selectedNotario.email}`,
+            variant: "destructive",
+          });
+          return;
+        }
       }
     }
 
@@ -989,7 +1033,7 @@ export default function Usuarios() {
           rol_id: rolId,
           id_persona: newUserForm.id_persona ? parseInt(newUserForm.id_persona) : null,
           id_inmobiliaria: newUserForm.id_inmobiliaria ? parseInt(newUserForm.id_inmobiliaria) : null,
-          id_notario: rolId === ROLE_NOTARIO && newUserForm.id_notario ? parseInt(newUserForm.id_notario) : null,
+          id_notario: isNotarioRoleSelected && newUserForm.id_notario ? parseInt(newUserForm.id_notario) : null,
           id_banco: isBancoRoleSelected && newUserForm.id_banco ? parseInt(newUserForm.id_banco) : null,
         },
       });
@@ -1175,7 +1219,7 @@ export default function Usuarios() {
         id_banco: ""
       }));
       setIsInmobiliariaLocked(false);
-    } else if (newRolId === ROLE_NOTARIO) {
+    } else if (newRolNombre.includes('Notario')) {
       // Notario: email/nombre se toman de la notaría seleccionada
       setNewUserForm(prev => ({
         ...prev,
@@ -1701,8 +1745,8 @@ export default function Usuarios() {
               </div>
             )}
 
-            {/* 2b. Notaría - SOLO visible para rol Notario (6) */}
-            {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && (
+            {/* 2b. Notaría - SOLO visible para roles Notario */}
+            {isNotarioRoleSelected && (
               <div className="space-y-2">
                 <Label htmlFor="notaria" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
@@ -1738,11 +1782,14 @@ export default function Usuarios() {
                               key={notario.id}
                               value={`${notario.notaria || ''} ${notario.nombre || ''} ${notario.email || ''}`}
                               onSelect={() => {
+                                const principal = notarioPrincipalByNotaria.get(notario.id);
                                 setNewUserForm(prev => ({
                                   ...prev,
                                   id_notario: notario.id.toString(),
-                                  email: notario.email || "",
-                                  nombre: prev.nombre || notario.nombre || "",
+                                  // Sin principal: este usuario lo será (correo/nombre de la notaría).
+                                  // Con principal: usuario adicional con correo/nombre propios.
+                                  email: principal ? "" : (notario.email || ""),
+                                  nombre: principal ? "" : (notario.nombre || ""),
                                 }));
                                 setMatchedPersona(null);
                                 setIsPersonaLinked(false);
@@ -1770,14 +1817,43 @@ export default function Usuarios() {
                     </Command>
                   </PopoverContent>
                 </Popover>
-                {newUserForm.id_notario && !notariosOptions.find(n => n.id.toString() === newUserForm.id_notario)?.email && (
+                {newUserForm.id_notario && !selectedNotarioPrincipal && !notariosOptions.find(n => n.id.toString() === newUserForm.id_notario)?.email && (
                   <p className="text-xs text-destructive">
                     Esta notaría no tiene correo registrado. Captúralo primero en el módulo de Notarías.
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  El correo del usuario será el correo registrado de la notaría.
-                </p>
+                {selectedNotarioPrincipal ? (
+                  <div className="rounded-md border border-green-500/20 bg-green-500/10 px-3 py-2 space-y-1">
+                    <p className="text-xs font-medium text-green-700 dark:text-green-400 flex items-center gap-1.5">
+                      Usuario principal de la notaría
+                      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
+                        Principal
+                      </Badge>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedNotarioPrincipal.nombre || 'Sin nombre'} · {selectedNotarioPrincipal.email}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Esta notaría ya tiene usuario principal. El nuevo usuario será adicional, con su propio nombre y correo.
+                    </p>
+                  </div>
+                ) : newUserForm.id_notario ? (
+                  <div className="rounded-md border border-blue-500/20 bg-blue-500/10 px-3 py-2 space-y-1">
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                      Este usuario será el principal de la notaría
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px] px-1.5">
+                        Principal
+                      </Badge>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      El correo del usuario será el correo registrado de la notaría.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    El correo del usuario será el correo registrado de la notaría.
+                  </p>
+                )}
               </div>
             )}
 
@@ -1856,12 +1932,12 @@ export default function Usuarios() {
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-2">
                 Email *
-                {parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO && <Lock className="h-3 w-3 text-muted-foreground" />}
+                {isNotarioRoleSelected && !selectedNotarioPrincipal && <Lock className="h-3 w-3 text-muted-foreground" />}
               </Label>
               <Input
                 id="email"
                 type="email"
-                disabled={parseInt(newUserForm.rol_id || '0') === ROLE_NOTARIO}
+                disabled={isNotarioRoleSelected && !selectedNotarioPrincipal}
                 value={newUserForm.email}
                 onChange={(e) => {
                   setNewUserForm(prev => ({ ...prev, email: e.target.value }));
