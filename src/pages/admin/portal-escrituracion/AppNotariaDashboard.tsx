@@ -182,7 +182,7 @@ export function AppNotariaDashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const isAdmin = (profile?.rol_id ?? 99) <= 2;
+  const isAdmin = [1, 7, 29].includes(profile?.rol_id ?? 0);
 
   // ── Modal Expediente ────────────────────────────────────────────────────────
   const [expedienteModal, setExpedienteModal] = useState<{

@@ -22,7 +22,7 @@ export const PortalNotariaLayout = () => {
 
   const NAV = usePortalNav(NOTARIA_MENU_ID, iconMap, Home);
 
-  const isSuperAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
+  const isSuperAdmin = [1, 7, 29].includes(profile?.rol_id ?? 0);
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
   const go = (p: string) => { navigate(p); setMobileOpen(false); };
