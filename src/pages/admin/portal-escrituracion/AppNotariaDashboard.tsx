@@ -306,41 +306,29 @@ export function AppNotariaDashboard() {
     },
   });
 
-  // ── Usuarios con rol Notario (para el selector de impersonación) ──────────
-  // Solo usuarios activos con rol Notario y notaría vinculada (usuarios.id_notario).
-  const ROLE_NOTARIO = 6;
+  // ── Notarías para el selector de impersonación (admins) ───────────────────
+  // Solo notarías socias de SOZU (notarios.trabaja_con_sozu=true), NO las que
+  // dependan de tener un usuario con login vinculado. Flag curado por SOZU:
+  // cubre las que ya tienen cuentas asignadas + socias listas sin cuentas aún,
+  // y crece solo conforme SOZU marque nuevas. Evita traer el directorio nacional.
   const { data: notariosList = [] } = useQuery({
-    queryKey: ['app-notaria-notario-users'],
+    queryKey: ['app-notaria-notarios-socias'],
     enabled: isAdmin,
     staleTime: 10 * 60_000,
     queryFn: async () => {
-      const { data: users } = await (supabase as any)
-        .from('usuarios')
-        .select('email, nombre, id_notario')
-        .eq('rol_id', ROLE_NOTARIO)
-        .eq('activo', true)
-        .not('id_notario', 'is', null);
-
-      const userList = (users ?? []) as { email: string; nombre: string | null; id_notario: number }[];
-      if (!userList.length) return [];
-
-      const notarioIds = [...new Set(userList.map(u => u.id_notario))];
-      const { data: nots } = await supabase
+      const { data } = await supabase
         .from('notarios')
-        .select('id, nombre, notaria')
-        .in('id', notarioIds);
+        .select('id, nombre, notaria, email')
+        .eq('activo', true)
+        .eq('trabaja_con_sozu', true)
+        .order('notaria');
 
-      const notMap: Record<number, { nombre: string; notaria: string }> = {};
-      for (const n of nots ?? []) notMap[n.id] = { nombre: n.nombre ?? '', notaria: n.notaria ?? '' };
-
-      return userList
-        .map(u => ({
-          id: u.id_notario,
-          nombre: u.nombre || u.email,
-          email: u.email,
-          notaria: notMap[u.id_notario]?.notaria || notMap[u.id_notario]?.nombre || `Notaría #${u.id_notario}`,
-        }))
-        .sort((a, b) => a.notaria.localeCompare(b.notaria));
+      return (data ?? []).map(n => ({
+        id: n.id,
+        nombre: n.nombre || n.notaria || `Notaría #${n.id}`,
+        email: n.email || '',
+        notaria: n.notaria || n.nombre || `Notaría #${n.id}`,
+      }));
     },
   });
 
@@ -888,11 +876,11 @@ export function AppNotariaDashboard() {
               <Command>
                 <CommandInput placeholder="Buscar notario, notaría o correo..." />
                 <CommandList>
-                  <CommandEmpty>No hay usuarios con rol Notario vinculados a una notaría.</CommandEmpty>
+                  <CommandEmpty>No hay notarías socias de SOZU registradas.</CommandEmpty>
                   <CommandGroup>
                     {notariosList.map(n => (
                       <CommandItem
-                        key={n.email}
+                        key={n.id}
                         value={`${n.notaria} ${n.nombre} ${n.email}`}
                         onSelect={() => {
                           setAdminNotarioId(prev => prev === n.id ? null : n.id);
@@ -965,7 +953,7 @@ export function AppNotariaDashboard() {
         <div className="flex flex-col items-center justify-center py-16 gap-3 border border-dashed border-border rounded-xl">
           <Stamp className="h-10 w-10 text-muted-foreground/30" />
           <p className="text-sm font-medium text-muted-foreground">Selecciona un notario para ver sus unidades</p>
-          <p className="text-xs text-muted-foreground">Usa el buscador de arriba para elegir un usuario con rol Notario.</p>
+          <p className="text-xs text-muted-foreground">Usa el buscador de arriba para elegir una notaría.</p>
         </div>
       )}
 

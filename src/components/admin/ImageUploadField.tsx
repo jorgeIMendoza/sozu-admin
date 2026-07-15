@@ -20,6 +20,7 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*", v
   const isCard = variant === "card";
   const [uploading, setUploading] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const { toast } = useToast();
 
   const clearImage = () => {
@@ -27,43 +28,53 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*", v
     onChange("");
   };
 
-  const handleUpload = async () => {
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `projects/images/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('documentos')
+        .getPublicUrl(filePath);
+
+      onChange(data.publicUrl);
+      setImageError(false);
+      toast({ title: "Archivo subido exitosamente" });
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast({ title: "Error al subir archivo", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUpload = () => {
     const tempInput = document.createElement('input');
     tempInput.type = 'file';
     tempInput.accept = accept;
-    
-    tempInput.onchange = async (event: Event) => {
+
+    tempInput.onchange = (event: Event) => {
       const target = event.target as HTMLInputElement;
-      if (target.files && target.files[0]) {
-        const file = target.files[0];
-        setUploading(true);
-        try {
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Date.now()}.${fileExt}`;
-          const filePath = `projects/images/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('documentos')
-            .upload(filePath, file);
-
-          if (uploadError) throw uploadError;
-
-          const { data } = supabase.storage
-            .from('documentos')
-            .getPublicUrl(filePath);
-
-          onChange(data.publicUrl);
-          toast({ title: "Archivo subido exitosamente" });
-        } catch (error) {
-          console.error('Error uploading file:', error);
-          toast({ title: "Error al subir archivo", variant: "destructive" });
-        } finally {
-          setUploading(false);
-        }
-      }
+      if (target.files && target.files[0]) uploadFile(target.files[0]);
     };
-    
+
     tempInput.click();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
   };
 
   return (
@@ -125,16 +136,19 @@ export function ImageUploadField({ label, value, onChange, accept = "image/*", v
         </div>
       ) : (
         <div
-          className={`flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg text-center cursor-pointer hover:border-muted-foreground/50 hover:bg-muted/20 transition-colors ${isCard ? "aspect-square w-full max-w-36 p-4" : "p-6"}`}
+          className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${dragging ? "border-primary bg-primary/10" : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/20"} ${isCard ? "aspect-square w-full max-w-36 p-4" : "p-6"}`}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             handleUpload();
           }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragging(true); }}
+          onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragging(false); }}
+          onDrop={handleDrop}
         >
           <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
           <p className="text-sm text-muted-foreground">
-            {uploading ? "Subiendo..." : `Haz clic para subir ${label.toLowerCase()}`}
+            {uploading ? "Subiendo..." : `Haz clic o arrastra para subir ${label.toLowerCase()}`}
           </p>
         </div>
       )}
