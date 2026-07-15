@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCollectionAccounts, CollectionAccount } from '@/hooks/useCollectionAccounts';
 import { useCollectionInboxStore } from '@/lib/portal-cobranza/collection-inbox-store';
@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2, SlidersHorizontal, X }
 import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
 import { cn } from '@/lib/utils';
 import {
-  TipoMultiSelect, nivelDeParcialidades, type TipoCategoria,
+  TipoMultiSelect, type TipoCategoria,
 } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
 import { CollectionAdvancedFilters } from '@/components/admin/portal-cobranza/CollectionAdvancedFilters';
 
@@ -78,20 +78,10 @@ function statusTextClass(status: string | null): string {
   } as Record<string, string>)[status ?? ''] ?? 'text-muted-foreground';
 }
 
-// Sortable columns and their accessor. Adding one = one line here.
+// Sortable columns. El valor de la clave se manda a la RPC (p_sort_key) que
+// hace el ORDER BY server-side; ya no hay accessors client-side.
 type SortKey = 'account' | 'client' | 'price' | 'overdue' | 'pending'
   | 'installments' | 'invalid' | 'daysLate';
-
-const SORT_ACCESSORS: Record<SortKey, (r: CollectionAccount) => number | string> = {
-  account:      r => r.cuenta_id,
-  client:       r => (r.cliente_nombre ?? '').toLowerCase(),
-  price:        r => r.precio_final ?? 0,
-  overdue:      r => r.monto_vencido,
-  pending:      r => r.saldo_pendiente,
-  installments: r => r.parcialidades_vencidas,
-  invalid:      r => r.invalidos ?? 0,
-  daysLate:     r => r.dias_sin_pagar,
-};
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -183,81 +173,52 @@ export default function CollectionInboxPage() {
   }, []);
   // Table sort. key=null → default criticality order.
   const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'asc' });
-  const toggleSort = (key: SortKey) =>
+  const toggleSort = (key: SortKey) => {
     setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+    setPage(1); // el orden cambia el conjunto paginado server-side
+  };
 
   const { data: projects } = useProyectosCobranza();
-  const { data: rawData, isLoading, isError, refetch } = useCollectionAccounts({ projectId });
+  // Todo server-side (filtros + orden + paginado + KPIs), igual que Relación de
+  // Pagos. La RPC recibe cada filtro de la bandeja y devuelve solo la página.
+  const { data, isLoading, isError, refetch } = useCollectionAccounts({
+    projectId,
+    cliente: searchClient,
+    unidad: searchUnit,
+    clabe: searchClabe,
+    cuenta: searchAccount,
+    modelos: filterModel,
+    tipos: filterType,
+    estatus: filterStatus,
+    prioridad: filterPriority,
+    invalidLevel: filterInvalidLevel,
+    sortKey: sort.key,
+    sortDir: sort.dir,
+    page,
+    pageSize: PAGE_SIZE,
+  });
 
-  // Filter options derived from the actual data (distinct). "They come from the DB".
-  const options = useMemo(() => {
-    const types = new Set<string>(), statuses = new Set<string>(), models = new Set<string>();
-    for (const r of rawData ?? []) {
-      types.add(typeOf(r));
-      if (r.estatus_propiedad) statuses.add(r.estatus_propiedad);
-      if (r.modelo) models.add(r.modelo);
-    }
-    const sortEs = (a: string, b: string) => a.localeCompare(b, 'es');
-    return {
-      types:    [...types].sort(sortEs),
-      statuses: [...statuses].sort(sortEs),
-      models:   [...models].sort(sortEs),
-    };
-  }, [rawData]);
+  // Filas de la página actual (ya filtradas/ordenadas/paginadas por la RPC).
+  const pageRows = data?.cuentas ?? [];
+  const total = data?.total ?? 0;
 
-  // Client-side filter + sort (chosen sort, else criticality).
-  const filtered = useMemo(() => {
-    if (!rawData) return [];
-    const cl = searchClient.toLowerCase().trim();
-    const ac = searchAccount.toLowerCase().trim();
-    const un = searchUnit.toLowerCase().trim();
-    const cb = searchClabe.toLowerCase().trim();
-    const rows = rawData.filter(r => {
-      if (cl && !(r.cliente_nombre ?? '').toLowerCase().includes(cl)
-               && !(r.cliente_email ?? '').toLowerCase().includes(cl)) return false;
-      if (ac) {
-        const fmt = formatCuentaCobranzaId(r.cuenta_id).toLowerCase();
-        if (!fmt.includes(ac) && !String(r.cuenta_id).includes(ac)) return false;
-      }
-      if (un && !(r.numero_propiedad ?? '').toLowerCase().includes(un)) return false;
-      if (cb && !(r.clabe_stp ?? '').toLowerCase().includes(cb)) return false;
-      if (filterModel.length > 0 && !filterModel.includes(r.modelo ?? '')) return false;
-      if (filterType.length > 0 && !filterType.includes(typeOf(r))) return false;
-      if (filterPriority.length > 0 && !filterPriority.includes(nivelDeParcialidades(r.parcialidades_vencidas))) return false;
-      if (filterInvalidLevel.length > 0 && !filterInvalidLevel.includes(nivelDeParcialidades(r.invalidos ?? 0))) return false;
-      if (filterStatus.length > 0 && !filterStatus.includes(r.estatus_propiedad ?? '')) return false;
-      return true;
-    });
-    // User-chosen order; if none, criticality (overdue installments DESC, invalid DESC).
-    if (sort.key) {
-      const acc = SORT_ACCESSORS[sort.key];
-      const factor = sort.dir === 'asc' ? 1 : -1;
-      return rows.sort((a, b) => {
-        const av = acc(a), bv = acc(b);
-        const cmp = typeof av === 'string' && typeof bv === 'string'
-          ? av.localeCompare(bv)
-          : (av as number) - (bv as number);
-        return factor * cmp;
-      });
-    }
-    return rows.sort((a, b) => {
-      const instDiff = b.parcialidades_vencidas - a.parcialidades_vencidas;
-      if (instDiff !== 0) return instDiff;
-      return (b.invalidos ?? 0) - (a.invalidos ?? 0);
-    });
-  }, [rawData, searchClient, searchAccount, searchUnit, searchClabe, filterModel, filterType, filterPriority, filterInvalidLevel, filterStatus, sort]);
+  // Opciones de filtro (universo del proyecto) que devuelve la RPC. Tipo usa el
+  // catálogo fijo (TIPOS) del multiselect; estatus/modelos vienen del server.
+  const options = {
+    statuses: data?.estatus ?? [],
+    models:   data?.modelos ?? [],
+  };
 
-  // KPIs from filtered set
-  const kpis = useMemo(() => ({
-    total:      filtered.length,
-    overdue:    filtered.reduce((s, r) => s + r.monto_vencido, 0),
-    pending:    filtered.reduce((s, r) => s + r.saldo_pendiente, 0),
-    inArrears:  filtered.filter(r => r.parcialidades_vencidas > 0).length,
-  }), [filtered]);
+  // KPIs sobre el conjunto filtrado completo (los agrega la RPC, no la página).
+  const kpis = {
+    total:     data?.kpis?.total ?? 0,
+    overdue:   data?.kpis?.overdue ?? 0,
+    pending:   data?.kpis?.pending ?? 0,
+    inArrears: data?.kpis?.in_arrears ?? 0,
+  };
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const resetPage = () => setPage(1);
 
   const hasFilters = !!searchClient || !!searchAccount || !!searchUnit
@@ -298,7 +259,7 @@ export default function CollectionInboxPage() {
   // evita que al cambiar de proyecto se vacíe la vista.
   // Primera carga: solo el mensaje centrado. keepPreviousData evita vaciar la vista
   // al cambiar de proyecto.
-  if (isLoading && !rawData) {
+  if (isLoading && !data) {
     return <CollectionLoading label="Cargando cuentas..." />;
   }
 
@@ -454,9 +415,9 @@ export default function CollectionInboxPage() {
       {!isLoading && !isError && (
         <div className="flex justify-end">
           <span className="text-xs text-muted-foreground tabular-nums">
-            {filtered.length === 0
+            {total === 0
               ? 'Sin resultados'
-              : `${((page - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} – ${Math.min(page * PAGE_SIZE, filtered.length).toLocaleString('es-MX')} de ${filtered.length.toLocaleString('es-MX')} cuentas`}
+              : `${((page - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} – ${Math.min(page * PAGE_SIZE, total).toLocaleString('es-MX')} de ${total.toLocaleString('es-MX')} cuentas`}
           </span>
         </div>
       )}
@@ -591,12 +552,12 @@ export default function CollectionInboxPage() {
       </div>
 
       {/* Pagination */}
-      {filtered.length > 0 && (
+      {total > 0 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span className="text-[12px]">
             {((page - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} -{' '}
-            {Math.min(page * PAGE_SIZE, filtered.length).toLocaleString('es-MX')} de{' '}
-            {filtered.length.toLocaleString('es-MX')} cuentas
+            {Math.min(page * PAGE_SIZE, total).toLocaleString('es-MX')} de{' '}
+            {total.toLocaleString('es-MX')} cuentas
           </span>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="h-7 w-7"

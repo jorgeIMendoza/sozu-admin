@@ -84,7 +84,10 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
   const { data, isLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_relacion_pagos', {
+      // RPC del portal cobranza — prefijo `pcobranza` (estándar de nombres del
+      // portal). Cast a any: el nombre nuevo aún no está en los tipos generados.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('get_pcobranza_relacion_pagos', {
         p_proyecto_id: filters.proyectoId ?? null,
         p_limit: filters.pageSize,
         p_offset: (filters.page - 1) * filters.pageSize,
