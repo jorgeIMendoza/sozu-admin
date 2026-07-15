@@ -78,6 +78,24 @@ const PortalTrackingContext = createContext<PortalTrackingContextValue | null>(n
 
 const HEARTBEAT_MS = 60_000; // 60s
 
+/**
+ * user_agent a reportar en `portal_sesiones`. Cuando la app corre dentro del
+ * wrapper nativo (Despia), el UA del WebView es indistinguible de Safari/Chrome
+ * móvil — se antepone el marcador `SozuClienteApp/1.0` que las RPCs de
+ * mediciones ya reconocen, conservando el UA original para clasificar
+ * SO/marca del dispositivo.
+ */
+function buildTrackedUserAgent(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent ?? "";
+  const isNativeApp =
+    typeof window !== "undefined" &&
+    (window.Despia !== undefined || ua.includes("Despia"));
+  if (!isNativeApp) return ua || null;
+  const platform = window.Despia?.getPlatform?.() ?? null;
+  return `SozuClienteApp/1.0${platform ? ` (${platform})` : ""} ${ua}`.trim();
+}
+
 /** Una entrada del catálogo de submenús cargada una sola vez por sesión. */
 interface SubmenuLookupRow {
   id_menu: number;
@@ -181,7 +199,7 @@ export function PortalTrackingProvider({
     if (!user) return;
     let cancelled = false;
     (async () => {
-      const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : null;
+      const userAgent = buildTrackedUserAgent();
       const { data, error } = await (supabase as any).rpc("register_portal_session", {
         p_portal: portal,
         p_user_agent: userAgent,

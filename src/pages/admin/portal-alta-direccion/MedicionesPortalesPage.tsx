@@ -8,9 +8,9 @@
  * Se refresca automáticamente cada 30s para que el conteo de online sea
  * accionable en tiempo casi-real.
  */
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Users, BarChart3, Activity, RefreshCw, ChevronRight, X, Mail, Loader2, Monitor, Smartphone, Tablet, HelpCircle, PieChart as PieChartIcon, Cpu, Globe, Tag, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Users, BarChart3, Activity, RefreshCw, ChevronRight, X, Mail, Loader2, Monitor, Smartphone, Tablet, HelpCircle, PieChart as PieChartIcon, Cpu, Globe, Tag, Radio, type LucideIcon } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +46,7 @@ const PORTAL_LABEL: Record<string, string> = {
 };
 
 /** Tipos de dispositivo (clasificados desde user_agent en el RPC dispositivos_uso_por_portal). */
-const DEVICE_ORDER = ["desktop", "iphone", "android_phone", "ipad", "android_tablet", "desconocido"] as const;
+const DEVICE_ORDER = ["desktop", "iphone", "android_phone", "ipad", "android_tablet", "app", "desconocido"] as const;
 type DeviceKey = (typeof DEVICE_ORDER)[number];
 const DEVICE_LABEL: Record<DeviceKey, string> = {
   desktop: "Escritorio",
@@ -54,6 +54,7 @@ const DEVICE_LABEL: Record<DeviceKey, string> = {
   android_phone: "Android (teléfono)",
   ipad: "iPad (tablet iOS)",
   android_tablet: "Android (tablet)",
+  app: "App clientes",
   desconocido: "Desconocido",
 };
 const DEVICE_ICON: Record<DeviceKey, LucideIcon> = {
@@ -62,6 +63,7 @@ const DEVICE_ICON: Record<DeviceKey, LucideIcon> = {
   android_phone: Smartphone,
   ipad: Tablet,
   android_tablet: Tablet,
+  app: Smartphone,
   desconocido: HelpCircle,
 };
 type DispositivoRow = { portal: string; tipo_dispositivo: string; usuarios_unicos: number; total_sesiones: number };
@@ -115,12 +117,14 @@ const USER_DEVICE_LABEL: Record<string, string> = {
   desktop: "Escritorio / Laptop",
   mobile: "Móvil",
   tablet: "Tablet",
+  app: "App clientes",
   desconocido: "Desconocido",
 };
 const USER_DEVICE_ICON: Record<string, LucideIcon> = {
   desktop: Monitor,
   mobile: Smartphone,
   tablet: Tablet,
+  app: Smartphone,
   desconocido: HelpCircle,
 };
 
@@ -130,12 +134,44 @@ export default function MedicionesPortalesPage() {
   const [rango, setRango] = useState<RangoPreset>("mes");
   const [detallePortal, setDetallePortal] = useState<string | null>(null);
   const [graficosPortal, setGraficosPortal] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const desde = useMemo(() => {
     const horas = RANGO_HORAS[rango];
     if (horas == null) return null;
     return new Date(Date.now() - horas * 3600 * 1000).toISOString();
   }, [rango]);
+
+  // Realtime: cualquier INSERT/UPDATE en portal_sesiones (sesión nueva,
+  // heartbeat, cierre) invalida todas las queries de mediciones. Debounce de
+  // 2s porque los heartbeats de todos los portales llegan en ráfagas.
+  // Requiere que la tabla esté en la publicación supabase_realtime + policy
+  // SELECT para staff; si no lo está, el canal simplemente no emite y la
+  // página degrada al polling de 30s ya existente.
+  const invalidateTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel("mediciones-portal-sesiones")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "portal_sesiones" },
+        () => {
+          if (invalidateTimerRef.current != null) return;
+          invalidateTimerRef.current = window.setTimeout(() => {
+            invalidateTimerRef.current = null;
+            queryClient.invalidateQueries({ queryKey: ["mediciones"] });
+          }, 2_000);
+        },
+      )
+      .subscribe();
+    return () => {
+      if (invalidateTimerRef.current != null) {
+        window.clearTimeout(invalidateTimerRef.current);
+        invalidateTimerRef.current = null;
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Usuarios online — refetch cada 30s para sensación de tiempo real.
   const onlineQ = useQuery<OnlineRow[]>({
@@ -201,8 +237,10 @@ export default function MedicionesPortalesPage() {
       porPortal.set(r.portal, bucket);
       global[tipo] = (global[tipo] ?? 0) + r.total_sesiones;
     }
-    // Columnas a mostrar: las 5 principales siempre; "desconocido" solo si hay.
-    const cols = DEVICE_ORDER.filter((k) => k !== "desconocido" || (global.desconocido ?? 0) > 0);
+    // Columnas a mostrar: las 5 principales siempre; "app"/"desconocido" solo si hay.
+    const cols = DEVICE_ORDER.filter(
+      (k) => (k !== "desconocido" && k !== "app") || (global[k] ?? 0) > 0,
+    );
     const totalGlobal = Object.values(global).reduce((s, n) => s + n, 0);
     const portales = [...porPortal.keys()].sort(
       (a, b) =>
@@ -585,6 +623,21 @@ type DesgloseRow = {
 };
 
 type Metrica = "sesiones" | "usuarios";
+/** Tabs del sheet de gráficos: métricas históricas + vista en vivo. */
+type TabGraficos = Metrica | "envivo";
+
+/** Fila de la RPC `sesiones_activas_por_portal` (sesiones en vivo). */
+type SesionEnVivoRow = {
+  session_id: string;
+  email_usuario: string | null;
+  nombre_usuario: string | null;
+  sesion_inicio: string | null;
+  ultima_actividad: string | null;
+  tipo_dispositivo: string | null;
+  tecnologia: string | null;
+  navegador: string | null;
+  marca_dispositivo: string | null;
+};
 
 /** Dimensiones a graficar, en orden fijo. */
 const DIMENSIONES: { key: string; titulo: string; icon: LucideIcon }[] = [
@@ -619,11 +672,12 @@ function GraficosDispositivosSheet({
   desde: string | null;
   onClose: () => void;
 }) {
-  const [metrica, setMetrica] = useState<Metrica>("sesiones");
+  const [tab, setTab] = useState<TabGraficos>("sesiones");
+  const metrica: Metrica = tab === "usuarios" ? "usuarios" : "sesiones";
 
   const q = useQuery<DesgloseRow[]>({
     queryKey: ["mediciones", "desglose-dispositivos", portal, desde],
-    enabled: !!portal,
+    enabled: !!portal && tab !== "envivo",
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc(
@@ -636,7 +690,7 @@ function GraficosDispositivosSheet({
   });
 
   const handleClose = () => {
-    setMetrica("sesiones");
+    setTab("sesiones");
     onClose();
   };
 
@@ -714,9 +768,11 @@ function GraficosDispositivosSheet({
             Resumen gráfico — {portal ? PORTAL_LABEL[portal] ?? portal : ""}
           </SheetTitle>
           <SheetDescription>
-            Rango aplicado: {rangoLabel.toLowerCase()} · Distribución de{" "}
-            {metrica === "sesiones" ? "sesiones" : "usuarios únicos"} por tipo de
-            dispositivo, tecnología, navegador y marca.
+            {tab === "envivo"
+              ? "Sesiones conectadas en este momento — se actualiza en tiempo real."
+              : `Rango aplicado: ${rangoLabel.toLowerCase()} · Distribución de ${
+                  metrica === "sesiones" ? "sesiones" : "usuarios únicos"
+                } por tipo de dispositivo, tecnología, navegador y marca.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -729,26 +785,38 @@ function GraficosDispositivosSheet({
           </div>
         ) : (
           <>
-            {/* Toggle métrica */}
+            {/* Toggle métrica / en vivo */}
             <div className="mt-5 inline-flex rounded-lg border border-border p-0.5 text-xs">
-              {(["sesiones", "usuarios"] as Metrica[]).map((m) => (
+              {(["sesiones", "usuarios", "envivo"] as TabGraficos[]).map((m) => (
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setMetrica(m)}
+                  onClick={() => setTab(m)}
                   className={cn(
-                    "rounded-md px-3 py-1.5 font-medium transition-colors",
-                    metrica === m
-                      ? "bg-foreground text-background"
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors",
+                    tab === m
+                      ? m === "envivo"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-foreground text-background"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {m === "sesiones" ? "Por sesiones" : "Por usuarios"}
+                  {m === "envivo" && (
+                    <span
+                      className={cn(
+                        "inline-block h-1.5 w-1.5 rounded-full",
+                        tab === "envivo" ? "bg-white animate-pulse" : "bg-emerald-500",
+                      )}
+                    />
+                  )}
+                  {m === "sesiones" ? "Por sesiones" : m === "usuarios" ? "Por usuarios" : "En vivo"}
                 </button>
               ))}
             </div>
 
-            {q.isLoading ? (
+            {tab === "envivo" ? (
+              <SesionesEnVivoPanel portal={portal} />
+            ) : q.isLoading ? (
               <div className="mt-8 flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Cargando gráficos…
               </div>
@@ -775,15 +843,156 @@ function GraficosDispositivosSheet({
               </div>
             )}
 
-            <p className="mt-4 text-[11px] text-muted-foreground">
-              Clasificado desde el navegador del usuario. El user_agent no distingue
-              laptop de escritorio (ambos = "Escritorio / Laptop"); la marca en
-              Android es aproximada.
-            </p>
+            {tab !== "envivo" && (
+              <p className="mt-4 text-[11px] text-muted-foreground">
+                Clasificado desde el navegador del usuario. Los accesos desde la app
+                móvil se cuentan como "App clientes". El user_agent no distingue
+                laptop de escritorio (ambos = "Escritorio / Laptop"); la marca en
+                Android es aproximada.
+              </p>
+            )}
           </>
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Panel "En vivo" — sesiones conectadas ahora mismo en el portal.
+ * Consume la RPC `sesiones_activas_por_portal(portal, minutos)`. Se refresca
+ * por realtime (invalidación de ["mediciones"]) + polling de respaldo de 15s.
+ */
+function SesionesEnVivoPanel({ portal }: { portal: string | null }) {
+  const q = useQuery<SesionEnVivoRow[]>({
+    queryKey: ["mediciones", "en-vivo", portal],
+    enabled: !!portal,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc(
+        "sesiones_activas_por_portal",
+        { p_portal: portal, p_minutos_inactividad: 15 },
+      );
+      if (error) throw error;
+      return (data ?? []) as SesionEnVivoRow[];
+    },
+  });
+
+  const errMsg = q.error
+    ? ((q.error as any).message as string) ||
+      ((q.error as any).details as string) ||
+      "Error al cargar"
+    : null;
+  const isRpcMissing =
+    !!errMsg &&
+    /sesiones_activas_por_portal|PGRST202|function .* does not exist/i.test(errMsg);
+
+  if (isRpcMissing) {
+    return (
+      <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-800">
+        La RPC <code className="font-mono">sesiones_activas_por_portal</code> aún no
+        está disponible en BD. Aplicar la migración de mediciones en vivo y refrescar.
+      </div>
+    );
+  }
+
+  if (q.isLoading) {
+    return (
+      <div className="mt-6 flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cargando sesiones en vivo…
+      </div>
+    );
+  }
+
+  if (q.error) {
+    return (
+      <div className="mt-6 py-16 text-center text-sm text-red-600">Error: {errMsg}</div>
+    );
+  }
+
+  const filas = q.data ?? [];
+  const usuariosUnicos = new Set(filas.map((r) => r.email_usuario).filter(Boolean)).size;
+
+  return (
+    <div className="mt-5">
+      {/* Contador en vivo */}
+      <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+        <span className="relative flex h-3 w-3">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+        </span>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none text-emerald-700 dark:text-emerald-300">
+            {filas.length}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {filas.length === 1 ? "sesión activa" : "sesiones activas"} ·{" "}
+            {usuariosUnicos} {usuariosUnicos === 1 ? "usuario" : "usuarios"} · últimos
+            15 min
+          </p>
+        </div>
+        <Radio className="ml-auto h-5 w-5 text-emerald-500" />
+      </div>
+
+      {filas.length === 0 ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Nadie conectado en este momento.
+        </p>
+      ) : (
+        <div className="mt-3 rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Usuario</TableHead>
+                <TableHead className="text-xs">Dispositivo</TableHead>
+                <TableHead className="text-xs">Navegador</TableHead>
+                <TableHead className="text-xs">Marca</TableHead>
+                <TableHead className="text-xs">Conectado desde</TableHead>
+                <TableHead className="text-xs">Última actividad</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filas.map((r) => (
+                <TableRow key={r.session_id}>
+                  <TableCell className="text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {r.nombre_usuario || r.email_usuario || "—"}
+                        </div>
+                        {r.nombre_usuario && r.email_usuario && (
+                          <div className="text-[11px] text-muted-foreground font-mono break-all">
+                            {r.email_usuario}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <DispositivoCell tipo={r.tipo_dispositivo} />
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {r.navegador || "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {r.marca_dispositivo || "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {r.sesion_inicio ? formatRelativo(r.sesion_inicio) : "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {r.ultima_actividad ? formatRelativo(r.ultima_actividad) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   );
 }
 
