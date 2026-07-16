@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
   ChevronLeft, CheckCircle2, AlertTriangle, Clock, FileText, Download,
@@ -27,6 +28,7 @@ export function EntregaDetalle() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const { profile } = useAuth();
   const isPropMode = id.startsWith('prop-');
   const propiedadIdFromUrl = isPropMode ? parseInt(id.replace('prop-', '')) : null;
   const entregaIdFromUrl   = !isPropMode ? parseInt(id) : null;
@@ -271,8 +273,37 @@ export function EntregaDetalle() {
       return next;
     });
 
+  const insertLog = async (opts: {
+    id_checklist_item: number;
+    tipo_evento: string;
+    accion?: string;
+    estatus_anterior?: string;
+    estatus_nuevo?: string;
+    observaciones?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    if (!entregaId) return;
+    await (supabase as any).from('entregas_checklist_log').insert({
+      id_entrega:        entregaId,
+      id_checklist_item: opts.id_checklist_item,
+      tipo_evento:       opts.tipo_evento,
+      accion:            opts.accion ?? null,
+      estatus_anterior:  opts.estatus_anterior ?? null,
+      estatus_nuevo:     opts.estatus_nuevo ?? null,
+      observaciones:     opts.observaciones ?? null,
+      usuario:           profile?.email ?? null,
+      metadata:          opts.metadata ?? null,
+      activo:            true,
+    });
+  };
+
   const handleActualizarEstatus = async (itemId: number, nuevoEstatus: number) => {
     setItemLoading(itemId, true);
+    const item = checklist.flatMap(c => c.items).find(i => i.id === itemId);
+    const estatusAnterior = item ? getEstatusNombre(item.id_estatus_checklist) : null;
+    const estatusNuevo    = getEstatusNombre(nuevoEstatus);
+    const esReversion     = nuevoEstatus === ESTATUS_CHECKLIST.PENDIENTE && item?.id_estatus_checklist !== ESTATUS_CHECKLIST.PENDIENTE;
+
     const { error } = await supabase
       .from('entregas_checklist_items')
       .update({ id_estatus_checklist: nuevoEstatus })
@@ -280,14 +311,22 @@ export function EntregaDetalle() {
     if (error) {
       toast.error('Error al actualizar el ítem');
     } else {
-      toast.success(`Ítem actualizado: ${getEstatusNombre(nuevoEstatus)}`);
+      toast.success(`Ítem actualizado: ${estatusNuevo}`);
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      await insertLog({
+        id_checklist_item: itemId,
+        tipo_evento:       esReversion ? 'REVERSION_ESTATUS' : 'CAMBIO_ESTATUS',
+        accion:            esReversion ? 'Reversión a Pendiente' : `Marcar como ${estatusNuevo}`,
+        estatus_anterior:  estatusAnterior ?? undefined,
+        estatus_nuevo:     estatusNuevo,
+      });
     }
     setItemLoading(itemId, false);
   };
 
   const handleAsignarResponsable = async (itemId: number, entidadId: number | null) => {
     setItemLoading(itemId, true);
+    const entidadNombre = entidadId ? (entidadesER.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
     const { error } = await (supabase as any)
       .from('entregas_checklist_items')
       .update({ id_responsable_er: entidadId })
@@ -297,6 +336,13 @@ export function EntregaDetalle() {
     } else {
       toast.success(entidadId ? 'Responsable asignado' : 'Responsable removido');
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      await insertLog({
+        id_checklist_item: itemId,
+        tipo_evento:       'ASIGNACION_RESPONSABLE',
+        accion:            entidadId ? `Asignado: ${entidadNombre}` : 'Responsable removido',
+        observaciones:     entidadNombre ?? undefined,
+        metadata:          entidadId ? { id_entidad: entidadId } : undefined,
+      });
     }
     setItemLoading(itemId, false);
   };
@@ -329,6 +375,15 @@ export function EntregaDetalle() {
       toast.success('Ítem marcado como No cumple');
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
       queryClient.invalidateQueries({ queryKey: ['observaciones-entrega', entregaId] });
+      const item = checklist.flatMap(c => c.items).find(i => i.id === itemId);
+      await insertLog({
+        id_checklist_item: itemId,
+        tipo_evento:       'CAMBIO_ESTATUS',
+        accion:            'Marcar como No cumple',
+        estatus_anterior:  item ? getEstatusNombre(item.id_estatus_checklist) : undefined,
+        estatus_nuevo:     getEstatusNombre(ESTATUS_CHECKLIST.NO_CUMPLE),
+        observaciones:     noCumpleObs.trim(),
+      });
       setNoCumpleModal(null);
       setNoCumpleObs('');
     }
