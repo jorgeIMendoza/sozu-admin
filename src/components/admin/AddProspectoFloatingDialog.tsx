@@ -1,13 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Search, Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,6 +35,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const [selectedProspectoId, setSelectedProspectoId] = useState<number | null>(null);
   const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
+  const [projSearch, setProjSearch] = useState("");
   const [tipoPersona, setTipoPersona] = useState("pf");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
@@ -121,38 +119,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
       .map((p) => ({ value: p.id_persona.toString(), label: p.nombre_legal || p.email }));
   }, [misProspectos]);
 
-  const prospectPersonaIds = useMemo(() => {
-    return [...new Set(misProspectos.map((p) => p.id_persona))] as number[];
-  }, [misProspectos]);
-
-  const { data: activeProjectIdsByPersona = new Map<number, Set<number>>() } = useQuery({
-    queryKey: ["prospecto-active-projects-floating", prospectPersonaIds],
-    queryFn: async () => {
-      if (prospectPersonaIds.length === 0) return new Map<number, Set<number>>();
-
-      const { data, error } = await supabase
-        .from("entidades_relacionadas")
-        .select("id_persona, id_proyecto")
-        .eq("id_tipo_entidad", 7)
-        .eq("activo", true)
-        .in("id_persona", prospectPersonaIds);
-
-      if (error) throw error;
-
-      const map = new Map<number, Set<number>>();
-      (data || []).forEach((relation: any) => {
-        if (!relation.id_persona || !relation.id_proyecto) return;
-        if (!map.has(relation.id_persona)) {
-          map.set(relation.id_persona, new Set<number>());
-        }
-        map.get(relation.id_persona)?.add(relation.id_proyecto);
-      });
-
-      return map;
-    },
-    enabled: open && prospectPersonaIds.length > 0,
-  });
-
   const handleSelectProspecto = (value: string) => {
     if (!value) {
       setSelectedProspectoId(null);
@@ -224,8 +190,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     enabled: open && !isLoadingAccess,
   });
 
-  const showSearch = proyectos.length > 10;
-
   // Fetch project assignments for a persona found via email lookup (may not be in agent's prospects)
   const { data: existingPersonaProjectIds = new Set<number>() } = useQuery({
     queryKey: ["existing-persona-projects", existingPersonaId],
@@ -242,12 +206,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     },
     enabled: open && !!existingPersonaId,
   });
-
-  // Available projects for new prospect creation (not already selected in this session)
-  const availableProjectsForNew = useMemo(() => {
-    const selectedSet = new Set(selectedProyectoIds);
-    return proyectos.filter((p) => !selectedSet.has(p.id));
-  }, [proyectos, selectedProyectoIds]);
 
   // Add project to existing prospect
   const addProjectToProspectMutation = useMutation({
@@ -482,40 +440,54 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     setCurp("");
     setEditProyectos([]);
     setExistingPersonaId(null);
+    setProjSearch("");
     hasTrackedFieldFill.current = false;
     onOpenChange(false);
   };
 
-  // Available projects to add (not already assigned)
-  const availableProjectsForAdd = useMemo(() => {
-    const assignedIds = activeProjectIdsByPersona.get(selectedProspectoId || -1) || new Set<number>();
-    return proyectos.filter((p) => !assignedIds.has(p.id));
-  }, [proyectos, activeProjectIdsByPersona, selectedProspectoId]);
+  const labelCls = "mb-1.5 block text-[11px] font-semibold text-[#4B5563]";
+  const labelBoldCls = "mb-2 text-[11px] font-bold text-[#4B5563]";
+  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[13px] font-medium text-[#171A1D] outline-none transition-all placeholder:text-[#9AA3AD] focus:border-[#16A45E] focus:ring-2 focus:ring-[#16A45E]/15";
+  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[#16A45E] focus:ring-2 focus:ring-[#16A45E]/15 focus:ring-offset-0";
+  const rfcInvalid = !!rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc);
+  const curpInvalid = !!curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp);
+
+  const q = projSearch.trim().toLowerCase();
+  const filteredProyectos = q ? proyectos.filter((p) => (p.nombre || "").toLowerCase().includes(q)) : proyectos;
+
+  const selectedProyectosList: { id: number; nombre: string; relId: number | null }[] = isEditMode
+    ? editProyectos.map((e) => ({ id: e.id_proyecto, nombre: e.proyecto_nombre, relId: e.entidad_relacionada_id }))
+    : selectedProyectoIds.map((id) => ({ id, nombre: proyectos.find((p) => p.id === id)?.nombre || `Proyecto ${id}`, relId: null }));
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEditMode ? "Editar Prospecto" : "Nuevo Prospecto"}</DialogTitle>
+      <DialogContent
+        className="max-w-[540px] gap-0 overflow-hidden rounded-md p-0"
+        style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
+          <DialogTitle className="text-[18px] font-extrabold text-[#171A1D]">
+            {isEditMode ? "Editar Prospecto" : "Nuevo Prospecto"}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Search existing prospects */}
-          <div className="space-y-2">
-            <Label className="text-muted-foreground text-xs">Buscar prospecto existente para editar</Label>
+        <div className="flex max-h-[calc(90vh-9rem)] flex-col gap-[18px] overflow-y-auto px-[22px] py-[22px]">
+          {/* Search / pick existing prospect */}
+          <div>
+            <div className={labelBoldCls}>¿Ya lo tienes registrado? Búscalo para no duplicar</div>
             {prospectoOptions.length >= 10 ? (
               <Combobox
                 value={selectedProspectoId?.toString() || ""}
                 onValueChange={handleSelectProspecto}
                 options={prospectoOptions}
-                placeholder="Buscar por nombre..."
-                searchPlaceholder="Escribir nombre del prospecto..."
+                placeholder="Buscar por nombre…"
+                searchPlaceholder="Escribir nombre del prospecto…"
                 emptyText="No se encontró el prospecto"
               />
             ) : (
               <Select value={selectedProspectoId?.toString() || ""} onValueChange={handleSelectProspecto}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar prospecto..." />
+                <SelectTrigger className={triggerCls}>
+                  <SelectValue placeholder="Buscar por nombre…" />
                 </SelectTrigger>
                 <SelectContent>
                   {prospectoOptions.map((p) => (
@@ -526,240 +498,216 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             )}
           </div>
 
-          {/* Projects section */}
-          {isEditMode ? (
-            <div className="space-y-2">
-              <Label>Proyectos de Interés</Label>
-              <div className="flex flex-wrap gap-1.5 min-h-[36px] items-center p-2 border border-border rounded-md bg-background">
-                {editProyectos.map((p) => (
-                  <Badge key={p.entidad_relacionada_id} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
-                    {p.proyecto_nombre}
-                    {editProyectos.length > 1 && (
+          {/* Desarrollos de interés — búsqueda + lista */}
+          <div>
+            <div className={labelBoldCls}>
+              Desarrollos de Interés {!isEditMode && <span className="text-[#16A45E]">*</span>}
+            </div>
+
+            {/* Seleccionados */}
+            {selectedProyectosList.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {selectedProyectosList.map((s) => (
+                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md border border-[#D6ECE0] bg-[#EAF6F0] px-2 py-1 text-[12px] font-medium text-[#0E7A45]">
+                    {s.nombre}
+                    {(!isEditMode || editProyectos.length > 1) && (
                       <button
+                        type="button"
                         onClick={() => {
-                          setEditProyectos((prev) => prev.filter((x) => x.entidad_relacionada_id !== p.entidad_relacionada_id));
-                          removeProjectFromProspectMutation.mutate(p.entidad_relacionada_id);
+                          if (isEditMode) {
+                            if (s.relId != null) {
+                              setEditProyectos((prev) => prev.filter((x) => x.entidad_relacionada_id !== s.relId));
+                              removeProjectFromProspectMutation.mutate(s.relId);
+                            }
+                          } else {
+                            setSelectedProyectoIds((prev) => prev.filter((id) => id !== s.id));
+                          }
                         }}
-                        className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
+                        className="rounded p-0.5 text-[#0E7A45]/70 hover:bg-[#0E7A45]/10 hover:text-[#0E7A45]"
                       >
                         <X className="h-3 w-3" />
                       </button>
                     )}
-                  </Badge>
+                  </span>
                 ))}
-                {editProyectos.length === 0 && (
-                  <span className="text-sm text-muted-foreground">Sin proyectos asignados</span>
-                )}
               </div>
-              {availableProjectsForAdd.length > 0 && (
-                showSearch ? (
-                  <Combobox
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && selectedProspectoId) {
-                        addProjectToProspectMutation.mutate({
-                          personaId: selectedProspectoId,
-                          proyectoId: parseInt(value),
-                        });
-                      }
-                    }}
-                    options={availableProjectsForAdd.map((p) => ({ value: p.id.toString(), label: p.nombre }))}
-                    placeholder="Agregar otro proyecto..."
-                    searchPlaceholder="Buscar desarrollo..."
-                    emptyText="No se encontró el desarrollo"
-                  />
-                ) : (
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && selectedProspectoId) {
-                        addProjectToProspectMutation.mutate({
-                          personaId: selectedProspectoId,
-                          proyectoId: parseInt(value),
-                        });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Agregar otro proyecto..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableProjectsForAdd.map((p) => (
-                        <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )
-              )}
+            )}
+
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA3AD]" />
+              <input
+                value={projSearch}
+                onChange={(e) => setProjSearch(e.target.value)}
+                placeholder="Buscar desarrollo…"
+                className={cn(inputCls, "pl-8")}
+              />
             </div>
-          ) : (
-            <div className="space-y-2">
-              <Label>Desarrollos de Interés <span className="text-destructive">*</span></Label>
-              {/* Selected projects as badges */}
-              {selectedProyectoIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 min-h-[36px] items-center p-2 border border-border rounded-md bg-background">
-                  {selectedProyectoIds.map((id) => {
-                    const proj = proyectos.find((p) => p.id === id);
+
+            {/* Coincidencias (solo al escribir) */}
+            {projSearch.trim() && (
+              <div className="mt-1.5 max-h-[184px] overflow-y-auto rounded-md border border-[#ECEEF0]">
+                {(() => {
+                  const selectedIds = new Set(isEditMode ? editProyectos.map((e) => e.id_proyecto) : selectedProyectoIds);
+                  const results = filteredProyectos.filter((p) => !selectedIds.has(p.id));
+                  if (results.length === 0) {
+                    return <div className="px-3 py-2.5 text-[12px] text-[#9AA3AD]">No se encontró el desarrollo</div>;
+                  }
+                  return results.map((p) => {
+                    const already = !isEditMode && existingPersonaProjectIds.has(p.id);
                     return (
-                      <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
-                        {proj?.nombre || `Proyecto ${id}`}
-                        <button
-                          onClick={() => setSelectedProyectoIds((prev) => prev.filter((pid) => pid !== id))}
-                          className="ml-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={already || (isEditMode && addProjectToProspectMutation.isPending)}
+                        onClick={() => {
+                          if (already) return;
+                          if (isEditMode) {
+                            if (selectedProspectoId) addProjectToProspectMutation.mutate({ personaId: selectedProspectoId, proyectoId: p.id });
+                          } else {
+                            setSelectedProyectoIds((prev) => [...prev, p.id]);
+                          }
+                          setProjSearch("");
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] text-[#171A1D] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:text-[#B6BCC4]"
+                      >
+                        {p.nombre}
+                        {already && <span className="text-[11px] text-[#9AA3AD]">ya registrado</span>}
+                      </button>
                     );
-                  })}
+                  });
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Información básica · datos sensibles */}
+          <div className="border-t border-[#ECEEF0] pt-4">
+            <div className="mb-3 flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">
+              <Lock className="h-3 w-3" />
+              Información básica · datos sensibles
+            </div>
+            <div className="flex flex-col gap-3">
+              {/* Tipo de persona — segmented */}
+              <div>
+                <div className={labelCls}>Tipo de Persona <span className="text-[#16A45E]">*</span></div>
+                <div className="flex max-w-[240px] rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-[3px]">
+                  {[{ v: "pf", l: "Física" }, { v: "pm", l: "Moral" }].map((o) => (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => setTipoPersona(o.v)}
+                      className={cn(
+                        "flex-1 rounded-md py-[7px] text-[12px] font-semibold transition-colors",
+                        tipoPersona === o.v
+                          ? "bg-white text-[#171A1D] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                          : "text-[#6B7280] hover:text-[#171A1D]"
+                      )}
+                    >
+                      {o.l}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {/* Add project selector */}
-              {availableProjectsForNew.length > 0 && (
-                showSearch ? (
-                  <Combobox
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && !existingPersonaProjectIds.has(parseInt(value))) {
-                        setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
-                      }
-                    }}
-                    options={availableProjectsForNew.map((p) => ({
-                      value: p.id.toString(),
-                      label: existingPersonaProjectIds.has(p.id)
-                        ? `${p.nombre} (ya registrado)`
-                        : p.nombre,
-                    }))}
-                    placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."}
-                    searchPlaceholder="Buscar desarrollo..."
-                    emptyText="No se encontró el desarrollo"
+              </div>
+
+              {/* Nombre */}
+              <div>
+                <div className={labelCls}>Nombre Completo <span className="text-[#16A45E]">*</span></div>
+                <input
+                  className={inputCls}
+                  placeholder="Nombre y apellidos"
+                  value={nombre}
+                  onChange={(e) => { setNombre(e.target.value); trackFieldFill(); }}
+                />
+              </div>
+
+              {/* Email + Teléfono */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className={labelCls}>Email <span className="text-[#16A45E]">*</span></div>
+                  <input
+                    type="email"
+                    className={cn(inputCls, "disabled:bg-[#F6F7F8] disabled:text-[#9AA3AD]")}
+                    placeholder="correo@dominio.com"
+                    value={email}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    disabled={isEditMode && !!selectedProspectoId}
                   />
-                ) : (
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && !existingPersonaProjectIds.has(parseInt(value))) {
-                        setSelectedProyectoIds((prev) => [...prev, parseInt(value)]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={selectedProyectoIds.length > 0 ? "Agregar otro desarrollo..." : "Seleccionar desarrollo..."} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableProjectsForNew.map((p) => {
-                        const alreadyAssigned = existingPersonaProjectIds.has(p.id);
-                        return (
-                          <SelectItem
-                            key={p.id}
-                            value={p.id.toString()}
-                            disabled={alreadyAssigned}
-                            className={alreadyAssigned ? "opacity-50" : ""}
-                          >
-                            {p.nombre}
-                            {alreadyAssigned && (
-                              <span className="ml-1 text-xs text-muted-foreground">(ya registrado)</span>
-                            )}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                )
-              )}
-            </div>
-          )}
-
-          {/* Información Básica section */}
-          <div className="border rounded-lg p-4 space-y-4">
-            <p className="text-center text-sm font-medium text-muted-foreground">Información Básica</p>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo de Persona <span className="text-destructive">*</span></Label>
-                <Select value={tipoPersona} onValueChange={setTipoPersona}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pf">Persona Física</SelectItem>
-                    <SelectItem value="pm">Persona Moral</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {existingPersonaId && !isEditMode && (
+                    <p className="mt-1 text-[10px] font-medium text-blue-600">✓ Persona existente — se vinculará al prospecto</p>
+                  )}
+                </div>
+                <div>
+                  <div className={labelCls}>Teléfono <span className="text-[#16A45E]">*</span> (+52)</div>
+                  <div className="flex gap-2">
+                    <Select value={clavePais} onValueChange={setClavePais}>
+                      <SelectTrigger className={cn(triggerCls, "w-[70px] shrink-0")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MX">MX</SelectItem>
+                        <SelectItem value="US">US</SelectItem>
+                        <SelectItem value="CO">CO</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <input
+                      className={cn(inputCls, "tabular-nums")}
+                      inputMode="numeric"
+                      placeholder="10 dígitos"
+                      value={telefono}
+                      onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 10); setTelefono(v); trackFieldFill(); }}
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Nombre Completo <span className="text-destructive">*</span></Label>
-                <Input placeholder="Ingresa el nombre completo" value={nombre} onChange={(e) => { setNombre(e.target.value); trackFieldFill(); }} />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" placeholder="Ingresa el email" value={email} onChange={(e) => handleEmailChange(e.target.value)} disabled={isEditMode && !!selectedProspectoId} />
-                {existingPersonaId && !isEditMode && (
-                  <p className="text-[10px] text-blue-600 font-medium">✓ Persona existente encontrada — se vinculará al prospecto</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Teléfono <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2">
-                  <Select value={clavePais} onValueChange={setClavePais}>
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MX">MX</SelectItem>
-                      <SelectItem value="US">US</SelectItem>
-                      <SelectItem value="CO">CO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input placeholder="10 dígitos" value={telefono} onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 10); setTelefono(v); trackFieldFill(); }} maxLength={10} />
+              {/* RFC + CURP */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className={labelCls}>RFC</div>
+                  <input
+                    className={cn(inputCls, "uppercase", rfcInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
+                    placeholder="Opcional"
+                    value={rfc}
+                    onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                    maxLength={13}
+                  />
+                  {rfcInvalid && <p className="mt-1 text-[10px] text-red-500">Formato inválido (12-13 caracteres)</p>}
+                </div>
+                <div>
+                  <div className={labelCls}>CURP</div>
+                  <input
+                    className={cn(inputCls, "uppercase", curpInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
+                    placeholder="Opcional"
+                    value={curp}
+                    onChange={(e) => setCurp(e.target.value.toUpperCase())}
+                    maxLength={18}
+                  />
+                  {curpInvalid && <p className="mt-1 text-[10px] text-red-500">Formato inválido (18 caracteres)</p>}
                 </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>RFC</Label>
-                <Input 
-                  placeholder="Ej: ABC123456DEF" 
-                  value={rfc} 
-                  onChange={(e) => setRfc(e.target.value.toUpperCase())} 
-                  maxLength={13}
-                  className={rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc) ? "border-destructive" : ""}
-                />
-                {rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc) && (
-                  <p className="text-[10px] text-destructive">Formato inválido (12-13 caracteres)</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label>CURP</Label>
-                <Input 
-                  placeholder="Ej: ABCD123456HMNEFD01" 
-                  value={curp} 
-                  onChange={(e) => setCurp(e.target.value.toUpperCase())} 
-                  maxLength={18}
-                  className={curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp) ? "border-destructive" : ""}
-                />
-                {curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp) && (
-                  <p className="text-[10px] text-destructive">Formato inválido (18 caracteres)</p>
-                )}
-              </div>
-            </div>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-            <Button
-              onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
-              disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white"
-            >
-              {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Guardando...</> : isEditMode ? "Actualizar" : "Guardar"}
-            </Button>
-          </div>
+        {/* Footer */}
+        <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
+            disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A45E] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#128A4F] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

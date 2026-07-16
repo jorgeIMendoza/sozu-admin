@@ -24,6 +24,7 @@ import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
+import { optimizedImage } from "@/utils/optimizedImage";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
@@ -35,6 +36,15 @@ const AgentUnidadesProyecto = () => {
   const modeloIdParam = searchParams.get("modelo");
   const openFiltersParam = searchParams.get("openFilters");
   const navigate = useNavigate();
+
+  // Persistencia de filtros (sessionStorage). Si se llega con proyecto/modelo en la
+  // URL, esos mandan y se ignora lo guardado (contexto nuevo desde inventario/detalle).
+  const FILTERS_KEY = "agent-unidades-filters";
+  const hasUrlPreselect = !!proyectoIdParam || !!modeloIdParam;
+  const storedFilters: any = (() => {
+    if (hasUrlPreselect) return {};
+    try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY) || "{}"); } catch { return {}; }
+  })();
   const { permissions: agentPerms } = useAgentPortalPermissions();
   const canGenerateOffer = agentPerms['/admin/agent/inventario']?.canGenerateOffer;
   const canGenerateDigitalOffer = agentPerms['/admin/agent/inventario']?.canGenerateDigitalOffer;
@@ -65,18 +75,18 @@ const AgentUnidadesProyecto = () => {
   const [schemesOpen, setSchemesOpen] = useState(false);
 
   // Filters
-  const [filterProjectNames, setFilterProjectNames] = useState<string[]>([]);
-  const [filterModelNames, setFilterModelNames] = useState<string[]>([]);
-  const [filterLevels, setFilterLevels] = useState<string[]>([]);
-  const [filterBodega, setFilterBodega] = useState<TriState>("todos");
-  const [filterEstacionamiento, setFilterEstacionamiento] = useState<TriState>("todos");
+  const [filterProjectNames, setFilterProjectNames] = useState<string[]>(() => storedFilters.filterProjectNames ?? []);
+  const [filterModelNames, setFilterModelNames] = useState<string[]>(() => storedFilters.filterModelNames ?? []);
+  const [filterLevels, setFilterLevels] = useState<string[]>(() => storedFilters.filterLevels ?? []);
+  const [filterBodega, setFilterBodega] = useState<TriState>(() => storedFilters.filterBodega ?? "todos");
+  const [filterEstacionamiento, setFilterEstacionamiento] = useState<TriState>(() => storedFilters.filterEstacionamiento ?? "todos");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(openFiltersParam === 'true');
-  const [sortOrder, setSortOrder] = useState<SortOrder>("none");
-  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => storedFilters.sortOrder ?? "none");
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(() => storedFilters.priceRange ?? null);
   const [priceRangeLocal, setPriceRangeLocal] = useState<[number, number] | null>(null);
   const priceCommitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [recamarasFilter, setRecamarasFilter] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [recamarasFilter, setRecamarasFilter] = useState<string[]>(() => storedFilters.recamarasFilter ?? []);
+  const [searchQuery, setSearchQuery] = useState(() => storedFilters.searchQuery ?? "");
   const [lastKnownTotalCount, setLastKnownTotalCount] = useState(PAGE_SIZE);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -346,6 +356,12 @@ const AgentUnidadesProyecto = () => {
     : (selectedProperty ? getSchemesForProperty(selectedProperty) : []);
 
   useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange, normalizedSearchQuery]);
+
+  // Guardar filtros para no reiniciarlos al navegar dentro de la sesión.
+  useEffect(() => {
+    const payload = { filterProjectNames, filterModelNames, filterLevels, filterBodega, filterEstacionamiento, sortOrder, recamarasFilter, priceRange, searchQuery };
+    try { sessionStorage.setItem(FILTERS_KEY, JSON.stringify(payload)); } catch { /* ignore */ }
+  }, [filterProjectNames, filterModelNames, filterLevels, filterBodega, filterEstacionamiento, sortOrder, recamarasFilter, priceRange, searchQuery]);
   useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
 
   const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
@@ -374,7 +390,7 @@ const AgentUnidadesProyecto = () => {
   ];
 
   const chipClass = (active: boolean) =>
-    `px-3.5 py-2 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
+    `px-3.5 py-2 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
       active
         ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
         : "bg-white border-gray-200 text-foreground hover:bg-gray-50"
@@ -522,7 +538,7 @@ const AgentUnidadesProyecto = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={handleOpenFilters}
-            className="flex items-center gap-2 px-4 h-10 rounded-xl border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-[hsl(222.2_84%_4.9%)] shadow-sm text-sm font-medium"
+            className="flex items-center gap-2 px-4 h-10 rounded-md border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-[hsl(222.2_84%_4.9%)] shadow-sm text-sm font-medium"
             style={{ colorScheme: "light" }}
           >
             <SlidersHorizontal className="h-4 w-4" />
@@ -538,14 +554,14 @@ const AgentUnidadesProyecto = () => {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 pl-9 pr-3 rounded-xl border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-sm font-medium text-[hsl(222.2_84%_4.9%)] placeholder:text-[hsl(215.4_16.3%_46.9%)] placeholder:opacity-100 caret-[hsl(222.2_84%_4.9%)] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full h-10 pl-9 pr-3 rounded-md border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-sm font-medium text-[hsl(222.2_84%_4.9%)] placeholder:text-[hsl(215.4_16.3%_46.9%)] placeholder:opacity-100 caret-[hsl(222.2_84%_4.9%)] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="Buscar..."
               style={{ WebkitTextFillColor: "hsl(222.2 84% 4.9%)", colorScheme: "light" }}
             />
           </div>
           <button
             onClick={cycleSortOrder}
-            className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-colors ${
+            className={`h-10 w-10 rounded-md flex items-center justify-center border transition-colors ${
               sortOrder !== "none"
                 ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
                 : "bg-white border-gray-200 text-muted-foreground"
@@ -610,7 +626,7 @@ const AgentUnidadesProyecto = () => {
           </DrawerHeader>
           <div className="overflow-y-auto px-4 pb-6 max-h-[65vh]">{filterContent}</div>
           <div className="px-4 py-3 border-t">
-            <Button className="w-full rounded-full gap-2 bg-[hsl(var(--agent-primary,147_33%_29%))] hover:brightness-110 text-white" onClick={() => setFiltersDrawerOpen(false)}>
+            <Button className="w-full rounded-md gap-2 bg-[hsl(var(--agent-primary,147_33%_29%))] hover:brightness-110 text-white" onClick={() => setFiltersDrawerOpen(false)}>
               <Search className="h-4 w-4" /> Ver {totalCount} unidades
             </Button>
           </div>
@@ -666,18 +682,18 @@ const AgentUnidadesProyecto = () => {
                   <DetailCarousel images={selectedProperty.model_images} />
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
                     <Building2 className="h-3 w-3 text-muted-foreground" /> {selectedProperty.proyecto_nombre}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.edificio_nombre}</span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.modelo_nombre}</span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.edificio_nombre}</span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.modelo_nombre}</span>
                   {selectedProperty.piso && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
                       <Layers className="h-3 w-3 text-muted-foreground" /> Nivel {selectedProperty.piso}
                     </span>
                   )}
                   {selectedProperty.m2_total > 0 && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
                       <Maximize2 className="h-3 w-3 text-muted-foreground" /> {selectedProperty.m2_total.toFixed(2)} m²
                     </span>
                   )}
@@ -696,12 +712,12 @@ const AgentUnidadesProyecto = () => {
                 {(selectedProperty.bodegas_count > 0 || selectedProperty.estacionamientos_count > 0) && (
                   <div className="flex flex-wrap gap-2">
                     {selectedProperty.bodegas_count > 0 && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
                         <img src={bodegaIcon} alt="bodega" className="h-3 w-3 opacity-60" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}
                       </span>
                     )}
                     {selectedProperty.estacionamientos_count > 0 && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-xs font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
                         <Car className="h-3 w-3 text-muted-foreground" /> {selectedProperty.estacionamientos_count} estac.
                         {selectedProperty.estacionamientos_tipos?.length > 0 && (
                           <span className="ml-1 text-muted-foreground">({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>
@@ -712,7 +728,7 @@ const AgentUnidadesProyecto = () => {
                 )}
                 <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="relative overflow-hidden rounded-2xl p-5 text-center bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/15">
+                  <div className="relative overflow-hidden rounded-md p-5 text-center bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/15">
                     <div className="absolute inset-x-0 top-0 h-1 bg-[hsl(var(--agent-primary,147_33%_29%))]/40" />
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--agent-primary,147_33%_29%))]/80">Precio de Lista</p>
                     <p className="mt-1 text-2xl font-bold text-[hsl(var(--agent-primary,147_33%_29%))]">{formatPrice(selectedProperty.precio_lista)}</p>
@@ -742,7 +758,7 @@ const AgentUnidadesProyecto = () => {
                             key={scheme.id}
                             type="button"
                             onClick={() => setSelectedSchemeId(prev => prev === scheme.id ? null : scheme.id)}
-                            className={`relative w-full text-left rounded-2xl border p-4 space-y-3 transition-all duration-200 ${
+                            className={`relative w-full text-left rounded-md border p-4 space-y-3 transition-all duration-200 ${
                               isSelected
                                 ? "border-[hsl(var(--agent-primary,147_33%_29%))] bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.05] ring-2 ring-[hsl(var(--agent-primary,147_33%_29%))]/20 shadow-sm"
                                 : "border-border/60 bg-card hover:border-[hsl(var(--agent-primary,147_33%_29%))]/40 hover:shadow-sm"
@@ -763,22 +779,22 @@ const AgentUnidadesProyecto = () => {
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {scheme.porcentaje_enganche > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                                   <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{scheme.porcentaje_enganche}%</span> Enganche
                                 </span>
                               )}
                               {amounts.porcentajeMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                                   <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
                                 </span>
                               )}
                               {amounts.porcentajeEntrega > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                                   <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
                                 </span>
                               )}
                               {amounts.numMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-lg bg-[hsl(var(--agent-primary,147_33%_29%))]/10 px-2 py-1 text-[11px] text-[hsl(var(--agent-primary,147_33%_29%))]/80">
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-[hsl(var(--agent-primary,147_33%_29%))]/10 px-2 py-1 text-[11px] text-[hsl(var(--agent-primary,147_33%_29%))]/80">
                                   <span className="font-semibold text-[hsl(var(--agent-primary,147_33%_29%))]">{amounts.numMensualidades}</span> meses
                                 </span>
                               )}
@@ -819,7 +835,7 @@ const AgentUnidadesProyecto = () => {
                   </Collapsible>
                 )}
                 {selectedSchemeId && (
-                  <div className="bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/20 rounded-xl px-3 py-2.5 text-xs text-[hsl(var(--agent-primary,147_33%_29%))] font-medium flex items-center gap-2">
+                  <div className="bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/20 rounded-md px-3 py-2.5 text-xs text-[hsl(var(--agent-primary,147_33%_29%))] font-medium flex items-center gap-2">
                     <FileText className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">Plan seleccionado: <span className="font-semibold">{dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre || ""}</span></span>
                   </div>
@@ -828,7 +844,7 @@ const AgentUnidadesProyecto = () => {
               <div className="shrink-0 px-6 py-4 border-t bg-background">
                 {canGenerateOffer && (
                   isAgentRole && !hasTrainingComplete ? (
-                    <Button className="w-full gap-2 rounded-full" size="lg" disabled>
+                    <Button className="w-full gap-2 rounded-md" size="lg" disabled>
                       <FileText className="h-5 w-5" /> Completa tu capacitación para generar ofertas
                     </Button>
                   ) : (
@@ -843,7 +859,7 @@ const AgentUnidadesProyecto = () => {
                       forceLight={true}
                       enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] text-white font-semibold text-sm shadow-lg shadow-[hsl(var(--agent-primary,147_33%_29%))]/20 hover:brightness-110 active:scale-[0.98] transition-all">
+                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md bg-[hsl(var(--agent-primary,147_33%_29%))] text-white font-semibold text-sm shadow-lg shadow-[hsl(var(--agent-primary,147_33%_29%))]/20 hover:brightness-110 active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
                           <span>
                             Configurar Oferta
@@ -873,7 +889,7 @@ const UnitCard = React.memo(({ prop, formatPrice, onClick }: {
   onClick: () => void;
 }) => (
   <Card
-    className="overflow-hidden cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border border-border/60 rounded-xl bg-card"
+    className="overflow-hidden cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border border-border/60 rounded-md bg-card"
     onClick={onClick}
   >
     <div className="relative h-36">
@@ -920,7 +936,7 @@ const UnitCardImage = ({ images }: { images: any[] }) => {
       </div>
     );
   }
-  return <img src={images[0].url} alt="" className="w-full h-full object-cover" loading="lazy" />;
+  return <img src={optimizedImage(images[0].url, { width: 480, resize: "cover" })} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />;
 };
 
 // Detail carousel
@@ -945,12 +961,12 @@ const DetailCarousel = ({ images }: { images: any[] }) => {
   if (images.length === 0) return null;
 
   return (
-    <div className="relative rounded-xl overflow-hidden">
+    <div className="relative rounded-md overflow-hidden">
       <div ref={emblaRef} className="overflow-hidden">
         <div className="flex">
           {images.map((img: any, i: number) => (
             <div key={img.id || i} className="min-w-0 flex-[0_0_100%]">
-              <img src={img.url} alt="" className="w-full h-56 object-cover" loading="lazy" />
+              <img src={optimizedImage(img.url, { width: 720, resize: "cover" })} alt="" className="w-full h-56 object-cover" loading="lazy" decoding="async" />
             </div>
           ))}
         </div>
