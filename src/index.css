@@ -422,6 +422,7 @@ All colors MUST be HSL.
 ═══════════════════════════════════════════════ */
 
 .agent-portal {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --agent-primary: 147 33% 29%;       /* #2D5A3D */
   --agent-primary-foreground: 0 0% 100%;
   --agent-amber: 38 92% 50%;          /* #F59E0B */
@@ -432,6 +433,10 @@ All colors MUST be HSL.
   --agent-metric-green: 163 82% 27%;  /* #0D7C5F */
   --agent-muted: 220 9% 64%;          /* #9CA3AF */
 }
+
+/* Oculta la barra de scroll nativa (carruseles horizontales) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ═══════════════════════════════════════════════
    SOZU Theme — Scoped to .sozu-theme ancestor

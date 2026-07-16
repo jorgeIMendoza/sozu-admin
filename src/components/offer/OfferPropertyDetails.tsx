@@ -3,6 +3,7 @@ import { Bed, Bath, Car, Building2, Ruler, Package, ChevronRight, KeyRound, Copy
 import type { PropertyDetails, OfertaBodega, OfertaEstacionamiento } from "@/lib/offers/offer-data";
 import { formatMXN } from "@/lib/offers/offer-data";
 import UnitExtrasDialog from "./UnitExtrasDialog";
+import SectionCard from "./SectionCard";
 
 interface Props {
   property: PropertyDetails;
@@ -68,7 +69,7 @@ const StatTile = ({
   return (
     <Wrapper
       {...(interactive ? { type: "button" as const, onClick } : {})}
-      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left w-full ${
+      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md border text-left w-full ${
         interactive
           ? "bg-primary/5 border-primary/25 hover:bg-primary/10 transition-colors"
           : "bg-muted/50 border-border/40"
@@ -111,23 +112,15 @@ const OfferPropertyDetails = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* clipboard no disponible — no-op */
+      /* clipboard no disponible - no-op */
     }
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden">
-
-      {/* Header */}
-      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border bg-muted/20">
-        <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-        <h3 className="text-sm font-semibold">Datos de la propiedad</h3>
-      </div>
-
-      <div className="p-5">
+    <SectionCard icon={Building2} title="Datos de la propiedad" bodyClassName="p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-          {/* Left: ficha técnica — SOLO datos de identificación + precio */}
+          {/* Left: ficha técnica - SOLO datos de identificación + precio */}
           <div>
             <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-muted-foreground/60 mb-2">
               Ficha técnica
@@ -143,7 +136,7 @@ const OfferPropertyDetails = ({
             ) : null}
           </div>
 
-          {/* Right: características + extras — cada dato UNA sola vez */}
+          {/* Right: características + extras - cada dato UNA sola vez */}
           <div className="space-y-4">
             <div>
               <p className="text-[9px] uppercase tracking-[0.18em] font-bold text-muted-foreground/60 mb-2">
@@ -161,7 +154,7 @@ const OfferPropertyDetails = ({
                 {property.area ? (
                   <StatTile icon={Ruler} label={`${property.area}`} badge="m²" />
                 ) : null}
-                {/* Estacionamiento — tile clickeable con detalle en modal */}
+                {/* Estacionamiento - tile clickeable con detalle en modal */}
                 {hasEstac && (
                   <StatTile
                     icon={Car}
@@ -170,7 +163,7 @@ const OfferPropertyDetails = ({
                     onClick={() => setDialogKind("estacionamiento")}
                   />
                 )}
-                {/* Bodega — mismo trato que estacionamiento */}
+                {/* Bodega - mismo trato que estacionamiento */}
                 {hasBodegas && (
                   <StatTile
                     icon={Package}
@@ -184,7 +177,7 @@ const OfferPropertyDetails = ({
 
             {/* CLABE STP */}
             {clabeStp && (
-              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-muted/50 border border-border/40">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-muted/50 border border-border/40">
                 <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <KeyRound className="w-3.5 h-3.5 text-primary" />
                 </div>
@@ -207,7 +200,6 @@ const OfferPropertyDetails = ({
             )}
           </div>
         </div>
-      </div>
 
       <UnitExtrasDialog
         open={dialogKind !== null}
@@ -216,7 +208,7 @@ const OfferPropertyDetails = ({
         bodegas={bodegas}
         estacionamientos={estacionamientos}
       />
-    </div>
+    </SectionCard>
   );
 };
 

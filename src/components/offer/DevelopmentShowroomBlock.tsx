@@ -27,7 +27,7 @@ const DevelopmentShowroomBlock = ({ showroom, developmentName, agent }: Props) =
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
 
-      {/* ── Header — showroom identity ── */}
+      {/* ── Header - showroom identity ── */}
       <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -116,7 +116,7 @@ const DevelopmentShowroomBlock = ({ showroom, developmentName, agent }: Props) =
           </div>
         </div>
 
-        {/* Map — overflow hidden clips Google's "Abrir en Maps" button */}
+        {/* Map - overflow hidden clips Google's "Abrir en Maps" button */}
         {showroom.googleMapsEmbedUrl && (
           <div className="relative h-[210px] sm:h-full min-h-[210px] bg-muted border-t sm:border-t-0 sm:border-l border-border overflow-hidden">
             <iframe

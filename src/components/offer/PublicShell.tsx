@@ -85,14 +85,14 @@ const PublicShell = ({
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col [&_*:focus-visible]:!outline-none [&_*:focus-visible]:!ring-0 [&_*:focus-visible]:!ring-offset-0">
 
       {/* ── HEADER ── */}
       <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-xl border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 md:px-6 h-14 flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center gap-3">
 
           {/* SOZU logo */}
-          <div className="shrink-0 self-center h-7 flex items-center max-w-[90px]">
+          <div className="shrink-0 self-center h-6 flex items-center max-w-[78px]">
             <img
               src={sozuLogo}
               alt="SOZU"
@@ -103,7 +103,7 @@ const PublicShell = ({
           {/* Center: dev logo or name */}
           <div className="flex-1 flex items-center justify-center min-w-0 overflow-hidden self-center">
             {developmentLogoUrl ? (
-              <div className="h-7 flex items-center justify-center max-w-[130px] overflow-hidden">
+              <div className="h-8 flex items-center justify-center max-w-[150px] overflow-hidden">
                 <img
                   src={developmentLogoUrl}
                   alt={developmentName ?? "Desarrollo"}
@@ -136,7 +136,7 @@ const PublicShell = ({
               {agent ? (
                 <AgentBadge agent={agent} />
               ) : (
-                /* Cargando: skeleton — nunca un teléfono corporativo hardcodeado */
+                /* Cargando: skeleton - nunca un teléfono corporativo hardcodeado */
                 <div className="inline-flex items-center gap-2 pl-1 pr-3 py-1.5 rounded-full border border-border bg-muted/40">
                   <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
                   <div className="h-3 w-20 rounded bg-muted animate-pulse" />
@@ -147,7 +147,7 @@ const PublicShell = ({
         </div>
       </header>
 
-      {/* ── MOBILE NAV — drawer lateral derecha ── */}
+      {/* ── MOBILE NAV - drawer lateral derecha ── */}
       {mobileNavMounted && navSections && (
         <>
           {/* Backdrop */}

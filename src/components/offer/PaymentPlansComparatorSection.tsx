@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { ChevronDown, LayoutGrid, BadgePercent, CheckCircle2, TrendingDown, Clock } from "lucide-react";
+import { LayoutGrid, BadgePercent, CheckCircle2, TrendingDown, Clock } from "lucide-react";
 import type { PaymentPlan } from "@/lib/offers/offer-data";
+import SectionCard from "./SectionCard";
 
 interface Props {
   plans: PaymentPlan[];
@@ -17,8 +17,6 @@ const fmt = (n: number) =>
 const pct = (n: number) => `${n}%`;
 
 const PaymentPlansComparatorSection = ({ plans, recommendedPlanId }: Props) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   if (!plans || plans.length === 0) return null;
 
   const minEnganche = Math.min(...plans.map((p) => p.downPaymentPct));
@@ -33,46 +31,14 @@ const PaymentPlansComparatorSection = ({ plans, recommendedPlanId }: Props) => {
   };
 
   return (
-    <section className="rounded-2xl bg-card border border-border overflow-hidden">
-
-      {/* Toggle header */}
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-muted/20 transition-colors"
-        aria-expanded={isExpanded}
-      >
-        <div className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
-          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <LayoutGrid className="w-3.5 h-3.5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-foreground">
-              Comparar los {plans.length} esquemas lado a lado
-            </h3>
-            {!isExpanded && (
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Desde {fmt(minPrice)} · enganche desde {pct(minEnganche)}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {!isExpanded && (
-            <span className="hidden sm:inline text-[11px] font-semibold text-primary">
-              Ver tabla
-            </span>
-          )}
-          <ChevronDown
-            className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
-              isExpanded ? "rotate-180" : ""
-            }`}
-          />
-        </div>
-      </button>
-
-      {isExpanded && (
-        <div className="border-t border-border">
+    <SectionCard
+      icon={LayoutGrid}
+      title={`Comparar los ${plans.length} esquemas lado a lado`}
+      bodyClassName=""
+    >
+          <p className="text-[11px] text-muted-foreground px-5 pt-3">
+            Desde {fmt(minPrice)} · enganche desde {pct(minEnganche)}
+          </p>
 
           {/* Scroll hint mobile */}
           <p className="sm:hidden text-[10px] text-muted-foreground px-5 pt-3 pb-0 flex items-center gap-1.5">
@@ -137,7 +103,7 @@ const PaymentPlansComparatorSection = ({ plans, recommendedPlanId }: Props) => {
               </thead>
 
               <tbody>
-                {/* Precio final — hero row */}
+                {/* Precio final - hero row */}
                 <tr className="bg-muted/10">
                   <td className="px-4 py-3.5 border-r border-b border-border">
                     <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-muted-foreground">
@@ -245,9 +211,7 @@ const PaymentPlansComparatorSection = ({ plans, recommendedPlanId }: Props) => {
           <p className="text-[10px] text-muted-foreground/60 text-center px-5 py-3 border-t border-border/50">
             Esquemas vigentes a la fecha de expedición. Sujetos a disponibilidad.
           </p>
-        </div>
-      )}
-    </section>
+    </SectionCard>
   );
 };
 

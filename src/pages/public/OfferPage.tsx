@@ -5,7 +5,6 @@ import Tour360Section from "@/components/offer/Tour360Section";
 import AgentCard from "@/components/offer/AgentCard";
 import CustomerAccountView from "@/components/offer/CustomerAccountView";
 import DevelopmentLogo from "@/components/offer/DevelopmentLogo";
-import DevelopmentPresenceSection from "@/components/offer/DevelopmentPresenceSection";
 import FormalReservationGateModal from "@/components/offer/FormalReservationGateModal";
 import OfferAmenities from "@/components/offer/OfferAmenities";
 import OfferConstructionProgress from "@/components/offer/OfferConstructionProgress";
@@ -16,6 +15,7 @@ import OfferPaymentPlansComparator from "@/components/offer/OfferPaymentPlansCom
 import OfferPropertyDetails from "@/components/offer/OfferPropertyDetails";
 import PreReservationActiveView from "@/components/offer/PreReservationActiveView";
 import PublicShell from "@/components/offer/PublicShell";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgentById } from "@/lib/offers/agent-data";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import {
@@ -25,25 +25,19 @@ import {
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
-import { AlertCircle, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Instagram, Loader2, MapPin, Sparkles, Youtube } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Building2, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Home, Instagram, Landmark, Loader2, MapPin, ScanEye, Sparkles, UserRound, Youtube } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-const NAV_SECTIONS = [
-  { id: "gallery",       label: "Galería" },
-  { id: "agent",         label: "Asesor" },
-  { id: "details",       label: "La unidad" },
-  { id: "floor-plan",    label: "Plano" },
-  { id: "tour-360",      label: "Tour 360°" },
-  { id: "payment-plans", label: "Esquemas" },
-  { id: "highlights",    label: "Destacados" },
-  { id: "construction",  label: "Avance obra" },
-  { id: "amenities",     label: "Amenidades" },
-  { id: "location",      label: "Ubicación" },
-  { id: "development",   label: "Showroom" },
-] as const;
+type TabId = "unidad" | "esquemas" | "desarrollo" | "asesor";
 
-const SCROLL_OFFSET = 80;
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: "unidad",     label: "La Unidad",        icon: Home },
+  { id: "esquemas",   label: "Esquemas de Pago", icon: Landmark },
+  { id: "desarrollo", label: "El Desarrollo",    icon: Sparkles },
+  { id: "asesor",     label: "Tu Asesor",        icon: UserRound },
+];
 
 type DevelopmentSocials = { instagram?: string; facebook?: string; youtube?: string };
 
@@ -71,7 +65,7 @@ function DevelopmentSocialLinks({ socials, variant = "desktop" }: {
 
   const linkBase =
     variant === "mobile"
-      ? "flex-1 min-w-[120px] h-10 inline-flex items-center justify-center gap-2 px-3 rounded-xl bg-card border border-border text-xs font-semibold transition-colors"
+      ? "flex-1 min-w-[120px] h-10 inline-flex items-center justify-center gap-2 px-3 rounded-md bg-card border border-border text-xs font-semibold transition-colors"
       : "inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-card border border-border text-xs font-semibold transition-colors";
 
   return (
@@ -115,9 +109,7 @@ const OfferPage = () => {
   const agent = dbAgent ?? mockAgent;
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<string>("gallery");
-  const [revealedSections, setRevealedSections] = useState<Set<string>>(new Set());
-  const galleryRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("unidad");
 
   const preReservation = useOfferStore((s) =>
     s.preReservations.find(
@@ -128,48 +120,20 @@ const OfferPage = () => {
     s.reservations.find((r) => r.preReservationId === preReservation?.id)
   );
 
-  const visibleNavSections = useMemo(() => {
-    if (!offer) return [] as { id: string; label: string }[];
-    return [...NAV_SECTIONS].filter(({ id }) => {
+  // Scroll al tope al cambiar de pestaña (evita quedar a media página).
+  const changeTab = (id: TabId) => {
+    setActiveTab(id);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const visibleTabs = useMemo(() => {
+    if (!offer) return [] as typeof TABS;
+    return TABS.filter(({ id }) => {
       if (import.meta.env.DEV) return true;
-      switch (id) {
-        case "agent":         return !!agent;
-        case "floor-plan":    return !!offer.floorPlanUrl;
-        case "tour-360":      return !!offer.tour360;
-        case "highlights":    return !!(offer.highlights && offer.highlights.length > 0);
-        case "development":   return !!offer.development;
-        default:              return true;
-      }
+      if (id === "asesor") return !!agent;
+      return true;
     });
   }, [offer, agent]);
-
-  useEffect(() => {
-    if (!offer) return;
-    const observers: IntersectionObserver[] = [];
-
-    visibleNavSections.forEach(({ id }) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const obs = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) {
-            setActiveSection(id);
-            setRevealedSections((prev) => {
-              if (prev.has(id)) return prev;
-              const next = new Set(prev);
-              next.add(id);
-              return next;
-            });
-          }
-        },
-        { rootMargin: `-${SCROLL_OFFSET}px 0px -45% 0px`, threshold: 0 }
-      );
-      obs.observe(el);
-      observers.push(obs);
-    });
-
-    return () => observers.forEach((o) => o.disconnect());
-  }, [offer, visibleNavSections]);
 
   const handleCtaClick = () => {
     if (reservationId) {
@@ -178,19 +142,6 @@ const OfferPage = () => {
       setGateModalOpen(true);
     }
   };
-
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
-    window.scrollTo({ top, behavior: "smooth" });
-    setActiveSection(id);
-  };
-
-  const sectionClass = (id: string) =>
-    `scroll-mt-20 transition-[opacity,transform] duration-500 ease-out ${
-      revealedSections.has(id) ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
-    }`;
 
   if (dbLoading) {
     return (
@@ -236,21 +187,6 @@ const OfferPage = () => {
   // Cambiar a true cuando el flujo de pago/hold esté en producción.
   const APARTADO_HABILITADO = false;
 
-  const urgencyLevel: "normal" | "soon" | "imminent" =
-    daysToExpiry < 1 ? "imminent" : daysToExpiry <= 3 ? "soon" : "normal";
-  const urgencyClass =
-    urgencyLevel === "imminent"
-      ? "bg-destructive/15 text-destructive border border-destructive/40 font-bold animate-pulse"
-      : urgencyLevel === "soon"
-      ? "bg-warning/20 text-warning-foreground border border-warning/40 font-bold"
-      : "bg-warning/10 text-warning-foreground border border-warning/30";
-  const expiryLabel =
-    daysToExpiry < 1 ? "Vence hoy" : daysToExpiry === 1 ? "Vence mañana" : `Vence en ${daysToExpiry} días`;
-
-  const expeditionLabel = new Date(offer.generatedAt)
-    .toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })
-    .replace(/\./g, "");
-
   // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
   // precio, metraje y $/m² reconcilien exacto entre sí.
   const formattedPrice = new Intl.NumberFormat("es-MX", {
@@ -261,82 +197,22 @@ const OfferPage = () => {
 
   const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
 
+  const hasPaymentPlans = !!(offer.paymentPlans && offer.paymentPlans.length > 0);
+
   return (
-    <PublicShell
-      agent={agent}
-      navSections={visibleNavSections}
-      onNavClick={scrollToSection}
-      activeSectionId={activeSection}
-    >
+    <PublicShell agent={agent} noFooter>
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-        <div className="lg:grid lg:grid-cols-[180px_1fr_268px] lg:gap-8 lg:items-start">
-
-          {/* ── LEFT NAV ── */}
-          <aside className="hidden lg:block sticky top-20 self-start">
-            <p className="text-[8.5px] uppercase tracking-[0.28em] font-semibold text-muted-foreground/40 mb-4 pl-2">
-              Contenido
-            </p>
-            <nav className="space-y-0.5">
-              {visibleNavSections.map((s) => {
-                const isActive = activeSection === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => scrollToSection(s.id)}
-                    className={`w-full text-left flex items-center py-2 px-2.5 rounded-lg transition-all duration-150 group ${
-                      isActive
-                        ? "bg-primary/8 text-primary"
-                        : "hover:bg-muted/50 hover:text-foreground"
-                    }`}
-                  >
-                    <span
-                      className={`text-[13px] leading-snug transition-colors duration-150 ${
-                        isActive
-                          ? "font-semibold text-primary"
-                          : "text-muted-foreground/70 group-hover:text-foreground"
-                      }`}
-                    >
-                      {s.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            {/* Website below nav */}
-            {offer.development?.website && (
-              <a
-                href={offer.development.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 flex items-center gap-3 p-3 rounded-xl border border-border bg-background hover:border-primary/40 hover:bg-muted/40 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Globe className="w-4 h-4 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[9px] uppercase tracking-[0.16em] font-semibold text-muted-foreground">Sitio web</p>
-                  <p className="text-[11px] font-semibold text-foreground truncate">
-                    {offer.development.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                  </p>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-              </a>
-            )}
-          </aside>
+        <div className="lg:grid lg:grid-cols-[1fr_324px] lg:gap-8 lg:items-start">
 
           {/* ── MAIN CONTENT ── */}
-          <div className="space-y-5 min-w-0">
+          <div className="min-w-0">
 
-            {/* Header */}
-            <header>
-              {/* ── DESKTOP: logo centrado + modelo pequeño arriba + dirección ── */}
-              {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) ? (
-                <div className="hidden md:flex flex-col items-center text-center mb-4">
-                  <p className="text-[9px] uppercase tracking-[0.22em] font-semibold text-muted-foreground/50 mb-2">
-                    {offer.property.unitModel} · {offer.property.unitNumber}
-                  </p>
-                  <div className="h-24 flex items-center justify-center mb-2">
+            {/* Header / identidad (solo mobile; en desktop la identidad vive en el card derecho) */}
+            <header className="mb-4 md:mb-0 empty:hidden">
+              {/* ── MOBILE: compacto - logo pequeño + modelo + dirección + precio ── */}
+              <div className="md:hidden flex flex-col items-center text-center">
+                {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) && (
+                  <div className="h-8 flex items-center justify-center mb-3">
                     <DevelopmentLogo
                       development={offer.development}
                       developmentName={offer.property.projectName}
@@ -344,395 +220,250 @@ const OfferPage = () => {
                       className="!h-full"
                     />
                   </div>
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                    {offer.location.address}
-                  </p>
-                </div>
-              ) : (
-                <div className="hidden md:block mb-5">
-                  <div className="flex items-center gap-1.5 mb-4 text-[9px] uppercase tracking-[0.22em] font-semibold text-muted-foreground/50 min-w-0">
-                    <span className="shrink-0">SOZU</span>
-                    <span className="text-muted-foreground/25 shrink-0">/</span>
-                    <span className="truncate">{offer.property.projectName}</span>
-                    <span className="text-muted-foreground/25 shrink-0">/</span>
-                    <span className="shrink-0">{offer.property.unitNumber}</span>
-                  </div>
-                  <h1 className="text-[2.75rem] font-bold leading-[1.1] tracking-tight text-foreground mb-3">
-                    {formatPropertyTitle(offer.property)}
-                  </h1>
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
-                    <MapPin className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                    {offer.location.address}
-                  </p>
-                </div>
-              )}
-
-              {/* ── MOBILE: centrado — logo + modelo + dirección ── */}
-              <div className="md:hidden mb-4 flex flex-col items-center text-center">
-                {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) && (
-                  <div className="h-9 flex items-center justify-center mb-5">
-                    <DevelopmentLogo
-                      development={offer.development}
-                      developmentName={offer.property.projectName}
-                      variant="section"
-                      className="h-9"
-                    />
-                  </div>
                 )}
-                <h1 className="font-serif text-[1.75rem] font-semibold tracking-[0.02em] leading-[1.1] text-foreground mb-5">
+                <h1 className="font-serif text-2xl font-semibold tracking-[0.02em] leading-[1.1] text-foreground mb-2">
                   {offer.property.unitModel} {offer.property.unitNumber}
                 </h1>
-                <p className="flex items-center gap-1 text-[11px] text-muted-foreground mb-4">
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground mb-2.5">
                   <MapPin className="w-3 h-3 shrink-0 opacity-60" />
                   {offer.location.address}
                 </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
+                  {formattedPrice}
+                </p>
+                {!!offer.property.pricePerM2 && offer.property.area && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
+                    {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
+                  </p>
+                )}
               </div>
 
-              {/* Separator */}
-              <div className="border-t border-border/50 mb-3" />
-
-              {/* Meta bar */}
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                <span className="font-mono text-[10px] text-muted-foreground/40 tracking-[0.1em]">
-                  {offer.id}
-                </span>
-                <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
-                <span className="text-[11px] text-muted-foreground/55">
-                  Expedida {expeditionLabel}
-                </span>
-                {isExpired ? (
-                  <>
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-destructive/10 text-destructive border border-destructive/25 font-semibold">
-                      <AlertCircle className="w-3 h-3" />
-                      Oferta vencida
-                    </span>
-                  </>
-                ) : daysToExpiry >= 0 ? (
-                  <>
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] ${urgencyClass}`}>
-                      {urgencyLevel === "imminent" ? (
-                        <AlertCircle className="w-3 h-3" />
-                      ) : (
-                        <Calendar className="w-3 h-3" />
-                      )}
-                      {expiryLabel}
-                    </span>
-                  </>
-                ) : null}
-              </div>
             </header>
 
-            {/* Expired banner */}
+            {/* Expired banner - slim, solo mobile (en desktop lo comunica el card derecho) */}
             {isExpired && (
-              <div className="rounded-xl bg-destructive/8 border border-destructive/20 px-4 py-3 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-destructive">Esta oferta ya venció</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    La información del desarrollo sigue disponible. Contacta a tu asesor para una oferta actualizada.
-                  </p>
-                </div>
+              <div className="lg:hidden rounded-lg bg-destructive/8 border border-destructive/20 px-3 py-2 flex items-center gap-2 mb-4">
+                <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                <p className="text-[12px] text-destructive leading-snug">
+                  <span className="font-semibold">Esta oferta ya venció.</span>{" "}
+                  <span className="text-muted-foreground">Contacta a tu asesor para una actualizada.</span>
+                </p>
               </div>
             )}
 
-            {/* GALLERY */}
-            <div id="gallery" ref={galleryRef} className={sectionClass("gallery")}>
-              <OfferGallery
-                images={offer.gallery}
-                captions={offer.galleryCaptions}
-                videoUrl={offer.videoUrl}
-                tour360Id={offer.tour360 ? "tour-360" : undefined}
-              />
-            </div>
+            {/* ── TABS ── */}
+            <Tabs value={activeTab} onValueChange={(v) => changeTab(v as TabId)}>
+              {/* Tab bar sticky - mismo lenguaje visual que el menú de Inmuebles (portal cobranza) */}
+              <div className="sticky top-14 z-30 -mx-4 md:-mx-6 px-4 md:px-6 bg-background/90 backdrop-blur-xl">
+                <TabsList className="flex w-full h-auto justify-start gap-0 bg-transparent p-0 rounded-none border-b border-border">
+                  {visibleTabs.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <TabsTrigger
+                        key={t.id}
+                        value={t.id}
+                        className="flex-1 min-w-0 flex items-center justify-center md:justify-start gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-2 md:px-4 py-2.5 text-[13px] font-medium text-muted-foreground shadow-none transition-colors duration-100 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-primary/5 data-[state=active]:shadow-none hover:text-foreground hover:bg-muted/50"
+                      >
+                        <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                        <span className="truncate">{t.label}</span>
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </div>
 
-            {/* AGENT */}
-            <div id="agent" className={sectionClass("agent")}>
-              {agent ? (
-                <AgentCard agent={agent} offerId={offer.id} offerLabel={formatPropertyTitle(offer.property)} />
-              ) : import.meta.env.DEV ? (
-                <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                  <div className="bg-muted/30 border-b border-border/50 px-5 py-2">
-                    <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">
-                      Tu asesor comercial
-                    </p>
-                  </div>
-                  <div className="p-5 flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-muted animate-pulse shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-muted rounded-lg w-2/3 animate-pulse" />
-                      <div className="h-3 bg-muted rounded-lg w-1/2 animate-pulse" />
-                      <p className="text-[11px] text-muted-foreground/60 mt-1">
-                        Tu asesor SOZU estará disponible en esta oferta próximamente.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* DETAILS */}
-            <div id="details" className={sectionClass("details")}>
-              <OfferPropertyDetails
-                property={offer.property}
-                bodegas={offer.bodegas}
-                estacionamientos={offer.estacionamientos}
-                clabeStp={offer.clabeStp}
-              />
-            </div>
-
-            {/* FLOOR PLAN */}
-            <div id="floor-plan" className={sectionClass("floor-plan")}>
-              {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
-                <OfferFloorPlanLarge
-                  imageUrl={offer.floorPlanUrl}
-                  unitArea={offer.property.area}
-                  bedrooms={offer.property.bedrooms}
-                  bathrooms={offer.property.bathrooms}
-                  view={offer.property.view}
-                  floor={offer.property.level}
-                  planoUbicacionUrl={offer.planoUbicacionUrl}
-                  planoUbicacionRegiones={offer.planoUbicacionRegiones}
-                  highlightUnit={offer.unitDepto}
-                  fullPropertyNumber={offer.property.unitNumber}
+              {/* ── TAB: LA UNIDAD ── */}
+              <TabsContent value="unidad" className="mt-6 space-y-5 focus-visible:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-2 data-[state=active]:duration-300">
+                {/* Galería */}
+                <OfferGallery
+                  images={offer.gallery}
+                  captions={offer.galleryCaptions}
+                  videoUrl={offer.videoUrl}
                 />
-              ) : import.meta.env.DEV ? (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-border/40 flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20.25v-15m6 15v-15M3.75 9h16.5M3.75 15h16.5" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-muted-foreground">Plano arquitectónico</p>
-                      <p className="text-[11px] text-muted-foreground/60">Próximamente disponible</p>
-                    </div>
+
+                {/* Detalles */}
+                <OfferPropertyDetails
+                  property={offer.property}
+                  bodegas={offer.bodegas}
+                  estacionamientos={offer.estacionamientos}
+                  clabeStp={offer.clabeStp}
+                />
+
+                {/* Recorre tu unidad (Tour 360) - antes del plano */}
+                {offer.tour360 ? (
+                  <div id="tour-360">
+                    <Tour360Section
+                      tour={offer.tour360}
+                      developmentName={offer.property.projectName}
+                      propertyLabel={`${offer.property.unitModel} ${offer.property.unitNumber}`}
+                    />
                   </div>
-                  <div className="p-5">
-                    <div className="aspect-[4/3] rounded-xl bg-gradient-to-br from-muted/50 to-muted/20 flex flex-col items-center justify-center gap-3 border border-border/30">
-                      <svg className="w-16 h-16 text-muted-foreground/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h12A2.25 2.25 0 0020.25 14.25V3M3.75 3h16.5M3.75 3H2.25m1.5 0h.375m15.75 0H21m-1.5 0h-.375M9 7.5h6M9 10.5h6M9 13.5h3" />
-                      </svg>
+                ) : import.meta.env.DEV ? (
+                  <div id="tour-360" className="rounded-md border border-border bg-card overflow-hidden">
+                    <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border bg-muted/20">
+                      <ScanEye className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <h3 className="text-sm font-semibold text-foreground">Recorre tu unidad</h3>
+                    </div>
+                    <div className="aspect-video bg-gradient-to-br from-muted/40 to-muted/20 flex flex-col items-center justify-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
+                        <Sparkles className="w-7 h-7 text-muted-foreground/30" />
+                      </div>
                       <p className="text-xs text-muted-foreground/50 text-center px-8">
-                        El plano será cargado por el equipo del proyecto.
+                        El recorrido virtual será agregado en breve por el equipo de {offer.property.projectName}.
                       </p>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </div>
+                ) : null}
 
-            {/* TOUR 360 */}
-            {offer.tour360 ? (
-              <Tour360Section
-                tour={offer.tour360}
-                developmentName={offer.property.projectName}
-                propertyLabel={`${offer.property.unitModel} ${offer.property.unitNumber}`}
-              />
-            ) : import.meta.env.DEV ? (
-              <div id="tour-360" className={`${sectionClass("tour-360")} rounded-2xl border border-dashed border-border bg-muted/20 overflow-hidden`}>
-                <div className="px-5 py-4 border-b border-border/40 bg-muted/10 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-muted-foreground/40" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-muted-foreground">Recorrido virtual 360°</p>
-                    <p className="text-[11px] text-muted-foreground/60">Próximamente disponible</p>
-                  </div>
-                </div>
-                <div className="aspect-video bg-gradient-to-br from-muted/40 to-muted/20 flex flex-col items-center justify-center gap-3">
-                  <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
-                    <Sparkles className="w-7 h-7 text-muted-foreground/30" />
-                  </div>
-                  <p className="text-xs text-muted-foreground/50 text-center px-8">
-                    El recorrido virtual será agregado en breve por el equipo de {offer.property.projectName}.
-                  </p>
-                </div>
-              </div>
-            ) : null}
-
-            {/* PAYMENT PLANS */}
-            <div id="payment-plans" className={`${sectionClass("payment-plans")} space-y-5`}>
-              <OfferPaymentPlansComparator
-                offerId={offer.id}
-                plans={offer.paymentPlans}
-                listPrice={offer.property.listPrice}
-              />
-              {offer.paymentPlans && offer.paymentPlans.length > 0 && (
-                <PaymentPlansComparatorSection plans={offer.paymentPlans} />
-              )}
-            </div>
-
-            {/* HIGHLIGHTS */}
-            <div id="highlights" className={sectionClass("highlights")}>
-              {offer.highlights && offer.highlights.length > 0 ? (
-                <div className="rounded-2xl border border-border bg-card p-5 md:p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold">Esto la hace especial</h3>
-                  </div>
-                  <ul className="space-y-2.5">
-                    {offer.highlights.map((h, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                        <span>{h}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : import.meta.env.DEV ? (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 md:p-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 text-muted-foreground/40" />
-                    <h3 className="text-sm font-semibold text-muted-foreground">Esto la hace especial</h3>
-                  </div>
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/20 shrink-0" />
-                        <div className={`h-3 rounded-full bg-muted-foreground/15 ${i === 1 ? "w-3/4" : i === 2 ? "w-1/2" : "w-2/3"}`} />
+                {/* Plano */}
+                {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
+                  <OfferFloorPlanLarge
+                    imageUrl={offer.floorPlanUrl}
+                    unitArea={offer.property.area}
+                    bedrooms={offer.property.bedrooms}
+                    bathrooms={offer.property.bathrooms}
+                    view={offer.property.view}
+                    floor={offer.property.level}
+                    planoUbicacionUrl={offer.planoUbicacionUrl}
+                    planoUbicacionRegiones={offer.planoUbicacionRegiones}
+                    highlightUnit={offer.unitDepto}
+                    fullPropertyNumber={offer.property.unitNumber}
+                  />
+                ) : import.meta.env.DEV ? (
+                  <div className="rounded-md border border-border bg-card overflow-hidden">
+                    <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border bg-muted/20">
+                      <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <h3 className="text-sm font-semibold text-foreground">Plano arquitectónico</h3>
+                    </div>
+                    <div className="p-5">
+                      <div className="aspect-[4/3] rounded-md bg-gradient-to-br from-muted/50 to-muted/20 flex flex-col items-center justify-center gap-3 border border-border/30">
+                        <svg className="w-16 h-16 text-muted-foreground/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h12A2.25 2.25 0 0020.25 14.25V3M3.75 3h16.5M3.75 3H2.25m1.5 0h.375m15.75 0H21m-1.5 0h-.375M9 7.5h6M9 10.5h6M9 13.5h3" />
+                        </svg>
+                        <p className="text-xs text-muted-foreground/50 text-center px-8">
+                          El plano será cargado por el equipo del proyecto.
+                        </p>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 mt-3 leading-relaxed">
-                    Las características destacadas serán agregadas próximamente por el asesor.
-                  </p>
-                </div>
-              ) : null}
-            </div>
+                ) : null}
 
-            {/* CONSTRUCTION */}
-            <div id="construction" className={sectionClass("construction")}>
-              <OfferConstructionProgress
-                progress={offer.constructionProgress}
-                milestones={offer.constructionMilestones}
-                estimatedDelivery={offer.estimatedDelivery}
-                lastUpdated={offer.constructionLastUpdated}
-                videoUrl={offer.constructionVideoUrl}
-                videoTitle={offer.constructionVideoTitle}
-                photos={offer.constructionPhotos}
-                description={offer.constructionDescription}
-              />
-            </div>
+              </TabsContent>
 
-            {/* AMENITIES */}
-            <div id="amenities" className={sectionClass("amenities")}>
-              {offer.amenitiesEnriched && offer.amenitiesEnriched.length > 0 ? (
-                <AmenitiesGridSection amenities={offer.amenitiesEnriched} />
-              ) : (
-                <OfferAmenities amenities={offer.amenities} />
-              )}
-            </div>
-
-            {/* LOCATION */}
-            <div id="location" className={sectionClass("location")}>
-              <OfferLocation location={offer.location} />
-            </div>
-
-            {/* DEVELOPMENT */}
-            <div id="development" className={sectionClass("development")}>
-              {offer.development ? (
-                <DevelopmentPresenceSection
-                  development={offer.development}
-                  developmentName={offer.property.projectName}
-                  agent={agent}
+              {/* ── TAB: ESQUEMAS DE PAGO ── */}
+              <TabsContent value="esquemas" className="mt-6 space-y-5 focus-visible:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-2 data-[state=active]:duration-300">
+                <OfferPaymentPlansComparator
+                  offerId={offer.id}
+                  plans={offer.paymentPlans}
+                  listPrice={offer.property.listPrice}
                 />
-              ) : import.meta.env.DEV ? (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center">
-                  <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/50 mb-2">
-                    Información del desarrollo
-                  </p>
-                  <p className="text-sm font-bold text-foreground/70">{offer.property.projectName}</p>
-                  <p className="text-[11px] text-muted-foreground/50 mt-1">
-                    Redes sociales, showroom y sitio web disponibles próximamente.
-                  </p>
-                </div>
-              ) : null}
-            </div>
+                {hasPaymentPlans && (
+                  <PaymentPlansComparatorSection plans={offer.paymentPlans} />
+                )}
+              </TabsContent>
 
-            {/* Mobile-only: social links + website (on desktop shown in aside/nav) */}
-            {offer.development && (
-              <div className="lg:hidden space-y-3">
-                {offer.development.website && (
-                  <a
-                    href={offer.development.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/40 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <Globe className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[9px] uppercase tracking-[0.16em] font-semibold text-muted-foreground">Sitio web oficial</p>
-                      <p className="text-[11px] font-semibold text-foreground truncate">
-                        {offer.development.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              {/* ── TAB: EL DESARROLLO ── */}
+              <TabsContent value="desarrollo" className="mt-6 space-y-5 focus-visible:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-2 data-[state=active]:duration-300">
+                {/* Amenidades */}
+                {offer.amenitiesEnriched && offer.amenitiesEnriched.length > 0 ? (
+                  <AmenitiesGridSection amenities={offer.amenitiesEnriched} />
+                ) : (
+                  <OfferAmenities amenities={offer.amenities} />
+                )}
+
+                {/* Avance de obra */}
+                <OfferConstructionProgress
+                  progress={offer.constructionProgress}
+                  milestones={offer.constructionMilestones}
+                  estimatedDelivery={offer.estimatedDelivery}
+                  lastUpdated={offer.constructionLastUpdated}
+                  videoUrl={offer.constructionVideoUrl}
+                  videoTitle={offer.constructionVideoTitle}
+                  photos={offer.constructionPhotos}
+                  description={offer.constructionDescription}
+                />
+
+                {/* Ubicación + Showroom */}
+                <OfferLocation location={offer.location} showroom={offer.development?.showroom} />
+
+                {/* Sitio web + redes (mobile) */}
+                {offer.development && (
+                  <div className="lg:hidden space-y-3">
+                    {offer.development.website && (
+                      <a
+                        href={offer.development.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3.5 rounded-md border border-border bg-card hover:border-primary/40 hover:bg-muted/40 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <Globe className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] uppercase tracking-[0.16em] font-semibold text-muted-foreground">Sitio web oficial</p>
+                          <p className="text-[11px] font-semibold text-foreground truncate">
+                            {offer.development.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                          </p>
+                        </div>
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+                      </a>
+                    )}
+                    <DevelopmentSocialLinks socials={offer.development.socials} variant="mobile" />
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ── TAB: TU ASESOR ── */}
+              <TabsContent value="asesor" className="mt-6 space-y-5 focus-visible:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-2 data-[state=active]:duration-300">
+                {agent ? (
+                  <AgentCard agent={agent} offerId={offer.id} offerLabel={formatPropertyTitle(offer.property)} />
+                ) : import.meta.env.DEV ? (
+                  <div className="rounded-md border border-border bg-card overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border/50 px-5 py-2">
+                      <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">
+                        Tu asesor comercial
                       </p>
                     </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-                  </a>
-                )}
-                <DevelopmentSocialLinks socials={offer.development.socials} variant="mobile" />
-              </div>
-            )}
-
-            {/* Footer logos */}
-            {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) && (
-              <div className="rounded-2xl overflow-hidden border border-border/50">
-                <div className="bg-gradient-to-br from-muted/40 to-muted/10 px-6 py-6 text-center border-b border-border/40">
-                  <p className="text-[8.5px] uppercase tracking-[0.3em] font-semibold text-muted-foreground/50 mb-5">
-                    Una oferta presentada por
-                  </p>
-                  <div className="flex items-center justify-center gap-8 md:gap-12">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="h-10 flex items-center justify-center">
-                        <DevelopmentLogo development={offer.development} developmentName={offer.property.projectName} variant="footer" />
+                    <div className="p-5 flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-full bg-muted animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-muted rounded-lg w-2/3 animate-pulse" />
+                        <div className="h-3 bg-muted rounded-lg w-1/2 animate-pulse" />
+                        <p className="text-[11px] text-muted-foreground/60 mt-1">
+                          Tu asesor estará disponible en esta oferta próximamente.
+                        </p>
                       </div>
-                      <span className="text-[10px] font-medium text-foreground/60">
-                        {offer.development.legalName ?? offer.property.projectName}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div className="w-px h-7 bg-border/60" />
-                      <span className="text-[8px] font-semibold text-muted-foreground/35 uppercase tracking-widest">con</span>
-                      <div className="w-px h-7 bg-border/60" />
-                    </div>
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="h-10 flex items-center justify-center">
-                        <img src={sozuLogo} alt="SOZU" className="h-7 w-auto object-contain dark:invert" />
-                      </div>
-                      <span className="text-[10px] font-medium text-foreground/60">Comercializador</span>
                     </div>
                   </div>
-                </div>
-                <div className="px-5 py-2.5 bg-muted/5 text-center">
-                  <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
-                    SOZU es comercializador autorizado de {offer.property.projectName}. Oferta personal e intransferible.
-                  </p>
-                </div>
-              </div>
-            )}
-
+                ) : null}
+              </TabsContent>
+            </Tabs>
 
           </div>{/* /main content */}
 
           {/* ── RIGHT ASIDE ── */}
           <aside className="hidden lg:block sticky top-20 self-start">
-            <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-
-
+            <div className="rounded-md border border-border bg-card overflow-hidden shadow-sm">
               <div className="p-5 space-y-0">
 
-                {/* Project logo + unit model */}
+                {/* Identidad: logo + modelo + dirección (siempre visible, sticky) */}
                 <div className="pb-4 border-b border-border/60">
-                  <div className="flex flex-col items-center text-center mb-1">
-                    <p className="font-serif text-[19px] font-semibold tracking-[0.03em] text-foreground leading-snug">
-                      {offer.property.unitModel} {offer.property.unitNumber}
-                    </p>
-                  </div>
+                  {offer.development && (offer.development.logoUrl || offer.development.logoUrlInverse) && (
+                    <div className="h-9 flex items-center justify-center mb-3">
+                      <DevelopmentLogo
+                        development={offer.development}
+                        developmentName={offer.property.projectName}
+                        variant="section"
+                        className="!h-full"
+                      />
+                    </div>
+                  )}
+                  <p className="font-serif text-[19px] font-semibold tracking-[0.03em] text-foreground leading-snug text-center">
+                    {offer.property.unitModel} {offer.property.unitNumber}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug text-center line-clamp-2">
+                    {offer.location.address}
+                  </p>
 
                   {/* Quick specs row */}
                   {offer.property.area && (
@@ -753,66 +484,50 @@ const OfferPage = () => {
                   )}
                 </div>
 
-                {/* Price block */}
-                <div className="py-4 border-b border-border/60">
-                  <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mb-1">
+                {/* Precio - centrado */}
+                <div className="py-4 border-b border-border/60 text-center">
+                  <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mb-1.5">
                     Precio de lista
                   </p>
                   <p className="text-[1.75rem] font-bold tabular-nums text-foreground leading-none tracking-tight">
                     {formattedPrice}
                   </p>
                   {!!offer.property.pricePerM2 && offer.property.area && (
-                    <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
+                    <p className="text-[11px] font-semibold text-success mt-1.5 tabular-nums">
                       {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
                     </p>
                   )}
                 </div>
 
-                {/* Delivery + expiry */}
-                <div className="py-3.5 space-y-2 border-b border-border/60">
-                  {offer.estimatedDelivery && (
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <Calendar className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-                      <span>
-                        Entrega{" "}
-                        {new Date(offer.estimatedDelivery).toLocaleDateString("es-MX", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      </span>
+                {/* Datos clave - Entrega | Expedición (fechas completas, centradas) */}
+                <div className="grid grid-cols-2 gap-4 py-4 border-b border-border/60">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Calendar className="w-3 h-3 shrink-0 text-primary/60" />
+                      <p className="text-[9px] uppercase tracking-[0.16em] font-semibold text-muted-foreground/60">Entrega</p>
                     </div>
-                  )}
-                  {isExpired ? (
-                    <div className="flex items-center gap-2 text-[11px] text-destructive font-semibold">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      Oferta vencida
+                    <p className="text-sm font-semibold text-foreground leading-tight">
+                      {offer.estimatedDelivery
+                        ? new Date(offer.estimatedDelivery).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })
+                        : "Por definir"}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Calendar className="w-3 h-3 shrink-0 text-primary/60" />
+                      <p className="text-[9px] uppercase tracking-[0.16em] font-semibold text-muted-foreground/60">Expedición</p>
                     </div>
-                  ) : daysToExpiry >= 0 ? (
-                    <div className={`flex items-center gap-2 text-[11px] ${
-                      urgencyLevel === "imminent"
-                        ? "text-destructive font-semibold"
-                        : urgencyLevel === "soon"
-                        ? "text-warning-foreground font-semibold"
-                        : "text-muted-foreground"
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        urgencyLevel === "imminent"
-                          ? "bg-destructive animate-pulse"
-                          : urgencyLevel === "soon"
-                          ? "bg-warning"
-                          : "bg-muted-foreground/30"
-                      }`} />
-                      {expiryLabel}
-                    </div>
-                  ) : null}
+                    <p className="text-sm font-semibold text-foreground leading-tight">
+                      {new Date(offer.generatedAt).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </p>
+                  </div>
                 </div>
 
-                {/* CTA — ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
+                {/* CTA - ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
                 {!reservationId && (
                   <div className="pt-4">
                     {isExpired ? (
-                      <div className="rounded-xl bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">
+                      <div className="rounded-md bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">
                         <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
                         <p className="text-[10px] text-muted-foreground leading-relaxed">
                           Contacta a tu asesor para recibir una oferta actualizada.
@@ -823,7 +538,7 @@ const OfferPage = () => {
                         <button
                           onClick={ctaDisabled ? undefined : handleCtaClick}
                           disabled={ctaDisabled}
-                          className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                          className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
                             ctaDisabled
                               ? "bg-muted text-muted-foreground cursor-not-allowed"
                               : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
@@ -857,7 +572,78 @@ const OfferPage = () => {
         </div>{/* /lg:grid */}
       </div>{/* /max-w-7xl */}
 
-      {/* Mobile sticky CTA — oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
+      {/* ── FOOTER UNIFICADO - sello empresarial (fondo oscuro, siempre visible) ── */}
+      <footer className="mt-8 bg-zinc-900 text-zinc-400 mb-20 lg:mb-0">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
+          {/* Presentado por */}
+          <div className="flex flex-col items-center text-center">
+            <p className="text-[8px] uppercase tracking-[0.32em] font-semibold text-zinc-500 mb-4">
+              Una oferta presentada por
+            </p>
+            <div className="flex items-center justify-center gap-6 md:gap-10">
+              {offer.development?.developerName && (
+                <>
+                  {/* Desarrolladora (constructora del proyecto) - clic → sitio oficial */}
+                  <a
+                    href={offer.development.developerWebsite ?? undefined}
+                    target={offer.development.developerWebsite ? "_blank" : undefined}
+                    rel="noopener noreferrer"
+                    className={`flex flex-col items-center gap-2 ${offer.development.developerWebsite ? "hover:opacity-80 transition-opacity" : "pointer-events-none"}`}
+                  >
+                    <div className="h-6 md:h-7 flex items-center justify-center">
+                      {offer.development.developerLogoUrl ? (
+                        <img
+                          src={offer.development.developerLogoUrl}
+                          alt={offer.development.developerName}
+                          className="h-full w-auto object-contain brightness-0 invert"
+                        />
+                      ) : (
+                        <span className="text-base md:text-lg font-bold text-white tracking-tight">
+                          {offer.development.developerName}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
+                      Desarrolla · {offer.development.developerName}
+                    </span>
+                  </a>
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-px h-4 bg-zinc-700" />
+                    <span className="text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em]">con</span>
+                    <div className="w-px h-4 bg-zinc-700" />
+                  </div>
+                </>
+              )}
+              {/* Comercializador SOZU - clic → sozu.com */}
+              <a
+                href="https://www.sozu.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="h-6 md:h-7 flex items-center justify-center">
+                  <img src={sozuLogo} alt="SOZU" className="h-5 md:h-6 w-auto object-contain brightness-0 invert" />
+                </div>
+                <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
+                  Comercializa · SOZU
+                </span>
+              </a>
+            </div>
+          </div>
+
+          {/* Línea legal */}
+          <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-center md:text-left">
+            <p className="text-[9px] text-zinc-500 leading-relaxed">
+              SOZU © 2026 · Comercializador autorizado{offer.development ? ` de ${offer.development.legalName ?? offer.property.projectName}` : ""}. Oferta personal e intransferible.
+            </p>
+            <p className="text-[9px] text-zinc-500 leading-relaxed">
+              Oferta informativa · No constituye contrato de compraventa · Sujeta a disponibilidad · Precios en MXN
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Mobile sticky CTA - oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
       {!reservationId && (isExpired || APARTADO_HABILITADO) && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
@@ -873,7 +659,7 @@ const OfferPage = () => {
               <button
                 onClick={ctaDisabled ? undefined : handleCtaClick}
                 disabled={ctaDisabled}
-                className={`w-full h-11 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
                   ctaDisabled
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-primary text-primary-foreground hover:bg-primary/90"

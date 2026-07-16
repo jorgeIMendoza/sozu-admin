@@ -2,7 +2,7 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import {
   Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon,
-  ArrowLeft, MessageCircleQuestion, Menu, LogOut, ChevronRight, Eye, EyeOff,
+  ArrowLeft, Menu, LogOut, ChevronRight, Eye, EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentPresentationProvider, useAgentPresentation } from "@/contexts/AgentPresentationContext";
@@ -302,8 +302,9 @@ export const AgentPortalLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            {canImpersonate && <AgentPortalImpersonationSelector />}
+            <p className="text-[16px] font-bold text-foreground tracking-tight truncate">{currentSection}</p>
             <div className="ml-auto flex items-center gap-3">
+              {canImpersonate && <AgentPortalImpersonationSelector />}
               <PresentationToggle />
               {renderProfileMenu()}
             </div>
@@ -337,16 +338,6 @@ export const AgentPortalLayout = () => {
           </main>
         </div>
 
-        {/* WhatsApp help bubble */}
-        <a
-          href="https://wa.me/523316693357?text=Hola%2C%20requiero%20apoyo%20para%20completar%20mi%20onboarding%20de%20agente"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-6 right-5 z-50 h-12 w-12 rounded-full bg-[#25D366] text-white shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
-          aria-label="Ayuda por WhatsApp"
-        >
-          <MessageCircleQuestion className="h-6 w-6" />
-        </a>
       </div>
       </AgentPresentationProvider>
     </PortalTrackingProvider>
