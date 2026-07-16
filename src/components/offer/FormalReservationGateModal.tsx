@@ -39,7 +39,7 @@ const FormalReservationGateModal = ({ open, onClose, offer, onStartFormal }: Pro
   }, []);
 
   const { property, development } = offer;
-  const propertyLabel = `${development?.legalName ?? property?.projectName ?? "Esta unidad"} · ${property?.unitNumber ?? "—"}`;
+  const propertyLabel = `${development?.legalName ?? property?.projectName ?? "Esta unidad"} · ${property?.unitNumber ?? "-"}`;
 
   const handleStartFormal = () => {
     sessionStorage.removeItem("sozu_pre_reservation_intent");
@@ -64,21 +64,21 @@ const FormalReservationGateModal = ({ open, onClose, offer, onStartFormal }: Pro
           <PhaseItem index={2} icon={BookOpen} phaseLabel="Fase 2 · sin presión" title="Revisas el contrato" description="Tu unidad queda reservada a tu nombre durante 5 días naturales mientras lees el contrato preliminar con calma y juntas tus documentos." />
           <PhaseItem index={3} icon={FileText} phaseLabel="Fase 3 · 5-8 minutos" title="Completas tu apartado" description="Confirmas tu tipo de comprador, validas tu RFC y haces una transferencia SPEI de $20,000 MXN que no es reembolsable." />
         </div>
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5">
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3.5">
           <div className="flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-foreground leading-tight mb-1">Hold de tarjeta — no es un cobro</p>
+              <p className="text-xs font-semibold text-foreground leading-tight mb-1">Hold de tarjeta - no es un cobro</p>
               <p className="text-xs text-muted-foreground leading-relaxed">La retención de $10,000 MXN funciona como los hoteles al hacer check-in: queda bloqueada en tu línea de crédito pero no se cobra. Si decides no avanzar, expira sola a los 5 días sin cargo.</p>
             </div>
           </div>
         </div>
       </div>
       <div className="px-5 pb-8 pt-4 border-t border-border/50 space-y-2 shrink-0">
-        <button onClick={handleStartFormal} className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+        <button onClick={handleStartFormal} className="w-full h-11 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
           Comenzar fase 1 <ArrowRight className="w-4 h-4" />
         </button>
-        <button onClick={onClose} className="w-full h-11 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-xl transition-colors">Cerrar</button>
+        <button onClick={onClose} className="w-full h-11 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-md transition-colors">Cerrar</button>
       </div>
     </div>
   );

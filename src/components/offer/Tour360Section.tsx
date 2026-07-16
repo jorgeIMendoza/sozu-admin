@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Move, ExternalLink, Sparkles } from "lucide-react";
+import { Move, ScanEye } from "lucide-react";
+import SectionCard from "./SectionCard";
 import type { Tour360 } from "@/lib/offers/offer-data";
 
 interface Tour360SectionProps {
@@ -42,34 +43,7 @@ const Tour360Section = ({ tour, developmentName, propertyLabel }: Tour360Section
   };
 
   return (
-    <section id="tour-360" className="scroll-mt-20">
-      <div className="rounded-2xl bg-card border border-border overflow-hidden">
-        <div className="px-5 py-4 border-b border-border-subtle bg-muted/20">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <h3 className="text-sm font-bold text-foreground">Recorre tu unidad</h3>
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed pl-9">
-                Recorre cada espacio de {developmentName} · {propertyLabel} como si estuvieras adentro.
-                {tour.durationEstimate ? ` Toma ${tour.durationEstimate}.` : ""}
-              </p>
-            </div>
-            <a
-              href={tour.fallbackUrl ?? tour.embedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            >
-              Abrir en pantalla completa
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        </div>
-
+    <SectionCard id="tour-360" icon={ScanEye} title="Recorre tu unidad" bodyClassName="p-0" className="scroll-mt-20">
         <div ref={containerRef} className="relative bg-foreground" onMouseDown={handleInteract} onTouchStart={handleInteract}>
           <div className="aspect-video w-full">
             <iframe
@@ -94,8 +68,7 @@ const Tour360Section = ({ tour, developmentName, propertyLabel }: Tour360Section
           )}
         </div>
 
-      </div>
-    </section>
+    </SectionCard>
   );
 };
 

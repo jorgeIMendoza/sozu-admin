@@ -55,7 +55,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+    <div className="rounded-md border border-border bg-card overflow-hidden shadow-sm">
       {/* Header con indicador "en línea" */}
       <div className="flex items-center gap-2 bg-gradient-to-r from-success/15 via-success/8 to-transparent border-b border-success/20 px-5 py-2.5">
         <span className="relative flex h-2 w-2">
@@ -70,7 +70,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
       <div className="p-5 md:p-6">
         <div className="flex gap-4 md:gap-5">
           {/* Foto */}
-          <div className="flex-shrink-0 w-20 h-20 md:w-28 md:h-28 rounded-2xl overflow-hidden bg-white ring-2 ring-success/20 shadow-sm flex items-center justify-center">
+          <div className="flex-shrink-0 w-20 h-20 md:w-28 md:h-28 rounded-md overflow-hidden bg-white ring-2 ring-success/20 shadow-sm flex items-center justify-center">
             {hasPersonPhoto ? (
               <img
                 src={agent.photoUrl!}
@@ -86,7 +86,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
           {/* Identidad */}
           <div className="min-w-0 flex-1 self-center">
             <h3 className="text-lg md:text-xl font-bold leading-tight">{agent.fullName}</h3>
-            <p className="text-sm text-muted-foreground mt-0.5">{agent.title}</p>
+            {agent.title && <p className="text-sm text-muted-foreground mt-0.5">{agent.title}</p>}
             {agent.brokerage && (
               <div className="mt-2.5 inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full border border-success/30 bg-success/5">
                 {agent.brokerageLogo ? (
@@ -108,7 +108,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
 
         {/* Bio */}
         {agent.bio && (
-          <div className="mt-5 rounded-xl bg-muted/40 border-l-2 border-success/50 px-4 py-3">
+          <div className="mt-5 rounded-md bg-muted/40 border-l-2 border-success/50 px-4 py-3">
             <p className="text-sm italic text-muted-foreground leading-relaxed">"{agent.bio}"</p>
           </div>
         )}
@@ -138,7 +138,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
           </div>
         )}
 
-        {/* CTAs — solo los que tienen dato (evita links muertos tel:/wa.me/) */}
+        {/* CTAs - solo los que tienen dato (evita links muertos tel:/wa.me/) */}
         <div
           className="mt-5 grid gap-2"
           style={{ gridTemplateColumns: `repeat(${ctaCount}, minmax(0, 1fr))` }}
@@ -148,7 +148,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
               href={buildAgentWhatsAppLink(agent, whatsappMsg)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-success text-success-foreground text-xs font-semibold shadow-sm hover:bg-success/90 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-md bg-success text-success-foreground text-xs font-semibold shadow-sm hover:bg-success/90 transition-colors"
             >
               <MessageCircle className="w-4 h-4" />
               WhatsApp
@@ -157,7 +157,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
           {agent.phone && (
             <a
               href={buildAgentPhoneLink(agent)}
-              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-muted hover:border-success/40 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-md border border-border bg-background text-xs font-semibold hover:bg-muted hover:border-success/40 transition-colors"
             >
               <Phone className="w-4 h-4 text-success" />
               Llamar
@@ -166,7 +166,7 @@ const AgentCard = ({ agent, offerId, offerLabel }: Props) => {
           {agent.email && (
             <a
               href={buildAgentEmailLink(agent, offerId ? `Consulta sobre ${offerId}` : undefined)}
-              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-muted hover:border-success/40 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-md border border-border bg-background text-xs font-semibold hover:bg-muted hover:border-success/40 transition-colors"
             >
               <Mail className="w-4 h-4 text-success" />
               Email

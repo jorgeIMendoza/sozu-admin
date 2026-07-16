@@ -30,7 +30,7 @@ const TimeTravelControl = () => {
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed mt-1">
             Simula el avance de días para ver las notificaciones de cada momento. Solo visible
-            en desarrollo — no aparece en producción.
+            en desarrollo - no aparece en producción.
           </p>
           <p className="text-[11px] text-foreground mt-2">
             Estado actual: <span className="font-semibold">{currentLabel}</span>
