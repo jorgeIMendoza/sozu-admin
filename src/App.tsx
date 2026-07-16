@@ -344,6 +344,8 @@ const CrmExecutiveWeeklyDigest  = lazyRetry(() => import("./pages/admin/portal-c
 // Portal CRM Sozu · módulo CRM
 const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
 const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
+const CrmCompanies         = lazyRetry(() => import("./pages/admin/portal-crm/companies").then(m => ({ default: m.CrmCompanies })));
+const CrmCompanyDetail     = lazyRetry(() => import("./pages/admin/portal-crm/companies").then(m => ({ default: m.CrmCompanyDetail })));
 const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
 const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
 const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
@@ -951,6 +953,8 @@ const App = () => (
                   {/* Portal CRM Sozu — CRM */}
                   <Route path="portal-crm/ventas/contactos" element={<CrmContacts />} />
                   <Route path="portal-crm/ventas/contactos/:contactId" element={<CrmContactDetail />} />
+                  <Route path="portal-crm/ventas/empresas" element={<CrmCompanies />} />
+                  <Route path="portal-crm/ventas/empresas/:companyId" element={<CrmCompanyDetail />} />
                   <Route path="portal-crm/ventas/negocios" element={<CrmDeals />} />
                   <Route path="portal-crm/ventas/tareas" element={<CrmTasks />} />
                   <Route path="portal-crm/ventas/citas" element={<CrmAppointments />} />
