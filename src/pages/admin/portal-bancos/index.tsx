@@ -18,11 +18,11 @@ import { toast } from "@/hooks/use-toast";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
-  HEALTH_DESCRIPTOR, deriveHealth, closedDescriptor, fmtMXN, fmtDate,
+  fmtMXN, fmtDate,
   type BankLead, type LeadStatus,
 } from "@/lib/portal-bancos/bank-leads";
 import {
-  useSolicitudesBanco, useActualizarSolicitud, usePagosCuentaBanco,
+  useSolicitudesBanco, useActualizarSolicitud, usePagosCuentaBanco, useAsignarEjecutivo,
 } from "@/hooks/usePortalBancos/useSolicitudesBanco";
 import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
 import { useCurrentBanco, useSolicitudScope, useBancoResolvedScope } from "@/contexts/BankImpersonationContext";
@@ -35,17 +35,35 @@ import {
   useCambiarRolEjecutivo, useEditarEjecutivo, useBancoRoles,
   type EjecutivoBanco, type RolBancoPortal,
 } from "@/hooks/usePortalBancos/useBancoEquipo";
+import {
+  useBancoSolicitudNotas, useCrearNota, useEditarNota, useEliminarNota,
+  type BancoSolicitudNota,
+} from "@/hooks/usePortalBancos/useBancoSolicitudNotas";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   computeFunnel, computeWinRate, STAGE_PROBABILITY,
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert, Users, Loader2,
+  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X,
 } from "lucide-react";
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 
 // ------------------------------ Helpers UI ------------------------------
+/** Fecha + hora local (es-MX) para la Bitácora, p. ej. "16 jul 2026, 14:03". */
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive") {
   return {
     neutral: "bg-muted text-muted-foreground",
@@ -89,9 +107,6 @@ function useBankScopedLeads(): BankLead[] {
 
 function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => void }) {
   const desc = STATUS_DESCRIPTORS[lead.status];
-  const closed = closedDescriptor(lead.status);
-  const health = deriveHealth(lead);
-  const hd = HEALTH_DESCRIPTOR[health];
   return (
     <button
       onClick={() => onOpen(lead.id)}
@@ -106,7 +121,6 @@ function LeadCard({ lead, onOpen }: { lead: BankLead; onOpen: (id: string) => vo
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <Badge className={toneClass(desc.tone)} variant="secondary">{desc.label}</Badge>
-          {closed ? null : <Badge className={toneClass(hd.tone)} variant="outline">{hd.label}</Badge>}
         </div>
       </div>
       <div className="mt-3 flex items-center justify-end text-[11px] text-muted-foreground">
@@ -132,6 +146,16 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const leadBancoId = lead ? Number(lead.bankId) : null;
   const { data: agents = [] } = useBancoEquipo(leadBancoId);
   const actualizar = useActualizarSolicitud();
+  const asignar = useAsignarEjecutivo();
+  const { profile } = useAuth();
+  const { data: bancoRoles } = useBancoRoles();
+  // Solo Admin del banco (Supervisor Banco) o Super Admin pueden asignar casos.
+  const puedeAsignar =
+    profile?.rol_id === 1 ||
+    (bancoRoles?.supervisorRolId != null && profile?.rol_id === bancoRoles.supervisorRolId);
+  const idSolicitud = lead ? Number(lead.id) : null;
+  const { data: notas = [] } = useBancoSolicitudNotas(idSolicitud);
+  const crearNota = useCrearNota();
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
   const [verCliente, setVerCliente] = useState(false);
@@ -141,7 +165,10 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const idNum = Number(lead.id);
   const idBanco = leadBancoId ?? Number(lead.bankId);
   const desc = STATUS_DESCRIPTORS[lead.status];
-  const transitions = VALID_TRANSITIONS[lead.status] || [];
+  // Una vez asignado un ejecutivo, ya no se puede regresar a "Nuevo".
+  const transitions = (VALID_TRANSITIONS[lead.status] || []).filter(
+    (to) => !(to === "nuevo" && !!lead.assignedAgentId),
+  );
 
   const doTransition = (to: LeadStatus) => {
     let reason: string | null = null;
@@ -170,27 +197,43 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   };
 
   const assignLead = (agentEmail: string) =>
-    actualizar.mutate(
-      { id: idNum, idBanco, patch: { email_agente: agentEmail || null } },
+    asignar.mutate(
       {
-        onSuccess: () => toast({ title: "Ejecutivo asignado" }),
+        id: idNum,
+        email: agentEmail || null,
+        // Al asignar un caso nuevo, avanza automáticamente a "Asignado" en el
+        // Pipeline. Si ya está más avanzado, no se regresa; al des-asignar
+        // (email vacío) no se toca el estatus.
+        estatus: agentEmail && lead.status === "nuevo" ? "asignado" : undefined,
+      },
+      {
+        onSuccess: () =>
+          toast({ title: agentEmail ? "Ejecutivo asignado" : "Asignación removida" }),
         onError: (e: any) =>
           toast({ title: "No se pudo asignar", description: e?.message ?? "Error", variant: "destructive" }),
       },
     );
 
-  const saveNote = () =>
-    actualizar.mutate(
-      { id: idNum, idBanco, patch: { notas_banco: note.trim() } },
+  const myEmail = (profile?.email ?? "").trim().toLowerCase();
+  const saveNote = () => {
+    if (!note.trim() || !myEmail) return;
+    crearNota.mutate(
+      {
+        idSolicitud: idNum,
+        nota: note.trim(),
+        autorEmail: myEmail,
+        autorNombre: profile?.nombre || profile?.email || "Usuario",
+      },
       {
         onSuccess: () => {
           setNote("");
-          toast({ title: "Nota guardada" });
+          toast({ title: "Nota agregada" });
         },
         onError: (e: any) =>
           toast({ title: "No se pudo guardar la nota", description: e?.message ?? "Error", variant: "destructive" }),
       },
     );
+  };
 
   return (
     <Sheet open={!!leadId} onOpenChange={(o) => !o && onClose()}>
@@ -275,16 +318,27 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
 
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Asignación</p>
-            <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(v)}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Asignar ejecutivo" /></SelectTrigger>
-              <SelectContent>
-                {agents.filter((a) => a.activo).map((a) => (
-                  <SelectItem key={a.email} value={a.email}>
-                    {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {puedeAsignar ? (
+              <Select value={lead.assignedAgentId ?? ""} onValueChange={(v) => assignLead(v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Asignar ejecutivo" /></SelectTrigger>
+                <SelectContent>
+                  {agents.filter((a) => a.activo).map((a) => (
+                    <SelectItem key={a.email} value={a.email}>
+                      {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              // Los Agentes no asignan: ven (solo lectura) a quién está asignado.
+              <div className="h-9 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm">
+                {lead.assignedAgentId
+                  ? `Asignado a ${
+                      agents.find((a) => a.email === lead.assignedAgentId)?.nombre ?? lead.assignedAgentId
+                    }`
+                  : "Sin asignar"}
+              </div>
+            )}
           </div>
 
           {transitions.length > 0 && (
@@ -313,7 +367,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Agregar nota</p>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Resumen del contacto, próximos pasos..." />
-            <Button size="sm" disabled={!note.trim() || actualizar.isPending} onClick={saveNote}>
+            <Button size="sm" disabled={!note.trim() || crearNota.isPending} onClick={saveNote}>
               Guardar nota
             </Button>
           </div>
@@ -321,15 +375,28 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Bitácora</p>
             <div className="space-y-2">
+              {/* Eventos del sistema (creación / cambios de estado) — solo lectura. */}
               {lead.activity.map((a) => (
                 <div key={a.id} className="rounded-md border border-border p-2 text-xs">
-                  <div className="flex justify-between"><span className="font-medium">{a.author}</span><span className="text-muted-foreground">{fmtDate(a.ts)}</span></div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium">{a.author}</span>
+                    <span className="text-muted-foreground whitespace-nowrap">{fmtDateTime(a.ts)}</span>
+                  </div>
                   <p className="text-muted-foreground">
                     {a.type === "status_change"
                       ? `${a.from ? STATUS_DESCRIPTORS[a.from].label : "—"} → ${a.to ? STATUS_DESCRIPTORS[a.to].label : "—"}${a.note ? ` · ${a.note}` : ""}`
                       : a.note || a.type}
                   </p>
                 </div>
+              ))}
+              {/* Notas de usuarios: autor + fecha/hora; editar/borrar solo el autor. */}
+              {notas.map((n) => (
+                <BitacoraNotaRow
+                  key={n.id}
+                  nota={n}
+                  idSolicitud={idNum}
+                  canManage={!n.legacy && !!myEmail && (n.autor_email ?? "").trim().toLowerCase() === myEmail}
+                />
               ))}
             </div>
           </div>
@@ -355,6 +422,77 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
         />
       )}
     </Sheet>
+  );
+}
+
+/**
+ * Fila de una nota de la Bitácora: muestra autor, fecha/hora y el texto. Si
+ * `canManage` (el usuario logueado es el autor), permite editar/borrar la nota.
+ */
+function BitacoraNotaRow({ nota, idSolicitud, canManage }: { nota: BancoSolicitudNota; idSolicitud: number; canManage: boolean }) {
+  const editar = useEditarNota();
+  const eliminar = useEliminarNota();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(nota.nota);
+  const editada = nota.fecha_actualizacion && nota.fecha_actualizacion !== nota.fecha_creacion;
+
+  const guardar = () => {
+    if (!text.trim()) return;
+    editar.mutate(
+      { idSolicitud, id: nota.id, nota: text.trim() },
+      {
+        onSuccess: () => { setEditing(false); toast({ title: "Nota actualizada" }); },
+        onError: (e: any) => toast({ title: "No se pudo actualizar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  const borrar = () => {
+    eliminar.mutate(
+      { idSolicitud, id: nota.id },
+      {
+        onSuccess: () => toast({ title: "Nota eliminada" }),
+        onError: (e: any) => toast({ title: "No se pudo eliminar", description: e?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-md border border-border p-2 text-xs">
+      <div className="flex justify-between gap-2">
+        <span className="font-medium">{nota.autor_nombre || nota.autor_email}</span>
+        <span className="text-muted-foreground whitespace-nowrap">
+          {fmtDateTime(nota.fecha_creacion)}{editada ? " · editada" : ""}
+        </span>
+      </div>
+      {editing ? (
+        <div className="mt-1 space-y-1">
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} className="text-xs" />
+          <div className="flex gap-1 justify-end">
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditing(false); setText(nota.nota); }}>
+              <X className="h-3.5 w-3.5 mr-1" /> Cancelar
+            </Button>
+            <Button size="sm" className="h-7 px-2" disabled={editar.isPending || !text.trim()} onClick={guardar}>
+              <Save className="h-3.5 w-3.5 mr-1" /> Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-muted-foreground whitespace-pre-wrap flex-1">{nota.nota}</p>
+          {canManage && (
+            <div className="flex gap-0.5 shrink-0">
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" title="Editar" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:text-destructive" title="Eliminar" disabled={eliminar.isPending} onClick={borrar}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
