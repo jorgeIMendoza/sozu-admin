@@ -232,54 +232,53 @@ export function EntregaDetalle() {
   const getEstatusNombre = (id: number) =>
     estatusCatalogo.find(e => e.id === id)?.nombre ?? 'Sin estatus';
 
-  // ── Catálogo de responsables (supervisores y técnicos) desde entregas_responsables ─
+  // ── Catálogo de responsables (supervisores y técnicos) desde entidades_relacionadas ─
   const { data: responsablesCat = { supervisores: [], tecnicos: [] } } = useQuery<{ supervisores: EntidadER[]; tecnicos: EntidadER[] }>({
     queryKey: ['entregas-responsables-cat'],
     queryFn: async () => {
-      // DDL probe — graceful fallback si la tabla aún no existe
-      const probe = await (supabase as any).from('entregas_responsables').select('id').limit(0);
+      const toER = (data: any[]): EntidadER[] =>
+        (data ?? []).map((er: any) => ({
+          id: er.id,
+          nombre: er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
+        }));
+
+      // DDL probe — detectar si los indicadores operativos ya existen
+      const probe = await (supabase as any)
+        .from('entidades_relacionadas')
+        .select('id, es_supervisor_entregas, es_tecnico_entregas')
+        .limit(0);
+
       if (probe.error) {
-        // Fallback: usar entidades tipo 8 y 22 directamente
+        // Fallback pre-DDL: tipos 8 y 22 como lista única para ambos selectores
         const { data } = await supabase
           .from('entidades_relacionadas')
           .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
           .in('id_tipo_entidad', [8, 22])
           .eq('activo', true)
           .order('id');
-        const lista = (data ?? []).map((er: any) => ({
-          id: er.id,
-          nombre: er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
-        }));
+        const lista = toER(data ?? []);
         return { supervisores: lista, tecnicos: lista };
       }
 
-      const { data: configs } = await (supabase as any)
-        .from('entregas_responsables')
-        .select('id, id_entidad_relacionada, es_supervisor, es_tecnico')
-        .eq('activo', true);
-      if (!configs?.length) return { supervisores: [], tecnicos: [] };
-
-      const erIds = (configs as any[]).map((c: any) => c.id_entidad_relacionada);
-      const { data: entidades } = await supabase
-        .from('entidades_relacionadas')
-        .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
-        .in('id', erIds)
-        .eq('activo', true);
-
-      const nombreMap: Record<number, string> = Object.fromEntries(
-        (entidades ?? []).map((er: any) => [
-          er.id,
-          er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
-        ])
-      );
+      // DDL aplicado: usar indicadores operativos para filtrado preciso
+      const [supRes, tecRes] = await Promise.all([
+        (supabase as any)
+          .from('entidades_relacionadas')
+          .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
+          .eq('es_supervisor_entregas', true)
+          .eq('activo', true)
+          .order('id'),
+        (supabase as any)
+          .from('entidades_relacionadas')
+          .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
+          .eq('es_tecnico_entregas', true)
+          .eq('activo', true)
+          .order('id'),
+      ]);
 
       return {
-        supervisores: (configs as any[])
-          .filter((c: any) => c.es_supervisor)
-          .map((c: any) => ({ id: c.id_entidad_relacionada, nombre: nombreMap[c.id_entidad_relacionada] ?? `Entidad #${c.id_entidad_relacionada}` })),
-        tecnicos: (configs as any[])
-          .filter((c: any) => c.es_tecnico)
-          .map((c: any) => ({ id: c.id_entidad_relacionada, nombre: nombreMap[c.id_entidad_relacionada] ?? `Entidad #${c.id_entidad_relacionada}` })),
+        supervisores: toER(supRes.data ?? []),
+        tecnicos:     toER(tecRes.data ?? []),
       };
     },
     staleTime: 60_000,
