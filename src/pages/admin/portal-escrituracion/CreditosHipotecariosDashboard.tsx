@@ -672,26 +672,65 @@ export function CreditosHipotecariosDashboard() {
 
       const propIds = props.map((p: any) => p.id);
 
-      // Paso 2: cuentas de cobranza
+      // Paso 2: cuentas de cobranza — todas las cuentas activas de las propiedades
       const { data: cuentasList } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, fecha_actualizacion')
+        .select('id, id_propiedad, precio_final, id_oferta, fecha_actualizacion')
         .eq('activo', true)
         .in('id_propiedad', propIds);
+      if (!cuentasList?.length) return [];
 
-      const cuentaByProp: Record<number, { id: number; precio_final: number; fecha_actualizacion: string }> = {};
-      (cuentasList || []).forEach((c: any) => {
-        const ex = cuentaByProp[c.id_propiedad];
-        if (!ex || c.fecha_actualizacion > ex.fecha_actualizacion) cuentaByProp[c.id_propiedad] = c;
+      // Paso 2b: clasificar principal vs escriturable via bodegas + estacionamientos
+      const ofertaIdsAll = [...new Set((cuentasList as any[]).map(c => c.id_oferta).filter(Boolean))];
+      const ofertaMap: Record<number, { id_producto: number | null }> = {};
+      if (ofertaIdsAll.length) {
+        const { data: ofertasList } = await supabase
+          .from('ofertas').select('id, id_producto').in('id', ofertaIdsAll);
+        (ofertasList || []).forEach((o: any) => { ofertaMap[o.id] = { id_producto: o.id_producto ?? null }; });
+      }
+
+      // Paso 2c: productos escriturables por propiedad (solo los que aparecen en bodegas o estacionamientos)
+      const [{ data: bodegasAll }, { data: estacAll }] = await Promise.all([
+        supabase.from('bodegas').select('id_propiedad, id_producto').in('id_propiedad', propIds).eq('activo', true),
+        supabase.from('estacionamientos').select('id_propiedad, id_producto').in('id_propiedad', propIds).eq('activo', true),
+      ]);
+      const escriturableProds: Record<number, Set<number>> = {};
+      [...(bodegasAll || []), ...(estacAll || [])].forEach((x: any) => {
+        if (!escriturableProds[x.id_propiedad]) escriturableProds[x.id_propiedad] = new Set();
+        if (x.id_producto) escriturableProds[x.id_propiedad].add(x.id_producto);
       });
-      const cuentaIds = Object.values(cuentaByProp).map(c => c.id);
-      if (!cuentaIds.length) return [];
+
+      // Clasificar cada cuenta: principal (depto), escriturable (bodega/estac con oferta propia), o comercial
+      // Excluye: condensadoras, paquetes amueblados y cualquier producto no registrado en bodegas/estacionamientos
+      const principalByProp: Record<number, any> = {};
+      const escriturablesByProp: Record<number, any[]> = {};
+      (cuentasList as any[]).forEach(c => {
+        const idProd = ofertaMap[c.id_oferta]?.id_producto ?? null;
+        const isPrincipal = !idProd;
+        const isEscriturable = isPrincipal ||
+          (idProd !== null && (escriturableProds[c.id_propiedad]?.has(idProd) ?? false));
+        if (isPrincipal && !principalByProp[c.id_propiedad]) principalByProp[c.id_propiedad] = c;
+        if (isEscriturable) {
+          if (!escriturablesByProp[c.id_propiedad]) escriturablesByProp[c.id_propiedad] = [];
+          escriturablesByProp[c.id_propiedad].push(c);
+        }
+      });
+
+      const principalIds = Object.values(principalByProp).map((c: any) => c.id);
+      const allEscriturableIds = Object.values(escriturablesByProp).flat().map((c: any) => c.id);
+      if (!principalIds.length) return [];
+
+      // Mapa inverso: cuentaId principal → propId (para búsqueda O(1) en construcción de filas)
+      const principalIdToPropId: Record<number, number> = {};
+      Object.entries(principalByProp).forEach(([propId, c]) => {
+        principalIdToPropId[(c as any).id] = Number(propId);
+      });
 
       // Paso 3: creditos_hipotecarios (tabla nueva — puede no existir aún)
       const { data: creditos, error: creditosError } = await (supabase as any)
         .from('creditos_hipotecarios')
         .select('id, id_cuenta_cobranza, id_banco, monto_credito, vobo_banco, pago_banco_estatus, fecha_cita_firma, fecha_actualizacion')
-        .in('id_cuenta_cobranza', cuentaIds)
+        .in('id_cuenta_cobranza', principalIds)
         .eq('activo', true);
 
       if (creditosError) {
@@ -715,7 +754,7 @@ export function CreditosHipotecariosDashboard() {
       const { data: pagosData } = await supabase
         .from('pagos')
         .select('id_cuenta_cobranza, monto, clave_rastreo')
-        .in('id_cuenta_cobranza', cuentaIds)
+        .in('id_cuenta_cobranza', allEscriturableIds)
         .eq('activo', true);
 
       const pagosByCuenta: Record<number, { total: number; hasSinCR: boolean }> = {};
@@ -729,7 +768,7 @@ export function CreditosHipotecariosDashboard() {
 
       // Paso 6: compradores + personas
       const { data: comprsList } = await supabase
-        .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+        .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', principalIds).eq('activo', true);
       const personaIds = [...new Set((comprsList || []).map((c: any) => c.id_persona))];
       const personaMap: Record<number, string> = {};
       if (personaIds.length) {
@@ -747,17 +786,25 @@ export function CreditosHipotecariosDashboard() {
 
       // Paso 8: construir filas
       return (creditos as any[]).map(cr => {
-        const cuenta = Object.values(cuentaByProp).find(c => c.id === cr.id_cuenta_cobranza);
+        const propIdNum = principalIdToPropId[cr.id_cuenta_cobranza] ?? 0;
+        const cuenta = principalByProp[propIdNum];
         if (!cuenta) return null;
 
-        const prop = Object.entries(cuentaByProp).find(([, c]) => c.id === cr.id_cuenta_cobranza);
-        const propIdNum = prop ? Number(prop[0]) : 0;
         const unidad = propMap[propIdNum] ?? '—';
 
-        const paidInfo = pagosByCuenta[cuenta.id] ?? { total: 0, hasSinCR: false };
-        const paidAmount = paidInfo.total;
-        const hasSinCR = paidInfo.hasSinCR;
-        const escrituraValue = cuenta.precio_final ?? 0;
+        // Escritura = suma de cuentas escriturables (depto + bodega + estac escriturable)
+        // Excluye condensadoras, paquetes amueblados y cualquier producto comercial no escriturable
+        const cuentasEscriturables = escriturablesByProp[propIdNum] ?? [cuenta];
+        const escrituraValue = cuentasEscriturables.reduce(
+          (s: number, c: any) => s + Number(c.precio_final ?? 0), 0,
+        );
+
+        // Pagado = suma de pagos de cuentas escriturables únicamente
+        const paidAmount = cuentasEscriturables.reduce(
+          (s: number, c: any) => s + (pagosByCuenta[c.id]?.total ?? 0), 0,
+        );
+        const hasSinCR = cuentasEscriturables.some((c: any) => pagosByCuenta[c.id]?.hasSinCR ?? false);
+
         const mortgageCreditAmount = cr.monto_credito ?? 0;
         const sobrepago = escrituraValue > 0 && paidAmount > escrituraValue * 1.01;
         const escrituraBloqueada = hasSinCR || sobrepago;
