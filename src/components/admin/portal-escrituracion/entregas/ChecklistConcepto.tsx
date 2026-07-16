@@ -118,6 +118,14 @@ export function ChecklistConcepto({
                   </button>
                 </>)}
 
+                {item.id_estatus_checklist === ESTATUS_CHECKLIST.VOBO_RECHAZADO && (
+                  <button
+                    onClick={() => onActualizarEstatus(item.id, ESTATUS_CHECKLIST.EN_REPARACION)}
+                    className="px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 text-[11px] font-medium hover:bg-orange-100 border border-orange-200 transition-colors flex items-center gap-1">
+                    <Wrench className="w-3 h-3" /> Reenviar a reparación
+                  </button>
+                )}
+
                 {/* ── Revertir a Pendiente (Fase 2) ── */}
                 {!isPendiente && (
                   <button

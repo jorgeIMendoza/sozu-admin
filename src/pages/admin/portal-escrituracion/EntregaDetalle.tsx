@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,7 @@ import {
   ChevronLeft, CheckCircle2, AlertTriangle, Clock, FileText, Download,
   ChevronRight, User, Building2, CalendarDays, Wrench,
   ListChecks, ClipboardCheck, Package, Loader2, CheckCheck, Play,
+  RotateCcw, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -45,6 +46,8 @@ export function EntregaDetalle() {
   const [noCumpleModal, setNoCumpleModal] = useState<{ itemId: number; nombre: string } | null>(null);
   const [noCumpleObs, setNoCumpleObs] = useState('');
   const [evidenciaModal, setEvidenciaModal] = useState<{ itemId: number; nombre: string } | null>(null);
+  const [logData, setLogData]         = useState<any[]>([]);
+  const [logLoading, setLogLoading]   = useState(false);
 
   // ── Query principal: propiedad + edificio + modelo + proyecto + cliente ──────
   const { data: pageData, isLoading: pageLoading, error: pageError } = useQuery<PageData | null>({
@@ -132,6 +135,22 @@ export function EntregaDetalle() {
   });
 
   const entregaId = pageData?.entrega?.id ?? null;
+
+  useEffect(() => {
+    if (activeTab !== 'historial' || !entregaId) return;
+    setLogLoading(true);
+    (supabase as any)
+      .from('entregas_checklist_log')
+      .select('id, id_checklist_item, tipo_evento, accion, estatus_anterior, estatus_nuevo, observaciones, usuario, fecha_creacion')
+      .eq('id_entrega', entregaId)
+      .eq('activo', true)
+      .order('fecha_creacion', { ascending: false })
+      .limit(100)
+      .then(({ data }: { data: any[] | null }) => {
+        setLogData(data ?? []);
+        setLogLoading(false);
+      });
+  }, [activeTab, entregaId]);
 
   // ── Checklist ────────────────────────────────────────────────────────────────
   const { data: checklist = [] } = useQuery<ChecklistCategoria[]>({
@@ -313,9 +332,16 @@ export function EntregaDetalle() {
     } else {
       toast.success(`Ítem actualizado: ${estatusNuevo}`);
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      const tipoEvento = esReversion
+        ? 'REVERSION_ESTATUS'
+        : nuevoEstatus === ESTATUS_CHECKLIST.VOBO_APROBADO
+          ? 'VOBO_APROBADO'
+          : nuevoEstatus === ESTATUS_CHECKLIST.VOBO_RECHAZADO
+            ? 'VOBO_RECHAZADO'
+            : 'CAMBIO_ESTATUS';
       await insertLog({
         id_checklist_item: itemId,
-        tipo_evento:       esReversion ? 'REVERSION_ESTATUS' : 'CAMBIO_ESTATUS',
+        tipo_evento:       tipoEvento,
         accion:            esReversion ? 'Reversión a Pendiente' : `Marcar como ${estatusNuevo}`,
         estatus_anterior:  estatusAnterior ?? undefined,
         estatus_nuevo:     estatusNuevo,
@@ -546,7 +572,10 @@ export function EntregaDetalle() {
   // Conteo desde ítems reales: aplicables = todos excepto NO_APLICA; cumplidos = CUMPLE
   const allChecklistItems = checklist.flatMap(c => c.items);
   const aplicables        = allChecklistItems.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
-  const cumplidos         = aplicables.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE);
+  const cumplidos         = aplicables.filter(i =>
+    i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE ||
+    i.id_estatus_checklist === ESTATUS_CHECKLIST.VOBO_APROBADO
+  );
   const checklistGlobal   = aplicables.length > 0 ? Math.round((cumplidos.length / aplicables.length) * 100) : 0;
   const entregaEstatus = pageData?.entrega?.estatus ?? 'PENDIENTE_PRE_ENTREGA';
   const estatusMeta = ESTATUS_META[entregaEstatus] ?? { label: entregaEstatus, cls: 'bg-slate-50 text-slate-600 border border-slate-200' };
@@ -1217,24 +1246,61 @@ export function EntregaDetalle() {
         {activeTab === 'historial' && (
           <div className="max-w-2xl space-y-4">
             <p className="text-sm font-bold text-slate-900">Bitácora de eventos</p>
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              {/* Evento inicial: pre-entrega iniciada */}
-              <div className="flex items-start gap-4 p-4 border-b border-slate-50">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 bg-sky-50 text-sky-600">
-                  <Wrench className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">Pre-entrega iniciada</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Registro de pre-entrega creado · estatus PRE_ENTREGA_EN_PROCESO</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs text-slate-400">—</p>
+            {logLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+              </div>
+            ) : logData.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-10 text-center">
+                <p className="text-xs text-slate-400">Sin eventos registrados todavía.</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="relative px-4 py-4">
+                  <div className="absolute left-[2.125rem] top-6 bottom-6 w-px bg-slate-100" />
+                  {logData.map((ev) => {
+                    const isVoBoAprobado  = ev.tipo_evento === 'VOBO_APROBADO';
+                    const isVoBoRechazado = ev.tipo_evento === 'VOBO_RECHAZADO';
+                    const isReversion     = ev.tipo_evento === 'REVERSION_ESTATUS';
+                    const isAsignacion    = ev.tipo_evento === 'ASIGNACION_RESPONSABLE';
+                    const iconBg = isVoBoAprobado  ? 'bg-emerald-50 text-emerald-600'
+                                 : isVoBoRechazado ? 'bg-red-50 text-red-600'
+                                 : isReversion     ? 'bg-amber-50 text-amber-600'
+                                 : isAsignacion    ? 'bg-violet-50 text-violet-600'
+                                 : 'bg-sky-50 text-sky-600';
+                    const EvIcon = isVoBoAprobado  ? CheckCheck
+                                 : isVoBoRechazado ? X
+                                 : isReversion     ? RotateCcw
+                                 : isAsignacion    ? User
+                                 : Wrench;
+                    return (
+                      <div key={ev.id} className="relative flex gap-3 pb-5 last:pb-0">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 z-10 ${iconBg}`}>
+                          <EvIcon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0 pt-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-xs font-semibold text-slate-900 leading-tight">{ev.accion ?? ev.tipo_evento}</p>
+                            <p className="text-[11px] text-slate-400 shrink-0 whitespace-nowrap">{fmtDt(ev.fecha_creacion)}</p>
+                          </div>
+                          {(ev.estatus_anterior || ev.estatus_nuevo) && (
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {ev.estatus_anterior ?? '—'} → {ev.estatus_nuevo ?? '—'}
+                            </p>
+                          )}
+                          {ev.observaciones && (
+                            <p className="text-[11px] text-slate-400 mt-0.5 italic">"{ev.observaciones}"</p>
+                          )}
+                          {ev.usuario && (
+                            <p className="text-[10px] text-slate-400 mt-1">{ev.usuario}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <div className="px-4 py-6 text-center">
-                <p className="text-xs text-slate-400">El historial completo de eventos estará disponible próximamente.</p>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
