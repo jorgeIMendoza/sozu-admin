@@ -573,7 +573,7 @@ const OfferPage = () => {
       </div>{/* /max-w-7xl */}
 
       {/* ── FOOTER UNIFICADO - sello empresarial (fondo oscuro, siempre visible) ── */}
-      <footer className="mt-8 bg-zinc-900 text-zinc-400 mb-20 lg:mb-0">
+      <footer className={`mt-8 bg-zinc-900 text-zinc-400 ${!reservationId && APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
           {/* Presentado por */}
           <div className="flex flex-col items-center text-center">
@@ -643,32 +643,22 @@ const OfferPage = () => {
         </div>
       </footer>
 
-      {/* Mobile sticky CTA - oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
-      {!reservationId && (isExpired || APARTADO_HABILITADO) && (
+      {/* Mobile sticky CTA - solo con apartado habilitado (el aviso de vencida ya sale arriba) */}
+      {!reservationId && APARTADO_HABILITADO && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
-            {isExpired ? (
-              <div className="flex items-center gap-2.5 py-0.5">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
-                  <p className="text-[10px] text-muted-foreground">Contacta a tu asesor para una nueva oferta</p>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={ctaDisabled ? undefined : handleCtaClick}
-                disabled={ctaDisabled}
-                className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  ctaDisabled
-                    ? "bg-muted text-muted-foreground cursor-not-allowed"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-              >
-                {ctaLabel}
-                {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
-              </button>
-            )}
+            <button
+              onClick={ctaDisabled ? undefined : handleCtaClick}
+              disabled={ctaDisabled}
+              className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                ctaDisabled
+                  ? "bg-muted text-muted-foreground cursor-not-allowed"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }`}
+            >
+              {ctaLabel}
+              {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       )}
