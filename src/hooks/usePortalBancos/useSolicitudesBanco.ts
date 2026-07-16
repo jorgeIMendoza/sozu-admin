@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { BankLead, LeadStatus } from "@/lib/portal-bancos/bank-leads";
+import { parseNotasBanco, serializeNotasBanco } from "@/lib/portal-bancos/notas-banco";
 
 /**
  * Solicitudes de crédito reales del Portal Bancos.
@@ -48,28 +49,19 @@ function phone(p: { telefono?: string | null; clave_pais_telefono?: string | nul
 async function fetchSolicitudesBanco(scope: SolicitudScope): Promise<BankLead[]> {
   // 1. Solicitudes activas. `scope` = un banco (id) o "all" (todos los bancos,
   // vista Super Administrador → sin filtro por banco).
-  // `email_agente` es la asignación al usuario del sistema (reemplazo de
-  // `id_agente`). Probe graceful: si la columna aún no existe (DDL pendiente),
-  // reintenta sin ella para no ocultar las solicitudes.
+  // La asignación de ejecutivo y las notas viven dentro de `notas_banco` (JSON
+  // { email_agente, notas }) para no depender de columnas nuevas (sin DDL).
   const baseCols =
     "id, id_cuenta_cobranza, id_banco, id_agente, estatus, motivo_cierre, notas_banco, " +
     "monto_financiar, plazo_anios, mensualidad_estimada_min, mensualidad_estimada_max, " +
     "tasa_estimada_min, tasa_estimada_max, cat_estimado_min, cat_estimado_max, " +
     "fecha_envio, fecha_respuesta_banco, fecha_creacion, fecha_actualizacion";
-  const runQuery = (cols: string) => {
-    let q = (supabase as any)
-      .from("bancos_solicitudes")
-      .select(cols)
-      .eq("activo", true);
-    if (scope !== "all") q = q.eq("id_banco", scope);
-    return q.order("fecha_envio", { ascending: false });
-  };
-  let sols: any[] | null;
-  let error: any;
-  ({ data: sols, error } = await runQuery(`${baseCols}, email_agente`));
-  if (error) {
-    ({ data: sols, error } = await runQuery(baseCols));
-  }
+  let q = (supabase as any)
+    .from("bancos_solicitudes")
+    .select(baseCols)
+    .eq("activo", true);
+  if (scope !== "all") q = q.eq("id_banco", scope);
+  const { data: sols, error } = await q.order("fecha_envio", { ascending: false });
   if (error || !sols || sols.length === 0) return [];
 
   // 2. Cuentas de cobranza referenciadas.
@@ -236,13 +228,14 @@ async function fetchSolicitudesBanco(scope: SolicitudScope): Promise<BankLead[]>
     const precio = num(cc?.precio_final);
     const fechaEnvio = s.fecha_envio ?? s.fecha_creacion ?? new Date().toISOString();
     const fechaEscrituracion = proj?.fecha_entrega_proyecto ?? proj?.fecha_entrega ?? "";
+    // Asignación al usuario del sistema (email), guardada dentro de notas_banco.
+    const emailAgente = parseNotasBanco(s.notas_banco).email_agente;
 
     return {
       id: String(s.id),
       bankId: String(s.id_banco),
       status,
-      // Asignación al usuario del sistema (email). `id_agente` queda legacy.
-      assignedAgentId: s.email_agente ? String(s.email_agente) : undefined,
+      assignedAgentId: emailAgente ? String(emailAgente) : undefined,
       closeReason: s.motivo_cierre ?? undefined,
       client: {
         fullName: persona?.nombre_legal || "Cliente sin nombre",
@@ -306,6 +299,9 @@ async function fetchSolicitudesBanco(scope: SolicitudScope): Promise<BankLead[]>
         }
         return [];
       })(),
+      // Solo el evento de creación (sistema). Las notas de la Bitácora se
+      // gestionan aparte (arreglo JSON en notas_banco, ver useBancoSolicitudNotas)
+      // y NO se derivan aquí para no mostrar el JSON crudo como evento.
       activity: [
         {
           id: `${s.id}-creado`,
@@ -316,17 +312,6 @@ async function fetchSolicitudesBanco(scope: SolicitudScope): Promise<BankLead[]>
             s.monto_financiar ? ` · financiar ${Math.round(monto).toLocaleString("es-MX")}` : ""
           }`,
         },
-        ...(s.notas_banco
-          ? [
-              {
-                id: `${s.id}-nota`,
-                ts: s.fecha_actualizacion ?? fechaEnvio,
-                author: "Banco",
-                type: "nota" as const,
-                note: s.notas_banco as string,
-              },
-            ]
-          : []),
       ],
       createdAt: s.fecha_creacion ?? fechaEnvio,
       lastUpdate: s.fecha_actualizacion ?? fechaEnvio,
@@ -422,10 +407,7 @@ export interface ActualizarSolicitudInput {
   idBanco: number; // para invalidar la query del banco
   patch: {
     estatus?: LeadStatus;
-    /** Email del usuario del sistema asignado (reemplaza id_agente). */
-    email_agente?: string | null;
     motivo_cierre?: string | null;
-    notas_banco?: string | null;
     fecha_respuesta_banco?: string | null;
   };
 }
@@ -450,6 +432,49 @@ export function useActualizarSolicitud() {
     onSuccess: () => {
       // Invalida todas las vistas (un banco y la global "all").
       qc.invalidateQueries({ queryKey: ["solicitudes-banco"] });
+    },
+  });
+}
+
+/**
+ * Asigna (o des-asigna con `email=null`) un ejecutivo a la solicitud. Se guarda
+ * dentro de `notas_banco` (`{ email_agente, notas }`) para no depender de una
+ * columna nueva. Read-modify-write para preservar las notas existentes.
+ */
+export function useAsignarEjecutivo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      email,
+      estatus,
+    }: {
+      id: number;
+      email: string | null;
+      /** Si se indica, actualiza también el estatus (p. ej. "asignado"). */
+      estatus?: LeadStatus;
+    }) => {
+      const { data } = await (supabase as any)
+        .from("bancos_solicitudes")
+        .select("notas_banco")
+        .eq("id", id)
+        .maybeSingle();
+      const meta = parseNotasBanco(data?.notas_banco ?? null);
+      meta.email_agente = email && email.trim() ? email.trim() : null;
+      const update: Record<string, any> = {
+        notas_banco: serializeNotasBanco(meta),
+        fecha_actualizacion: new Date().toISOString(),
+      };
+      if (estatus) update.estatus = estatus;
+      const { error } = await (supabase as any)
+        .from("bancos_solicitudes")
+        .update(update)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["solicitudes-banco"] });
+      qc.invalidateQueries({ queryKey: ["banco-solicitud-notas"] });
     },
   });
 }
