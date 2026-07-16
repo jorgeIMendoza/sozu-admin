@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { isToday, isPast, isFuture, parseISO, format as fmtDateFns } from "date-fns";
+import { isToday, isPast, isFuture, parseISO, format as fmtDateFns, addDays, addWeeks, addMonths, addYears } from "date-fns";
 import {
   leadStatusLabel, lifecycleLabel, leadScoreColor, relTime, fmtDate,
   fmtDateTime, fmtMXN, stageColor, DEAL_STAGES, apptStatusLabel,
@@ -977,11 +977,22 @@ export function CrmContactDetail() {
     enabled: !!contactId,
     queryFn: async () => {
       const res = await (supabase as any).from("crm_tareas")
-        .select("id, titulo, tipo, prioridad, estatus, fecha_vencimiento, fecha_creacion")
+        .select("id, titulo, tipo, prioridad, estatus, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
         .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
         .order("fecha_vencimiento", { ascending: true });
       if (res.error) return [];
-      return (res.data ?? []).map((t: any) => ({ id: t.id, title: t.titulo, status: t.estatus, priority: t.prioridad, due_date: t.fecha_vencimiento, created_at: t.fecha_creacion }));
+      return (res.data ?? []).map((t: any) => ({
+        id: t.id, title: t.titulo, status: t.estatus, priority: t.prioridad,
+        due_date: t.fecha_vencimiento, created_at: t.fecha_creacion,
+        descripcion: t.descripcion ?? null, recurrencia: t.recurrencia ?? null,
+        // Campos crudos para regenerar la recurrencia al completar.
+        raw: {
+          recurrencia: t.recurrencia ?? null, fecha_vencimiento: t.fecha_vencimiento,
+          fecha_recordatorio: t.fecha_recordatorio ?? null,
+          id_entidad_relacionada: t.id_entidad_relacionada, id_usuario_asignado: t.id_usuario_asignado ?? null,
+          titulo: t.titulo, tipo: t.tipo, prioridad: t.prioridad, descripcion: t.descripcion ?? null,
+        },
+      }));
     },
   });
 
@@ -1002,7 +1013,15 @@ export function CrmContactDetail() {
   const completeTask = async (id: number) => {
     const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id);
     if (error) { toast.error(error.message); return; }
-    toast.success("Tarea completada"); invalidateAll();
+    // Si la tarea es recurrente, genera la siguiente ocurrencia.
+    const done = (tasks ?? []).find((t: any) => t.id === id);
+    if (done?.raw?.recurrencia && done.raw.fecha_vencimiento) {
+      await regenerateRecurringTask(done.raw);
+      toast.success("Tarea completada · se generó la siguiente");
+    } else {
+      toast.success("Tarea completada");
+    }
+    invalidateAll();
   };
   const deleteTask = async (id: number) => {
     const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
@@ -1865,70 +1884,28 @@ function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string
 function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ titulo: "", tipo: "seguimiento", fecha_vencimiento: "", prioridad: "normal", assigned_to: userId ?? "" });
+  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(userId ?? ""));
   const save = async () => {
-    if (!form.titulo) return;
+    if (!form.titulo.trim()) return;
     setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert({
-      id_entidad_relacionada: Number(contactId),
-      titulo: form.titulo,
-      tipo: form.tipo,
-      prioridad: form.prioridad,
-      fecha_vencimiento: form.fecha_vencimiento || null,
-      id_usuario_asignado: form.assigned_to || null,
-      estatus: "pendiente",
-    });
+    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, Number(contactId)));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Tarea creada"); setOpen(false); setForm({ ...form, titulo: "" }); onSaved();
+    toast.success("Tarea creada"); setOpen(false); setForm(emptyTaskForm(userId ?? "")); onSaved();
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyTaskForm(userId ?? "")); }}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
         <div className="grid gap-3">
-          <DField label="Título"><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} /></DField>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Tipo">
-              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="seguimiento">Seguimiento</SelectItem>
-                  <SelectItem value="llamada">Llamada</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="visita">Visita</SelectItem>
-                </SelectContent>
-              </Select>
-            </DField>
-            <DField label="Prioridad">
-              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="baja">Baja</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="alta">Alta</SelectItem>
-                  <SelectItem value="urgente">Urgente</SelectItem>
-                </SelectContent>
-              </Select>
-            </DField>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Fecha"><Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} /></DField>
-            <DField label="Asignar a">
-              <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-          </div>
+          <TaskFormFields form={form} setForm={setForm} owners={owners as any[]} />
         </div>
-        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -2307,13 +2284,166 @@ const TASK_PRIORITY_META: Record<string, { label: string; cls: string; order: nu
   baja: { label: "Baja", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", order: 3 },
 };
 
+// Presets de recordatorio (minutos antes del vencimiento). El valor absoluto
+// (fecha_recordatorio) lo dispara el cron `crm-recordatorios-tareas`.
+const TASK_REMINDER_OPTIONS: { id: string; label: string; minutes: number | null }[] = [
+  { id: "none", label: "Sin recordatorio", minutes: null },
+  { id: "at", label: "A la hora del vencimiento", minutes: 0 },
+  { id: "15m", label: "15 minutos antes", minutes: 15 },
+  { id: "1h", label: "1 hora antes", minutes: 60 },
+  { id: "1d", label: "1 día antes", minutes: 1440 },
+];
+const TASK_RECURRENCE_OPTIONS: { id: string; label: string }[] = [
+  { id: "none", label: "No se repite" },
+  { id: "diaria", label: "Diaria" },
+  { id: "semanal", label: "Semanal" },
+  { id: "quincenal", label: "Quincenal" },
+  { id: "mensual", label: "Mensual" },
+  { id: "anual", label: "Anual" },
+];
+const RECURRENCE_LABEL: Record<string, string> = Object.fromEntries(TASK_RECURRENCE_OPTIONS.map((o) => [o.id, o.label]));
+
+// Estado local unificado del formulario de tarea (global y por contacto).
+type TaskFormState = {
+  titulo: string; tipo: string; prioridad: string;
+  fecha: string; hora: string; recordatorio: string; recurrencia: string;
+  descripcion: string; assigned_to: string;
+};
+const emptyTaskForm = (assignee = ""): TaskFormState => ({
+  titulo: "", tipo: "seguimiento", prioridad: "normal",
+  fecha: "", hora: "08:00", recordatorio: "none", recurrencia: "none",
+  descripcion: "", assigned_to: assignee,
+});
+
+// Construye el payload de INSERT a crm_tareas desde el estado del formulario.
+function buildTaskInsert(form: TaskFormState, contactId: number) {
+  const dueIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "08:00"}:00`).toISOString() : null;
+  let recIso: string | null = null;
+  if (dueIso && form.recordatorio !== "none") {
+    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
+    if (mins != null) recIso = new Date(new Date(dueIso).getTime() - mins * 60000).toISOString();
+  }
+  return {
+    id_entidad_relacionada: contactId,
+    titulo: form.titulo.trim(),
+    tipo: form.tipo,
+    prioridad: form.prioridad,
+    descripcion: form.descripcion.trim() || null,
+    fecha_vencimiento: dueIso,
+    fecha_recordatorio: recIso,
+    recurrencia: form.recurrencia === "none" ? null : form.recurrencia,
+    id_usuario_asignado: form.assigned_to || null,
+    estatus: "pendiente",
+  };
+}
+
+function advanceByRecurrence(d: Date, rec: string): Date {
+  switch (rec) {
+    case "diaria": return addDays(d, 1);
+    case "semanal": return addWeeks(d, 1);
+    case "quincenal": return addWeeks(d, 2);
+    case "mensual": return addMonths(d, 1);
+    case "anual": return addYears(d, 1);
+    default: return d;
+  }
+}
+
+// Al completar una tarea recurrente, genera la siguiente ocurrencia (mismo offset de
+// recordatorio respecto al vencimiento). Se llama tras marcarla completada.
+async function regenerateRecurringTask(t: {
+  recurrencia?: string | null; fecha_vencimiento?: string | null; fecha_recordatorio?: string | null;
+  id_entidad_relacionada: number; id_usuario_asignado?: string | null;
+  titulo: string; tipo: string; prioridad: string; descripcion?: string | null;
+}) {
+  if (!t.recurrencia || !t.fecha_vencimiento) return;
+  const nextDue = advanceByRecurrence(parseISO(t.fecha_vencimiento), t.recurrencia);
+  let nextRec: string | null = null;
+  if (t.fecha_recordatorio) {
+    const offsetMs = parseISO(t.fecha_vencimiento).getTime() - parseISO(t.fecha_recordatorio).getTime();
+    nextRec = new Date(nextDue.getTime() - offsetMs).toISOString();
+  }
+  await (supabase as any).from("crm_tareas").insert({
+    id_entidad_relacionada: t.id_entidad_relacionada,
+    id_usuario_asignado: t.id_usuario_asignado ?? null,
+    titulo: t.titulo, tipo: t.tipo, prioridad: t.prioridad,
+    descripcion: t.descripcion ?? null,
+    fecha_vencimiento: nextDue.toISOString(),
+    fecha_recordatorio: nextRec,
+    recurrencia: t.recurrencia,
+    estatus: "pendiente",
+  });
+}
+
+// Formato de vencimiento con hora cuando no es medianoche.
+function fmtDueDateTime(iso: string): string {
+  const d = parseISO(iso);
+  const base = isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy");
+  return d.getHours() === 0 && d.getMinutes() === 0 ? base : `${base} · ${fmtDateFns(d, "HH:mm")}`;
+}
+
+// Campos compartidos del formulario de tarea (título, tipo, prioridad, vencimiento+hora,
+// recordatorio, recurrencia, asignado, notas). El contacto lo maneja cada diálogo.
+function TaskFormFields({ form, setForm, owners }: {
+  form: TaskFormState;
+  setForm: (f: TaskFormState) => void;
+  owners: { id: string; full_name: string; email: string }[];
+}) {
+  return (
+    <>
+      <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Llamar al prospecto" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Tipo</Label>
+          <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div><Label>Prioridad</Label>
+          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Fecha de vencimiento</Label><Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></div>
+        <div><Label>Hora</Label><Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} disabled={!form.fecha} /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Recordatorio</Label>
+          <Select value={form.recordatorio} onValueChange={(v) => setForm({ ...form, recordatorio: v })} disabled={!form.fecha}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div><Label>Repetir</Label>
+          <Select value={form.recurrencia} onValueChange={(v) => setForm({ ...form, recurrencia: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{TASK_RECURRENCE_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div><Label>Asignar a</Label>
+        <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+          <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+          <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+      <div><Label>Notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Detalles de la tarea…" rows={3} /></div>
+    </>
+  );
+}
+
 type GlobalTask = {
   id: number;
   titulo: string;
   tipo: string;
   prioridad: string;
   estatus: string;
+  descripcion: string | null;
   fecha_vencimiento: string | null;
+  fecha_recordatorio: string | null;
+  recurrencia: string | null;
   fecha_creacion: string;
   id_entidad_relacionada: number;
   id_usuario_asignado: string | null;
@@ -2343,7 +2473,7 @@ export function CrmTasks() {
     queryKey: ["crm-tasks-global"],
     queryFn: async () => {
       const res = await (supabase as any).from("crm_tareas")
-        .select("id, titulo, tipo, prioridad, estatus, fecha_vencimiento, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
+        .select("id, titulo, tipo, prioridad, estatus, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
         .eq("activo", true)
         .order("fecha_vencimiento", { ascending: true, nullsFirst: false })
         .limit(1000);
@@ -2381,7 +2511,10 @@ export function CrmTasks() {
         tipo: r.tipo,
         prioridad: r.prioridad,
         estatus: r.estatus,
+        descripcion: r.descripcion ?? null,
         fecha_vencimiento: r.fecha_vencimiento,
+        fecha_recordatorio: r.fecha_recordatorio ?? null,
+        recurrencia: r.recurrencia ?? null,
         fecha_creacion: r.fecha_creacion,
         id_entidad_relacionada: r.id_entidad_relacionada,
         id_usuario_asignado: r.id_usuario_asignado,
@@ -2441,11 +2574,17 @@ export function CrmTasks() {
 
   const toggleComplete = useMutation({
     mutationFn: async (t: GlobalTask) => {
-      const next = isDone(t) ? "pendiente" : "completada";
+      const completing = !isDone(t);
+      const next = completing ? "completada" : "pendiente";
       const { error } = await (supabase as any).from("crm_tareas").update({ estatus: next }).eq("id", t.id);
       if (error) throw error;
+      // Al completar una tarea recurrente, genera la siguiente ocurrencia.
+      if (completing && t.recurrencia && t.fecha_vencimiento) await regenerateRecurringTask(t);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }),
+    onSuccess: (_d, t) => {
+      qc.invalidateQueries({ queryKey: ["crm-tasks-global"] });
+      if (!isDone(t) && t.recurrencia) toast.success("Tarea completada · se generó la siguiente");
+    },
     onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
   });
 
@@ -2563,12 +2702,12 @@ export function CrmTasks() {
                 const done = isDone(t);
                 const d = t.fecha_vencimiento ? parseISO(t.fecha_vencimiento) : null;
                 const isOverdue = d && isPast(d) && !isToday(d) && !done;
-                const dueLabel = d ? (isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy")) : "—";
+                const dueLabel = t.fecha_vencimiento ? fmtDueDateTime(t.fecha_vencimiento) : "—";
                 const typeMeta = TASK_TYPE_META[t.tipo] ?? { label: t.tipo, icon: ClipboardList };
                 const prioMeta = TASK_PRIORITY_META[t.prioridad];
                 const TypeIcon = typeMeta.icon;
                 return (
-                  <tr key={t.id} className="border-t border-border hover:bg-muted/30 group">
+                  <tr key={t.id} className="border-t border-border hover:bg-muted/30 group align-top">
                     <td className="p-3">
                       <button
                         type="button"
@@ -2583,8 +2722,11 @@ export function CrmTasks() {
                       <div className="flex items-center gap-2">
                         <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                        {t.recurrencia && <RefreshCw className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`Se repite: ${RECURRENCE_LABEL[t.recurrencia] ?? t.recurrencia}`} />}
+                        {t.fecha_recordatorio && <Bell className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Tiene recordatorio" />}
                       </div>
                       <span className="text-[11px] text-muted-foreground ml-6">{typeMeta.label}</span>
+                      {t.descripcion && <div className="text-xs text-muted-foreground/80 ml-6 mt-0.5 line-clamp-1 max-w-md">{t.descripcion}</div>}
                     </td>
                     <td className="p-3">
                       {prioMeta ? <Badge variant="outline" className={prioMeta.cls}>{prioMeta.label}</Badge> : <span className="text-muted-foreground">{t.prioridad}</span>}
@@ -2630,7 +2772,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
   const [saving, setSaving] = useState(false);
   const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
   const [contactSearch, setContactSearch] = useState("");
-  const [form, setForm] = useState({ titulo: "", tipo: "seguimiento", prioridad: "normal", fecha_vencimiento: "", assigned_to: defaultAssignee });
+  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(defaultAssignee));
 
   const { data: contactResults = [], isFetching } = useQuery({
     queryKey: ["crm-task-contact-search", contactSearch],
@@ -2650,20 +2792,12 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
     },
   });
 
-  const reset = () => { setForm({ titulo: "", tipo: "seguimiento", prioridad: "normal", fecha_vencimiento: "", assigned_to: defaultAssignee }); setContact(null); setContactSearch(""); };
+  const reset = () => { setForm(emptyTaskForm(defaultAssignee)); setContact(null); setContactSearch(""); };
 
   const save = async () => {
     if (!form.titulo.trim() || !contact) return;
     setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert({
-      id_entidad_relacionada: contact.id,
-      titulo: form.titulo.trim(),
-      tipo: form.tipo,
-      prioridad: form.prioridad,
-      fecha_vencimiento: form.fecha_vencimiento || null,
-      id_usuario_asignado: form.assigned_to || null,
-      estatus: "pendiente",
-    });
+    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, contact.id));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Tarea creada");
@@ -2677,7 +2811,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
       <DialogTrigger asChild>
         <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
         <div className="grid gap-3 py-1">
           <div>
@@ -2705,30 +2839,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
               </div>
             )}
           </div>
-          <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Llamar al prospecto" /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>Tipo</Label>
-              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Prioridad</Label>
-              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>Vencimiento</Label><Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} /></div>
-            <div><Label>Asignar a</Label>
-              <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
+          <TaskFormFields form={form} setForm={setForm} owners={owners} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
