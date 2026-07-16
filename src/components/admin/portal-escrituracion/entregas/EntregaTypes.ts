@@ -24,6 +24,11 @@ export interface EstatusChecklistRow {
   activo: boolean;
 }
 
+export interface EntidadER {
+  id: number;
+  nombre: string;
+}
+
 export interface ChecklistItem {
   id: number;
   id_categoria: number;
@@ -31,6 +36,7 @@ export interface ChecklistItem {
   id_estatus_checklist: number;
   observacion: string | null;
   responsable: string | null;
+  id_responsable_er: number | null;
   fecha_revision: string | null;
   fecha_compromiso: string | null;
 }
@@ -54,6 +60,7 @@ export interface ObservacionRow {
   estatus: string;
   prioridad: PrioridadObs;
   fecha_creacion: string;
+  id_checklist_item: number | null;
 }
 
 export interface PageData {

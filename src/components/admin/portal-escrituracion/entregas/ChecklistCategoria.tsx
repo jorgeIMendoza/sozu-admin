@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, CheckCircle2, Clock } from 'lucide-react';
-import { type ChecklistCategoria as ChecklistCategoriaType, ESTATUS_CHECKLIST } from './EntregaTypes';
+import { type ChecklistCategoria as ChecklistCategoriaType, type EntidadER, ESTATUS_CHECKLIST } from './EntregaTypes';
 import { ChecklistConcepto } from './ChecklistConcepto';
 
 interface ChecklistCategoriaRowProps {
@@ -7,11 +7,14 @@ interface ChecklistCategoriaRowProps {
   isExpanded: boolean;
   isSelected: boolean;
   itemsLoading: Set<number>;
+  entidadesER: EntidadER[];
   getEstatusNombre: (id: number) => string;
   onToggle: () => void;
   onSelect: () => void;
   onActualizarEstatus: (itemId: number, estatus: number) => void;
   onOpenNoCumple: (itemId: number, nombre: string) => void;
+  onAsignarResponsable: (itemId: number, entidadId: number | null) => void;
+  onOpenEvidencia: (itemId: number, nombre: string) => void;
 }
 
 export function ChecklistCategoriaRow({
@@ -19,11 +22,14 @@ export function ChecklistCategoriaRow({
   isExpanded,
   isSelected,
   itemsLoading,
+  entidadesER,
   getEstatusNombre,
   onToggle,
   onSelect,
   onActualizarEstatus,
   onOpenNoCumple,
+  onAsignarResponsable,
+  onOpenEvidencia,
 }: ChecklistCategoriaRowProps) {
   const catApl = cat.items.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
   const catCum = catApl.filter(i => i.id_estatus_checklist === ESTATUS_CHECKLIST.CUMPLE);
@@ -84,9 +90,12 @@ export function ChecklistCategoriaRow({
           key={item.id}
           item={item}
           isLoading={itemsLoading.has(item.id)}
+          entidadesER={entidadesER}
           getEstatusNombre={getEstatusNombre}
           onActualizarEstatus={onActualizarEstatus}
           onOpenNoCumple={onOpenNoCumple}
+          onAsignarResponsable={onAsignarResponsable}
+          onOpenEvidencia={onOpenEvidencia}
         />
       ))}
     </>

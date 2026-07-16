@@ -10,13 +10,14 @@ import {
 import { toast } from 'sonner';
 import {
   ESTATUS_CHECKLIST, ESTATUS_META, PRIORIDAD_META, fmt, fmtDt,
-  type EstatusChecklistRow, type ChecklistItem, type ChecklistCategoria, type ObservacionRow, type PageData,
+  type EstatusChecklistRow, type ChecklistItem, type ChecklistCategoria, type ObservacionRow, type PageData, type EntidadER,
 } from '@/components/admin/portal-escrituracion/entregas/EntregaTypes';
 import { SignatureCanvas } from '@/components/admin/portal-escrituracion/entregas/SignatureCanvas';
 import { VoBoPanel } from '@/components/admin/portal-escrituracion/entregas/VoBoPanel';
 import { ChecklistCategoriaRow } from '@/components/admin/portal-escrituracion/entregas/ChecklistCategoria';
 import { ChecklistEstatusModal } from '@/components/admin/portal-escrituracion/entregas/ChecklistEstatusModal';
 import { ObservacionCard } from '@/components/admin/portal-escrituracion/entregas/ObservacionCard';
+import { EvidenciaItemModal } from '@/components/admin/portal-escrituracion/entregas/EvidenciaItemModal';
 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ export function EntregaDetalle() {
   const [itemsLoading, setItemsLoading] = useState<Set<number>>(new Set());
   const [noCumpleModal, setNoCumpleModal] = useState<{ itemId: number; nombre: string } | null>(null);
   const [noCumpleObs, setNoCumpleObs] = useState('');
+  const [evidenciaModal, setEvidenciaModal] = useState<{ itemId: number; nombre: string } | null>(null);
 
   // ── Query principal: propiedad + edificio + modelo + proyecto + cliente ──────
   const { data: pageData, isLoading: pageLoading, error: pageError } = useQuery<PageData | null>({
@@ -146,7 +148,7 @@ export function EntregaDetalle() {
 
       const { data: items } = await supabase
         .from('entregas_checklist_items')
-        .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, fecha_revision, fecha_compromiso')
+        .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, id_responsable_er, fecha_revision, fecha_compromiso')
         .in('id_categoria', catIds)
         .eq('activo', true)
         .order('id', { ascending: true });
@@ -171,7 +173,7 @@ export function EntregaDetalle() {
     queryFn: async () => {
       const { data } = await supabase
         .from('entregas_observaciones')
-        .select('id, descripcion, estatus, prioridad, fecha_creacion')
+        .select('id, descripcion, estatus, prioridad, fecha_creacion, id_checklist_item')
         .eq('id_entrega', entregaId!)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -195,6 +197,24 @@ export function EntregaDetalle() {
 
   const getEstatusNombre = (id: number) =>
     estatusCatalogo.find(e => e.id === id)?.nombre ?? 'Sin estatus';
+
+  // ── Catálogo de entidades responsables (tipos 8=proveedor, 22=personal interno) ─
+  const { data: entidadesER = [] } = useQuery<EntidadER[]>({
+    queryKey: ['entidades-er-entregas'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
+        .in('id_tipo_entidad', [8, 22])
+        .eq('activo', true)
+        .order('id');
+      return (data ?? []).map((er: any) => ({
+        id: er.id,
+        nombre: er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
+      }));
+    },
+    staleTime: 60_000,
+  });
 
   // ── Plantilla preview (prop-mode: resumen del checklist a crear) ─────────────
   const modeloIdForPreview   = isPropMode ? (pageData?.modelo?.id ?? null) : null;
@@ -261,6 +281,21 @@ export function EntregaDetalle() {
       toast.error('Error al actualizar el ítem');
     } else {
       toast.success(`Ítem actualizado: ${getEstatusNombre(nuevoEstatus)}`);
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+    }
+    setItemLoading(itemId, false);
+  };
+
+  const handleAsignarResponsable = async (itemId: number, entidadId: number | null) => {
+    setItemLoading(itemId, true);
+    const { error } = await (supabase as any)
+      .from('entregas_checklist_items')
+      .update({ id_responsable_er: entidadId })
+      .eq('id', itemId);
+    if (error) {
+      toast.error('Error al asignar responsable');
+    } else {
+      toast.success(entidadId ? 'Responsable asignado' : 'Responsable removido');
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
     }
     setItemLoading(itemId, false);
@@ -793,11 +828,14 @@ export function EntregaDetalle() {
                           isExpanded={expandedCats.includes(cat.id)}
                           isSelected={selectedCat?.id === cat.id}
                           itemsLoading={itemsLoading}
+                          entidadesER={entidadesER}
                           getEstatusNombre={getEstatusNombre}
                           onToggle={() => toggleCat(cat.id)}
                           onSelect={() => setSelectedCat(cat)}
                           onActualizarEstatus={handleActualizarEstatus}
                           onOpenNoCumple={(itemId, nombre) => { setNoCumpleModal({ itemId, nombre }); setNoCumpleObs(''); }}
+                          onAsignarResponsable={handleAsignarResponsable}
+                          onOpenEvidencia={(itemId, nombre) => setEvidenciaModal({ itemId, nombre })}
                         />
                       ))}
                     </tbody>
@@ -1070,7 +1108,11 @@ export function EntregaDetalle() {
               </div>
             ) : (
               observaciones.map(obs => (
-                <ObservacionCard key={obs.id} obs={obs} />
+                <ObservacionCard
+                  key={obs.id}
+                  obs={obs}
+                  onCargarEvidencia={(itemId, desc) => setEvidenciaModal({ itemId, nombre: desc })}
+                />
               ))
             )}
           </div>
@@ -1152,6 +1194,19 @@ export function EntregaDetalle() {
         onChangeObs={setNoCumpleObs}
         onGuardar={handleGuardarNoCumple}
       />
+
+      {/* ── Modal: Evidencia por concepto (Fase 2) ──────────────────────────── */}
+      {evidenciaModal && entregaId && (
+        <EvidenciaItemModal
+          open={!!evidenciaModal}
+          onClose={() => setEvidenciaModal(null)}
+          itemId={evidenciaModal.itemId}
+          itemNombre={evidenciaModal.nombre}
+          entregaId={entregaId}
+          tipoDefecto="GENERAL"
+          onDone={() => {}}
+        />
+      )}
     </div>
   );
 }
