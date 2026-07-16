@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -40,6 +40,9 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { isToday, isPast, isFuture, parseISO, format as fmtDateFns } from "date-fns";
@@ -66,7 +69,23 @@ import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 
 // ─── Contacts list ────────────────────────────────────────────────────────────
 
-type ColumnId = "name" | "email" | "phone" | "lead_status" | "lifecycle" | "owner" | "created" | "updated" | "source";
+type ColumnId =
+  | "name"
+  | "email"
+  | "phone"
+  | "lead_status"
+  | "lifecycle"
+  | "owner"
+  | "created"
+  | "updated"
+  | "source"
+  | "meta_form_name"
+  | "meta_campaign_id"
+  | "meta_ad_id"
+  | "meta_platform"
+  | "meta_created_time"
+  | "meta_field_data";
+
 type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
 
 const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
@@ -79,9 +98,15 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "created", label: "Fecha creación", visible: true },
   { id: "updated", label: "Última actualización", visible: true },
   { id: "source", label: "Fuente del registro", visible: true },
+  { id: "meta_form_name", label: "Formulario (Meta)", visible: false },
+  { id: "meta_campaign_id", label: "Campaña (Meta)", visible: false },
+  { id: "meta_ad_id", label: "Anuncio (Meta)", visible: false },
+  { id: "meta_platform", label: "Plataforma (Meta)", visible: false },
+  { id: "meta_created_time", label: "Fecha lead (Meta)", visible: false },
+  { id: "meta_field_data", label: "Respuestas del formulario", visible: false },
 ];
 
-const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v2";
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v3";
 
 const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "nuevo", label: "Nuevo" },
@@ -118,11 +143,27 @@ function loadContactColumns(): ColumnConfig[] {
 }
 
 type ContactRow = {
-  id: string; full_name: string; email: string | null; phone: string | null;
-  development_id: string | null; lead_status: string; lifecycle_stage: string;
-  source_platform: string | null; source_name: string | null;
-  contact_owner: string | null; last_activity_at: string | null;
-  next_task_at: string | null; lead_score: number; created_at: string;
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  development_id: string | null;
+  lead_status: string;
+  lifecycle_stage: string;
+  source_platform: string | null;
+  source_name: string | null;
+  contact_owner: string | null;
+  owner_name: string | null;
+  last_activity_at: string | null;
+  next_task_at: string | null;
+  lead_score: number;
+  created_at: string;
+  meta_form_name: string | null;
+  meta_campaign_id: string | null;
+  meta_ad_id: string | null;
+  meta_platform: string | null;
+  meta_created_time: string | null;
+  meta_field_data: any[] | null;
 };
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
@@ -152,6 +193,7 @@ export function CrmContacts() {
   const [filterDev, setFilterDev] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterLifecycle, setFilterLifecycle] = useState("all");
+  const [filterSource, setFilterSource] = useState("all");
   const [page, setPage] = useState(0);
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
@@ -175,19 +217,28 @@ export function CrmContacts() {
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id,nombre").eq("activo", true).order("nombre");
+      // Solo proyectos SOZU: proyectos con relación de entidad SOZU (id_tipo_entidad=5) y publicados.
+      const { data: rels } = await (supabase as any).from("entidades_relacionadas")
+        .select("id_proyecto").eq("id_tipo_entidad", 5).eq("activo", true).not("id_proyecto", "is", null);
+      const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
+      if (!ids.length) return [];
+      const { data } = await (supabase as any).from("proyectos")
+        .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
       return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
     },
   });
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, page],
     queryFn: async () => {
+      // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
+      // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
       const tipoFilter = filterLifecycle !== "all"
         ? filterLifecycle === "customer" ? [2] : [7]
         : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
 
+      // Búsqueda por nombre/email/teléfono → resolver ids de persona primero.
       let searchPersonaIds: number[] | null = null;
       if (search.trim()) {
         const { data: matchPers } = await (supabase as any).from("personas")
@@ -197,11 +248,28 @@ export function CrmContacts() {
         if (searchPersonaIds!.length === 0) return { rows: [], count: 0 };
       }
 
+      // Filtro por fuente vía crm_leads_atribucion (Meta = tiene meta_leadgen_id).
+      let sourceErIds: number[] | null = null;   // restringir a estos (solo Meta)
+      let excludeErIds: number[] = [];            // excluir estos (manual = no Meta)
+      if (filterSource === "meta" || filterSource === "manual") {
+        const { data: metaRows } = await (supabase as any).from("crm_leads_atribucion")
+          .select("id_entidad_relacionada").eq("activo", true).not("meta_leadgen_id", "is", null);
+        const metaIds = (metaRows ?? []).map((r: any) => Number(r.id_entidad_relacionada));
+        if (filterSource === "meta") {
+          sourceErIds = metaIds;
+          if (!sourceErIds.length) return { rows: [], count: 0 };
+        } else {
+          excludeErIds = metaIds;
+        }
+      }
+
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
         q = q.in("id_tipo_entidad", tipoFilter).eq("activo", true);
         if (proyectoId) q = q.eq("id_proyecto", proyectoId);
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
+        if (sourceErIds) q = q.in("id", sourceErIds);
+        if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
 
@@ -216,32 +284,58 @@ export function CrmContacts() {
       const ers: any[] = pageRes.data ?? [];
       if (!ers.length) return { rows: [], count: countRes.count ?? 0 };
 
+      // Datos de contacto desde personas.
       const { data: personas } = await (supabase as any).from("personas")
         .select("id, nombre_legal, nombre_comercial, email, telefono")
         .in("id", ers.map((e: any) => e.id_persona))
         .eq("activo", true);
-
       const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
+
+      // Atribución de Meta (opcional): puede no existir la tabla todavía (DDL pendiente).
+      let atrMap: Record<number, any> = {};
+      const atrRes = await (supabase as any).from("crm_leads_atribucion")
+        .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
+        .in("id_entidad_relacionada", ers.map((e: any) => e.id))
+        .eq("activo", true);
+      if (!atrRes.error) {
+        atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
+      }
+
+      // Resolver nombres de los propietarios (id_propietario es un auth_user_id / UUID).
+      const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
+      let ownerNameMap: Record<string, string> = {};
+      if (ownerIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
+        ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
 
       const rows: ContactRow[] = ers
         .filter((e: any) => pMap[e.id_persona])
         .map((e: any) => {
           const p = pMap[e.id_persona];
+          const a = atrMap[e.id] ?? null;
           return {
             id: String(e.id),
             full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
             email: p.email ?? null,
             phone: p.telefono ?? null,
             development_id: e.id_proyecto ? String(e.id_proyecto) : null,
-            lead_status: "new" as const,
-            lifecycle_stage: e.id_tipo_entidad === 2 ? "customer" : "lead",
-            source_platform: null,
-            source_name: null,
-            contact_owner: null,
+            lead_status: a?.estatus_lead ?? "nuevo",
+            lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
+            source_platform: a?.meta_platform ?? null,
+            source_name: a?.meta_form_name ?? null,
+            contact_owner: a?.id_propietario ?? null,
+            owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
             last_activity_at: e.fecha_actualizacion ?? null,
             next_task_at: null,
             lead_score: 0,
             created_at: e.fecha_creacion ?? new Date().toISOString(),
+            meta_form_name: a?.meta_form_name ?? null,
+            meta_campaign_id: a?.meta_campaign_id ?? null,
+            meta_ad_id: a?.meta_ad_id ?? null,
+            meta_platform: a?.meta_platform ?? null,
+            meta_created_time: a?.meta_created_time ?? null,
+            meta_field_data: a?.meta_field_data ?? null,
           };
         });
 
@@ -300,17 +394,10 @@ export function CrmContacts() {
       <div className="flex flex-wrap items-center gap-2">
         <CFilter value={filterDev} onChange={(v) => { setFilterDev(v); setPage(0); }} placeholder="Proyecto"
           options={[{ v: "all", l: "Todos los proyectos" }, ...(developments ?? []).map((d: any) => ({ v: d.id, l: d.name }))]} />
-        <Button variant="outline" size="sm" className="h-8 text-xs font-normal text-muted-foreground">
-          <ChevronDown className="size-3 mr-1" /> Fecha de creación
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs font-normal text-muted-foreground">
-          <ChevronDown className="size-3 mr-1" /> Última actividad
-        </Button>
+        <CFilter value={filterSource} onChange={(v) => { setFilterSource(v); setPage(0); }} placeholder="Fuente"
+          options={[{ v: "all", l: "Todas las fuentes" }, { v: "meta", l: "Solo Meta" }, { v: "manual", l: "Manual" }]} />
         <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
           options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
-        <Button variant="outline" size="sm" className="h-8 text-xs">
-          <Plus className="size-3 mr-1" /> Filtros avanzados
-        </Button>
       </div>
 
       {/* Table card */}
@@ -421,7 +508,7 @@ export function CrmContacts() {
                           );
                         }
                         case "owner":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.contact_owner ?? "Sin asignar"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.owner_name ?? "Sin asignar"}</td>;
                         case "created":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
                         case "updated":
@@ -434,6 +521,44 @@ export function CrmContacts() {
                               </span>
                             </td>
                           );
+                        case "meta_form_name":
+                          return (
+                            <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">
+                              {c.meta_form_name ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                                  {c.meta_form_name}
+                                </span>
+                              ) : "—"}
+                            </td>
+                          );
+                        case "meta_campaign_id":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap font-mono text-xs">{c.meta_campaign_id || "—"}</td>;
+                        case "meta_ad_id":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap font-mono text-xs">{c.meta_ad_id || "—"}</td>;
+                        case "meta_platform":
+                          return (
+                            <td key={col.id} className="p-3 whitespace-nowrap">
+                              {c.meta_platform ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/5 text-primary border border-primary/20 uppercase">
+                                  {c.meta_platform}
+                                </span>
+                              ) : "—"}
+                            </td>
+                          );
+                        case "meta_created_time":
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.meta_created_time ? fmtDate(c.meta_created_time) : "—"}</td>;
+                        case "meta_field_data": {
+                          const count = Array.isArray(c.meta_field_data) ? c.meta_field_data.length : 0;
+                          return (
+                            <td key={col.id} className="p-3 whitespace-nowrap">
+                              {count > 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 text-xs font-medium">
+                                  {count} {count === 1 ? "respuesta" : "respuestas"}
+                                </span>
+                              ) : "—"}
+                            </td>
+                          );
+                        }
                         default:
                           return null;
                       }
@@ -510,32 +635,44 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "new" });
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo" });
 
   const submit = async () => {
-    if (!orgId || !form.full_name) return;
+    if (!form.full_name) return;
     setBusy(true);
-    const { error } = await (supabase as any).from("contacts").insert({
-      organization_id: orgId,
-      full_name: form.full_name,
-      email: form.email || null,
-      phone: form.phone || null,
-      normalized_email: form.email ? form.email.toLowerCase().trim() : null,
-      normalized_phone: form.phone ? form.phone.replace(/\D/g, "") : null,
-      development_id: form.development_id || null,
-      source_platform: form.source_platform,
-      source_name: form.source_name,
-      lifecycle_stage: form.lifecycle_stage,
-      lead_status: form.lead_status,
-      contact_owner: user?.id ?? null,
-      consent_status: "unknown",
-    });
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Contacto creado");
-    setOpen(false);
-    setForm({ ...form, full_name: "", email: "", phone: "" });
-    onCreated();
+    try {
+      // 1. Persona (datos de contacto)
+      const { data: persona, error: pErr } = await (supabase as any).from("personas").insert({
+        tipo_persona: "pf",
+        nombre_legal: form.full_name,
+        email: form.email || null,
+        telefono: form.phone || null,
+      }).select("id").single();
+      if (pErr) throw pErr;
+      // 2. Entidad relacionada (prospecto tipo 7)
+      const { data: er, error: eErr } = await (supabase as any).from("entidades_relacionadas").insert({
+        id_persona: persona.id,
+        id_tipo_entidad: 7,
+        id_proyecto: form.development_id ? Number(form.development_id) : null,
+      }).select("id").single();
+      if (eErr) throw eErr;
+      // 3. Estado del CRM (best-effort: si la tabla aún no existe, el contacto igual queda creado)
+      const { error: aErr } = await (supabase as any).from("crm_leads_atribucion").insert({
+        id_entidad_relacionada: er.id,
+        estatus_lead: form.lead_status,
+        etapa_ciclo_vida: form.lifecycle_stage,
+        id_propietario: user?.id ?? null,
+      });
+      if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
+      toast.success("Contacto creado");
+      setOpen(false);
+      setForm({ ...form, full_name: "", email: "", phone: "" });
+      onCreated();
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo crear el contacto");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -556,10 +693,10 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
             </Select>
           </CField>
           <div className="grid grid-cols-2 gap-3">
-            <CField label="Lead status">
+            <CField label="Estado del lead">
               <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
+                <SelectContent>{META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </CField>
             <CField label="Lifecycle">
@@ -648,6 +785,7 @@ function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
 function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
   const [activityDate, setActivityDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(true);
 
   const editor = useEditor({
     extensions: [
@@ -660,22 +798,24 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
     editorProps: {
       attributes: { class: "prose prose-sm max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none" },
     },
+    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
   });
 
   const save = async () => {
     if (!userId || !editor || editor.isEmpty) return;
     setSaving(true);
     const html = editor.getHTML();
-    const { error } = await (supabase as any).from("notes").insert({
-      contact_id: contactId,
-      user_id: userId,
-      content: html,
-      activity_date: activityDate,
+    const { error } = await (supabase as any).from("crm_notas").insert({
+      id_entidad_relacionada: Number(contactId),
+      id_usuario: userId,
+      contenido: html,
+      fecha_actividad: activityDate,
     });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Nota guardada");
     editor.commands.clearContent();
+    setIsEmpty(true);
     onSaved();
   };
 
@@ -697,7 +837,7 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
         <Button
           size="sm"
           onClick={save}
-          disabled={saving || !editor || editor.isEmpty}
+          disabled={saving || !editor || isEmpty}
           className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
         >
           {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
@@ -717,40 +857,55 @@ export function CrmContactDetail() {
     queryKey: ["contact-sozu", contactId],
     enabled: !!contactId,
     queryFn: async () => {
+      const erId = Number(contactId);
       const { data: er } = await (supabase as any).from("entidades_relacionadas")
         .select("id, id_persona, id_proyecto, id_tipo_entidad, fecha_creacion, fecha_actualizacion")
-        .eq("id", Number(contactId)).maybeSingle();
+        .eq("id", erId).maybeSingle();
       if (!er) return null;
       const { data: p } = await (supabase as any).from("personas")
         .select("id, nombre_legal, nombre_comercial, email, telefono")
         .eq("id", er.id_persona).maybeSingle();
       if (!p) return null;
+      // Atribución / estado del CRM (opcional: la tabla puede no existir aún).
+      let a: any = null;
+      const atrRes = await (supabase as any).from("crm_leads_atribucion")
+        .select("*").eq("id_entidad_relacionada", erId).eq("activo", true).maybeSingle();
+      if (!atrRes.error) a = atrRes.data;
       return {
         id: String(er.id),
+        id_persona: er.id_persona,
         full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
         email: p.email ?? null,
         phone: p.telefono ?? null,
         development_id: er.id_proyecto ? String(er.id_proyecto) : null,
-        lead_status: "new",
-        lifecycle_stage: er.id_tipo_entidad === 2 ? "customer" : "lead",
-        source_platform: null, source_name: null, contact_owner: null,
+        lead_status: a?.estatus_lead ?? "nuevo",
+        lifecycle_stage: a?.etapa_ciclo_vida ?? (er.id_tipo_entidad === 2 ? "customer" : "lead"),
+        source_platform: a?.meta_platform ?? null,
+        source_name: a?.meta_form_name ?? null,
+        contact_owner: a?.id_propietario ?? null,
         last_activity_at: er.fecha_actualizacion ?? null,
         next_task_at: null, lead_score: 0,
         created_at: er.fecha_creacion ?? new Date().toISOString(),
+        meta_form_name: a?.meta_form_name ?? null,
+        meta_campaign_id: a?.meta_campaign_id ?? null,
+        meta_ad_id: a?.meta_ad_id ?? null,
+        meta_platform: a?.meta_platform ?? null,
+        meta_created_time: a?.meta_created_time ?? null,
         buying_intent: null, score: null,
       };
     },
   });
 
-  const { data: attribution } = useQuery({
-    queryKey: ["contact-attribution", contactId],
-    queryFn: async () => (await (supabase as any).from("contact_attribution").select("*").eq("contact_id", contactId).maybeSingle()).data,
-  });
-
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id,nombre").eq("activo", true).order("nombre");
+      // Solo proyectos SOZU: proyectos con relación de entidad SOZU (id_tipo_entidad=5) y publicados.
+      const { data: rels } = await (supabase as any).from("entidades_relacionadas")
+        .select("id_proyecto").eq("id_tipo_entidad", 5).eq("activo", true).not("id_proyecto", "is", null);
+      const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
+      if (!ids.length) return [];
+      const { data } = await (supabase as any).from("proyectos")
+        .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
       return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
     },
   });
@@ -758,45 +913,74 @@ export function CrmContactDetail() {
   const { data: owners } = useQuery({
     queryKey: ["agentes-list"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).eq("rol_id", 3);
+      // rol_id 9 = "Agente Interno", rol_id 1 = "Super Administrador" (el 3 es "Agente Inmobiliario", 200+).
+      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
       return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
     },
   });
 
   const { data: notes } = useQuery({
     queryKey: ["contact-notes", contactId],
-    queryFn: async () => (await (supabase as any).from("notes").select("*").eq("contact_id", contactId).order("created_at", { ascending: false })).data ?? [],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_notas")
+        .select("id, contenido, fecha_actividad, fecha_creacion, id_usuario")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_creacion", { ascending: false });
+      if (res.error) return [];
+      const rows = res.data ?? [];
+      // Resolver nombre del autor (lectura a usuarios).
+      const authorIds = Array.from(new Set(rows.map((n: any) => n.id_usuario).filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (authorIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", authorIds);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null }));
+    },
   });
 
   const { data: tasks } = useQuery({
     queryKey: ["contact-tasks", contactId],
-    queryFn: async () => (await (supabase as any).from("tasks").select("*").eq("contact_id", contactId).order("due_date", { ascending: true })).data ?? [],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_tareas")
+        .select("id, titulo, tipo, prioridad, estatus, fecha_vencimiento, fecha_creacion")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_vencimiento", { ascending: true });
+      if (res.error) return [];
+      return (res.data ?? []).map((t: any) => ({ id: t.id, title: t.titulo, status: t.estatus, priority: t.prioridad, due_date: t.fecha_vencimiento, created_at: t.fecha_creacion }));
+    },
   });
 
-  const { data: appointments } = useQuery({
-    queryKey: ["contact-appts", contactId],
-    queryFn: async () => (await (supabase as any).from("appointments").select("*").eq("contact_id", contactId).order("scheduled_at", { ascending: false })).data ?? [],
-  });
-
-  const { data: deals } = useQuery({
-    queryKey: ["contact-deals", contactId],
-    queryFn: async () => (await (supabase as any).from("deals").select("*").eq("contact_id", contactId).order("created_at", { ascending: false })).data ?? [],
-  });
-
-  const { data: pipelineEvents } = useQuery({
-    queryKey: ["contact-pipeline", contactId],
-    queryFn: async () => (await (supabase as any).from("pipeline_events").select("*").eq("contact_id", contactId).order("changed_at", { ascending: false })).data ?? [],
-  });
-
-  const { data: conversionEvents } = useQuery({
-    queryKey: ["contact-conv", contactId],
-    queryFn: async () => (await (supabase as any).from("conversion_events").select("*").eq("contact_id", contactId).order("event_time", { ascending: false })).data ?? [],
-  });
+  // Fase 1: citas, negocios, pipeline y eventos de conversión aún no persisten.
+  const appointments: any[] = [];
+  const deals: any[] = [];
+  const pipelineEvents: any[] = [];
+  const conversionEvents: any[] = [];
 
   const invalidateAll = () => {
-    ["contact", "contact-notes", "contact-tasks", "contact-appts", "contact-deals", "contact-pipeline", "contact-conv"].forEach(
+    ["contact-sozu", "contact-notes", "contact-tasks"].forEach(
       (k) => qc.invalidateQueries({ queryKey: [k, contactId] }),
     );
+    // También refrescar la lista de contactos para que refleje los cambios al volver.
+    qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+  };
+
+  const completeTask = async (id: number) => {
+    const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Tarea completada"); invalidateAll();
+  };
+  const deleteTask = async (id: number) => {
+    const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Tarea eliminada"); invalidateAll();
+  };
+  const deleteNote = async (id: number) => {
+    const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Nota eliminada"); invalidateAll();
   };
 
   if (isLoading) return (
@@ -854,9 +1038,7 @@ export function CrmContactDetail() {
         </div>
         <div className="flex gap-2">
           <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
-          <TaskDialog contactId={contactId!} orgId={orgId} owners={owners ?? []} onSaved={invalidateAll} />
-          <AppointmentDialog contactId={contactId!} orgId={orgId} developmentId={contact.development_id} owners={owners ?? []} onSaved={invalidateAll} />
-          <DealDialog contactId={contactId!} orgId={orgId} developmentId={contact.development_id} onSaved={invalidateAll} />
+          <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
         </div>
       </div>
 
@@ -889,21 +1071,25 @@ export function CrmContactDetail() {
           </div>
 
           {/* Quick action icons */}
-          <div className="grid grid-cols-5 gap-1">
-            {[
-              { Icon: StickyNote, label: "Nota" },
-              { Icon: Mail, label: "Correo" },
-              { Icon: Phone, label: "Llamada" },
-              { Icon: ClipboardList, label: "Tarea" },
-              { Icon: CalendarClock, label: "Reunión" },
-            ].map(({ Icon, label }) => (
-              <button key={label} className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors">
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                  <Icon className="h-3.5 w-3.5" />
-                </div>
-                <span className="text-[9px] text-muted-foreground leading-none">{label}</span>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-1">
+            <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll}
+              trigger={
+                <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <StickyNote className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none">Nota</span>
+                </button>
+              } />
+            <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll}
+              trigger={
+                <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <ClipboardList className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none">Tarea</span>
+                </button>
+              } />
           </div>
 
           {/* Accordion: Acerca de este contacto */}
@@ -921,7 +1107,7 @@ export function CrmContactDetail() {
 
         {/* Center: activity tabs */}
         <section className="col-span-6 border-r border-border">
-          <Tabs defaultValue="actividades" className="flex flex-col">
+          <Tabs defaultValue="descripcion" className="flex flex-col">
             <div className="border-b border-border">
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
@@ -930,44 +1116,29 @@ export function CrmContactDetail() {
               </TabsList>
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0">
-              <p className="text-sm text-muted-foreground">Sin descripción para este contacto.</p>
+              <DescriptionPanel
+                contact={contact} notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+              />
             </TabsContent>
-            <TabsContent value="actividades" className="p-4 space-y-4 mt-0">
-              <InlineNoteForm contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
-              {/* Tarea inline section */}
-              <div className="border border-border rounded-lg p-3 bg-card">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarea</span>
-                  <button
-                    className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors"
-                    onClick={() => {/* TaskDialog trigger */}}
-                  >
-                    <Plus className="h-3.5 w-3.5" />Crear tarea
-                  </button>
-                </div>
-              </div>
-              {/* Línea de tiempo */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Línea de tiempo</p>
-                <Timeline
-                  notes={notes ?? []} tasks={tasks ?? []} appointments={appointments ?? []}
-                  deals={deals ?? []} pipelineEvents={pipelineEvents ?? []} conversionEvents={conversionEvents ?? []}
-                  contact={contact}
-                />
-              </div>
+            <TabsContent value="actividades" className="p-4 mt-0">
+              <ActivityPanel
+                contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
+                notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+              />
             </TabsContent>
             <TabsContent value="avanzado" className="p-4 mt-0">
               <div className="space-y-2 text-sm">
-                {!attribution ? (
-                  <p className="text-muted-foreground">Sin datos de atribución para este contacto.</p>
+                {!contact.meta_platform && !contact.meta_campaign_id && !contact.meta_ad_id && !contact.meta_form_name ? (
+                  <p className="text-muted-foreground">Sin datos de atribución de Meta para este contacto.</p>
                 ) : (
                   <>
-                    <ARow label="UTM source" v={attribution.first_touch_source ?? contact.source_platform} />
-                    <ARow label="UTM medium" v={attribution.first_touch_medium} />
-                    <ARow label="UTM campaign" v={attribution.first_touch_campaign ?? contact.source_name} />
-                    <ARow label="fbclid" v={attribution.fbclid} mono />
-                    <ARow label="gclid" v={attribution.gclid} mono />
-                    <ARow label="Landing" v={attribution.landing_page} mono />
+                    <ARow label="Plataforma" v={contact.meta_platform} />
+                    <ARow label="Formulario" v={contact.meta_form_name} />
+                    <ARow label="Campaña (Meta)" v={contact.meta_campaign_id} mono />
+                    <ARow label="Anuncio (Meta)" v={contact.meta_ad_id} mono />
+                    <ARow label="Fecha lead (Meta)" v={contact.meta_created_time ? fmtDate(contact.meta_created_time) : null} />
                   </>
                 )}
               </div>
@@ -989,27 +1160,10 @@ export function CrmContactDetail() {
 
             <AccordionItem value="deals">
               <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Negocios <span className="text-xs text-muted-foreground font-normal">{(deals ?? []).length}</span></span>
+                <span className="flex items-center gap-2">Negocios <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">Próximamente</span></span>
               </AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-2">
-                  <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors mb-1">
-                    <Plus className="h-3.5 w-3.5" />Agregar
-                  </button>
-                  {!(deals ?? []).length ? (
-                    <p className="text-xs text-muted-foreground py-1">Sin negocios</p>
-                  ) : (
-                    (deals ?? []).map((d: any) => (
-                      <div key={d.id} className="p-2.5 rounded-md border border-primary/20 bg-primary/5 text-xs">
-                        <div className="font-medium truncate text-primary">{d.deal_name}</div>
-                        <div className="text-primary mt-0.5 flex items-center justify-between">
-                          <span>{DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}</span>
-                          {d.value && <span className="font-semibold">{fmtMXN(Number(d.value))}</span>}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground py-2">La gestión de negocios llegará en una fase posterior.</p>
               </AccordionContent>
             </AccordionItem>
 
@@ -1031,62 +1185,91 @@ export function CrmContactDetail() {
 function LeftPanel({ contact, developments, owners, onSaved }: any) {
   const [form, setForm] = useState({
     email: contact.email ?? "", phone: contact.phone ?? "",
-    lead_status: contact.lead_status ?? "new", lifecycle_stage: contact.lifecycle_stage ?? "lead",
+    lead_status: contact.lead_status ?? "nuevo", lifecycle_stage: contact.lifecycle_stage ?? "lead",
     development_id: contact.development_id ?? "", contact_owner: contact.contact_owner ?? "",
   });
-  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-  const save = async () => {
-    setSaving(true);
-    const { error } = await (supabase as any).from("contacts").update({
-      email: form.email || null, phone: form.phone || null,
-      lead_status: form.lead_status, lifecycle_stage: form.lifecycle_stage,
-      development_id: form.development_id || null, contact_owner: form.contact_owner || null,
-      last_activity_at: new Date().toISOString(),
-    }).eq("id", contact.id);
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Contacto actualizado"); onSaved();
+  // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
+  const run = async (fn: () => Promise<{ error: any }>) => {
+    setStatus("saving");
+    try {
+      const { error } = await fn();
+      if (error) throw error;
+      setStatus("saved");
+      onSaved();
+    } catch (e: any) {
+      setStatus("error");
+      toast.error(e?.message ?? "No se pudo guardar");
+    }
   };
+
+  const persistPersona = () => {
+    if (!contact.id_persona) return;
+    run(() => (supabase as any).from("personas").update({
+      email: form.email || null,
+      telefono: form.phone || null,
+      fecha_actualizacion: new Date().toISOString(),
+    }).eq("id", contact.id_persona));
+  };
+
+  const persistProyecto = (value: string) =>
+    run(() => (supabase as any).from("entidades_relacionadas").update({
+      id_proyecto: value ? Number(value) : null,
+      fecha_actualizacion: new Date().toISOString(),
+    }).eq("id", Number(contact.id)));
+
+  const persistAtribucion = (override: { lead_status?: string; lifecycle_stage?: string; contact_owner?: string }) =>
+    run(() => (supabase as any).from("crm_leads_atribucion").upsert({
+      id_entidad_relacionada: Number(contact.id),
+      estatus_lead: override.lead_status ?? form.lead_status,
+      etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
+      id_propietario: (override.contact_owner ?? form.contact_owner) || null,
+    }, { onConflict: "id_entidad_relacionada" }));
 
   return (
     <div className="space-y-3 text-sm">
       <CField label="Correo electrónico">
-        <Input className="h-8 text-sm" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="correo@ejemplo.com" />
+        <Input className="h-8 text-sm" type="email" value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          onBlur={persistPersona} placeholder="correo@ejemplo.com" />
       </CField>
       <CField label="Número de móvil">
-        <Input className="h-8 text-sm" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+52 55 0000 0000" />
+        <Input className="h-8 text-sm" type="tel" value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onBlur={persistPersona} placeholder="+52 55 0000 0000" />
       </CField>
       <CField label="Proyecto">
-        <Select value={form.development_id} onValueChange={(v) => setForm({ ...form, development_id: v })}>
+        <Select value={form.development_id} onValueChange={(v) => { setForm({ ...form, development_id: v }); persistProyecto(v); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin proyecto" /></SelectTrigger>
           <SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Estado del lead">
-        <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
+        <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            {Object.entries(leadStatusLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
           </SelectContent>
         </Select>
       </CField>
       <CField label="Etapa del ciclo de vida">
-        <Select value={form.lifecycle_stage} onValueChange={(v) => setForm({ ...form, lifecycle_stage: v })}>
+        <Select value={form.lifecycle_stage} onValueChange={(v) => { setForm({ ...form, lifecycle_stage: v }); persistAtribucion({ lifecycle_stage: v }); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Propietario del contacto">
-        <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
+        <Select value={form.contact_owner} onValueChange={(v) => { setForm({ ...form, contact_owner: v }); persistAtribucion({ contact_owner: v }); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
           <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
-      <Button size="sm" onClick={save} disabled={saving} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground mt-1">
-        {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : <><Save className="h-3.5 w-3.5 mr-1.5" />Guardar cambios</>}
-      </Button>
+      <div className="h-5 flex items-center justify-end text-xs pt-0.5">
+        {status === "saving" && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Guardando…</span>}
+        {status === "saved" && <span className="inline-flex items-center gap-1 text-emerald-600"><Check className="h-3 w-3" />Guardado</span>}
+        {status === "error" && <span className="inline-flex items-center gap-1 text-destructive"><TriangleAlert className="h-3 w-3" />No se guardó</span>}
+      </div>
     </div>
   );
 }
@@ -1100,13 +1283,323 @@ function DField({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string };
+type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null };
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact }: any) {
+function HL({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-sm mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+function AssocCard({ title }: { title: string }) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">Próximamente</span>
+      </div>
+      <p className="text-xs text-muted-foreground">No hay {title.toLowerCase()} asociados.</p>
+    </div>
+  );
+}
+
+function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
+  const lastActivity = (() => {
+    const dates: string[] = [
+      ...(notes ?? []).map((n: any) => n.created_at),
+      ...(tasks ?? []).map((t: any) => t.created_at),
+    ].filter(Boolean);
+    if (contact.last_activity_at) dates.push(contact.last_activity_at);
+    if (!dates.length) return null;
+    return dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+  })();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = (tasks ?? [])
+    .filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= today)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+  return (
+    <div className="space-y-4">
+      {/* Aspectos destacados de los datos */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="text-sm font-semibold mb-3">Aspectos destacados de los datos</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <HL label="Fecha de creación" value={contact.created_at ? fmtDateTime(contact.created_at) : "—"} />
+          <HL label="Etapa del ciclo de vida" value={lifecycleLabel[contact.lifecycle_stage] ?? contact.lifecycle_stage ?? "—"} />
+          <HL label="Última actividad" value={lastActivity ? fmtDate(lastActivity) : "—"} />
+        </div>
+      </div>
+
+      {/* Actividades recientes */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
+        <Timeline
+          notes={notes ?? []} tasks={tasks ?? []} appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+          contact={contact}
+          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
+        />
+      </div>
+
+      {/* Próximas actividades (tareas pendientes con fecha futura) */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="text-sm font-semibold mb-3">Próximas actividades</h3>
+        {!upcoming.length ? (
+          <p className="text-xs text-muted-foreground">Sin próximas actividades.</p>
+        ) : (
+          <div className="space-y-2">
+            {upcoming.map((t: any) => (
+              <div key={t.id} className="flex items-center gap-3 group/up">
+                <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 flex items-center justify-center">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{t.title}</div>
+                  <div className="text-xs text-muted-foreground">Pendiente: {fmtDate(t.due_date)}</div>
+                </div>
+                <button onClick={() => onCompleteTask?.(t.id)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
+                  <Check className="h-3 w-3" />Completar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Objetos asociados — fase posterior */}
+      <AssocCard title="Suscripciones" />
+      <AssocCard title="Pagos" />
+      <AssocCard title="Pedidos" />
+    </div>
+  );
+}
+
+function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
+  const [filter, setFilter] = useState<"all" | "note" | "task">("all");
+  const [search, setSearch] = useState("");
+  const TABS: { id: "all" | "note" | "task"; label: string }[] = [
+    { id: "all", label: "Todas las actividades" },
+    { id: "note", label: "Notas" },
+    { id: "task", label: "Tareas" },
+  ];
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs por tipo de actividad */}
+      <div className="border-b border-border flex gap-1">
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setFilter(t.id)}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${filter === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Compositor contextual: nota solo en "Notas", crear tarea solo en "Tareas".
+          "Todas las actividades" es solo el recap (sin compositor). */}
+      {filter === "note" && (
+        <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
+      )}
+      {filter === "task" && (
+        <div className="border border-border rounded-lg p-3 bg-card">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarea</span>
+            <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
+              trigger={
+                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
+                  <Plus className="h-3.5 w-3.5" />Crear tarea
+                </button>
+              } />
+          </div>
+        </div>
+      )}
+
+      {/* Buscar actividades */}
+      <div className="relative">
+        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
+      </div>
+
+      <Timeline
+        notes={filter === "task" ? [] : notes}
+        tasks={filter === "note" ? [] : tasks}
+        appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+        contact={contact} search={search} includeSystem={filter === "all"}
+        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
+      />
+    </div>
+  );
+}
+
+function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; noteId: number; initialHtml: string; onSaved: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      UnderlineExt,
+      ImageExt.configure({ inline: false, allowBase64: false }),
+      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
+      TextStyleExt,
+    ],
+    editorProps: { attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" } },
+    content: initialHtml || "",
+  });
+
+  useEffect(() => {
+    if (open && editor) editor.commands.setContent(initialHtml || "");
+  }, [open, editor, initialHtml]);
+
+  const save = async () => {
+    if (!editor) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_notas").update({ contenido: editor.getHTML() }).eq("id", noteId);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Nota actualizada");
+    onOpenChange(false);
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Editar nota</DialogTitle></DialogHeader>
+        <div className="border border-border rounded-lg overflow-hidden">
+          <RichNoteToolbar editor={editor} />
+          <EditorContent editor={editor} />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={save} disabled={saving} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type LocalComment = { id: number; text: string };
+
+function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void }) {
+  const [expanded, setExpanded] = useState(true);
+  const [pinned, setPinned] = useState(false);              // front-only (no persiste aún)
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<LocalComment[]>([]); // front-only (no persiste aún)
+  const [draft, setDraft] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [propsOpen, setPropsOpen] = useState(false);
+
+  const copyLink = () => {
+    try { navigator.clipboard.writeText(window.location.href); toast.success("Enlace copiado"); }
+    catch { toast.error("No se pudo copiar el enlace"); }
+  };
+  const addComment = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setComments((c) => [...c, { id: c.length + 1, text }]);
+    setDraft("");
+  };
+
+  return (
+    <div className={`border rounded-lg bg-card shadow-sm ${pinned ? "border-primary/40 ring-1 ring-primary/20" : "border-border"}`}>
+      <div className="flex items-start gap-2 p-3">
+        <button onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0" aria-label={expanded ? "Colapsar" : "Expandir"}>
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm">
+              <span className="font-semibold">Nota</span>
+              {note.author ? <span className="text-muted-foreground"> de {note.author}</span> : null}
+              {pinned && <span className="ml-2 text-[10px] font-medium text-primary align-middle">📌 Anclada</span>}
+            </span>
+            <div className="flex items-center gap-3 shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setPinned((p) => !p)}>{pinned ? "Desanclar" : "Anclar"}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
+                  <DropdownMenuItem onClick={copyLink}>Copiar enlace</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPropsOpen(true)}>Ver todas las propiedades</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onDelete(note.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <span className="text-xs text-muted-foreground/70 tabular-nums">{fmtDateTime(note.created_at)}</span>
+            </div>
+          </div>
+
+          {expanded && (
+            <>
+              <div
+                className="mt-1.5 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
+                dangerouslySetInnerHTML={{ __html: note.content }}
+              />
+              {/* Footer */}
+              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
+                <button onClick={() => setShowComments((s) => !s)} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  {showComments ? "Ocultar comentarios" : "Agregar comentario"}{comments.length ? ` (${comments.length})` : ""}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">1 asociación <ChevronDown className="h-3 w-3" /></button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem disabled>{contactName}</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {showComments && (
+                <div className="mt-2 space-y-2">
+                  {comments.map((c) => (
+                    <div key={c.id} className="text-sm bg-muted/40 rounded-md p-2 text-foreground">{c.text}</div>
+                  ))}
+                  <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={addComment} disabled={!draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Comentar</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Los comentarios y el anclado aún no se guardan (pendiente de BD).</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Ver todas las propiedades */}
+      <Dialog open={propsOpen} onOpenChange={setPropsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Propiedades de la nota</DialogTitle></DialogHeader>
+          <div className="space-y-1 text-sm">
+            <ARow label="ID" v={String(note.id)} mono />
+            <ARow label="Autor" v={note.author ?? "—"} />
+            <ARow label="Fecha de creación" v={fmtDateTime(note.created_at)} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Editar nota */}
+      <NoteEditDialog open={editOpen} onOpenChange={setEditOpen} noteId={note.id} initialHtml={note.content} onSaved={onEdited} />
+    </div>
+  );
+}
+
+function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onEdited }: any) {
   const synthetic: TLItem = {
     id: "contact-created",
     ts: contact.created_at,
@@ -1116,26 +1609,66 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
     tone: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
   };
 
-  const items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
-    ...tasks.map((t: any) => ({ id: `t-${t.id}`, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
+  let items: TLItem[] = [
+    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
+    ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
     ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
     ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
     ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Evento", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
-    synthetic,
+    ...(includeSystem ? [synthetic] : []),
   ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
-  const hasRealActivity = items.length > 1;
+  const q = (search ?? "").trim().toLowerCase();
+  if (q) {
+    items = items.filter((it) =>
+      (it.title ?? "").toLowerCase().includes(q) ||
+      stripHtml(it.html ?? "").toLowerCase().includes(q) ||
+      (it.kind ?? "").toLowerCase().includes(q));
+  }
+
+  const hasRealActivity = items.some((it) => it.id !== "contact-created");
+
+  if (!items.length) {
+    return (
+      <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
+        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+          <MessageSquare className="h-5 w-5 text-primary" />
+        </div>
+        <p className="text-sm font-medium text-primary/80">{q ? "Sin resultados" : "Sin actividad registrada aún"}</p>
+        <p className="text-xs text-primary/60 mt-1">{q ? "Ajusta la búsqueda" : "Agrega una nota para comenzar el historial"}</p>
+      </div>
+    );
+  }
+
+  // Agrupar por mes, respetando el orden descendente.
+  const groups: { key: string; items: TLItem[] }[] = [];
+  for (const it of items) {
+    const d = new Date(it.ts);
+    const key = isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    let g = groups.find((x) => x.key === key);
+    if (!g) { g = { key, items: [] }; groups.push(g); }
+    g.items.push(it);
+  }
 
   return (
-    <div>
-      <div className="space-y-0">
-        {items.map((it, i) => {
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <div key={g.key}>
+          <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
+          <div className="space-y-0">
+            {g.items.map((it, i) => {
+          if (it.type === "note") {
+            return (
+              <div key={it.id} className="pb-4 last:pb-0">
+                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
+              </div>
+            );
+          }
           const Icon = it.icon;
           return (
             <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0 group/item">
-              {i < items.length - 1 && (
+              {i < g.items.length - 1 && (
                 <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border/60" />
               )}
               <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background shadow-sm ${it.tone ?? "bg-muted"}`}>
@@ -1157,18 +1690,29 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
                     {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
                   </>
                 )}
+                {it.type === "task" && (
+                  <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                    {it.status !== "completada" && (
+                      <button onClick={() => onCompleteTask?.(it.rawId)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
+                        <Check className="h-3 w-3" />Completar
+                      </button>
+                    )}
+                    <button onClick={() => onDeleteTask?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
+                      <X className="h-3 w-3" />Eliminar
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
-        })}
-      </div>
-      {!hasRealActivity && (
-        <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-            <MessageSquare className="h-5 w-5 text-primary" />
+            })}
           </div>
+        </div>
+      ))}
+      {!hasRealActivity && (
+        <div className="text-center py-6 border border-dashed border-primary/20 rounded-xl bg-primary/5">
           <p className="text-sm font-medium text-primary/80">Sin actividad registrada aún</p>
-          <p className="text-xs text-primary/60 mt-1">Agrega una nota para comenzar el historial</p>
+          <p className="text-xs text-primary/60 mt-1">Agrega una nota o tarea para comenzar el historial</p>
         </div>
       )}
     </div>
@@ -1184,9 +1728,10 @@ function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boo
   );
 }
 
-function NoteDialog({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
+function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string; userId?: string; onSaved: () => void; trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(true);
 
   const editor = useEditor({
     extensions: [
@@ -1199,28 +1744,35 @@ function NoteDialog({ contactId, userId, onSaved }: { contactId: string; userId?
     editorProps: {
       attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" },
     },
+    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
   });
 
   const save = async () => {
     if (!userId || !editor || editor.isEmpty) return;
     setSaving(true);
     const html = editor.getHTML();
-    const { error } = await (supabase as any).from("notes").insert({ contact_id: contactId, user_id: userId, content: html });
+    const { error } = await (supabase as any).from("crm_notas").insert({
+      id_entidad_relacionada: Number(contactId),
+      id_usuario: userId,
+      contenido: html,
+    });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    await (supabase as any).from("contacts").update({ last_activity_at: new Date().toISOString() }).eq("id", contactId);
     toast.success("Nota guardada");
     setOpen(false);
     editor.commands.clearContent();
+    setIsEmpty(true);
     onSaved();
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
-          <StickyNote className="h-4 w-4 mr-1.5" />Nota
-        </Button>
+        {trigger ?? (
+          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
+            <StickyNote className="h-4 w-4 mr-1.5" />Nota
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Nueva nota</DialogTitle></DialogHeader>
@@ -1229,7 +1781,7 @@ function NoteDialog({ contactId, userId, onSaved }: { contactId: string; userId?
           <EditorContent editor={editor} />
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={saving || !editor || editor.isEmpty} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button onClick={save} disabled={saving || !editor || isEmpty} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
           </Button>
         </DialogFooter>
@@ -1238,55 +1790,64 @@ function NoteDialog({ contactId, userId, onSaved }: { contactId: string; userId?
   );
 }
 
-function TaskDialog({ contactId, orgId, owners, onSaved }: any) {
-  const { user } = useAuth();
+function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", task_type: "follow_up", due_date: "", priority: "normal", assigned_to: user?.id ?? "" });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ titulo: "", tipo: "seguimiento", fecha_vencimiento: "", prioridad: "normal", assigned_to: userId ?? "" });
   const save = async () => {
-    if (!orgId || !form.title) return;
-    const { error } = await (supabase as any).from("tasks").insert({
-      organization_id: orgId, contact_id: contactId, title: form.title,
-      task_type: form.task_type, priority: form.priority,
-      due_date: form.due_date || null, assigned_to: form.assigned_to || null,
+    if (!form.titulo) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_tareas").insert({
+      id_entidad_relacionada: Number(contactId),
+      titulo: form.titulo,
+      tipo: form.tipo,
+      prioridad: form.prioridad,
+      fecha_vencimiento: form.fecha_vencimiento || null,
+      id_usuario_asignado: form.assigned_to || null,
+      estatus: "pendiente",
     });
+    setSaving(false);
     if (error) { toast.error(error.message); return; }
-    if (form.due_date) await (supabase as any).from("contacts").update({ next_task_at: form.due_date }).eq("id", contactId);
-    toast.success("Tarea creada"); setOpen(false); setForm({ ...form, title: "" }); onSaved();
+    toast.success("Tarea creada"); setOpen(false); setForm({ ...form, titulo: "" }); onSaved();
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button>
+        )}
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
         <div className="grid gap-3">
-          <DField label="Título"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></DField>
+          <DField label="Título"><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} /></DField>
           <div className="grid grid-cols-2 gap-3">
             <DField label="Tipo">
-              <Select value={form.task_type} onValueChange={(v) => setForm({ ...form, task_type: v })}>
+              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="follow_up">Seguimiento</SelectItem>
-                  <SelectItem value="call">Llamada</SelectItem>
+                  <SelectItem value="seguimiento">Seguimiento</SelectItem>
+                  <SelectItem value="llamada">Llamada</SelectItem>
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="visit">Visita</SelectItem>
+                  <SelectItem value="visita">Visita</SelectItem>
                 </SelectContent>
               </Select>
             </DField>
             <DField label="Prioridad">
-              <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
+              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Baja</SelectItem>
+                  <SelectItem value="baja">Baja</SelectItem>
                   <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="urgent">Urgente</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="urgente">Urgente</SelectItem>
                 </SelectContent>
               </Select>
             </DField>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <DField label="Fecha"><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></DField>
+            <DField label="Fecha"><Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} /></DField>
             <DField label="Asignar a">
               <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -1295,7 +1856,7 @@ function TaskDialog({ contactId, orgId, owners, onSaved }: any) {
             </DField>
           </div>
         </div>
-        <DialogFooter><Button onClick={save} disabled={!form.title} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1405,7 +1966,13 @@ export function CrmDeals() {
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id,nombre").eq("activo", true).order("nombre");
+      // Solo proyectos SOZU: proyectos con relación de entidad SOZU (id_tipo_entidad=5) y publicados.
+      const { data: rels } = await (supabase as any).from("entidades_relacionadas")
+        .select("id_proyecto").eq("id_tipo_entidad", 5).eq("activo", true).not("id_proyecto", "is", null);
+      const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
+      if (!ids.length) return [];
+      const { data } = await (supabase as any).from("proyectos")
+        .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
       return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
     },
   });
