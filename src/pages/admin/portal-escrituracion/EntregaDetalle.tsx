@@ -577,6 +577,20 @@ export function EntregaDetalle() {
     i.id_estatus_checklist === ESTATUS_CHECKLIST.VOBO_APROBADO
   );
   const checklistGlobal   = aplicables.length > 0 ? Math.round((cumplidos.length / aplicables.length) * 100) : 0;
+
+  const evidenciaTipoDefecto = (() => {
+    if (!evidenciaModal) return 'GENERAL' as const;
+    const item = allChecklistItems.find(i => i.id === evidenciaModal.itemId);
+    if (!item) return 'GENERAL' as const;
+    const e = item.id_estatus_checklist;
+    if (e === ESTATUS_CHECKLIST.NO_CUMPLE)              return 'INCIDENCIA'  as const;
+    if (e === ESTATUS_CHECKLIST.EN_REPARACION)          return 'REPARACION'  as const;
+    if (e === ESTATUS_CHECKLIST.REPARADO_PENDIENTE_VOBO ||
+        e === ESTATUS_CHECKLIST.VOBO_APROBADO           ||
+        e === ESTATUS_CHECKLIST.VOBO_RECHAZADO)         return 'VALIDACION'  as const;
+    return 'GENERAL' as const;
+  })();
+
   const entregaEstatus = pageData?.entrega?.estatus ?? 'PENDIENTE_PRE_ENTREGA';
   const estatusMeta = ESTATUS_META[entregaEstatus] ?? { label: entregaEstatus, cls: 'bg-slate-50 text-slate-600 border border-slate-200' };
 
@@ -1324,7 +1338,7 @@ export function EntregaDetalle() {
           itemId={evidenciaModal.itemId}
           itemNombre={evidenciaModal.nombre}
           entregaId={entregaId}
-          tipoDefecto="GENERAL"
+          tipoDefecto={evidenciaTipoDefecto}
           onDone={() => {}}
         />
       )}

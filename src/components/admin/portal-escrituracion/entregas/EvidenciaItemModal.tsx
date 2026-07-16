@@ -150,10 +150,10 @@ export function EvidenciaItemModal({
                       <video
                         src={ev.url}
                         controls
-                        muted
                         playsInline
                         preload="metadata"
                         className="w-full h-full object-cover"
+                        ref={(el) => { if (el) el.muted = true; }}
                       />
                       <div className="absolute top-1 left-1 pointer-events-none">{badge}</div>
                     </div>
