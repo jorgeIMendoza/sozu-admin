@@ -8,6 +8,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { ChevronsUpDown, Check, UserSearch, X, Building2, Home, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type Owner = { email: string; personaId: number | null; nombre: string };
+
 export function ClienteImpersonationSelector() {
   const { profile } = useAuth();
   const { impersonatedClienteEmail, impersonatedClienteName, setImpersonatedCliente, clearImpersonation, isImpersonating } = useClienteImpersonation();
@@ -66,26 +68,26 @@ export function ClienteImpersonationSelector() {
     enabled: canAccessClientPortal,
   });
 
-  // Resuelve el cliente dueño a partir de proyecto + número de propiedad.
-  // Reproduce el MISMO vínculo de propiedad→cliente que usa el portal
-  // (ver use-portfolio.ts): oferta principal (id_producto NULL) →
-  // cuenta_cobranza aprobada → id_persona_lead. Aplica tanto a unidades en
-  // adquisición como en patrimonio (la categoría se deriva de la etapa, no del vínculo).
+  // Resuelve TODOS los dueños (lead + copropietarios) a partir de proyecto + número
+  // de propiedad. Mismo vínculo que use-portfolio.ts, con soporte de copropiedad:
+  //  - cuentas de la propiedad por DOS vías: cuentas.id_propiedad = propId, o su
+  //    oferta principal apunta a propId (id_propiedad de la cuenta puede ser NULL).
+  //  - personas dueñas = lead de la oferta principal ∪ compradores (copropietarios).
   // Waterfall: proyecto → edificios → edificios_modelos → propiedades →
-  // cuentas_cobranza → ofertas → usuarios (cliente rol 23).
+  // cuentas_cobranza → ofertas/compradores → usuarios (cliente rol 23).
   const numTrim = numeroPropiedad.trim();
-  const { data: resolved } = useQuery({
-    queryKey: ["resolve-cliente-by-propiedad", proyectoId, numTrim],
-    queryFn: async () => {
+  const { data: resolvedOwners = [] } = useQuery({
+    queryKey: ["resolve-clientes-by-propiedad", proyectoId, numTrim],
+    queryFn: async (): Promise<Owner[]> => {
       const { data: eds } = await supabase
         .from("edificios").select("id").eq("id_proyecto", proyectoId).eq("activo", true);
       const edIds = (eds || []).map((e: any) => e.id);
-      if (!edIds.length) return null;
+      if (!edIds.length) return [];
 
       const { data: mods } = await supabase
         .from("edificios_modelos").select("id").in("id_edificio", edIds);
       const modIds = (mods || []).map((m: any) => m.id);
-      if (!modIds.length) return null;
+      if (!modIds.length) return [];
 
       const { data: props } = await supabase
         .from("propiedades")
@@ -95,48 +97,73 @@ export function ClienteImpersonationSelector() {
         .eq("activo", true)
         .limit(1);
       const propId = props?.[0]?.id;
-      if (!propId) return null;
+      if (!propId) return [];
 
-      const { data: cuentas } = await supabase
-        .from("cuentas_cobranza")
-        .select("id_oferta")
+      // Ofertas principales que apuntan a la propiedad (para path por oferta y leads)
+      const { data: ofByProp } = await supabase
+        .from("ofertas")
+        .select("id")
         .eq("id_propiedad", propId)
         .eq("activo", true)
-        .eq("es_aprobado", true);
-      const ofertaIds = [...new Set((cuentas || []).map((c: any) => c.id_oferta).filter(Boolean))];
-      if (!ofertaIds.length) return null;
+        .is("id_producto", null);
+      const ofByPropIds = [...new Set((ofByProp || []).map((o: any) => o.id).filter(Boolean))];
 
-      const { data: ofs } = await supabase
-        .from("ofertas")
-        .select("id_persona_lead")
-        .in("id", ofertaIds)
-        .eq("activo", true)
-        .is("id_producto", null)
-        .limit(1);
-      const personaId = ofs?.[0]?.id_persona_lead;
-      if (!personaId) return null;
+      // Cuentas de la propiedad: (a) por cuentas.id_propiedad, (b) por oferta principal
+      const [cByPropRes, cByOfertaRes] = await Promise.all([
+        supabase.from("cuentas_cobranza").select("id").eq("id_propiedad", propId).eq("activo", true).eq("es_aprobado", true),
+        ofByPropIds.length
+          ? supabase.from("cuentas_cobranza").select("id").in("id_oferta", ofByPropIds).eq("activo", true).eq("es_aprobado", true)
+          : Promise.resolve({ data: [] as { id: number }[] }),
+      ]);
+      const cuentaIds = [
+        ...new Set([...(cByPropRes.data || []), ...(cByOfertaRes.data || [])].map((c: any) => c.id)),
+      ];
+      if (!cuentaIds.length) return [];
+
+      // Personas dueñas: leads (ofertas principales de esas cuentas) ∪ copropietarios
+      const personaIds = new Set<number>();
+
+      const { data: cuentasFull } = await supabase
+        .from("cuentas_cobranza").select("id, id_oferta").in("id", cuentaIds);
+      const ofertaIds = [...new Set((cuentasFull || []).map((c: any) => c.id_oferta).filter(Boolean))];
+      if (ofertaIds.length) {
+        const { data: ofs } = await supabase
+          .from("ofertas").select("id_persona_lead, id_producto").in("id", ofertaIds).eq("activo", true);
+        for (const o of (ofs || []) as any[]) {
+          if (o.id_producto == null && o.id_persona_lead) personaIds.add(o.id_persona_lead as number);
+        }
+      }
+
+      const { data: comps } = await supabase
+        .from("compradores").select("id_persona").in("id_cuenta_cobranza", cuentaIds).eq("activo", true);
+      for (const c of (comps || []) as any[]) if (c.id_persona) personaIds.add(c.id_persona as number);
+
+      if (!personaIds.size) return [];
 
       const { data: us } = await supabase
         .from("usuarios")
         .select("email, personas!inner(id, nombre_legal)")
-        .eq("id_persona", personaId)
+        .in("id_persona", [...personaIds])
         .eq("rol_id", 23)
-        .eq("activo", true)
-        .limit(1);
-      const u: any = us?.[0];
-      if (!u) return null;
-      return { email: u.email, personaId: u.personas?.id, nombre: u.personas?.nombre_legal || u.email };
+        .eq("activo", true);
+      return ((us || []) as any[])
+        .map((u) => ({ email: u.email, personaId: u.personas?.id ?? null, nombre: u.personas?.nombre_legal || u.email }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
     },
     enabled: canAccessClientPortal && proyectoId !== null && numTrim.length > 0,
   });
 
-  // Autoselecciona el cliente dueño cuando proyecto + propiedad resuelven a uno.
+  // Autoselecciona un dueño cuando proyecto + propiedad resuelven. Si el cliente ya
+  // impersonado es uno de los dueños (p.ej. el admin eligió el otro copropietario),
+  // respetar esa elección; si no, autoseleccionar el primero.
+  const ownersKey = resolvedOwners.map((o) => o.email).join(",");
   useEffect(() => {
-    if (resolved?.email) {
-      setImpersonatedCliente(resolved.email, resolved.personaId ?? null, resolved.nombre);
-    }
+    if (!resolvedOwners.length) return;
+    if (impersonatedClienteEmail && resolvedOwners.some((o) => o.email === impersonatedClienteEmail)) return;
+    const first = resolvedOwners[0];
+    setImpersonatedCliente(first.email, first.personaId ?? null, first.nombre);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolved?.email]);
+  }, [ownersKey]);
 
   // Early return DESPUÉS de todos los hooks (Rules of Hooks): canAccessClientPortal
   // arranca en false mientras profile carga y luego puede pasar a true, así que
@@ -216,6 +243,14 @@ export function ClienteImpersonationSelector() {
             <span className={cn("truncate text-sm", !isImpersonating && "text-muted-foreground")}>
               {isImpersonating ? impersonatedClienteName : "Cliente"}
             </span>
+            {resolvedOwners.length > 1 && (
+              <span
+                title={`${resolvedOwners.length} copropietarios`}
+                className="shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold leading-4 text-primary"
+              >
+                {resolvedOwners.length}
+              </span>
+            )}
             <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-40 group-hover:opacity-70" />
           </button>
         </PopoverTrigger>
@@ -224,7 +259,27 @@ export function ClienteImpersonationSelector() {
             <CommandInput placeholder="Buscar cliente..." />
             <CommandList>
               <CommandEmpty>No se encontró el cliente.</CommandEmpty>
-              <CommandGroup>
+              {resolvedOwners.length > 0 && (
+                <CommandGroup heading={resolvedOwners.length > 1 ? `Copropietarios (${resolvedOwners.length})` : "Dueño de la propiedad"}>
+                  {resolvedOwners.map((o) => (
+                    <CommandItem
+                      key={`owner-${o.email}`}
+                      value={`owner ${o.nombre} ${o.email}`}
+                      onSelect={() => {
+                        setImpersonatedCliente(o.email, o.personaId, o.nombre);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", impersonatedClienteEmail === o.email ? "opacity-100" : "opacity-0")} />
+                      <div className="flex flex-col">
+                        <span className="text-sm">{o.nombre}</span>
+                        <span className="text-xs text-muted-foreground">{o.email}</span>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              <CommandGroup heading={resolvedOwners.length > 0 ? "Todos los clientes" : undefined}>
                 {clients.map((client: any) => (
                   <CommandItem
                     key={client.email}

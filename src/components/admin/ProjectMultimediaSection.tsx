@@ -579,28 +579,33 @@ export function ProjectMultimediaSection({ projectId }: ProjectMultimediaSection
                      </IconTooltip>
                    </div>
 
-                    <div className="aspect-video bg-muted overflow-hidden">
-                      {item.es_imagen && isImageUrl(item.url) ? (
+                    {item.es_imagen && isImageUrl(item.url) ? (
+                      // Contenedor de alto fijo (4/3) + object-contain: imagen COMPLETA sin
+                      // recorte ni deformación, y tarjetas de tamaño uniforme. Verticales u
+                      // horizontales caben con letterbox gris; nunca se estiran.
+                      <div className="aspect-[4/3] bg-muted overflow-hidden flex items-center justify-center">
                         <img
                           src={optimizedImage(item.url, { width: 640 })}
                           alt="Multimedia"
                           loading="lazy"
-                          className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
+                          className={`max-w-full max-h-full object-contain ${!item.activo ? 'grayscale opacity-50' : ''}`}
                         />
-                      ) : !item.es_imagen && isVideoUrl(item.url) ? (
+                      </div>
+                    ) : !item.es_imagen && isVideoUrl(item.url) ? (
+                      <div className="aspect-video bg-muted overflow-hidden">
                         <video
                           src={item.url}
                           controls={item.activo}
                           className={`w-full h-full object-cover ${!item.activo ? 'grayscale opacity-50' : ''}`}
                         />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <p className="text-xs text-muted-foreground text-center p-2">
-                            Vista previa no disponible
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="aspect-video bg-muted overflow-hidden flex items-center justify-center">
+                        <p className="text-xs text-muted-foreground text-center p-2">
+                          Vista previa no disponible
+                        </p>
+                      </div>
+                    )}
 
                   <div className="flex items-center gap-2 px-3 pt-3">
                     <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

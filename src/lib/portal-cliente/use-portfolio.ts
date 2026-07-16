@@ -49,24 +49,38 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
     { id: "post_entrega", label: "Post-Entrega" },
   ];
 
-  // Etapa según avance de pago (Vendida, En demanda, o estatus no mapeado):
-  // parcialidades pendientes → preventa; saldo > 0 → pago_final; liquidado → escrituración
+  // Etapa según avance de pago (Vendida, En demanda, o estatus no mapeado).
+  // NO se infiere escrituración/entrega desde el pago: son hitos con estatus
+  // propio (7 escrituración, 8 entregado, 9 pagada). Estar liquidado ≠ escriturar
+  // (requiere datos notariales). Sin esos estatus, la propiedad está "en pago".
+  //   parcialidades pendientes → preventa · resto → pago_final
   const byPaymentProgress = () =>
-    hasPendingParcialidades ? 0 : pendingBalance > 0 ? 1 : 2;
+    hasPendingParcialidades ? 0 : 1;
 
   // Map estatus_disponibilidad id to the currently active stage index
   let activeIdx: number;
   switch (estatusId) {
     case 10: activeIdx = 0; break; // Asignado → preventa
     case 4: activeIdx = 0; break;  // Apartado → preventa
+    // Pagada completamente (9) va ANTES de escriturar en el ciclo de vida:
+    // sigue en fase de pago hasta que el estatus avance a Escrituración (7).
+    // Liquidar ≠ escriturar; el avance lo dicta el estatus, no el saldo.
+    case 9: activeIdx = 1; break;  // Pagada completamente → pago_final (aún sin escriturar)
     case 7: activeIdx = 2; break;  // Escrituración
-    case 9: activeIdx = 3; break;  // Pagada completamente → entrega
     case 8: activeIdx = 4; break;  // Entregado → post_entrega
     case 5:                        // Vendida
     case 11:                       // En demanda (legal) — no bloquear el flujo de pago
     default:                       // Cualquier otro estatus: derivar del saldo, no asumir preventa
       activeIdx = byPaymentProgress();
       break;
+  }
+
+  // Cap por realidad de pago: escrituración/entrega/post-entrega exigen saldo ≈ 0.
+  // Si aún hay saldo pendiente, el estatus_disponibilidad está desfasado (p.ej.
+  // reprecio con cuenta nueva que hereda estatus 9 de la anterior). No mostrar una
+  // etapa más avanzada que la que corresponde al avance de pago real.
+  if (pendingBalance > 0.01) {
+    activeIdx = Math.min(activeIdx, hasPendingParcialidades ? 0 : 1);
   }
 
   return ALL.map((s, i): StageInfo => {
@@ -111,38 +125,78 @@ type PagoInfo = {
 };
 
 async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> {
-  // 1. Get active MAIN-PROPERTY offers for this persona (exclude addon products)
-  const { data: offers } = await supabase
-    .from("ofertas")
-    .select("id, id_propiedad")
-    .eq("id_persona_lead", personaId)
-    .eq("activo", true)
-    .is("id_producto", null);
+  // Cuentas de cobranza en las que participa la persona, por DOS caminos:
+  //  (a) lead de la oferta       → ofertas.id_persona_lead
+  //  (b) copropietario/comprador → compradores.id_persona
+  // Se unen para que los copropietarios (no solo el lead) vean su unidad.
+  const [leadOffersRes, compradorRowsRes] = await Promise.all([
+    supabase.from("ofertas").select("id").eq("id_persona_lead", personaId).eq("activo", true),
+    supabase.from("compradores").select("id_cuenta_cobranza").eq("id_persona", personaId).eq("activo", true),
+  ]);
 
-  if (!offers?.length) return [];
+  const leadOfferIds = (leadOffersRes.data ?? []).map((o) => o.id as number);
+  const compradorCuentaIds = [
+    ...new Set((compradorRowsRes.data ?? []).map((r) => r.id_cuenta_cobranza as number).filter(Boolean)),
+  ];
 
-  const offerIds = offers.map((o) => o.id as number);
+  // cuentaIds del path lead (via id_oferta) — aprobadas y activas
+  const { data: leadCuentasIdRows } = leadOfferIds.length
+    ? await supabase
+        .from("cuentas_cobranza")
+        .select("id")
+        .in("id_oferta", leadOfferIds)
+        .eq("activo", true)
+        .eq("es_aprobado", true)
+    : { data: [] as { id: number }[] };
 
-  // 2. Get approved billing accounts (includes clabe_stp for receipt modal)
-  const { data: cuentas } = await supabase
+  const allCuentaIds = [
+    ...new Set([
+      ...(leadCuentasIdRows ?? []).map((c) => c.id as number),
+      ...compradorCuentaIds,
+    ]),
+  ];
+
+  if (!allCuentaIds.length) return [];
+
+  // Datos completos de esas cuentas (incluye clabe_stp para el modal de recibo)
+  const { data: cuentasFull } = await supabase
     .from("cuentas_cobranza")
     .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
-    .in("id_oferta", offerIds)
+    .in("id", allCuentaIds)
     .eq("activo", true)
     .eq("es_aprobado", true);
 
-  if (!cuentas?.length) return [];
+  if (!cuentasFull?.length) return [];
 
-  const cuentaIds = cuentas.map((c) => c.id as number);
+  // Ofertas de esas cuentas → id_producto (principal vs producto) + id_propiedad de respaldo
+  const ofertaIds = [...new Set(cuentasFull.map((c) => c.id_oferta as number).filter(Boolean))];
+  const { data: ofertasData } = ofertaIds.length
+    ? await supabase.from("ofertas").select("id, id_propiedad, id_producto").in("id", ofertaIds)
+    : { data: [] as { id: number; id_propiedad: number | null; id_producto: number | null }[] };
 
-  // Cuentas legacy sin id_propiedad: recuperar la propiedad desde la oferta (ofertas.id_propiedad)
-  const ofertaPropMap: Record<number, number | null> = Object.fromEntries(
-    offers.map((o) => [o.id as number, (o.id_propiedad as number | null) ?? null]),
-  );
-  for (const c of cuentas as Record<string, unknown>[]) {
-    if (c.id_propiedad == null) c.id_propiedad = ofertaPropMap[c.id_oferta as number] ?? null;
+  const ofertaMap: Record<number, { id_propiedad: number | null; id_producto: number | null }> =
+    Object.fromEntries(
+      (ofertasData ?? []).map((o) => [
+        o.id as number,
+        { id_propiedad: (o.id_propiedad as number | null) ?? null, id_producto: (o.id_producto as number | null) ?? null },
+      ]),
+    );
+
+  // Separar cuentas principales (oferta sin producto) de cuentas de producto.
+  // Fallback: si la cuenta no trae id_propiedad, tomarlo de la oferta.
+  const mainCuentasRaw: Record<string, unknown>[] = [];
+  const productCuentas: Record<string, unknown>[] = [];
+  for (const c of cuentasFull as Record<string, unknown>[]) {
+    const of = ofertaMap[c.id_oferta as number];
+    if (c.id_propiedad == null) c.id_propiedad = of?.id_propiedad ?? null;
+    if (of?.id_producto != null) productCuentas.push(c);
+    else mainCuentasRaw.push(c);
   }
 
+  const cuentas = mainCuentasRaw;
+  if (!cuentas.length) return [];
+
+  const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
   // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
@@ -162,93 +216,70 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     tipo_financiamiento: tipoFinMap[c.id as number] ?? null,
   })) as Record<string, unknown>[];
 
-  // 2.5 Fetch product offers (id_producto IS NOT NULL) and build additionalProducts per propiedad
+  // 2.5 additionalProducts desde las cuentas de producto (lead o copropietario)
   const productsByPropId: Record<number, AdditionalProduct[]> = {};
-  {
-    const { data: productOffers } = await supabase
-      .from("ofertas")
-      .select("id, id_propiedad, id_producto")
-      .eq("id_persona_lead", personaId)
-      .eq("activo", true)
-      .not("id_producto", "is", null);
+  if (productCuentas.length) {
+    const productoIds = [
+      ...new Set(
+        productCuentas.map((c) => ofertaMap[c.id_oferta as number]?.id_producto as number).filter(Boolean),
+      ),
+    ];
+    const productCuentaIds = productCuentas.map((c) => c.id as number);
 
-    if (productOffers?.length) {
-      const productOfferIds = productOffers.map((o) => o.id as number);
-      const productoIds = [...new Set(productOffers.map((o) => o.id_producto as number).filter(Boolean))];
+    const [productosRes, productPagosRes] = await Promise.all([
+      productoIds.length
+        ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
+        : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
+      supabase
+        .from("pagos")
+        .select("id_cuenta_cobranza, monto")
+        .in("id_cuenta_cobranza", productCuentaIds)
+        .eq("activo", true),
+    ]);
 
-      const [productCuentasRes, productosRes] = await Promise.all([
-        supabase
-          .from("cuentas_cobranza")
-          .select("id, id_oferta, precio_final")
-          .in("id_oferta", productOfferIds)
-          .eq("activo", true)
-          .eq("es_aprobado", true),
-        productoIds.length
-          ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
-          : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
-      ]);
+    const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
+      Object.fromEntries(
+        (productosRes.data ?? []).map((p) => [
+          p.id as number,
+          { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
+        ]),
+      );
 
-      const productCuentas = productCuentasRes.data ?? [];
-      const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
-        Object.fromEntries(
-          (productosRes.data ?? []).map((p) => [
-            p.id as number,
-            { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
-          ]),
-        );
+    const pagosByCuenta: Record<number, number> = {};
+    for (const p of productPagosRes.data ?? []) {
+      const cId = p.id_cuenta_cobranza as number;
+      pagosByCuenta[cId] = (pagosByCuenta[cId] ?? 0) + Number(p.monto);
+    }
 
-      const productCuentaIds = productCuentas.map((c) => c.id as number);
-      if (productCuentaIds.length) {
-        const { data: productPagos } = await supabase
-          .from("pagos")
-          .select("id_cuenta_cobranza, monto")
-          .in("id_cuenta_cobranza", productCuentaIds)
-          .eq("activo", true);
+    for (const cc of productCuentas) {
+      const of = ofertaMap[cc.id_oferta as number];
+      const propId = (of?.id_propiedad as number | null) ?? null;
+      const productoId = (of?.id_producto as number | null) ?? null;
+      if (!propId || !productoId) continue;
 
-        const pagosByCuenta: Record<number, number> = {};
-        for (const p of productPagos ?? []) {
-          const cId = p.id_cuenta_cobranza as number;
-          pagosByCuenta[cId] = (pagosByCuenta[cId] ?? 0) + Number(p.monto);
-        }
+      const totalPaid = pagosByCuenta[cc.id as number] ?? 0;
+      const totalPrice = Number(cc.precio_final);
+      const pendingBalance = Math.max(0, totalPrice - totalPaid);
 
-        const ofertaMap: Record<number, { propiedadId: number; productoId: number }> =
-          Object.fromEntries(
-            productOffers.map((o) => [
-              o.id as number,
-              { propiedadId: o.id_propiedad as number, productoId: o.id_producto as number },
-            ]),
-          );
+      let status: AdditionalProduct["status"];
+      if (totalPaid === 0) status = "pendiente";
+      else if (pendingBalance > 0) status = "financiado";
+      else status = "pagado";
 
-        for (const cc of productCuentas) {
-          const oferta = ofertaMap[cc.id_oferta as number];
-          if (!oferta) continue;
+      const ps = productosMap[productoId];
+      const prod: AdditionalProduct = {
+        id: String(cc.id),
+        name: ps?.nombre ?? "Producto",
+        description: ps?.descripcion ?? undefined,
+        totalPrice,
+        totalPaid,
+        pendingBalance,
+        status,
+        documents: [],
+      };
 
-          const totalPaid = pagosByCuenta[cc.id as number] ?? 0;
-          const totalPrice = Number(cc.precio_final);
-          const pendingBalance = Math.max(0, totalPrice - totalPaid);
-
-          let status: AdditionalProduct["status"];
-          if (totalPaid === 0) status = "pendiente";
-          else if (pendingBalance > 0) status = "financiado";
-          else status = "pagado";
-
-          const ps = productosMap[oferta.productoId];
-          const prod: AdditionalProduct = {
-            id: String(cc.id),
-            name: ps?.nombre ?? "Producto",
-            description: ps?.descripcion ?? undefined,
-            totalPrice,
-            totalPaid,
-            pendingBalance,
-            status,
-            documents: [],
-          };
-
-          const propId = oferta.propiedadId;
-          if (!productsByPropId[propId]) productsByPropId[propId] = [];
-          productsByPropId[propId].push(prod);
-        }
-      }
+      if (!productsByPropId[propId]) productsByPropId[propId] = [];
+      productsByPropId[propId].push(prod);
     }
   }
 
@@ -352,7 +383,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
         if (!parentId) continue;
         if (!mantoAcuerdosByParentId[parentId]) mantoAcuerdosByParentId[parentId] = [];
         mantoAcuerdosByParentId[parentId].push({
-          fecha_pago: String(a.fecha_pago).slice(0, 10),
+          fecha_pago: a.fecha_pago ? String(a.fecha_pago).slice(0, 10) : "",
           monto: Number(a.monto),
           pago_completado: Boolean(a.pago_completado),
         });
@@ -494,8 +525,11 @@ function buildFromData(
       let concept = CONCEPTO_NAMES[idConcepto] ?? "Pago";
       if (idConcepto === 5) { parcialidadCount++; concept = `Parcialidad ${parcialidadCount}`; }
       const info = pagoInfoPorAcuerdo[a.id as number];
+      // fecha_pago del acuerdo puede venir null aun estando pagado (la fecha real
+      // vive en el pago). Fallback al pago; si no hay, cadena vacía (nunca "null").
+      const fechaAcuerdo = a.fecha_pago ?? info?.fechaPago ?? null;
       return {
-        date: String(a.fecha_pago).slice(0, 10),
+        date: fechaAcuerdo ? String(fechaAcuerdo).slice(0, 10) : "",
         concept,
         amount: Number(a.monto),
         status: (a.pago_completado ? "pagado" : "pendiente") as "pagado" | "pendiente",
