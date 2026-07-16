@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Clock, SlidersHorizontal, Loader2, History } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, SlidersHorizontal, Loader2, History, Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
+import { useProyectosMotorComisiones } from "@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones";
 import { SimulatorProvider, useSimulator } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { MotorComisionesReadOnly } from "@/components/admin/portal-alta-direccion/MotorComisionesReadOnly";
 import {
@@ -41,7 +42,7 @@ export default function AltaDireccionEstructuraComisionesPage() {
           <SlidersHorizontal className="h-5 w-5 text-primary" /> Estructura de Comisiones
         </h1>
         <p className="text-sm text-muted-foreground">
-          Consulta el Motor de Comisiones (escenarios, roles y resumen por canal) y valídalo por proyecto.
+          Consulta el Motor de Comisiones (roles y resumen por canal) y valídalo por proyecto.
         </p>
       </div>
 
@@ -63,49 +64,45 @@ export default function AltaDireccionEstructuraComisionesPage() {
   );
 }
 
-/* ─── Consulta del motor (todos los escenarios, solo lectura) ─── */
+/* ─── Consulta del motor (real, por proyecto, solo lectura) ─── */
 function MotorConsulta() {
-  const { scenarios, channels, roles, roleAssignments } = useSimulator();
-  const [sid, setSid] = useState(scenarios[0]?.id || "");
-  const scenario = scenarios.find((s) => s.id === sid) || scenarios[0];
-
-  if (!scenario) {
-    return (
-      <div className="rounded-xl border border-dashed border-border p-12 text-center">
-        <SlidersHorizontal className="mx-auto h-8 w-8 text-muted-foreground" />
-        <p className="mt-2 text-sm font-medium">Sin escenarios definidos</p>
-        <p className="text-xs text-muted-foreground">El Portal Estructura de comisiones aún no tiene escenarios configurados.</p>
-      </div>
-    );
-  }
+  const { channels, roles, roleAssignments, commissionRules, motorConfig, motorProjectId, setMotorProjectId } = useSimulator();
+  const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
 
   const snapshot: MotorSnapshot = {
-    scenario: {
-      id: scenario.id,
-      name: scenario.name,
-      commissionMode: scenario.commissionMode,
-      totalCommissionPct: scenario.totalCommissionPct,
-      channelMix: scenario.channelMix,
-      channelExternalPcts: scenario.channelExternalPcts,
-    },
+    totalCommissionPct: motorConfig.totalCommissionPct,
     channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
     roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
-    commissionRules: scenario.commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
+    commissionRules: commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">Escenario:</span>
-        <Select value={scenario.id} onValueChange={setSid}>
-          <SelectTrigger className="h-9 w-[260px] text-sm"><SelectValue placeholder="Escenario" /></SelectTrigger>
+        <Building2 className="h-4 w-4 text-muted-foreground" />
+        <Select
+          value={motorProjectId != null ? String(motorProjectId) : undefined}
+          onValueChange={(v) => setMotorProjectId(Number(v))}
+        >
+          <SelectTrigger className="h-9 w-[260px] text-sm">
+            <SelectValue placeholder={isLoadingProyectos ? "Cargando proyectos…" : "Selecciona un proyecto"} />
+          </SelectTrigger>
           <SelectContent>
-            {scenarios.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            {proyectosMotor.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
-      <MotorComisionesReadOnly snapshot={snapshot} />
+
+      {motorProjectId == null ? (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center">
+          <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-2 text-sm font-medium">Selecciona un proyecto</p>
+          <p className="text-xs text-muted-foreground">Elige un desarrollo arriba para ver su Motor de Comisiones.</p>
+        </div>
+      ) : (
+        <MotorComisionesReadOnly snapshot={snapshot} />
+      )}
     </div>
   );
 }
@@ -140,7 +137,7 @@ function ValidacionPanel() {
           <SlidersHorizontal className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-2 text-sm font-medium">Sin propuestas por validar</p>
           <p className="text-xs text-muted-foreground">
-            El Portal Estructura de comisiones aún no ha enviado escenarios a validar para este proyecto.
+            El Portal Estructura de comisiones aún no ha enviado el motor a validar para este proyecto.
           </p>
         </div>
       ) : (
@@ -153,7 +150,6 @@ function ValidacionPanel() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{p.proyecto_nombre}</p>
-                      <p className="truncate text-xs text-muted-foreground">{p.escenario_nombre || p.escenario_id}</p>
                     </div>
                     <Badge variant="secondary" className={cn("shrink-0 text-[10px]", badge.cls)}>{badge.label}</Badge>
                   </div>
@@ -187,7 +183,7 @@ function ValidacionSheet({
   validadoPor: string | null;
 }) {
   const validar = useValidarPropuesta();
-  const { data: historial = [] } = useValidacionesHistorial(propuesta?.id_proyecto, propuesta?.escenario_id);
+  const { data: historial = [] } = useValidacionesHistorial(propuesta?.id_proyecto);
   const [notas, setNotas] = useState("");
 
   const decidir = (estado: "validada" | "rechazada") => {
@@ -200,9 +196,6 @@ function ValidacionSheet({
       {
         propuestaId: propuesta.id,
         id_proyecto: propuesta.id_proyecto,
-        escenario_id: propuesta.escenario_id,
-        escenario_nombre: propuesta.escenario_nombre,
-        modo: propuesta.modo,
         snapshot: propuesta.snapshot,
         estado,
         notas: estado === "rechazada" ? notas.trim() : null,
@@ -231,9 +224,6 @@ function ValidacionSheet({
                   {ESTADO_BADGE[propuesta.estado].label}
                 </Badge>
               </SheetTitle>
-              <p className="text-xs text-muted-foreground">
-                Escenario: {propuesta.escenario_nombre || propuesta.escenario_id}
-              </p>
             </SheetHeader>
 
             <div className="mt-4 space-y-5">

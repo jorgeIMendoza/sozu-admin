@@ -107,6 +107,11 @@ export interface CommissionRule {
   pool: 'sozu' | 'project';
 }
 
+/** Config real del Motor de Comisiones — única y global, independiente de escenarios de simulación. Siempre Modo A (sobre venta); solo los Escenarios de Simulación permiten Modo B. */
+export interface MotorConfig {
+  totalCommissionPct: number;
+}
+
 export interface Scenario {
   id: string;
   name: string;
@@ -222,4 +227,6 @@ export interface AppState {
   commercialPolicies: CommercialPoliciesConfig;
   /** Matriz de comisión por canal × puesto — única y compartida, independiente de escenario. */
   commissionRules: CommissionRule[];
+  /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) — única y compartida, independiente de escenario. */
+  motorConfig: MotorConfig;
 }

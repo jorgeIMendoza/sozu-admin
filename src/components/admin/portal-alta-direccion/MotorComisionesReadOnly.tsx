@@ -13,36 +13,32 @@ const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n || 0);
 
 export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot }) {
-  if (!snapshot?.scenario) {
+  if (!snapshot) {
     return <p className="text-sm text-muted-foreground">Sin datos del motor en esta propuesta.</p>;
   }
-  const { scenario, channels, roles, roleAssignments, commissionRules } = snapshot;
+  const { channels, roles, roleAssignments, commissionRules } = snapshot;
   const roleById = new Map(roles.map((r) => [r.id, r]));
   const assignmentByRole = new Map(roleAssignments.map((a) => [a.roleId, a]));
-  const sobre = scenario.commissionMode === "on_sale_value" ? "sobre venta" : "sobre remanente";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">{scenario.name}</p>
           <p className="text-xs text-muted-foreground">
-            Modo: {scenario.commissionMode === "on_sale_value" ? "A · Sobre Venta" : "B · Sobre Remanente"} · Comisión total{" "}
-            <span className="font-semibold text-accent">{scenario.totalCommissionPct}%</span>
+            Modo: A · Sobre Venta · Comisión total{" "}
+            <span className="font-semibold text-accent">{snapshot.totalCommissionPct}%</span>
           </p>
         </div>
       </div>
 
       {channels.map((ch) => {
         const channelRules = commissionRules.filter((r) => r.channelId === ch.id);
-        const extPct = scenario.channelExternalPcts?.[ch.id] ?? ch.externalCommissionPct;
-        const comisionTotal = scenario.totalCommissionPct;
+        const extPct = ch.externalCommissionPct;
+        const comisionTotal = snapshot.totalCommissionPct;
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((s, r) => s + (r.percentage || 0), 0);
-        const remanente = scenario.commissionMode === "on_sale_value"
-          ? comisionInterna - sumaDispersada
-          : 100 - sumaDispersada;
+        const remanente = comisionInterna - sumaDispersada;
 
         const completo = Math.abs(remanente) < 0.005;
         const statusColor = completo
@@ -63,7 +59,6 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
               <div className="flex items-center gap-3">
                 <h3 className="font-semibold">{ch.name}</h3>
                 <Badge variant="outline" className="text-[10px]">Ext: {extPct}%</Badge>
-                <Badge variant="outline" className="text-[10px]">Mix: {scenario.channelMix?.[ch.id] || 0}%</Badge>
               </div>
               <div className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${statusColor}`}>
                 <StatusIcon className="h-3.5 w-3.5" />
@@ -78,7 +73,7 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
                 <thead>
                   <tr>
                     <th>Rol</th>
-                    <th>% {sobre}</th>
+                    <th>% sobre venta</th>
                     <th>Pool</th>
                   </tr>
                 </thead>
