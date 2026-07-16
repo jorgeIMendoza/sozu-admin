@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Loader2, UploadCloud, FileCheck, X, Camera, ImageIcon } from 'lucide-react';
+import { Loader2, UploadCloud, FileCheck, X, ImageIcon } from 'lucide-react';
 import { fmtDt } from './EntregaTypes';
 
 interface EvidenciaItemModalProps {
@@ -64,6 +64,10 @@ export function EvidenciaItemModal({
 
   const handleSubmit = async () => {
     if (!file) { toast.error('Selecciona un archivo'); return; }
+    if (file.type.startsWith('video/') && file.size > 100 * 1024 * 1024) {
+      toast.error('El video no puede superar 100 MB');
+      return;
+    }
     setSaving(true);
     try {
       const ext  = file.name.split('.').pop() ?? 'bin';
@@ -131,26 +135,44 @@ export function EvidenciaItemModal({
                 {evidencias.length} evidencia{evidencias.length !== 1 ? 's' : ''} registrada{evidencias.length !== 1 ? 's' : ''}
               </p>
               <div className="grid grid-cols-3 gap-2">
-                {evidencias.map(ev => (
-                  <a key={ev.id} href={ev.url} target="_blank" rel="noopener noreferrer"
-                    className="relative rounded-xl overflow-hidden bg-slate-100 aspect-square group">
-                    {ev.tipo === 'VIDEO'
-                      ? <div className="w-full h-full flex items-center justify-center text-slate-400">
-                          <Camera className="w-6 h-6" />
-                        </div>
-                      : <img src={ev.url} alt={ev.nombre ?? 'Evidencia'} className="w-full h-full object-cover" />
-                    }
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end p-1">
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity ${
-                        ev.tipo_evidencia === 'INCIDENCIA' ? 'bg-red-500' :
-                        ev.tipo_evidencia === 'REPARACION' ? 'bg-orange-500' :
-                        ev.tipo_evidencia === 'VALIDACION' ? 'bg-emerald-500' : 'bg-slate-500'
-                      }`}>
-                        {TIPO_LABEL[ev.tipo_evidencia as TipoEvidencia] ?? ev.tipo_evidencia}
-                      </span>
+                {evidencias.map(ev => {
+                  const badge = (
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium text-white ${
+                      ev.tipo_evidencia === 'INCIDENCIA' ? 'bg-red-500' :
+                      ev.tipo_evidencia === 'REPARACION' ? 'bg-orange-500' :
+                      ev.tipo_evidencia === 'VALIDACION' ? 'bg-emerald-500' : 'bg-slate-500'
+                    }`}>
+                      {TIPO_LABEL[ev.tipo_evidencia as TipoEvidencia] ?? ev.tipo_evidencia}
+                    </span>
+                  );
+                  return ev.tipo === 'VIDEO' ? (
+                    <div key={ev.id} className="relative rounded-xl overflow-hidden bg-slate-100 aspect-square">
+                      <video
+                        src={ev.url}
+                        controls
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute top-1 left-1 pointer-events-none">{badge}</div>
                     </div>
-                  </a>
-                ))}
+                  ) : (
+                    <a key={ev.id} href={ev.url} target="_blank" rel="noopener noreferrer"
+                      className="relative rounded-xl overflow-hidden bg-slate-100 aspect-square group">
+                      <img src={ev.url} alt={ev.nombre ?? 'Evidencia'} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end p-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity ${
+                          ev.tipo_evidencia === 'INCIDENCIA' ? 'bg-red-500' :
+                          ev.tipo_evidencia === 'REPARACION' ? 'bg-orange-500' :
+                          ev.tipo_evidencia === 'VALIDACION' ? 'bg-emerald-500' : 'bg-slate-500'
+                        }`}>
+                          {TIPO_LABEL[ev.tipo_evidencia as TipoEvidencia] ?? ev.tipo_evidencia}
+                        </span>
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
