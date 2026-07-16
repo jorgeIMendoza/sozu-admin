@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2, UploadCloud, FileCheck, X, Camera, ImageIcon } from 'lucide-react';
 import { fmtDt } from './EntregaTypes';
@@ -26,6 +27,7 @@ const TIPO_LABEL: Record<TipoEvidencia, string> = {
 export function EvidenciaItemModal({
   open, onClose, itemId, itemNombre, entregaId, tipoDefecto = 'GENERAL', onDone,
 }: EvidenciaItemModalProps) {
+  const { profile } = useAuth();
   const [file, setFile]               = useState<File | null>(null);
   const [tipo, setTipo]               = useState<TipoEvidencia>(tipoDefecto);
   const [saving, setSaving]           = useState(false);
@@ -80,6 +82,7 @@ export function EvidenciaItemModal({
         nombre:        file.name,
         tipo:          file.type.startsWith('video/') ? 'VIDEO' : 'FOTO',
         tipo_evidencia: tipo,
+        subido_por:    profile?.email ?? null,
         activo:        true,
       };
       if (itemId !== null) payload.id_item = itemId;
