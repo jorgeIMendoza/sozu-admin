@@ -595,7 +595,7 @@ const OfferPage = () => {
                         <img
                           src={offer.development.developerLogoUrl}
                           alt={offer.development.developerName}
-                          className="h-full w-auto object-contain brightness-0 invert"
+                          className="h-5 md:h-6 w-auto object-contain brightness-0 invert"
                         />
                       ) : (
                         <span className="text-base md:text-lg font-bold text-white tracking-tight">
