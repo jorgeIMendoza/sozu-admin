@@ -423,13 +423,13 @@ export function CrmContacts() {
             <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500 border-b border-border">
+              <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <th className="p-3 text-left w-8"><Checkbox /></th>
+                  <th className="px-3 py-2.5 text-left w-8"><Checkbox /></th>
                   {visibleColumns.map((col) => (
-                    <th key={col.id} className="p-3 text-left font-medium whitespace-nowrap">{col.label}</th>
+                    <th key={col.id} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{col.label}</th>
                   ))}
-                  <th className="p-3 w-8"></th>
+                  <th className="px-3 py-2.5 w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -437,7 +437,7 @@ export function CrmContacts() {
                   <tr key={c.id} role="button" tabIndex={0}
                     onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
-                    className="border-t border-border hover:bg-primary/5/40 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 transition-colors duration-150 group"
+                    className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
                     <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
                     {visibleColumns.map((col) => {
@@ -446,18 +446,18 @@ export function CrmContacts() {
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2 text-primary group-hover:text-primary font-medium">
-                                <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/20">
+                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
+                                <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                {c.full_name}
+                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
                               </span>
                             </td>
                           );
                         case "email":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.email || "—"}</td>;
                         case "phone":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.phone || "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.phone || "—"}</td>;
                         case "lead_status": {
                           const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
                           const statusColor: Record<string, string> = {
@@ -510,9 +510,9 @@ export function CrmContacts() {
                         case "owner":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.owner_name ?? "Sin asignar"}</td>;
                         case "created":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
                         case "updated":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
                         case "source":
                           return (
                             <td key={col.id} className="p-3">
@@ -717,7 +717,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
 }
 
 function CField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="grid gap-1.5"><Label className="text-xs">{label}</Label>{children}</div>;
+  return <div className="grid gap-1.5"><Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</Label>{children}</div>;
 }
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
@@ -853,6 +853,37 @@ export function CrmContactDetail() {
   const { user } = useAuth();
   const qc = useQueryClient();
 
+  // Solo en esta vista: acotar el <main> del layout al alto visible exacto para que
+  // NO haya scroll de ventana y cada panel de la ficha scrollee por su cuenta (estilo HubSpot).
+  // Se restaura al desmontar, así no afecta a las demás páginas del CRM.
+  useEffect(() => {
+    const el = document.querySelector("main") as HTMLElement | null;
+    const bodyPrev = document.body.style.overflow;
+    const htmlPrev = document.documentElement.style.overflow;
+    const prev = el ? { height: el.style.height, minHeight: el.style.minHeight, padding: el.style.padding, overflow: el.style.overflow } : null;
+    const apply = () => {
+      // Bloquear el scroll de la ventana (mata el sobrante del banner + min-h-screen del shell).
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
+      if (el) {
+        window.scrollTo(0, 0);
+        const top = el.getBoundingClientRect().top; // banner + header, medido en runtime
+        el.style.height = `${window.innerHeight - top}px`;
+        el.style.minHeight = "0";
+        el.style.padding = "0";
+        el.style.overflow = "hidden";
+      }
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      document.documentElement.style.overflow = htmlPrev;
+      document.body.style.overflow = bodyPrev;
+      if (el && prev) { el.style.height = prev.height; el.style.minHeight = prev.minHeight; el.style.padding = prev.padding; el.style.overflow = prev.overflow; }
+    };
+  }, []);
+
   const { data: contact, isLoading, error: contactError } = useQuery({
     queryKey: ["contact-sozu", contactId],
     enabled: !!contactId,
@@ -924,8 +955,9 @@ export function CrmContactDetail() {
     enabled: !!contactId,
     queryFn: async () => {
       const res = await (supabase as any).from("crm_notas")
-        .select("id, contenido, fecha_actividad, fecha_creacion, id_usuario")
+        .select("id, contenido, fecha_actividad, fecha_creacion, id_usuario, anclado")
         .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("anclado", { ascending: false })
         .order("fecha_creacion", { ascending: false });
       if (res.error) return [];
       const rows = res.data ?? [];
@@ -936,7 +968,7 @@ export function CrmContactDetail() {
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", authorIds);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null }));
+      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
     },
   });
 
@@ -1026,9 +1058,9 @@ export function CrmContactDetail() {
   const initials = contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("").toUpperCase() || "?";
 
   return (
-    <div className="space-y-0 -mx-4 -mt-4 -mb-4 lg:-mx-8 lg:-mt-6 lg:-mb-6">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
             <Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
@@ -1042,10 +1074,10 @@ export function CrmContactDetail() {
         </div>
       </div>
 
-      {/* 3-column body */}
-      <div className="grid grid-cols-12 min-h-[calc(100vh-112px)]">
+      {/* 3-column body — llena el alto restante; cada columna scrollea por su cuenta (estilo HubSpot) */}
+      <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
         {/* Left: profile + info */}
-        <aside className="col-span-3 border-r border-border p-5 space-y-5 bg-white overflow-y-auto">
+        <aside className="col-span-3 border-r border-border p-5 space-y-5 bg-white h-full min-h-0 overflow-y-auto">
           {/* Avatar + name */}
           <div className="flex flex-col items-center gap-3 pt-2">
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold select-none ring-4 ring-primary/5 shadow-sm">
@@ -1106,29 +1138,29 @@ export function CrmContactDetail() {
         </aside>
 
         {/* Center: activity tabs */}
-        <section className="col-span-6 border-r border-border">
-          <Tabs defaultValue="descripcion" className="flex flex-col">
-            <div className="border-b border-border">
+        <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
+          <Tabs defaultValue="descripcion" className="flex flex-col h-full min-h-0">
+            <div className="border-b border-border shrink-0">
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
                 <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
                 <TabsTrigger value="avanzado" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Información avanzada</TabsTrigger>
               </TabsList>
             </div>
-            <TabsContent value="descripcion" className="p-4 mt-0">
+            <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DescriptionPanel
                 contact={contact} notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
               />
             </TabsContent>
-            <TabsContent value="actividades" className="p-4 mt-0">
+            <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <ActivityPanel
                 contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
                 notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
               />
             </TabsContent>
-            <TabsContent value="avanzado" className="p-4 mt-0">
+            <TabsContent value="avanzado" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <div className="space-y-2 text-sm">
                 {!contact.meta_platform && !contact.meta_campaign_id && !contact.meta_ad_id && !contact.meta_form_name ? (
                   <p className="text-muted-foreground">Sin datos de atribución de Meta para este contacto.</p>
@@ -1147,7 +1179,7 @@ export function CrmContactDetail() {
         </section>
 
         {/* Right: related entities */}
-        <aside className="col-span-3 p-4 bg-slate-50/40">
+        <aside className="col-span-3 p-4 bg-slate-50/40 h-full min-h-0 overflow-y-auto">
           <Accordion type="multiple" defaultValue={["empresas", "deals", "tickets"]}>
             <AccordionItem value="empresas">
               <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
@@ -1283,7 +1315,7 @@ function DField({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null };
+type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean };
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -1293,7 +1325,7 @@ function HL({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-sm mt-0.5">{value}</div>
+      <div className="text-sm mt-0.5 tabular-nums">{value}</div>
     </div>
   );
 }
@@ -1486,26 +1518,61 @@ function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSaved }: { 
   );
 }
 
-type LocalComment = { id: number; text: string };
-
 function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(true);
-  const [pinned, setPinned] = useState(false);              // front-only (no persiste aún)
+  const [pinned, setPinned] = useState<boolean>(!!note.anclado);
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<LocalComment[]>([]); // front-only (no persiste aún)
   const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
+
+  // Comentarios (persisten en crm_notas_comentarios; tabla puede no existir aún → fallback vacío).
+  const { data: comments = [] } = useQuery({
+    queryKey: ["nota-comentarios", note.id],
+    enabled: showComments,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_notas_comentarios")
+        .select("id, contenido, fecha_creacion, id_usuario")
+        .eq("id_nota", note.id).eq("activo", true)
+        .order("fecha_creacion", { ascending: true });
+      if (res.error) return [];
+      const rows = res.data ?? [];
+      const ids = Array.from(new Set(rows.map((r: any) => r.id_usuario).filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (ids.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
+    },
+  });
 
   const copyLink = () => {
     try { navigator.clipboard.writeText(window.location.href); toast.success("Enlace copiado"); }
     catch { toast.error("No se pudo copiar el enlace"); }
   };
-  const addComment = () => {
+
+  const togglePin = async () => {
+    const next = !pinned;
+    setPinned(next);
+    const { error } = await (supabase as any).from("crm_notas").update({ anclado: next }).eq("id", note.id);
+    if (error) { setPinned(!next); toast.error(error.message); return; }
+    toast.success(next ? "Nota anclada" : "Nota desanclada");
+    onEdited();
+  };
+
+  const addComment = async () => {
     const text = draft.trim();
     if (!text) return;
-    setComments((c) => [...c, { id: c.length + 1, text }]);
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_notas_comentarios").insert({ id_nota: note.id, id_usuario: user?.id ?? null, contenido: text });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
     setDraft("");
+    qc.invalidateQueries({ queryKey: ["nota-comentarios", note.id] });
   };
 
   return (
@@ -1528,7 +1595,7 @@ function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contac
                   <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setPinned((p) => !p)}>{pinned ? "Desanclar" : "Anclar"}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={togglePin}>{pinned ? "Desanclar" : "Anclar"}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
                   <DropdownMenuItem onClick={copyLink}>Copiar enlace</DropdownMenuItem>
@@ -1565,15 +1632,20 @@ function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contac
 
               {showComments && (
                 <div className="mt-2 space-y-2">
-                  {comments.map((c) => (
-                    <div key={c.id} className="text-sm bg-muted/40 rounded-md p-2 text-foreground">{c.text}</div>
+                  {comments.map((c: any) => (
+                    <div key={c.id} className="text-sm bg-muted/40 rounded-md p-2">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-xs font-medium text-foreground">{c.author ?? "Usuario"}</span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
+                      </div>
+                      <div className="text-foreground">{c.text}</div>
+                    </div>
                   ))}
                   <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
                   <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={addComment} disabled={!draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Comentar</Button>
+                    <Button size="sm" onClick={addComment} disabled={saving || !draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
                     <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Los comentarios y el anclado aún no se guardan (pendiente de BD).</p>
                 </div>
               )}
             </>
@@ -1610,7 +1682,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   };
 
   let items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
+    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
     ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
     ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
@@ -1661,7 +1733,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
           if (it.type === "note") {
             return (
               <div key={it.id} className="pb-4 last:pb-0">
-                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
+                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
               </div>
             );
           }
@@ -2216,101 +2288,253 @@ export function CrmAppointments() {
   );
 }
 
-// ─── CrmTasks ─────────────────────────────────────────────────────────────────
+// ─── CrmTasks (globales) ────────────────────────────────────────────────────
+// Todas las tareas de todos los contactos. Lee/escribe el esquema real
+// `crm_tareas` (español); resuelve nombre de contacto y de usuario asignado
+// por waterfall. No usa `crm_tasks`/`contacts` (esquema ficticio inexistente).
+
+const TASK_TYPE_META: Record<string, { label: string; icon: typeof ClipboardList }> = {
+  seguimiento: { label: "Seguimiento", icon: ClipboardList },
+  llamada: { label: "Llamada", icon: Phone },
+  email: { label: "Email", icon: Mail },
+  whatsapp: { label: "WhatsApp", icon: MessageSquare },
+  visita: { label: "Visita", icon: Calendar },
+};
+const TASK_PRIORITY_META: Record<string, { label: string; cls: string; order: number }> = {
+  urgente: { label: "Urgente", cls: "bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400", order: 0 },
+  alta: { label: "Alta", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", order: 1 },
+  normal: { label: "Normal", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", order: 2 },
+  baja: { label: "Baja", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", order: 3 },
+};
+
+type GlobalTask = {
+  id: number;
+  titulo: string;
+  tipo: string;
+  prioridad: string;
+  estatus: string;
+  fecha_vencimiento: string | null;
+  fecha_creacion: string;
+  id_entidad_relacionada: number;
+  id_usuario_asignado: string | null;
+  contact_name: string | null;
+  assigned_name: string | null;
+};
 
 export function CrmTasks() {
-  const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const { user } = useAuth();
   const [tab, setTab] = useState<"all" | "today" | "overdue" | "upcoming">("today");
+  const [search, setSearch] = useState("");
+  const [fType, setFType] = useState("all");
+  const [fPriority, setFPriority] = useState("all");
+  const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ contact_id: "", title: "", due_date: "", assigned_to: user?.id ?? "", priority: "normal" });
 
-  const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["crm-tasks", orgId],
+  const { data: owners = [] } = useQuery({
+    queryKey: ["agentes-list"],
     queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_tasks").select("id,title,status,priority,due_date,assigned_to,contacts(full_name)").eq("organization_id", orgId).order("due_date", { ascending: true }).limit(500);
-      return data ?? [];
+      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
+      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
     },
-    enabled: !!orgId,
   });
 
-  const filtered = tasks.filter((tk: any) => {
-    if (tk.status === "completed" && tab !== "all") return false;
-    if (!tk.due_date) return tab === "all";
-    const d = parseISO(tk.due_date);
-    if (tab === "today") return isToday(d);
-    if (tab === "overdue") return isPast(d) && !isToday(d);
-    if (tab === "upcoming") return isFuture(d);
-    return true;
-  });
+  const { data: tasks = [], isLoading } = useQuery<GlobalTask[]>({
+    queryKey: ["crm-tasks-global"],
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_tareas")
+        .select("id, titulo, tipo, prioridad, estatus, fecha_vencimiento, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
+        .eq("activo", true)
+        .order("fecha_vencimiento", { ascending: true, nullsFirst: false })
+        .limit(1000);
+      if (res.error) return [];
+      const rows: any[] = res.data ?? [];
+      if (!rows.length) return [];
 
-  const complete = useMutation({
-    mutationFn: async (tk: any) => {
-      const newStatus = tk.status === "completed" ? "pending" : "completed";
-      await (supabase as any).from("crm_tasks").update({ status: newStatus }).eq("id", tk.id);
+      // Resolver nombre de contacto: entidades_relacionadas → personas.
+      const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
+      const contactMap: Record<number, string> = {};
+      if (entIds.length) {
+        const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+          .select("id, id_persona").in("id", entIds);
+        const personaByEnt: Record<number, number> = Object.fromEntries((ents ?? []).map((e: any) => [e.id, e.id_persona]));
+        const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
+        if (personaIds.length) {
+          const { data: personas } = await (supabase as any).from("personas")
+            .select("id, nombre_legal, nombre_comercial").in("id", personaIds);
+          const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+          for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
+        }
+      }
+
+      // Resolver nombre del usuario asignado.
+      const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
+      let userMap: Record<string, string> = {};
+      if (userIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", userIds);
+        userMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+
+      return rows.map((r) => ({
+        id: r.id,
+        titulo: r.titulo,
+        tipo: r.tipo,
+        prioridad: r.prioridad,
+        estatus: r.estatus,
+        fecha_vencimiento: r.fecha_vencimiento,
+        fecha_creacion: r.fecha_creacion,
+        id_entidad_relacionada: r.id_entidad_relacionada,
+        id_usuario_asignado: r.id_usuario_asignado,
+        contact_name: contactMap[r.id_entidad_relacionada] ?? null,
+        assigned_name: r.id_usuario_asignado ? (userMap[r.id_usuario_asignado] ?? null) : null,
+      }));
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks", orgId] }),
   });
 
-  const create = useMutation({
-    mutationFn: async () => { if (!orgId) return; await (supabase as any).from("crm_tasks").insert({ organization_id: orgId, ...form }); },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-tasks", orgId] }); setOpen(false); toast.success("Tarea creada"); },
+  const isDone = (t: GlobalTask) => t.estatus === "completada";
+
+  // Conteos por pestaña (siempre sobre tareas no completadas, salvo "Todo").
+  const counts = useMemo(() => {
+    const c = { all: tasks.length, today: 0, overdue: 0, upcoming: 0 };
+    for (const t of tasks) {
+      if (isDone(t) || !t.fecha_vencimiento) continue;
+      const d = parseISO(t.fecha_vencimiento);
+      if (isToday(d)) c.today++;
+      else if (isPast(d)) c.overdue++;
+      else if (isFuture(d)) c.upcoming++;
+    }
+    return c;
+  }, [tasks]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return tasks
+      .filter((t) => {
+        // Pestaña
+        if (tab !== "all") {
+          if (isDone(t)) return false;
+          if (!t.fecha_vencimiento) return false;
+          const d = parseISO(t.fecha_vencimiento);
+          if (tab === "today" && !isToday(d)) return false;
+          if (tab === "overdue" && !(isPast(d) && !isToday(d))) return false;
+          if (tab === "upcoming" && !isFuture(d)) return false;
+        }
+        if (fType !== "all" && t.tipo !== fType) return false;
+        if (fPriority !== "all" && t.prioridad !== fPriority) return false;
+        if (fAssignee !== "all") {
+          if (fAssignee === "none" && t.id_usuario_asignado) return false;
+          if (fAssignee !== "none" && t.id_usuario_asignado !== fAssignee) return false;
+        }
+        if (q && !(t.titulo?.toLowerCase().includes(q) || t.contact_name?.toLowerCase().includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        // Ordenar por prioridad y luego por vencimiento.
+        const pa = TASK_PRIORITY_META[a.prioridad]?.order ?? 9;
+        const pb = TASK_PRIORITY_META[b.prioridad]?.order ?? 9;
+        if (pa !== pb) return pa - pb;
+        const da = a.fecha_vencimiento ?? "9999";
+        const db = b.fecha_vencimiento ?? "9999";
+        return da.localeCompare(db);
+      });
+  }, [tasks, tab, search, fType, fPriority, fAssignee]);
+
+  const toggleComplete = useMutation({
+    mutationFn: async (t: GlobalTask) => {
+      const next = isDone(t) ? "pendiente" : "completada";
+      const { error } = await (supabase as any).from("crm_tareas").update({ estatus: next }).eq("id", t.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }),
+    onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
+  });
+
+  const removeTask = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }); toast.success("Tarea eliminada"); },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
   const TASK_TABS = [
-    { id: "all" as const, label: "Todo" },
-    { id: "today" as const, label: "Vencen hoy" },
-    { id: "overdue" as const, label: "Atrasado" },
-    { id: "upcoming" as const, label: "Próximamente" },
+    { id: "all" as const, label: "Todo", count: counts.all },
+    { id: "today" as const, label: "Vencen hoy", count: counts.today },
+    { id: "overdue" as const, label: "Atrasado", count: counts.overdue },
+    { id: "upcoming" as const, label: "Próximamente", count: counts.upcoming },
   ];
+
+  const hasFilters = search || fType !== "all" || fPriority !== "all" || fAssignee !== "all";
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <h1 className="text-2xl font-semibold">Tareas</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-            <div className="space-y-3 py-2">
-              <div><Label>Título</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Llamar al prospecto" /></div>
-              <div><Label>ID Contacto</Label><Input value={form.contact_id} onChange={e => setForm(f => ({ ...f, contact_id: e.target.value }))} placeholder="UUID" /></div>
-              <div><Label>Vencimiento</Label><Input type="datetime-local" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} /></div>
-              <div><Label>Prioridad</Label>
-                <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["urgent","high","normal","low"].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Tareas</h1>
+          <p className="text-sm text-muted-foreground">{tasks.length} tarea{tasks.length === 1 ? "" : "s"} en total · {counts.overdue} atrasada{counts.overdue === 1 ? "" : "s"}</p>
+        </div>
+        <NewGlobalTaskDialog
+          open={open}
+          onOpenChange={setOpen}
+          owners={owners}
+          defaultAssignee={user?.id ?? ""}
+          onCreated={() => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] })}
+        />
       </div>
 
-      {/* Border-bottom tabs */}
-      <div className="border-b border-border flex gap-1">
+      {/* Tabs con conteos */}
+      <div className="border-b border-border flex gap-1 overflow-x-auto">
         {TASK_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors duration-150 ${tab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap flex items-center gap-2 ${tab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
           >
             {t.label}
+            <span className={`text-[11px] rounded-full px-1.5 min-w-[20px] text-center ${tab === t.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"} ${t.id === "overdue" && t.count > 0 ? "!bg-red-500/10 !text-red-600 dark:!text-red-400" : ""}`}>{t.count}</span>
           </button>
         ))}
       </div>
 
-      {/* Table */}
+      {/* Barra de filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por título o contacto…" className="pl-8" />
+        </div>
+        <Select value={fAssignee} onValueChange={setFAssignee}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Asignado a" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los usuarios</SelectItem>
+            <SelectItem value="none">Sin asignar</SelectItem>
+            {owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={fType} onValueChange={setFType}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            {Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={fPriority} onValueChange={setFPriority}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Prioridad" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toda prioridad</SelectItem>
+            {Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFType("all"); setFPriority("all"); setFAssignee("all"); }}>
+            <X className="h-4 w-4 mr-1" />Limpiar
+          </Button>
+        )}
+      </div>
+
+      {/* Tabla */}
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-x-auto">
         {isLoading ? (
           <div className="p-6 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
@@ -2320,43 +2544,70 @@ export function CrmTasks() {
               <tr>
                 <th className="p-3 w-10"></th>
                 <th className="p-3 text-left font-medium">Título</th>
+                <th className="p-3 text-left font-medium">Prioridad</th>
                 <th className="p-3 text-left font-medium">Vencimiento</th>
                 <th className="p-3 text-left font-medium">Contacto asociado</th>
                 <th className="p-3 text-left font-medium">Asignado a</th>
+                <th className="p-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">Sin tareas.</td>
+                  <td colSpan={7} className="p-10 text-center text-muted-foreground">
+                    {hasFilters || tab !== "all" ? "Sin tareas para este filtro." : "Aún no hay tareas. Crea la primera con “Nueva tarea”."}
+                  </td>
                 </tr>
               )}
-              {filtered.map((tk: any) => {
-                const isOverdue = tk.due_date && isPast(parseISO(tk.due_date)) && !isToday(parseISO(tk.due_date)) && tk.status !== "completed";
-                const dueLabel = tk.due_date
-                  ? isToday(parseISO(tk.due_date))
-                    ? "Hoy"
-                    : fmtDateFns(parseISO(tk.due_date), "dd MMM yyyy")
-                  : "—";
+              {filtered.map((t) => {
+                const done = isDone(t);
+                const d = t.fecha_vencimiento ? parseISO(t.fecha_vencimiento) : null;
+                const isOverdue = d && isPast(d) && !isToday(d) && !done;
+                const dueLabel = d ? (isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy")) : "—";
+                const typeMeta = TASK_TYPE_META[t.tipo] ?? { label: t.tipo, icon: ClipboardList };
+                const prioMeta = TASK_PRIORITY_META[t.prioridad];
+                const TypeIcon = typeMeta.icon;
                 return (
-                  <tr key={tk.id} className="border-t border-border hover:bg-muted/30">
+                  <tr key={t.id} className="border-t border-border hover:bg-muted/30 group">
                     <td className="p-3">
                       <button
                         type="button"
-                        onClick={() => complete.mutate(tk)}
-                        className={`size-5 rounded-full border-2 flex items-center justify-center transition-colors ${tk.status === "completed" ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 hover:border-info"}`}
+                        title={done ? "Marcar pendiente" : "Marcar completada"}
+                        onClick={() => toggleComplete.mutate(t)}
+                        className={`size-5 rounded-full border-2 flex items-center justify-center transition-colors ${done ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 hover:border-emerald-500"}`}
                       >
-                        {tk.status === "completed" && <Check className="size-3" />}
+                        {done && <Check className="size-3" />}
                       </button>
                     </td>
                     <td className="p-3">
-                      <div className={tk.status === "completed" ? "line-through text-muted-foreground" : ""}>{tk.title}</div>
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground ml-6">{typeMeta.label}</span>
                     </td>
-                    <td className={`p-3 whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>{dueLabel}</td>
-                    <td className="p-3">{tk.contacts?.full_name ? (
-                      <Badge variant="outline" className="bg-info/10 text-info border-info/30">{tk.contacts.full_name}</Badge>
-                    ) : "—"}</td>
-                    <td className="p-3 text-muted-foreground">{tk.assigned_to ?? "—"}</td>
+                    <td className="p-3">
+                      {prioMeta ? <Badge variant="outline" className={prioMeta.cls}>{prioMeta.label}</Badge> : <span className="text-muted-foreground">{t.prioridad}</span>}
+                    </td>
+                    <td className={`p-3 whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      <span className="inline-flex items-center gap-1">{isOverdue && <TriangleAlert className="h-3.5 w-3.5" />}{dueLabel}</span>
+                    </td>
+                    <td className="p-3">
+                      {t.contact_name ? (
+                        <Link to={`/admin/portal-crm/ventas/contactos/${t.id_entidad_relacionada}`} className="text-info hover:underline">{t.contact_name}</Link>
+                      ) : "—"}
+                    </td>
+                    <td className="p-3 text-muted-foreground">{t.assigned_name ?? <span className="italic text-muted-foreground/60">Sin asignar</span>}</td>
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        title="Eliminar tarea"
+                        onClick={() => removeTask.mutate(t.id)}
+                        className="text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -2365,6 +2616,128 @@ export function CrmTasks() {
         )}
       </div>
     </div>
+  );
+}
+
+// Diálogo "Nueva tarea" global: selector de contacto con búsqueda + campos reales.
+function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCreated }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  owners: { id: string; full_name: string; email: string }[];
+  defaultAssignee: string;
+  onCreated: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
+  const [form, setForm] = useState({ titulo: "", tipo: "seguimiento", prioridad: "normal", fecha_vencimiento: "", assigned_to: defaultAssignee });
+
+  const { data: contactResults = [], isFetching } = useQuery({
+    queryKey: ["crm-task-contact-search", contactSearch],
+    enabled: open && contactSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = contactSearch.trim();
+      const { data: personas } = await (supabase as any).from("personas")
+        .select("id, nombre_legal, nombre_comercial")
+        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
+        .eq("activo", true).limit(20);
+      const pIds = (personas ?? []).map((p: any) => p.id);
+      if (!pIds.length) return [];
+      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
+      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+    },
+  });
+
+  const reset = () => { setForm({ titulo: "", tipo: "seguimiento", prioridad: "normal", fecha_vencimiento: "", assigned_to: defaultAssignee }); setContact(null); setContactSearch(""); };
+
+  const save = async () => {
+    if (!form.titulo.trim() || !contact) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_tareas").insert({
+      id_entidad_relacionada: contact.id,
+      titulo: form.titulo.trim(),
+      tipo: form.tipo,
+      prioridad: form.prioridad,
+      fecha_vencimiento: form.fecha_vencimiento || null,
+      id_usuario_asignado: form.assigned_to || null,
+      estatus: "pendiente",
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Tarea creada");
+    reset();
+    onOpenChange(false);
+    onCreated();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
+        <div className="grid gap-3 py-1">
+          <div>
+            <Label>Contacto asociado</Label>
+            {contact ? (
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span className="font-medium">{contact.name}</span>
+                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                {contactSearch.trim().length >= 2 && (
+                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
+                    {isFetching ? (
+                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
+                    ) : contactResults.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
+                    ) : contactResults.map((c) => (
+                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Llamar al prospecto" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Tipo</Label>
+              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label>Prioridad</Label>
+              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Vencimiento</Label><Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} /></div>
+            <div><Label>Asignar a</Label>
+              <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !form.titulo.trim() || !contact} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Crear tarea"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
