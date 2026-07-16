@@ -19,14 +19,13 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
   const { channels, roles, roleAssignments, commissionRules } = snapshot;
   const roleById = new Map(roles.map((r) => [r.id, r]));
   const assignmentByRole = new Map(roleAssignments.map((a) => [a.roleId, a]));
-  const sobre = snapshot.commissionMode === "on_sale_value" ? "sobre venta" : "sobre remanente";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs text-muted-foreground">
-            Modo: {snapshot.commissionMode === "on_sale_value" ? "A · Sobre Venta" : "B · Sobre Remanente"} · Comisión total{" "}
+            Modo: A · Sobre Venta · Comisión total{" "}
             <span className="font-semibold text-accent">{snapshot.totalCommissionPct}%</span>
           </p>
         </div>
@@ -39,9 +38,7 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((s, r) => s + (r.percentage || 0), 0);
-        const remanente = snapshot.commissionMode === "on_sale_value"
-          ? comisionInterna - sumaDispersada
-          : 100 - sumaDispersada;
+        const remanente = comisionInterna - sumaDispersada;
 
         const completo = Math.abs(remanente) < 0.005;
         const statusColor = completo
@@ -76,7 +73,7 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
                 <thead>
                   <tr>
                     <th>Rol</th>
-                    <th>% {sobre}</th>
+                    <th>% sobre venta</th>
                     <th>Pool</th>
                   </tr>
                 </thead>

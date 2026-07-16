@@ -183,13 +183,13 @@ export async function deleteReglaComisionRemota(id: string): Promise<SyncResult>
 }
 
 // ================================================================
-// Config del Motor de Comisiones por proyecto — Modo A/B + Comisión Total
-// (`comisiones_motor_config`, una fila por `id_proyecto`)
+// Config del Motor de Comisiones por proyecto — Comisión Total
+// (`comisiones_motor_config`, una fila por `id_proyecto`). Siempre Modo A
+// (sobre venta) — no hay campo `modo` que elegir en el motor real.
 // ================================================================
 
 function motorConfigFromRow(row: any): MotorConfig {
   return {
-    commissionMode: row.modo,
     totalCommissionPct: Number(row.comision_total_pct ?? 0),
   };
 }
@@ -203,7 +203,6 @@ export async function fetchMotorConfigReal(idProyecto: number): Promise<MotorCon
 export async function updateMotorConfigRemoto(config: MotorConfig, idProyecto: number): Promise<SyncResult> {
   const { error } = await (supabase as any).from("comisiones_motor_config").upsert({
     id_proyecto: idProyecto,
-    modo: config.commissionMode,
     comision_total_pct: config.totalCommissionPct,
     activo: true,
     fecha_actualizacion: new Date().toISOString(),

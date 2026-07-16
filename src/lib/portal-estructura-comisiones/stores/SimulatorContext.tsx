@@ -12,7 +12,7 @@ import {
   fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 
-const DEFAULT_MOTOR_CONFIG: MotorConfig = { commissionMode: 'on_sale_value', totalCommissionPct: 6 };
+const DEFAULT_MOTOR_CONFIG: MotorConfig = { totalCommissionPct: 6 };
 
 const STORAGE_KEY = 'sozu-ec-simulator-state';
 

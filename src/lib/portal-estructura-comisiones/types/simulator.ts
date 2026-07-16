@@ -107,9 +107,8 @@ export interface CommissionRule {
   pool: 'sozu' | 'project';
 }
 
-/** Config real del Motor de Comisiones — única y global, independiente de escenarios de simulación. */
+/** Config real del Motor de Comisiones — única y global, independiente de escenarios de simulación. Siempre Modo A (sobre venta); solo los Escenarios de Simulación permiten Modo B. */
 export interface MotorConfig {
-  commissionMode: CommissionMode;
   totalCommissionPct: number;
 }
 

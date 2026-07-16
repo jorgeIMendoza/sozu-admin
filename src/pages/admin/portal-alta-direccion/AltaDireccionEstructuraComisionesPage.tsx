@@ -70,7 +70,6 @@ function MotorConsulta() {
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
 
   const snapshot: MotorSnapshot = {
-    commissionMode: motorConfig.commissionMode,
     totalCommissionPct: motorConfig.totalCommissionPct,
     channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
@@ -197,7 +196,6 @@ function ValidacionSheet({
       {
         propuestaId: propuesta.id,
         id_proyecto: propuesta.id_proyecto,
-        modo: propuesta.modo,
         snapshot: propuesta.snapshot,
         estado,
         notas: estado === "rechazada" ? notas.trim() : null,

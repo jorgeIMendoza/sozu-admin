@@ -17,12 +17,11 @@ import { supabase } from "@/integrations/supabase/client";
  * consultas devuelven `[]` para no romper la UI.
  */
 
-export type CommissionMode = "on_sale_value" | "on_internal_remainder";
 export type EstadoPropuesta = "propuesta" | "validada" | "rechazada";
 export type EstadoValidacion = "validada" | "rechazada";
 
+/** Siempre Modo A (sobre venta) — el Motor de Comisiones real no permite elegir modo. */
 export interface MotorSnapshot {
-  commissionMode: CommissionMode | string;
   totalCommissionPct: number;
   channels: Array<{ id: string; name: string; externalCommissionPct: number; active: boolean }>;
   roles: Array<{ id: string; name: string; belongsTo: string }>;
@@ -34,7 +33,6 @@ export interface ComisionPropuesta {
   id: number;
   id_proyecto: number;
   proyecto_nombre: string;
-  modo: string | null;
   snapshot: MotorSnapshot;
   estado: EstadoPropuesta;
   propuesta_por: string | null;
@@ -45,7 +43,6 @@ export interface ComisionPropuesta {
 export interface ComisionValidacion {
   id: number;
   id_proyecto: number;
-  modo: string | null;
   snapshot: MotorSnapshot | null;
   estado: EstadoValidacion;
   notas: string | null;
@@ -65,7 +62,7 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
       let q = (supabase as any)
         .from("comisiones_propuestas")
         .select(
-          "id, id_proyecto, modo, snapshot, estado, propuesta_por, fecha_propuesta, fecha_actualizacion, proyectos!comisiones_propuestas_id_proyecto_fkey(nombre)",
+          "id, id_proyecto, snapshot, estado, propuesta_por, fecha_propuesta, fecha_actualizacion, proyectos!comisiones_propuestas_id_proyecto_fkey(nombre)",
         )
         .eq("activo", true)
         .order("fecha_actualizacion", { ascending: false });
@@ -76,7 +73,6 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
         id: r.id,
         id_proyecto: r.id_proyecto,
         proyecto_nombre: r.proyectos?.nombre ?? `Proyecto ${r.id_proyecto}`,
-        modo: r.modo ?? null,
         snapshot: r.snapshot as MotorSnapshot,
         estado: (r.estado ?? "propuesta") as EstadoPropuesta,
         propuesta_por: r.propuesta_por ?? null,
@@ -89,7 +85,6 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
 
 export interface EnviarPropuestaInput {
   id_proyecto: number;
-  modo: string;
   snapshot: MotorSnapshot;
   propuesta_por: string | null;
 }
@@ -104,7 +99,6 @@ export function useEnviarPropuesta() {
         .upsert(
           {
             id_proyecto: input.id_proyecto,
-            modo: input.modo,
             snapshot: input.snapshot,
             estado: "propuesta",
             propuesta_por: input.propuesta_por,
@@ -122,7 +116,6 @@ export function useEnviarPropuesta() {
 export interface ValidarPropuestaInput {
   propuestaId: number;
   id_proyecto: number;
-  modo: string | null;
   snapshot: MotorSnapshot;
   estado: EstadoValidacion;
   notas: string | null;
@@ -136,7 +129,6 @@ export function useValidarPropuesta() {
     mutationFn: async (input: ValidarPropuestaInput) => {
       const { error: insErr } = await (supabase as any).from("comisiones_validaciones").insert({
         id_proyecto: input.id_proyecto,
-        modo: input.modo,
         snapshot: input.snapshot,
         estado: input.estado,
         notas: input.notas,
@@ -166,7 +158,7 @@ export function useValidacionesHistorial(idProyecto?: number | null) {
       if (idProyecto == null) return [];
       const { data, error } = await (supabase as any)
         .from("comisiones_validaciones")
-        .select("id, id_proyecto, modo, snapshot, estado, notas, validado_por, fecha_validacion")
+        .select("id, id_proyecto, snapshot, estado, notas, validado_por, fecha_validacion")
         .eq("id_proyecto", idProyecto)
         .order("fecha_validacion", { ascending: false });
       if (error || !data) return [];

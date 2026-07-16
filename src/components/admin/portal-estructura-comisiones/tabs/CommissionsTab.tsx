@@ -5,7 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { validateCommissionRules } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -81,7 +80,6 @@ export default function CommissionsTab() {
   };
 
   const buildSnapshot = (): MotorSnapshot => ({
-    commissionMode: motorConfig.commissionMode,
     totalCommissionPct: motorConfig.totalCommissionPct,
     channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
@@ -96,7 +94,6 @@ export default function CommissionsTab() {
     try {
       await enviarPropuesta.mutateAsync({
         id_proyecto: motorProjectId,
-        modo: motorConfig.commissionMode,
         snapshot,
         propuesta_por: propuestaPor,
       });
@@ -147,8 +144,7 @@ export default function CommissionsTab() {
             <Tooltip>
               <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
               <TooltipContent className="max-w-sm text-xs">
-                <strong>Modo A (sobre venta):</strong> el % de cada rol se aplica sobre el valor de venta del canal. La suma + ext debe = comisión total.<br />
-                <strong>Modo B (sobre remanente):</strong> el % se aplica sobre el remanente interno. La suma debe = 100%.
+                El % de cada rol se aplica sobre el valor de venta del canal (Modo A: sobre venta). La suma de los roles + la comisión externa debe ser igual a la Comisión Total.
               </TooltipContent>
             </Tooltip>
           </p>
@@ -198,16 +194,6 @@ export default function CommissionsTab() {
                   onChange={(e) => updateMotorConfig({ ...motorConfig, totalCommissionPct: +e.target.value })}
                 />
               </div>
-              <Select
-                value={motorConfig.commissionMode}
-                onValueChange={(v) => updateMotorConfig({ ...motorConfig, commissionMode: v as any })}
-              >
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="on_sale_value">Modo A: Sobre Venta</SelectItem>
-                  <SelectItem value="on_internal_remainder">Modo B: Sobre Remanente</SelectItem>
-                </SelectContent>
-              </Select>
             </>
           )}
         </div>
@@ -218,7 +204,7 @@ export default function CommissionsTab() {
           <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-2 text-sm font-medium">Selecciona un proyecto</p>
           <p className="text-xs text-muted-foreground">
-            El Motor de Comisiones configura una matriz y un Modo/Comisión Total distintos para cada desarrollo. Elige uno arriba para empezar.
+            El Motor de Comisiones configura una matriz y una Comisión Total distintas para cada desarrollo. Elige uno arriba para empezar.
           </p>
         </div>
       ) : (
@@ -239,18 +225,13 @@ export default function CommissionsTab() {
       {channels.map(ch => {
         const channelRules = commissionRules.filter(r => r.channelId === ch.id);
         const extPct = ch.externalCommissionPct;
-        const validation = validateCommissionRules(
-          channelRules, motorConfig.commissionMode, motorConfig.totalCommissionPct, extPct
-        );
 
-        // Real-time channel summary calculations
+        // Real-time channel summary calculations (siempre Modo A: sobre venta)
         const comisionTotal = motorConfig.totalCommissionPct;
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((sum, r) => sum + r.percentage, 0);
-        const remanente = motorConfig.commissionMode === 'on_sale_value'
-          ? comisionInterna - sumaDispersada
-          : 100 - sumaDispersada;
+        const remanente = comisionInterna - sumaDispersada;
 
         const statusColor = Math.abs(remanente) < 0.005
           ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400'
@@ -293,18 +274,16 @@ export default function CommissionsTab() {
                 <thead>
                   <tr>
                     <th>Rol</th>
-                    {motorConfig.commissionMode === 'on_sale_value' && (
-                      <th>
-                        % sobre Comisión a Dispersar
-                        <Tooltip>
-                          <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
-                          <TooltipContent className="max-w-xs text-xs">
-                            % del rol respecto a la Comisión a Dispersar del canal (Interna esperada: {comisionInterna.toFixed(2)}%). El % sobre venta se calcula solo.
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                    )}
-                    <th>% {motorConfig.commissionMode === 'on_sale_value' ? 'sobre venta' : 'sobre remanente'}</th>
+                    <th>
+                      % sobre Comisión a Dispersar
+                      <Tooltip>
+                        <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          % del rol respecto a la Comisión a Dispersar del canal (Interna esperada: {comisionInterna.toFixed(2)}%). El % sobre venta se calcula solo.
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th>% sobre venta</th>
                     <th>Pool</th>
                     <th></th>
                   </tr>
@@ -333,28 +312,26 @@ export default function CommissionsTab() {
                             )}
                           </div>
                         </td>
-                        {motorConfig.commissionMode === 'on_sale_value' && (
-                          <td>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              className="w-24 h-8 text-sm font-mono"
-                              value={Number.isFinite(sharePct) ? +sharePct.toFixed(4) : 0}
-                              onChange={e => {
-                                const newShare = +e.target.value;
-                                const newPercentage = comisionInterna > 0 ? (newShare / 100) * comisionInterna : 0;
-                                updateRule(rule.id, { percentage: newPercentage });
-                              }}
-                            />
-                          </td>
-                        )}
+                        <td>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="w-24 h-8 text-sm font-mono"
+                            value={Number.isFinite(sharePct) ? +sharePct.toFixed(4) : 0}
+                            onChange={e => {
+                              const newShare = +e.target.value;
+                              const newPercentage = comisionInterna > 0 ? (newShare / 100) * comisionInterna : 0;
+                              updateRule(rule.id, { percentage: newPercentage });
+                            }}
+                          />
+                        </td>
                         <td>
                           <Input
                             type="number"
                             step="0.01"
                             className="w-24 h-8 text-sm font-mono"
                             value={rule.percentage}
-                            disabled={motorConfig.commissionMode === 'on_sale_value'}
+                            disabled
                             onChange={e => updateRule(rule.id, { percentage: +e.target.value })}
                           />
                         </td>
