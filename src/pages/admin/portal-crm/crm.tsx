@@ -423,13 +423,13 @@ export function CrmContacts() {
             <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500 border-b border-border">
+              <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <th className="p-3 text-left w-8"><Checkbox /></th>
+                  <th className="px-3 py-2.5 text-left w-8"><Checkbox /></th>
                   {visibleColumns.map((col) => (
-                    <th key={col.id} className="p-3 text-left font-medium whitespace-nowrap">{col.label}</th>
+                    <th key={col.id} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{col.label}</th>
                   ))}
-                  <th className="p-3 w-8"></th>
+                  <th className="px-3 py-2.5 w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -437,7 +437,7 @@ export function CrmContacts() {
                   <tr key={c.id} role="button" tabIndex={0}
                     onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
-                    className="border-t border-border hover:bg-primary/5/40 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 transition-colors duration-150 group"
+                    className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
                     <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
                     {visibleColumns.map((col) => {
@@ -446,18 +446,18 @@ export function CrmContacts() {
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2 text-primary group-hover:text-primary font-medium">
-                                <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/20">
+                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
+                                <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                {c.full_name}
+                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
                               </span>
                             </td>
                           );
                         case "email":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.email || "—"}</td>;
                         case "phone":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.phone || "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.phone || "—"}</td>;
                         case "lead_status": {
                           const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
                           const statusColor: Record<string, string> = {
@@ -510,9 +510,9 @@ export function CrmContacts() {
                         case "owner":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.owner_name ?? "Sin asignar"}</td>;
                         case "created":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
                         case "updated":
-                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
+                          return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
                         case "source":
                           return (
                             <td key={col.id} className="p-3">
@@ -717,7 +717,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
 }
 
 function CField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="grid gap-1.5"><Label className="text-xs">{label}</Label>{children}</div>;
+  return <div className="grid gap-1.5"><Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</Label>{children}</div>;
 }
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
@@ -1293,7 +1293,7 @@ function HL({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-sm mt-0.5">{value}</div>
+      <div className="text-sm mt-0.5 tabular-nums">{value}</div>
     </div>
   );
 }
