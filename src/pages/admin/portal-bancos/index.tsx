@@ -25,16 +25,17 @@ import {
   useSolicitudesBanco, useActualizarSolicitud, usePagosCuentaBanco,
 } from "@/hooks/usePortalBancos/useSolicitudesBanco";
 import { PIPELINE_ORDER } from "@/lib/portal-bancos/bank-leads";
-import { useCurrentBanco } from "@/contexts/BankImpersonationContext";
+import { useCurrentBanco, useSolicitudScope, useBancoResolvedScope } from "@/contexts/BankImpersonationContext";
 import {
   useBancosConvenio, useBancosCatalogo, useAgregarBancoConvenio,
   useActualizarBancoConvenio, useToggleBancoConvenioActivo,
 } from "@/hooks/usePortalBancos/useBancosConvenio";
 import {
-  useBancosAgentes, useCrearAgente, useActualizarAgente, useSetActivoAgente,
-  useCurrentBancoAgente,
-  type BancoAgente, type AgenteRol,
-} from "@/hooks/usePortalBancos/useBancosAgentes";
+  useBancoEquipo, useCrearEjecutivoBanco, useSetActivoEjecutivo,
+  useCambiarRolEjecutivo, useEditarEjecutivo, useBancoRoles,
+  type EjecutivoBanco, type RolBancoPortal,
+} from "@/hooks/usePortalBancos/useBancoEquipo";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   computeFunnel, computeWinRate, STAGE_PROBABILITY,
 } from "@/lib/portal-bancos/metrics";
@@ -67,16 +68,21 @@ function useBancosPathAllowed(path: string) {
 }
 
 function useBankScopedLeads(): BankLead[] {
-  const banco = useCurrentBanco();
-  // Fuente real: bancos_solicitudes del banco seleccionado (lo que el cliente
-  // envía desde Pago Final). Reemplaza el store mock.
-  const { data = [] } = useSolicitudesBanco(banco?.id_banco);
-  // Alcance por rol de equipo: un ejecutivo con rol 'agente' solo ve las
-  // solicitudes asignadas a su usuario; 'admin' (y quien no sea del equipo,
-  // p.ej. Super Admin) ve todas.
-  const agente = useCurrentBancoAgente(banco?.id_banco);
-  if (agente && agente.rol === "agente") {
-    return data.filter((l) => l.assignedAgentId === String(agente.id));
+  // Scope: un banco o "all" (Super Administrador ve todos los bancos).
+  const scope = useSolicitudScope();
+  const { data = [] } = useSolicitudesBanco(scope);
+  // Alcance por rol del usuario logueado (usuarios del sistema):
+  //   - Operador Banco (Agente) → solo las solicitudes asignadas a su email.
+  //   - Supervisor Banco (Admin) / Super Admin / otros → todas.
+  const { profile } = useAuth();
+  const { data: roles } = useBancoRoles();
+  const email = (profile?.email ?? "").trim().toLowerCase();
+  const esOperador =
+    roles?.operadorRolId != null && profile?.rol_id === roles.operadorRolId;
+  if (esOperador && email) {
+    return data.filter(
+      (l) => (l.assignedAgentId ?? "").trim().toLowerCase() === email,
+    );
   }
   return data;
 }
@@ -117,19 +123,23 @@ const ESTADOS_CON_RESPUESTA: LeadStatus[] = [
 ];
 
 function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onClose: () => void }) {
-  const banco = useCurrentBanco();
-  const { data: leads = [] } = useSolicitudesBanco(banco?.id_banco);
+  // Scope de datos: un banco o "all". El banco concreto de esta solicitud se
+  // toma del propio lead (así el detalle y la asignación funcionan también en
+  // la vista global de Super Administrador).
+  const scope = useSolicitudScope();
+  const { data: leads = [] } = useSolicitudesBanco(scope);
   const lead = leadId ? leads.find((l) => l.id === leadId) : undefined;
-  const { data: agents = [] } = useBancosAgentes(banco?.id_banco);
+  const leadBancoId = lead ? Number(lead.bankId) : null;
+  const { data: agents = [] } = useBancoEquipo(leadBancoId);
   const actualizar = useActualizarSolicitud();
   const [note, setNote] = useState("");
   const [closeReason, setCloseReason] = useState<string>("");
   const [verCliente, setVerCliente] = useState(false);
   const [verPagos, setVerPagos] = useState(false);
 
-  if (!lead || !banco) return null;
+  if (!lead) return null;
   const idNum = Number(lead.id);
-  const idBanco = banco.id_banco;
+  const idBanco = leadBancoId ?? Number(lead.bankId);
   const desc = STATUS_DESCRIPTORS[lead.status];
   const transitions = VALID_TRANSITIONS[lead.status] || [];
 
@@ -159,9 +169,9 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
     );
   };
 
-  const assignLead = (agentId: string) =>
+  const assignLead = (agentEmail: string) =>
     actualizar.mutate(
-      { id: idNum, idBanco, patch: { id_agente: agentId ? Number(agentId) : null } },
+      { id: idNum, idBanco, patch: { email_agente: agentEmail || null } },
       {
         onSuccess: () => toast({ title: "Ejecutivo asignado" }),
         onError: (e: any) =>
@@ -269,7 +279,9 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
               <SelectTrigger className="h-9"><SelectValue placeholder="Asignar ejecutivo" /></SelectTrigger>
               <SelectContent>
                 {agents.filter((a) => a.activo).map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>
+                  <SelectItem key={a.email} value={a.email}>
+                    {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -511,7 +523,7 @@ export function BancosBandeja() {
 
   return (
     <div className="space-y-4">
-      <Header title="Bandeja de solicitudes" subtitle={banco?.nombre} />
+      <Header title="Bandeja de solicitudes" subtitle={banco?.nombre ?? "Todos los bancos"} />
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <TabsList>
@@ -585,7 +597,7 @@ export function BancosTablero() {
 
   return (
     <div className="space-y-4">
-      <Header title="Tablero" subtitle={banco?.nombre} />
+      <Header title="Tablero" subtitle={banco?.nombre ?? "Todos los bancos"} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi icon={Inbox} label="Solicitudes" value={leads.length.toString()} />
         <Kpi icon={Activity} label="Monto solicitado" value={fmtMXN(totalMonto)} />
@@ -656,76 +668,104 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
   );
 }
 
-// ============================== EQUIPO (Agentes por banco — real) ==============================
+// ============================== EQUIPO (Ejecutivos = usuarios del sistema) ==============================
+/**
+ * Gestión de ejecutivos del banco = usuarios REALES del sistema (con login),
+ * roles Operador Banco (Agente) / Supervisor Banco (Admin), vinculados por
+ * `usuarios.id_banco`. SOLO Super Administrador. Alta/baja/cambio de rol/edición
+ * se reflejan al instante en Admin Panel → Usuarios del Sistema (misma tabla
+ * `usuarios`). Reemplaza el antiguo equipo de contacto (`bancos_agentes`).
+ */
 export function BancosEquipo() {
-  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/equipo");
+  const { profile } = useAuth();
+  const scope = useBancoResolvedScope();
+  const { data: roles } = useBancoRoles();
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
-  const crear = useCrearAgente();
-  const actualizar = useActualizarAgente();
-  const setActivo = useSetActivoAgente();
+  const crear = useCrearEjecutivoBanco();
 
-  // Banco vinculado seleccionado (default: primer convenio activo).
-  const [bancoSel, setBancoSel] = useState<number | null>(null);
-  const selectedId = bancoSel ?? convenios.find((c) => c.activo)?.id_banco ?? convenios[0]?.id_banco ?? null;
+  // Acceso: Super Administrador (ve/gestiona todos los bancos) o Admin de banco
+  // (Supervisor Banco), este último SOLO su propio banco.
+  const isSuperAdmin = profile?.rol_id === 1;
+  const isSupervisorBanco =
+    roles?.supervisorRolId != null && profile?.rol_id === roles.supervisorRolId;
+
+  // El banco a administrar sigue al scope de "Ver como": si se está viendo como
+  // un banco concreto (o el usuario es Admin de un banco), Equipo queda FIJO a
+  // ese banco (aislamiento por banco). Solo en la vista global "Super
+  // Administrador" (all) se permite elegir el banco.
+  const scopedId = scope.kind === "banco" ? scope.id : null;
+  const lockedToScope = scopedId != null;
+  const [bancoSelAll, setBancoSelAll] = useState<number | null>(null);
+  const selectedId =
+    scopedId ?? bancoSelAll ?? convenios.find((c) => c.activo)?.id_banco ?? convenios[0]?.id_banco ?? null;
   const banco = convenios.find((c) => c.id_banco === selectedId) ?? null;
 
-  const { data: agents = [], isLoading } = useBancosAgentes(selectedId);
-  const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as AgenteRol });
+  const { data: equipo = [], isLoading } = useBancoEquipo(selectedId);
+  const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as RolBancoPortal });
 
-  if (cargandoPermisos) return null;
-  if (!allowed) return <AccessDenied />;
+  if (!isSuperAdmin && !isSupervisorBanco) return <AccessDenied />;
 
   if (!cargandoBancos && convenios.length === 0) {
     return (
       <div className="space-y-4">
-        <Header title="Equipo" subtitle="Agentes por banco" />
+        <Header title="Equipo" subtitle="Ejecutivos por banco" />
         <EmptyState
           icon={Building2}
           title="Aún no hay bancos con convenio"
-          hint="Agrega bancos en la sección «Bancos». Si es la primera vez, aplica la migración de Ejecuciones_manuales/portal_bancos_administrador.md."
+          hint="Agrega bancos en la sección «Bancos» antes de dar de alta ejecutivos."
         />
       </div>
     );
   }
 
   const submit = () => {
-    if (!form.nombre.trim() || selectedId == null) return;
+    if (!form.nombre.trim() || !form.email.trim() || selectedId == null) return;
     crear.mutate(
-      { id_banco: selectedId, nombre: form.nombre.trim(), email: form.email.trim() || null, telefono: form.telefono.trim() || null, rol: form.rol },
+      { id_banco: selectedId, nombre: form.nombre.trim(), email: form.email.trim(), telefono: form.telefono.trim() || null, rolPortal: form.rol },
       {
-        onSuccess: () => { setForm({ nombre: "", email: "", telefono: "", rol: "agente" }); toast({ title: "Ejecutivo agregado", description: banco ? `Vinculado a ${banco.nombre}` : undefined }); },
-        onError: (e: any) => toast({ title: "No se pudo agregar", description: e?.message ?? "Error", variant: "destructive" }),
+        onSuccess: () => {
+          setForm({ nombre: "", email: "", telefono: "", rol: "agente" });
+          toast({ title: "Ejecutivo dado de alta", description: banco ? `Usuario creado en ${banco.nombre} · contraseña temporal: Temporal123!` : undefined });
+        },
+        onError: (e: any) => toast({ title: "No se pudo crear", description: e?.message ?? "Error", variant: "destructive" }),
       },
     );
   };
 
   return (
     <div className="space-y-4">
-      <Header title="Equipo" subtitle="Da de alta agentes y vincúlalos a un banco aliado" />
+      <Header title="Equipo" subtitle="Da de alta y administra ejecutivos (usuarios del sistema) del banco" />
 
-      {/* Selector de banco vinculado */}
+      {/* Banco a administrar. Fijo al banco en scope ("Ver como <Banco>");
+          seleccionable solo en la vista global "Super Administrador". */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Banco:</span>
-        <Select value={selectedId != null ? String(selectedId) : ""} onValueChange={(v) => setBancoSel(Number(v))}>
-          <SelectTrigger className="w-full sm:w-[280px] h-9"><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
-          <SelectContent>
-            {convenios.map((c) => (
-              <SelectItem key={c.id} value={String(c.id_banco)}>
-                {c.nombre}{!c.activo ? " (inactivo)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {lockedToScope ? (
+          <div className="h-9 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-medium">
+            {banco?.nombre ?? "—"}
+          </div>
+        ) : (
+          <Select value={selectedId != null ? String(selectedId) : ""} onValueChange={(v) => setBancoSelAll(Number(v))}>
+            <SelectTrigger className="w-full sm:w-[280px] h-9"><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
+            <SelectContent>
+              {convenios.map((c) => (
+                <SelectItem key={c.id} value={String(c.id_banco)}>
+                  {c.nombre}{!c.activo ? " (inactivo)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Nuevo ejecutivo</CardTitle>
-          {banco && <p className="text-xs text-muted-foreground">Se vinculará a <span className="font-medium text-foreground">{banco.nombre}</span></p>}
+          {banco && <p className="text-xs text-muted-foreground">Se creará como usuario del sistema vinculado a <span className="font-medium text-foreground">{banco.nombre}</span> con contraseña temporal.</p>}
         </CardHeader>
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
           <div className="flex gap-2">
             <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
@@ -735,7 +775,7 @@ export function BancosEquipo() {
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || selectedId == null}>Agregar</Button>
+            <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || !form.email.trim() || selectedId == null}>Agregar</Button>
           </div>
         </CardContent>
       </Card>
@@ -745,17 +785,10 @@ export function BancosEquipo() {
         <CardContent className="space-y-2">
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
-          ) : agents.length === 0 ? (
-            <EmptyState icon={Building2} title="Sin ejecutivos" hint="Agrega el primer ejecutivo de este banco." />
+          ) : equipo.length === 0 ? (
+            <EmptyState icon={Building2} title="Sin ejecutivos" hint="Da de alta el primer ejecutivo de este banco." />
           ) : (
-            agents.map((a) => (
-              <AgentRow
-                key={a.id}
-                a={a}
-                onToggleActive={() => setActivo.mutate({ id: a.id, activo: !a.activo })}
-                onChangeRole={(rol) => actualizar.mutate({ id: a.id, patch: { rol } })}
-              />
-            ))
+            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} />)
           )}
         </CardContent>
       </Card>
@@ -763,24 +796,79 @@ export function BancosEquipo() {
   );
 }
 
-function AgentRow({ a, onToggleActive, onChangeRole }: { a: BancoAgente; onToggleActive: () => void; onChangeRole: (r: AgenteRol) => void }) {
+function EjecutivoRow({ e }: { e: EjecutivoBanco }) {
+  const cambiarRol = useCambiarRolEjecutivo();
+  const setActivo = useSetActivoEjecutivo();
+  const editar = useEditarEjecutivo();
+  const [editing, setEditing] = useState(false);
+  const [edit, setEdit] = useState({ nombre: e.nombre, email: e.email, telefono: e.telefono ?? "" });
+
+  const guardar = () => {
+    editar.mutate(
+      { email: e.email, nombre: edit.nombre.trim(), telefono: edit.telefono.trim() || null, nuevoEmail: edit.email.trim() },
+      {
+        onSuccess: () => { setEditing(false); toast({ title: "Ejecutivo actualizado" }); },
+        onError: (err: any) => toast({ title: "No se pudo actualizar", description: err?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  const onChangeRole = (rol: RolBancoPortal) => {
+    if (rol === e.rolPortal) return;
+    cambiarRol.mutate(
+      { email: e.email, rolPortal: rol },
+      {
+        onSuccess: () => toast({ title: "Rol actualizado" }),
+        onError: (err: any) => toast({ title: "No se pudo cambiar el rol", description: err?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  const onToggleActive = () => {
+    setActivo.mutate(
+      { email: e.email, activo: !e.activo },
+      {
+        onSuccess: () => toast({ title: e.activo ? "Ejecutivo desactivado" : "Ejecutivo reactivado", description: e.activo ? undefined : "Contraseña temporal: Temporal123!" }),
+        onError: (err: any) => toast({ title: "No se pudo actualizar", description: err?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
   return (
-    <div className={`flex items-center gap-3 rounded-lg border border-border p-3 ${a.activo ? "" : "opacity-60"}`}>
-      <Avatar2 name={a.nombre} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{a.nombre}</p>
-        <p className="text-xs text-muted-foreground truncate">{[a.email, a.telefono].filter(Boolean).join(" · ") || "—"}</p>
+    <div className={`rounded-lg border border-border p-3 space-y-2 ${e.activo ? "" : "opacity-60"}`}>
+      <div className="flex items-center gap-3">
+        <Avatar2 name={e.nombre} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">
+            {e.nombre}
+            {!e.activo && <Badge variant="outline" className="ml-2 text-[10px]">Inactivo</Badge>}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
+        </div>
+        <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
+          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="agente">Agente</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
+        <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
+          {e.activo ? "Desactivar" : "Reactivar"}
+        </Button>
       </div>
-      <Select value={a.rol} onValueChange={(v: any) => onChangeRole(v)}>
-        <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="agente">Agente</SelectItem>
-          <SelectItem value="admin">Admin</SelectItem>
-        </SelectContent>
-      </Select>
-      <Button size="sm" variant={a.activo ? "outline" : "default"} onClick={onToggleActive}>
-        {a.activo ? "Desactivar" : "Reactivar"}
-      </Button>
+      {editing && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+          <Input placeholder="Nombre" value={edit.nombre} onChange={(ev) => setEdit({ ...edit, nombre: ev.target.value })} />
+          <Input placeholder="Email" type="email" value={edit.email} onChange={(ev) => setEdit({ ...edit, email: ev.target.value })} />
+          <Input placeholder="Teléfono" value={edit.telefono} onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value })} />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={guardar} disabled={editar.isPending || !edit.nombre.trim() || !edit.email.trim()}>
+              <Save className="h-4 w-4 mr-1" /> Guardar
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

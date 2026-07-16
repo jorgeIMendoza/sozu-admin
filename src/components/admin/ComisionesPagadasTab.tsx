@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { FILTRO_TODOS, ESTATUS_PAGADA } from "@/utils/comisionesEstatus";
 
 interface ComisionesPagadasTabProps {
   comisionistasAgrupados: any[];
@@ -15,6 +16,10 @@ interface ComisionesPagadasTabProps {
   loadingComisionistas: boolean;
   loadingCuentas: boolean;
   filtroGeneral: string;
+  /** Filtros de la barra superior. `FILTRO_TODOS` = sin filtro. */
+  filtroEstatus?: string;
+  filtroProyecto?: string;
+  filtroTipo?: string;
   formatCurrency: (value: number) => string;
 }
 
@@ -24,12 +29,25 @@ export default function ComisionesPagadasTab({
   loadingComisionistas,
   loadingCuentas,
   filtroGeneral,
+  filtroEstatus = FILTRO_TODOS,
+  filtroProyecto = FILTRO_TODOS,
+  filtroTipo = FILTRO_TODOS,
   formatCurrency
 }: ComisionesPagadasTabProps) {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [currentPageComisionistas, setCurrentPageComisionistas] = useState(1);
   const [currentPageCuentas, setCurrentPageCuentas] = useState(1);
   const itemsPerPage = 50;
+
+  // Todas las filas aquí ya están pagadas → su estatus es "Pagada". Por eso el
+  // filtro por estatus sólo aplica si es "Todos" o "Pagada"; cualquier otro
+  // estatus (Pendiente/Autorizado/Rechazado) no puede coincidir en esta pestaña.
+  const estatusPermitePagadas =
+    filtroEstatus === FILTRO_TODOS || filtroEstatus === ESTATUS_PAGADA;
+
+  const matchProyectoTipo = (c: any) =>
+    (filtroProyecto === FILTRO_TODOS || c.proyecto === filtroProyecto) &&
+    (filtroTipo === FILTRO_TODOS || c.tipo === filtroTipo);
 
   const toggleItem = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
@@ -41,22 +59,41 @@ export default function ComisionesPagadasTab({
     setExpandedItems(newExpanded);
   };
 
-  // Filtrar solo comisiones pagadas (pagada = true)
+  // Filtrar solo comisiones pagadas (pagada = true) que además pasen los
+  // filtros de estatus / proyecto / tipo de la barra superior.
   const comisionistasPagadas = useMemo(() => {
-    return comisionistasAgrupados?.map((com: any) => ({
-      ...com,
-      cuentas: com.cuentas.filter((c: any) => c.pagada),
-      montoTotal: com.cuentas.filter((c: any) => c.pagada).reduce((sum: number, c: any) => sum + c.montoComision, 0),
-    })).filter((com: any) => com.cuentas.length > 0) || [];
-  }, [comisionistasAgrupados]);
+    if (!estatusPermitePagadas) return [];
+    return comisionistasAgrupados?.map((com: any) => {
+      const cuentas = com.cuentas.filter((c: any) => c.pagada && matchProyectoTipo(c));
+      return {
+        ...com,
+        cuentas,
+        montoTotal: cuentas.reduce((sum: number, c: any) => sum + c.montoComision, 0),
+      };
+    }).filter((com: any) => com.cuentas.length > 0) || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comisionistasAgrupados, estatusPermitePagadas, filtroProyecto, filtroTipo]);
 
   const cuentasPagadas = useMemo(() => {
-    return cuentasAgrupadas?.map((cuenta: any) => ({
-      ...cuenta,
-      comisionistas: cuenta.comisionistas.filter((c: any) => c.pagada),
-      montoTotalComision: cuenta.comisionistas.filter((c: any) => c.pagada).reduce((sum: number, c: any) => sum + c.montoComision, 0),
-    })).filter((cuenta: any) => cuenta.comisionistas.length > 0) || [];
-  }, [cuentasAgrupadas]);
+    if (!estatusPermitePagadas) return [];
+    return cuentasAgrupadas
+      ?.filter((cuenta: any) => matchProyectoTipo(cuenta))
+      .map((cuenta: any) => {
+        const comisionistas = cuenta.comisionistas.filter((c: any) => c.pagada);
+        return {
+          ...cuenta,
+          comisionistas,
+          montoTotalComision: comisionistas.reduce((sum: number, c: any) => sum + c.montoComision, 0),
+        };
+      }).filter((cuenta: any) => cuenta.comisionistas.length > 0) || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuentasAgrupadas, estatusPermitePagadas, filtroProyecto, filtroTipo]);
+
+  // Al cambiar cualquier filtro, volver a la primera página.
+  useEffect(() => {
+    setCurrentPageComisionistas(1);
+    setCurrentPageCuentas(1);
+  }, [filtroGeneral, filtroEstatus, filtroProyecto, filtroTipo]);
 
   const comisionistasFiltrados = comisionistasPagadas.filter((com: any) =>
     com.email.toLowerCase().includes(filtroGeneral.toLowerCase()) ||

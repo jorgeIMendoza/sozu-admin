@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ComisionesPorPagarTab from "@/components/admin/ComisionesPorPagarTab";
 import ComisionesPagadasTab from "@/components/admin/ComisionesPagadasTab";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { ESTATUS_FILTRO_OPCIONES, FILTRO_TODOS } from "@/utils/comisionesEstatus";
 
 // ID del rol "Agente Inmobiliario"
 const AGENTE_INMOBILIARIO_ROL_ID = 3;
@@ -243,6 +245,9 @@ export default function PagarComisiones() {
   const queryClient = useQueryClient();
   const { registrarPago } = useActivityLogger();
   const [filtroGeneral, setFiltroGeneral] = useState("");
+  const [filtroEstatus, setFiltroEstatus] = useState<string>(FILTRO_TODOS);
+  const [filtroProyecto, setFiltroProyecto] = useState<string>(FILTRO_TODOS);
+  const [filtroTipo, setFiltroTipo] = useState<string>(FILTRO_TODOS);
   const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null);
   const [selectedComisionista, setSelectedComisionista] = useState<{ email: string; idCuenta: number } | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -590,6 +595,24 @@ export default function PagarComisiones() {
     }
   });
 
+  // Opciones de los filtros por Proyecto y por Tipo — derivadas de las cuentas
+  // cargadas (fuente directa de `proyecto`/`tipo`). Se ignora "N/A".
+  const proyectosDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    (cuentasAgrupadas as any[] | undefined)?.forEach((c) => {
+      if (c.proyecto && c.proyecto !== "N/A") set.add(c.proyecto);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [cuentasAgrupadas]);
+
+  const tiposDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    (cuentasAgrupadas as any[] | undefined)?.forEach((c) => {
+      if (c.tipo) set.add(c.tipo);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [cuentasAgrupadas]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setEvidenciaFile(e.target.files[0]);
@@ -751,13 +774,73 @@ export default function PagarComisiones() {
         </Card>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Input
           placeholder="Buscar..."
           value={filtroGeneral}
           onChange={(e) => setFiltroGeneral(e.target.value)}
           className="max-w-sm"
         />
+
+        <Select value={filtroEstatus} onValueChange={setFiltroEstatus}>
+          <SelectTrigger className="w-[240px]">
+            <SelectValue placeholder="Estatus" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FILTRO_TODOS}>Todos los estatus</SelectItem>
+            {ESTATUS_FILTRO_OPCIONES.map((estatus) => (
+              <SelectItem key={estatus} value={estatus}>
+                {estatus}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filtroProyecto} onValueChange={setFiltroProyecto}>
+          <SelectTrigger className="w-[240px]">
+            <SelectValue placeholder="Proyecto" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FILTRO_TODOS}>Todos los proyectos</SelectItem>
+            {proyectosDisponibles.map((proyecto) => (
+              <SelectItem key={proyecto} value={proyecto}>
+                {proyecto}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FILTRO_TODOS}>Todos los tipos</SelectItem>
+            {tiposDisponibles.map((tipo) => (
+              <SelectItem key={tipo} value={tipo}>
+                {tipo}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(filtroEstatus !== FILTRO_TODOS ||
+          filtroProyecto !== FILTRO_TODOS ||
+          filtroTipo !== FILTRO_TODOS ||
+          filtroGeneral !== "") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFiltroGeneral("");
+              setFiltroEstatus(FILTRO_TODOS);
+              setFiltroProyecto(FILTRO_TODOS);
+              setFiltroTipo(FILTRO_TODOS);
+            }}
+          >
+            Limpiar filtros
+          </Button>
+        )}
       </div>
 
       {/* Pestañas principales: Por Pagar / Pagadas */}
@@ -774,6 +857,9 @@ export default function PagarComisiones() {
             loadingComisionistas={loadingComisionistas}
             loadingCuentas={loadingCuentas}
             filtroGeneral={filtroGeneral}
+            filtroEstatus={filtroEstatus}
+            filtroProyecto={filtroProyecto}
+            filtroTipo={filtroTipo}
             formatCurrency={formatCurrency}
             openPagarDialog={openPagarDialog}
             openPagarTodasDialog={openPagarTodasDialog}
@@ -787,6 +873,9 @@ export default function PagarComisiones() {
             loadingComisionistas={loadingComisionistas}
             loadingCuentas={loadingCuentas}
             filtroGeneral={filtroGeneral}
+            filtroEstatus={filtroEstatus}
+            filtroProyecto={filtroProyecto}
+            filtroTipo={filtroTipo}
             formatCurrency={formatCurrency}
           />
         </TabsContent>
