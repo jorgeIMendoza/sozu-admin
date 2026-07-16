@@ -3,27 +3,22 @@ import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/Simulato
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { validateCommissionRules, formatPct } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import { validateCommissionRules } from '@/lib/portal-estructura-comisiones/utils/calculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProyectosFiltro } from '@/hooks/usePortalAltaDireccion/useProyectosFiltro';
+import { useProyectosMotorComisiones } from '@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones';
 import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
 interface SyncHistoryEntry {
   id: string;
   date: string;
   user: string;
-  scenarioId: string;
-  scenarioName: string;
   rolesAdded: number;
-  channelChanges: Array<{ channelId: string; channelName: string; from: number; to: number }>;
-  inactiveSkipped: string[];
 }
 
 const SYNC_HISTORY_KEY = 'sozu_commission_sync_history';
@@ -34,30 +29,29 @@ const saveHistory = (h: SyncHistoryEntry[]) => localStorage.setItem(SYNC_HISTORY
 
 export default function CommissionsTab() {
   const {
-    scenarios, channels, roles, roleAssignments, updateScenario,
+    channels, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
     commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
   } = useSimulator();
-  const [selectedScenarioId, setSelectedScenarioId] = useState(scenarios[0]?.id || '');
-  const scenario = scenarios.find(s => s.id === selectedScenarioId);
   const [syncOpen, setSyncOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SyncHistoryEntry[]>(loadHistory);
 
-  // Enviar a validar (Portal Alta Dirección) — por proyecto + escenario actual.
+  const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
+  const proyectoActual = proyectosMotor.find(p => p.id === motorProjectId);
+
+  // Enviar a validar (Portal Alta Dirección) — para el proyecto seleccionado.
   const { profile, user } = useAuth();
-  const { data: proyectos = [] } = useProyectosFiltro();
   const enviarPropuesta = useEnviarPropuesta();
   const [validarOpen, setValidarOpen] = useState(false);
-  const [selectedProjects, setSelectedProjects] = useState<Set<number>>(new Set());
 
   const commRoles = roles.filter(r => r.participatesInCommission);
 
-  // La matriz canal×puesto es única y compartida (no depende de escenario)
-  // — se sincroniza una sola vez, no en cada cambio de escenario.
+  // La matriz canal×puesto es del proyecto seleccionado — se sincroniza cada
+  // vez que cambia el proyecto.
   useEffect(() => {
-    syncMissingCommissionRules();
+    if (motorProjectId != null) syncMissingCommissionRules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [motorProjectId]);
 
   const rolesToAdd = useMemo(() => {
     let n = 0;
@@ -69,104 +63,49 @@ export default function CommissionsTab() {
     return n;
   }, [commissionRules, channels, commRoles]);
 
-  const handleConfirmSync = async (replaceManual: boolean) => {
-    if (!scenario) return;
+  const handleConfirmSync = async () => {
     const added = await syncMissingCommissionRules();
-
-    const updatedExternal = { ...scenario.channelExternalPcts };
-    const channelChanges: SyncHistoryEntry['channelChanges'] = [];
-    const inactiveSkipped: string[] = [];
-
-    channels.forEach(ch => {
-      if (!ch.active) {
-        const override = scenario.channelExternalPcts[ch.id];
-        const current = override ?? ch.externalCommissionPct;
-        if (current !== ch.externalCommissionPct) inactiveSkipped.push(ch.name);
-        return;
-      }
-      const override = scenario.channelExternalPcts[ch.id];
-      const current = override ?? ch.externalCommissionPct;
-      const next = ch.externalCommissionPct;
-      if (current === next) return;
-      const manuallyModified = override !== undefined && override !== ch.externalCommissionPct;
-      if (manuallyModified && !replaceManual) return;
-      updatedExternal[ch.id] = next;
-      channelChanges.push({ channelId: ch.id, channelName: ch.name, from: current, to: next });
-    });
-
-    updateScenario({ ...scenario, channelExternalPcts: updatedExternal });
 
     const entry: SyncHistoryEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
       user: 'Admin',
-      scenarioId: scenario.id,
-      scenarioName: scenario.name,
       rolesAdded: added,
-      channelChanges,
-      inactiveSkipped,
     };
     const next = [entry, ...history].slice(0, 50);
     setHistory(next);
     saveHistory(next);
 
-    if (inactiveSkipped.length > 0) {
-      toast.warning(`Canales inactivos omitidos: ${inactiveSkipped.join(', ')}`);
-    }
     toast.success('Roles y comisiones sincronizados correctamente.');
     setSyncOpen(false);
   };
 
-  const toggleProject = (id: number) =>
-    setSelectedProjects((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-
-  const buildSnapshot = (): MotorSnapshot | null => {
-    if (!scenario) return null;
-    return {
-      scenario: {
-        id: scenario.id,
-        name: scenario.name,
-        commissionMode: scenario.commissionMode,
-        totalCommissionPct: scenario.totalCommissionPct,
-        channelMix: scenario.channelMix,
-        channelExternalPcts: scenario.channelExternalPcts,
-      },
-      channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
-      roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
-      roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
-      commissionRules: scenario.commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
-    };
-  };
+  const buildSnapshot = (): MotorSnapshot => ({
+    commissionMode: motorConfig.commissionMode,
+    totalCommissionPct: motorConfig.totalCommissionPct,
+    channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
+    roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
+    roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
+    commissionRules: commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
+  });
 
   const handleEnviarValidar = async () => {
-    if (!scenario || selectedProjects.size === 0) return;
+    if (motorProjectId == null) return;
     const snapshot = buildSnapshot();
-    if (!snapshot) return;
     const propuestaPor = profile?.email || user?.email || null;
     try {
-      for (const id_proyecto of selectedProjects) {
-        await enviarPropuesta.mutateAsync({
-          id_proyecto,
-          escenario_id: scenario.id,
-          escenario_nombre: scenario.name,
-          modo: scenario.commissionMode,
-          snapshot,
-          propuesta_por: propuestaPor,
-        });
-      }
-      toast.success(`Enviado a validar a ${selectedProjects.size} proyecto(s).`);
+      await enviarPropuesta.mutateAsync({
+        id_proyecto: motorProjectId,
+        modo: motorConfig.commissionMode,
+        snapshot,
+        propuesta_por: propuestaPor,
+      });
+      toast.success(`Enviado a validar para ${proyectoActual?.nombre ?? 'el proyecto'}.`);
       setValidarOpen(false);
-      setSelectedProjects(new Set());
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo enviar a validar.');
     }
   };
-
-  if (!scenario) return <p className="text-muted-foreground p-6">Crea un escenario primero</p>;
 
   const getRoleInfo = (roleId: string) => {
     const role = roles.find(r => r.id === roleId);
@@ -215,67 +154,101 @@ export default function CommissionsTab() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} className="gap-1.5">
-                <RefreshCw className="h-3.5 w-3.5" /> Sincronizar roles y comisiones
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Select
+              value={motorProjectId != null ? String(motorProjectId) : undefined}
+              onValueChange={(v) => setMotorProjectId(Number(v))}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder={isLoadingProyectos ? 'Cargando proyectos…' : 'Selecciona un proyecto'} />
+              </SelectTrigger>
+              <SelectContent>
+                {proyectosMotor.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {motorProjectId != null && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} className="gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar roles y comisiones
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  Agrega al motor los roles nuevos que falten desde Roles y Sueldos.
+                </TooltipContent>
+              </Tooltip>
+              <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
+                <History className="h-3.5 w-3.5" /> Histórico
               </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">
-              Actualiza roles desde Roles y Sueldos y porcentajes de comisión desde Canales de Venta.
-            </TooltipContent>
-          </Tooltip>
-          <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
-            <History className="h-3.5 w-3.5" /> Histórico
-          </Button>
-          <Button variant="default" size="sm" onClick={() => setValidarOpen(true)} className="gap-1.5">
-            <Send className="h-3.5 w-3.5" /> Enviar a validar
-          </Button>
-          <Select value={selectedScenarioId} onValueChange={setSelectedScenarioId}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="Escenario" /></SelectTrigger>
-            <SelectContent>
-              {scenarios.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select
-            value={scenario.commissionMode}
-            onValueChange={(v) => updateScenario({ ...scenario, commissionMode: v as any })}
-          >
-            <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="on_sale_value">Modo A: Sobre Venta</SelectItem>
-              <SelectItem value="on_internal_remainder">Modo B: Sobre Remanente</SelectItem>
-            </SelectContent>
-          </Select>
+              <Button variant="default" size="sm" onClick={() => setValidarOpen(true)} className="gap-1.5">
+                <Send className="h-3.5 w-3.5" /> Enviar a validar
+              </Button>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Comisión total</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  className="w-20 h-9 text-sm font-mono"
+                  value={motorConfig.totalCommissionPct}
+                  onChange={(e) => updateMotorConfig({ ...motorConfig, totalCommissionPct: +e.target.value })}
+                />
+              </div>
+              <Select
+                value={motorConfig.commissionMode}
+                onValueChange={(v) => updateMotorConfig({ ...motorConfig, commissionMode: v as any })}
+              >
+                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="on_sale_value">Modo A: Sobre Venta</SelectItem>
+                  <SelectItem value="on_internal_remainder">Modo B: Sobre Remanente</SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          )}
         </div>
       </div>
 
+      {motorProjectId == null ? (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center">
+          <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-2 text-sm font-medium">Selecciona un proyecto</p>
+          <p className="text-xs text-muted-foreground">
+            El Motor de Comisiones configura una matriz y un Modo/Comisión Total distintos para cada desarrollo. Elige uno arriba para empezar.
+          </p>
+        </div>
+      ) : (
+      <>
       {/* UX Message */}
       <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground flex items-start gap-2">
         <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
         <span>
-          Los roles se cargan automáticamente desde la sección <strong>Roles y Sueldos</strong>. Puedes eliminarlos o modificar su comisión para este escenario.
+          Los roles se cargan automáticamente desde la sección <strong>Roles y Sueldos</strong>. Puedes eliminarlos o modificar su comisión.
         </span>
       </div>
 
       <div className="text-sm font-medium">
-        Comisión total del escenario: <span className="font-bold text-accent">{scenario.totalCommissionPct}%</span>
+        Comisión total: <span className="font-bold text-accent">{motorConfig.totalCommissionPct}%</span>
       </div>
 
       {/* Channel cards */}
       {channels.map(ch => {
-        const channelRules = scenario.commissionRules.filter(r => r.channelId === ch.id);
-        const extPct = scenario.channelExternalPcts[ch.id] ?? ch.externalCommissionPct;
+        const channelRules = commissionRules.filter(r => r.channelId === ch.id);
+        const extPct = ch.externalCommissionPct;
         const validation = validateCommissionRules(
-          channelRules, scenario.commissionMode, scenario.totalCommissionPct, extPct
+          channelRules, motorConfig.commissionMode, motorConfig.totalCommissionPct, extPct
         );
 
         // Real-time channel summary calculations
-        const comisionTotal = scenario.totalCommissionPct;
+        const comisionTotal = motorConfig.totalCommissionPct;
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((sum, r) => sum + r.percentage, 0);
-        const remanente = scenario.commissionMode === 'on_sale_value'
+        const remanente = motorConfig.commissionMode === 'on_sale_value'
           ? comisionInterna - sumaDispersada
           : 100 - sumaDispersada;
 
@@ -301,9 +274,6 @@ export default function CommissionsTab() {
               <div className="flex items-center gap-3">
                 <h3 className="font-semibold">{ch.name}</h3>
                 <Badge variant="outline" className="text-[10px]">Ext: {extPct}%</Badge>
-                <Badge variant="outline" className="text-[10px]">
-                  Mix: {scenario.channelMix[ch.id] || 0}%
-                </Badge>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md border ${statusColor}`}>
@@ -323,7 +293,7 @@ export default function CommissionsTab() {
                 <thead>
                   <tr>
                     <th>Rol</th>
-                    {scenario.commissionMode === 'on_sale_value' && (
+                    {motorConfig.commissionMode === 'on_sale_value' && (
                       <th>
                         % sobre Comisión a Dispersar
                         <Tooltip>
@@ -334,7 +304,7 @@ export default function CommissionsTab() {
                         </Tooltip>
                       </th>
                     )}
-                    <th>% {scenario.commissionMode === 'on_sale_value' ? 'sobre venta' : 'sobre remanente'}</th>
+                    <th>% {motorConfig.commissionMode === 'on_sale_value' ? 'sobre venta' : 'sobre remanente'}</th>
                     <th>Pool</th>
                     <th></th>
                   </tr>
@@ -363,7 +333,7 @@ export default function CommissionsTab() {
                             )}
                           </div>
                         </td>
-                        {scenario.commissionMode === 'on_sale_value' && (
+                        {motorConfig.commissionMode === 'on_sale_value' && (
                           <td>
                             <Input
                               type="number"
@@ -384,7 +354,7 @@ export default function CommissionsTab() {
                             step="0.01"
                             className="w-24 h-8 text-sm font-mono"
                             value={rule.percentage}
-                            disabled={scenario.commissionMode === 'on_sale_value'}
+                            disabled={motorConfig.commissionMode === 'on_sale_value'}
                             onChange={e => updateRule(rule.id, { percentage: +e.target.value })}
                           />
                         </td>
@@ -442,7 +412,7 @@ export default function CommissionsTab() {
                     <Tooltip>
                       <TooltipTrigger><Info className="h-3 w-3 opacity-50" /></TooltipTrigger>
                       <TooltipContent className="max-w-xs text-xs">
-                        El remanente es la comisión interna disponible aún no asignada a roles. Se calcula como la comisión total del escenario menos la comisión externa del canal y menos la suma de los porcentajes capturados.
+                        El remanente es la comisión interna disponible aún no asignada a roles. Se calcula como la comisión total menos la comisión externa del canal y menos la suma de los porcentajes capturados.
                       </TooltipContent>
                     </Tooltip>
                   </p>
@@ -467,22 +437,12 @@ export default function CommissionsTab() {
               {history.map(h => (
                 <div key={h.id} className="rounded-lg border px-3 py-2 text-xs">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">{h.scenarioName}</span>
+                    <span className="font-medium">Sincronización</span>
                     <span className="text-muted-foreground">{new Date(h.date).toLocaleString('es-MX')} · {h.user}</span>
                   </div>
                   <div className="text-muted-foreground">
-                    Roles agregados: <strong>{h.rolesAdded}</strong> · Canales actualizados: <strong>{h.channelChanges.length}</strong>
-                    {h.inactiveSkipped.length > 0 && <> · Inactivos omitidos: <strong>{h.inactiveSkipped.join(', ')}</strong></>}
+                    Roles agregados: <strong>{h.rolesAdded}</strong>
                   </div>
-                  {h.channelChanges.length > 0 && (
-                    <ul className="mt-1 pl-3 list-disc space-y-0.5">
-                      {h.channelChanges.map((c, i) => (
-                        <li key={i}>
-                          {c.channelName}: <span className="font-mono">{c.from}% → {c.to}%</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               ))}
             </div>
@@ -490,16 +450,12 @@ export default function CommissionsTab() {
         </div>
       )}
 
-      {scenario && (
-        <SyncCommissionsDialog
-          open={syncOpen}
-          onOpenChange={setSyncOpen}
-          scenario={scenario}
-          channels={channels}
-          rolesToAdd={rolesToAdd}
-          onConfirm={handleConfirmSync}
-        />
-      )}
+      <SyncCommissionsDialog
+        open={syncOpen}
+        onOpenChange={setSyncOpen}
+        rolesToAdd={rolesToAdd}
+        onConfirm={handleConfirmSync}
+      />
 
       {/* Enviar a validar — Portal Alta Dirección */}
       <Dialog open={validarOpen} onOpenChange={setValidarOpen}>
@@ -507,31 +463,21 @@ export default function CommissionsTab() {
           <DialogHeader>
             <DialogTitle>Enviar a validar</DialogTitle>
             <DialogDescription>
-              Se enviará el escenario <strong>{scenario.name}</strong> al Portal Alta Dirección
-              para que lo validen en los proyectos seleccionados.
+              Se enviará el Motor de Comisiones de <strong>{proyectoActual?.nombre ?? 'este proyecto'}</strong> al
+              Portal Alta Dirección para que lo validen.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 space-y-1 overflow-auto rounded-lg border p-2">
-            {proyectos.length === 0 ? (
-              <p className="px-2 py-4 text-center text-sm text-muted-foreground">Sin proyectos disponibles.</p>
-            ) : (
-              proyectos.map((p) => (
-                <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60">
-                  <Checkbox checked={selectedProjects.has(p.id)} onCheckedChange={() => toggleProject(p.id)} />
-                  <span className="text-sm">{p.nombre}</span>
-                </label>
-              ))
-            )}
-          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setValidarOpen(false)} disabled={enviarPropuesta.isPending}>Cancelar</Button>
-            <Button onClick={handleEnviarValidar} disabled={enviarPropuesta.isPending || selectedProjects.size === 0} className="gap-1.5">
+            <Button onClick={handleEnviarValidar} disabled={enviarPropuesta.isPending} className="gap-1.5">
               {enviarPropuesta.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Enviar ({selectedProjects.size})
+              Enviar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   );
 }

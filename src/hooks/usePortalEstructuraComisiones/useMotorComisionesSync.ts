@@ -1,20 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Channel, CommissionRule } from "@/lib/portal-estructura-comisiones/types/simulator";
+import type { Channel, CommissionRule, MotorConfig } from "@/lib/portal-estructura-comisiones/types/simulator";
 
 /**
- * Sincroniza Canales de Venta (`comisiones_canales`) y la matriz de
- * Comisiones por canal × puesto (`comisiones_reglas`) con Supabase, para
- * que sean compartidos entre todos los usuarios del portal en vez de vivir
- * solo en `localStorage`.
+ * Sincroniza Canales de Venta (`comisiones_canales`), la matriz de
+ * Comisiones por canal × puesto (`comisiones_reglas`) y la config del motor
+ * (`comisiones_motor_config`) con Supabase, para que sean compartidos entre
+ * todos los usuarios del portal en vez de vivir solo en `localStorage`.
  *
- * `comisiones_reglas` es única y compartida — no depende de escenario.
- * `SimulatorContext` inyecta la misma matriz en `commissionRules` de cada
- * escenario que expone, así que el resto de tabs (Resultados, Simuladores,
- * etc.) sigue leyendo `scenario.commissionRules` sin cambios.
+ * `comisiones_canales` es único y global (catálogo maestro, no depende de
+ * proyecto). `comisiones_reglas` y `comisiones_motor_config` son **por
+ * proyecto**: el Motor de Comisiones configura una matriz y un Modo/Total
+ * distintos para cada desarrollo (ver `useProyectosMotorComisiones.ts` para
+ * el catálogo de proyectos que aplica).
  *
- * Ambas tablas usan `id bigint GENERATED ALWAYS AS IDENTITY` — el id nunca
- * lo genera el cliente. Al crear, se inserta sin columna `id` y se usa el
- * id que devuelve la BD.
+ * Todas usan `id bigint GENERATED ALWAYS AS IDENTITY` — el id nunca lo
+ * genera el cliente. Al crear, se inserta sin columna `id` y se usa el id
+ * que devuelve la BD.
  *
  * Probe graceful: si las tablas aún no existen (DDL pendiente, ver
  * `Ejecuciones_manuales/motor_comisiones_canales_escenarios.md`), las
@@ -111,7 +112,7 @@ export async function seedCanalesReales(channels: Channel[]): Promise<void> {
 }
 
 // ================================================================
-// Comisiones — matriz canal × puesto (`comisiones_reglas`)
+// Comisiones — matriz canal × puesto por proyecto (`comisiones_reglas`)
 // ================================================================
 
 function ruleFromRow(row: any): CommissionRule {
@@ -133,8 +134,9 @@ function ruleFromRow(row: any): CommissionRule {
  * 100% local (localStorage) y no tiene tabla propia — es un catálogo
  * distinto de `roles_organizacionales` (Directorio de Personal).
  */
-function ruleToRow(rule: CommissionRule) {
+function ruleToRow(rule: CommissionRule, idProyecto: number) {
   return {
+    id_proyecto: idProyecto,
     id_canal: Number(rule.channelId),
     id_rol: rule.roleId,
     porcentaje: rule.percentage,
@@ -143,32 +145,68 @@ function ruleToRow(rule: CommissionRule) {
   };
 }
 
-export async function fetchReglasComisionReales(): Promise<CommissionRule[] | null> {
-  const { data, error } = await (supabase as any).from("comisiones_reglas").select("*").order("id");
+export async function fetchReglasComisionReales(idProyecto: number): Promise<CommissionRule[] | null> {
+  const { data, error } = await (supabase as any).from("comisiones_reglas").select("*").eq("id_proyecto", idProyecto).order("id");
   if (error || !data) return null;
   return (data as any[]).map(ruleFromRow);
 }
 
-export async function insertReglaComisionRemota(rule: CommissionRule): Promise<{ rule: CommissionRule | null; tableMissing: boolean }> {
-  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(ruleToRow(rule)).select().single();
+export async function insertReglaComisionRemota(rule: CommissionRule, idProyecto: number): Promise<{ rule: CommissionRule | null; tableMissing: boolean }> {
+  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(ruleToRow(rule, idProyecto)).select().single();
   if (error) return { rule: null, tableMissing: error.code === TABLE_MISSING_CODE };
   return { rule: ruleFromRow(data), tableMissing: false };
 }
 
 /** Inserta varias reglas de una vez (usado por "Sincronizar roles y comisiones"). */
-export async function insertReglasComisionRemotas(rules: CommissionRule[]): Promise<{ rules: CommissionRule[]; tableMissing: boolean }> {
+export async function insertReglasComisionRemotas(rules: CommissionRule[], idProyecto: number): Promise<{ rules: CommissionRule[]; tableMissing: boolean }> {
   if (!rules.length) return { rules: [], tableMissing: false };
-  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(rules.map(ruleToRow)).select();
+  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(rules.map((r) => ruleToRow(r, idProyecto))).select();
   if (error) return { rules: [], tableMissing: error.code === TABLE_MISSING_CODE };
   return { rules: (data as any[]).map(ruleFromRow), tableMissing: false };
 }
 
+/** Update/delete operan por `id` (PK única global) — no necesitan el proyecto. */
 export async function updateReglaComisionRemota(rule: CommissionRule): Promise<SyncResult> {
-  const { error } = await (supabase as any).from("comisiones_reglas").update(ruleToRow(rule)).eq("id", Number(rule.id));
+  const { error } = await (supabase as any).from("comisiones_reglas").update({
+    id_canal: Number(rule.channelId),
+    id_rol: rule.roleId,
+    porcentaje: rule.percentage,
+    pool: rule.pool,
+    fecha_actualizacion: new Date().toISOString(),
+  }).eq("id", Number(rule.id));
   return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE };
 }
 
 export async function deleteReglaComisionRemota(id: string): Promise<SyncResult> {
   const { error } = await (supabase as any).from("comisiones_reglas").delete().eq("id", Number(id));
+  return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE };
+}
+
+// ================================================================
+// Config del Motor de Comisiones por proyecto — Modo A/B + Comisión Total
+// (`comisiones_motor_config`, una fila por `id_proyecto`)
+// ================================================================
+
+function motorConfigFromRow(row: any): MotorConfig {
+  return {
+    commissionMode: row.modo,
+    totalCommissionPct: Number(row.comision_total_pct ?? 0),
+  };
+}
+
+export async function fetchMotorConfigReal(idProyecto: number): Promise<MotorConfig | null> {
+  const { data, error } = await (supabase as any).from("comisiones_motor_config").select("*").eq("id_proyecto", idProyecto).eq("activo", true).maybeSingle();
+  if (error || !data) return null;
+  return motorConfigFromRow(data);
+}
+
+export async function updateMotorConfigRemoto(config: MotorConfig, idProyecto: number): Promise<SyncResult> {
+  const { error } = await (supabase as any).from("comisiones_motor_config").upsert({
+    id_proyecto: idProyecto,
+    modo: config.commissionMode,
+    comision_total_pct: config.totalCommissionPct,
+    activo: true,
+    fecha_actualizacion: new Date().toISOString(),
+  }, { onConflict: "id_proyecto" });
   return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE };
 }
