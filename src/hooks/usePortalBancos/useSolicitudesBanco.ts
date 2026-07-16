@@ -21,7 +21,10 @@ import type { BankLead, LeadStatus } from "@/lib/portal-bancos/bank-leads";
  * tasa, estatus, fechas) provienen íntegramente de la BD.
  */
 
-const KEY = (idBanco?: number | null) => ["solicitudes-banco", idBanco ?? "none"] as const;
+/** Scope de la consulta: id de un banco, o "all" (todos, vista Super Admin). */
+export type SolicitudScope = number | "all";
+
+const KEY = (scope?: SolicitudScope | null) => ["solicitudes-banco", scope ?? "none"] as const;
 
 // `bancos_solicitudes.estatus` tiene un valor extra ('expirada') que el modelo
 // de la mesa (LeadStatus) no contempla. Se mapea a 'desistido' (terminal
@@ -42,19 +45,31 @@ function phone(p: { telefono?: string | null; clave_pais_telefono?: string | nul
   return `${clave}${p.telefono}`.trim();
 }
 
-async function fetchSolicitudesBanco(idBanco: number): Promise<BankLead[]> {
-  // 1. Solicitudes activas del banco.
-  const { data: sols, error } = await (supabase as any)
-    .from("bancos_solicitudes")
-    .select(
-      "id, id_cuenta_cobranza, id_banco, id_agente, estatus, motivo_cierre, notas_banco, " +
-        "monto_financiar, plazo_anios, mensualidad_estimada_min, mensualidad_estimada_max, " +
-        "tasa_estimada_min, tasa_estimada_max, cat_estimado_min, cat_estimado_max, " +
-        "fecha_envio, fecha_respuesta_banco, fecha_creacion, fecha_actualizacion",
-    )
-    .eq("id_banco", idBanco)
-    .eq("activo", true)
-    .order("fecha_envio", { ascending: false });
+async function fetchSolicitudesBanco(scope: SolicitudScope): Promise<BankLead[]> {
+  // 1. Solicitudes activas. `scope` = un banco (id) o "all" (todos los bancos,
+  // vista Super Administrador → sin filtro por banco).
+  // `email_agente` es la asignación al usuario del sistema (reemplazo de
+  // `id_agente`). Probe graceful: si la columna aún no existe (DDL pendiente),
+  // reintenta sin ella para no ocultar las solicitudes.
+  const baseCols =
+    "id, id_cuenta_cobranza, id_banco, id_agente, estatus, motivo_cierre, notas_banco, " +
+    "monto_financiar, plazo_anios, mensualidad_estimada_min, mensualidad_estimada_max, " +
+    "tasa_estimada_min, tasa_estimada_max, cat_estimado_min, cat_estimado_max, " +
+    "fecha_envio, fecha_respuesta_banco, fecha_creacion, fecha_actualizacion";
+  const runQuery = (cols: string) => {
+    let q = (supabase as any)
+      .from("bancos_solicitudes")
+      .select(cols)
+      .eq("activo", true);
+    if (scope !== "all") q = q.eq("id_banco", scope);
+    return q.order("fecha_envio", { ascending: false });
+  };
+  let sols: any[] | null;
+  let error: any;
+  ({ data: sols, error } = await runQuery(`${baseCols}, email_agente`));
+  if (error) {
+    ({ data: sols, error } = await runQuery(baseCols));
+  }
   if (error || !sols || sols.length === 0) return [];
 
   // 2. Cuentas de cobranza referenciadas.
@@ -226,7 +241,8 @@ async function fetchSolicitudesBanco(idBanco: number): Promise<BankLead[]> {
       id: String(s.id),
       bankId: String(s.id_banco),
       status,
-      assignedAgentId: s.id_agente != null ? String(s.id_agente) : undefined,
+      // Asignación al usuario del sistema (email). `id_agente` queda legacy.
+      assignedAgentId: s.email_agente ? String(s.email_agente) : undefined,
       closeReason: s.motivo_cierre ?? undefined,
       client: {
         fullName: persona?.nombre_legal || "Cliente sin nombre",
@@ -318,13 +334,16 @@ async function fetchSolicitudesBanco(idBanco: number): Promise<BankLead[]> {
   });
 }
 
-/** Solicitudes reales del banco seleccionado (vacío si no hay banco / DDL pendiente). */
-export function useSolicitudesBanco(idBanco?: number | null) {
+/**
+ * Solicitudes reales según el scope: un banco (id) o "all" (todos, vista Super
+ * Administrador). Vacío si no hay scope / DDL pendiente.
+ */
+export function useSolicitudesBanco(scope?: SolicitudScope | null) {
   return useQuery({
-    queryKey: KEY(idBanco),
-    enabled: idBanco != null,
+    queryKey: KEY(scope),
+    enabled: scope != null,
     staleTime: 30_000,
-    queryFn: () => fetchSolicitudesBanco(idBanco as number),
+    queryFn: () => fetchSolicitudesBanco(scope as SolicitudScope),
   });
 }
 
@@ -403,7 +422,8 @@ export interface ActualizarSolicitudInput {
   idBanco: number; // para invalidar la query del banco
   patch: {
     estatus?: LeadStatus;
-    id_agente?: number | null;
+    /** Email del usuario del sistema asignado (reemplaza id_agente). */
+    email_agente?: string | null;
     motivo_cierre?: string | null;
     notas_banco?: string | null;
     fecha_respuesta_banco?: string | null;
@@ -427,8 +447,9 @@ export function useActualizarSolicitud() {
       if (error) throw error;
       return true;
     },
-    onSuccess: (_ok, vars) => {
-      qc.invalidateQueries({ queryKey: KEY(vars.idBanco) });
+    onSuccess: () => {
+      // Invalida todas las vistas (un banco y la global "all").
+      qc.invalidateQueries({ queryKey: ["solicitudes-banco"] });
     },
   });
 }

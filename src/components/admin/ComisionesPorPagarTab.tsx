@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ENVIRONMENT } from "@/lib/config";
 import { format, parseISO } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronDown, ChevronRight, Eye, FileText, Stamp, Loader2, Info, Clock, CheckCircle2, XCircle, CircleDollarSign } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, FileText, Stamp, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { deriveEstatus, FILTRO_TODOS, type EstatusSeguimiento } from "@/utils/comisionesEstatus";
 
 interface ComisionesPorPagarTabProps {
   comisionistasAgrupados: any[];
@@ -22,6 +23,10 @@ interface ComisionesPorPagarTabProps {
   loadingComisionistas: boolean;
   loadingCuentas: boolean;
   filtroGeneral: string;
+  /** Filtros de la barra superior. `FILTRO_TODOS` = sin filtro. */
+  filtroEstatus?: string;
+  filtroProyecto?: string;
+  filtroTipo?: string;
   formatCurrency: (value: number) => string;
   /** @deprecated Pagar Comisiones es ahora vista de seguimiento — la
    *  ejecución del pago vive en la Bandeja de Ejecución del Portal de
@@ -29,42 +34,6 @@ interface ComisionesPorPagarTabProps {
   openPagarDialog?: (email: string, idCuenta: number) => void;
   /** @deprecated ver `openPagarDialog`. */
   openPagarTodasDialog?: (type: 'comisionista' | 'cuenta', data: any) => void;
-}
-
-/**
- * Deriva el estatus de seguimiento de una comisión en base a:
- *  - `pagada` del comisionista → "Pagada".
- *  - `estatus_autorizacion_comision_*` de la cuenta (según interno/externo) →
- *      Autorizado / Rechazado / En espera.
- *  - `aprobada=false` (fallback legacy pre-DDL) → Rechazado.
- *
- * Devuelve la etiqueta + icono + tono visual.
- */
-type EstatusSeguimiento = {
-  label: string;
-  tone: "emerald" | "amber" | "red" | "blue" | "gray";
-  icon: typeof Clock;
-};
-
-function deriveEstatus(item: {
-  pagada?: boolean;
-  aprobada?: boolean;
-  esExterno?: boolean;
-  esPagadaComisionVenta?: boolean;
-  estatusAutorizacionExterna?: string;
-  estatusAutorizacionInterna?: string;
-}): EstatusSeguimiento {
-  if (item.pagada) return { label: "Pagada", tone: "blue", icon: CircleDollarSign };
-  const estatus = item.esExterno
-    ? item.estatusAutorizacionExterna
-    : item.estatusAutorizacionInterna;
-  if (estatus === "Autorizado") {
-    return { label: "Autorizado · listo para pago", tone: "emerald", icon: CheckCircle2 };
-  }
-  if (estatus === "Rechazado" || item.aprobada === false) {
-    return { label: "Rechazado", tone: "red", icon: XCircle };
-  }
-  return { label: "Pendiente validación AD", tone: "amber", icon: Clock };
 }
 
 function EstatusBadge({ estatus }: { estatus: EstatusSeguimiento }) {
@@ -93,6 +62,9 @@ export default function ComisionesPorPagarTab({
   loadingComisionistas,
   loadingCuentas,
   filtroGeneral,
+  filtroEstatus = FILTRO_TODOS,
+  filtroProyecto = FILTRO_TODOS,
+  filtroTipo = FILTRO_TODOS,
   formatCurrency,
 }: ComisionesPorPagarTabProps) {
   // Permisos eliminados: el componente ya no ejecuta acciones de pago,
@@ -176,9 +148,22 @@ export default function ComisionesPorPagarTab({
   // de estatus. La ejecución del pago vive en la Bandeja de Ejecución del
   // Portal de Administración — aquí se eliminó el filtro previo de fecha de
   // enganche y los CTAs de acción.
+  // Predicado de proyecto/tipo a nivel de cuenta (compartido por ambas vistas).
+  const matchProyectoTipo = (c: any) =>
+    (filtroProyecto === FILTRO_TODOS || c.proyecto === filtroProyecto) &&
+    (filtroTipo === FILTRO_TODOS || c.tipo === filtroTipo);
+
   const comisionistasPendientes = useMemo(() => {
     return comisionistasAgrupados?.map((com: any) => {
-      const cuentasPendientes = com.cuentas.filter((c: any) => !c.pagada);
+      // Sólo cuentas pendientes que además pasen los filtros de estatus,
+      // proyecto y tipo. El estatus se deriva por cuenta (usando el esExterno
+      // del comisionista) para coincidir con el badge mostrado.
+      const cuentasPendientes = com.cuentas.filter((c: any) =>
+        !c.pagada &&
+        matchProyectoTipo(c) &&
+        (filtroEstatus === FILTRO_TODOS ||
+          deriveEstatus({ ...c, esExterno: com.esExterno }).label === filtroEstatus)
+      );
       const cuentasPagadas = com.cuentas.filter((c: any) => c.pagada);
       const montoTotal = com.cuentas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
       const montoPendiente = cuentasPendientes.reduce((sum: number, c: any) => sum + c.montoComision, 0);
@@ -191,25 +176,39 @@ export default function ComisionesPorPagarTab({
         montoPagado,
       };
     }).filter((com: any) => com.cuentas.length > 0) || [];
-  }, [comisionistasAgrupados]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comisionistasAgrupados, filtroEstatus, filtroProyecto, filtroTipo]);
 
   const cuentasPendientes = useMemo(() => {
-    return cuentasAgrupadas?.map((cuenta: any) => {
-      const comisionistasPendientes = cuenta.comisionistas.filter((c: any) => !c.pagada);
-      const comisionistasPagados = cuenta.comisionistas.filter((c: any) => c.pagada);
-      const montoTotal = cuenta.comisionistas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
-      const montoPendiente = comisionistasPendientes.reduce((sum: number, c: any) => sum + c.montoComision, 0);
-      const montoPagado = comisionistasPagados.reduce((sum: number, c: any) => sum + c.montoComision, 0);
-      return {
-        ...cuenta,
-        comisionistas: comisionistasPendientes,
-        montoTotal,
-        montoTotalComision: montoPendiente,
-        montoPendiente,
-        montoPagado,
-      };
-    }).filter((cuenta: any) => cuenta.comisionistas.length > 0) || [];
-  }, [cuentasAgrupadas]);
+    return cuentasAgrupadas
+      ?.filter((cuenta: any) => matchProyectoTipo(cuenta))
+      .map((cuenta: any) => {
+        const comisionistasPendientes = cuenta.comisionistas.filter((c: any) =>
+          !c.pagada &&
+          (filtroEstatus === FILTRO_TODOS || deriveEstatus(c).label === filtroEstatus)
+        );
+        const comisionistasPagados = cuenta.comisionistas.filter((c: any) => c.pagada);
+        const montoTotal = cuenta.comisionistas.reduce((sum: number, c: any) => sum + c.montoComision, 0);
+        const montoPendiente = comisionistasPendientes.reduce((sum: number, c: any) => sum + c.montoComision, 0);
+        const montoPagado = comisionistasPagados.reduce((sum: number, c: any) => sum + c.montoComision, 0);
+        return {
+          ...cuenta,
+          comisionistas: comisionistasPendientes,
+          montoTotal,
+          montoTotalComision: montoPendiente,
+          montoPendiente,
+          montoPagado,
+        };
+      }).filter((cuenta: any) => cuenta.comisionistas.length > 0) || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuentasAgrupadas, filtroEstatus, filtroProyecto, filtroTipo]);
+
+  // Al cambiar cualquier filtro, volver a la primera página para no quedar en
+  // una página vacía tras reducir los resultados.
+  useEffect(() => {
+    setCurrentPageComisionistas(1);
+    setCurrentPageCuentas(1);
+  }, [filtroGeneral, filtroEstatus, filtroProyecto, filtroTipo]);
 
   const comisionistasFiltrados = comisionistasPendientes.filter((com: any) =>
     com.email.toLowerCase().includes(filtroGeneral.toLowerCase()) ||
