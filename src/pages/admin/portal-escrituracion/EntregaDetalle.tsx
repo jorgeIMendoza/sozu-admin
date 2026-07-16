@@ -167,15 +167,28 @@ export function EntregaDetalle() {
       const catIds = (cats ?? []).map((c: any) => c.id);
       if (!catIds.length) return [];
 
-      const { data: items } = await supabase
+      let items: any[] = [];
+      const { data: itemsNew, error: itemsErr } = await (supabase as any)
         .from('entregas_checklist_items')
-        .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, id_responsable_er, fecha_revision, fecha_compromiso')
+        .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, id_responsable_er, id_supervisor_er, id_tecnico_er, fecha_revision, fecha_compromiso')
         .in('id_categoria', catIds)
         .eq('activo', true)
         .order('id', { ascending: true });
 
+      if (!itemsErr) {
+        items = itemsNew ?? [];
+      } else {
+        const { data: itemsFallback } = await supabase
+          .from('entregas_checklist_items')
+          .select('id, id_categoria, nombre, id_estatus_checklist, observacion, responsable, id_responsable_er, fecha_revision, fecha_compromiso')
+          .in('id_categoria', catIds)
+          .eq('activo', true)
+          .order('id', { ascending: true });
+        items = (itemsFallback ?? []).map((item: any) => ({ ...item, id_supervisor_er: null, id_tecnico_er: null }));
+      }
+
       const itemsByCat: Record<number, ChecklistItem[]> = {};
-      (items ?? []).forEach((item: any) => {
+      items.forEach((item: any) => {
         if (!itemsByCat[item.id_categoria]) itemsByCat[item.id_categoria] = [];
         itemsByCat[item.id_categoria].push(item as ChecklistItem);
       });
@@ -219,23 +232,60 @@ export function EntregaDetalle() {
   const getEstatusNombre = (id: number) =>
     estatusCatalogo.find(e => e.id === id)?.nombre ?? 'Sin estatus';
 
-  // ── Catálogo de entidades responsables (tipos 8=proveedor, 22=personal interno) ─
-  const { data: entidadesER = [] } = useQuery<EntidadER[]>({
-    queryKey: ['entidades-er-entregas'],
+  // ── Catálogo de responsables (supervisores y técnicos) desde entregas_responsables ─
+  const { data: responsablesCat = { supervisores: [], tecnicos: [] } } = useQuery<{ supervisores: EntidadER[]; tecnicos: EntidadER[] }>({
+    queryKey: ['entregas-responsables-cat'],
     queryFn: async () => {
-      const { data } = await supabase
+      // DDL probe — graceful fallback si la tabla aún no existe
+      const probe = await (supabase as any).from('entregas_responsables').select('id').limit(0);
+      if (probe.error) {
+        // Fallback: usar entidades tipo 8 y 22 directamente
+        const { data } = await supabase
+          .from('entidades_relacionadas')
+          .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
+          .in('id_tipo_entidad', [8, 22])
+          .eq('activo', true)
+          .order('id');
+        const lista = (data ?? []).map((er: any) => ({
+          id: er.id,
+          nombre: er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
+        }));
+        return { supervisores: lista, tecnicos: lista };
+      }
+
+      const { data: configs } = await (supabase as any)
+        .from('entregas_responsables')
+        .select('id, id_entidad_relacionada, es_supervisor, es_tecnico')
+        .eq('activo', true);
+      if (!configs?.length) return { supervisores: [], tecnicos: [] };
+
+      const erIds = (configs as any[]).map((c: any) => c.id_entidad_relacionada);
+      const { data: entidades } = await supabase
         .from('entidades_relacionadas')
         .select('id, personas!entidades_relacionadas_id_persona_fkey(nombre_legal, nombre_comercial)')
-        .in('id_tipo_entidad', [8, 22])
-        .eq('activo', true)
-        .order('id');
-      return (data ?? []).map((er: any) => ({
-        id: er.id,
-        nombre: er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
-      }));
+        .in('id', erIds)
+        .eq('activo', true);
+
+      const nombreMap: Record<number, string> = Object.fromEntries(
+        (entidades ?? []).map((er: any) => [
+          er.id,
+          er.personas?.nombre_legal || er.personas?.nombre_comercial || `Entidad #${er.id}`,
+        ])
+      );
+
+      return {
+        supervisores: (configs as any[])
+          .filter((c: any) => c.es_supervisor)
+          .map((c: any) => ({ id: c.id_entidad_relacionada, nombre: nombreMap[c.id_entidad_relacionada] ?? `Entidad #${c.id_entidad_relacionada}` })),
+        tecnicos: (configs as any[])
+          .filter((c: any) => c.es_tecnico)
+          .map((c: any) => ({ id: c.id_entidad_relacionada, nombre: nombreMap[c.id_entidad_relacionada] ?? `Entidad #${c.id_entidad_relacionada}` })),
+      };
     },
     staleTime: 60_000,
   });
+  const supervisores = responsablesCat.supervisores;
+  const tecnicos     = responsablesCat.tecnicos;
 
   // ── Plantilla preview (prop-mode: resumen del checklist a crear) ─────────────
   const modeloIdForPreview   = isPropMode ? (pageData?.modelo?.id ?? null) : null;
@@ -352,7 +402,7 @@ export function EntregaDetalle() {
 
   const handleAsignarResponsable = async (itemId: number, entidadId: number | null) => {
     setItemLoading(itemId, true);
-    const entidadNombre = entidadId ? (entidadesER.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
+    const entidadNombre = entidadId ? ([...supervisores, ...tecnicos].find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
     const { error } = await (supabase as any)
       .from('entregas_checklist_items')
       .update({ id_responsable_er: entidadId })
@@ -369,6 +419,38 @@ export function EntregaDetalle() {
         observaciones:     entidadNombre ?? undefined,
         metadata:          entidadId ? { id_entidad: entidadId } : undefined,
       });
+    }
+    setItemLoading(itemId, false);
+  };
+
+  const handleAsignarSupervisor = async (itemId: number, entidadId: number | null) => {
+    setItemLoading(itemId, true);
+    const nombre = entidadId ? (supervisores.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
+    const { error } = await (supabase as any)
+      .from('entregas_checklist_items')
+      .update({ id_supervisor_er: entidadId })
+      .eq('id', itemId);
+    if (error) {
+      toast.error('Error al asignar supervisor');
+    } else {
+      toast.success(entidadId ? `Supervisor asignado: ${nombre}` : 'Supervisor removido');
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+    }
+    setItemLoading(itemId, false);
+  };
+
+  const handleAsignarTecnico = async (itemId: number, entidadId: number | null) => {
+    setItemLoading(itemId, true);
+    const nombre = entidadId ? (tecnicos.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
+    const { error } = await (supabase as any)
+      .from('entregas_checklist_items')
+      .update({ id_tecnico_er: entidadId })
+      .eq('id', itemId);
+    if (error) {
+      toast.error('Error al asignar técnico');
+    } else {
+      toast.success(entidadId ? `Técnico asignado: ${nombre}` : 'Técnico removido');
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
     }
     setItemLoading(itemId, false);
   };
@@ -926,13 +1008,15 @@ export function EntregaDetalle() {
                           isExpanded={expandedCats.includes(cat.id)}
                           isSelected={selectedCat?.id === cat.id}
                           itemsLoading={itemsLoading}
-                          entidadesER={entidadesER}
+                          supervisores={supervisores}
+                          tecnicos={tecnicos}
                           getEstatusNombre={getEstatusNombre}
                           onToggle={() => toggleCat(cat.id)}
                           onSelect={() => setSelectedCat(cat)}
                           onActualizarEstatus={handleActualizarEstatus}
                           onOpenNoCumple={(itemId, nombre) => { setNoCumpleModal({ itemId, nombre }); setNoCumpleObs(''); }}
-                          onAsignarResponsable={handleAsignarResponsable}
+                          onAsignarSupervisor={handleAsignarSupervisor}
+                          onAsignarTecnico={handleAsignarTecnico}
                           onOpenEvidencia={(itemId, nombre) => setEvidenciaModal({ itemId, nombre })}
                         />
                       ))}

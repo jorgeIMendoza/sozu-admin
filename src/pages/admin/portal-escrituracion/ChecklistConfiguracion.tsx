@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/admin/portal-escrituracion/ui';
+import { ResponsablesConfigTab } from '@/components/admin/portal-escrituracion/entregas/ResponsablesConfigTab';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -349,6 +350,7 @@ export function ChecklistConfiguracion() {
   const [confirmDesactivarCat, setConfirmDesactivarCat] = useState<PlantillaCategoria | null>(null);
   const [searchTerm, setSearchTerm]                     = useState('');
   const [showPreview, setShowPreview]                   = useState(false);
+  const [activeConfigTab, setActiveConfigTab]           = useState<'checklist' | 'responsables'>('checklist');
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -725,8 +727,8 @@ export function ChecklistConfiguracion() {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-6 pt-5 pb-4 bg-white border-b border-slate-100">
         <PageHeader
-          title="Configuración de Checklist"
-          description="Administra las plantillas que alimentan la generación de pre-entregas"
+          title="Configuración de Entregas"
+          description="Administra las plantillas y responsables del módulo de Entregas"
           action={
             <button
               onClick={handleRecargar}
@@ -738,23 +740,48 @@ export function ChecklistConfiguracion() {
           }
         />
 
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <KpiMini icon={ListChecks} label="Plantillas activas" value={loadingPlant ? '—' : totalActivePlant} tone="blue" />
-          <KpiMini icon={Layers}     label="Categorías"         value={!selectedId ? '—' : loadingCats  ? '…' : categorias.length} />
-          <KpiMini icon={Package}    label="Ítems activos"      value={!selectedId ? '—' : loadingItems ? '…' : activeItemCount} />
-        </div>
+        {activeConfigTab === 'checklist' && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <KpiMini icon={ListChecks} label="Plantillas activas" value={loadingPlant ? '—' : totalActivePlant} tone="blue" />
+            <KpiMini icon={Layers}     label="Categorías"         value={!selectedId ? '—' : loadingCats  ? '…' : categorias.length} />
+            <KpiMini icon={Package}    label="Ítems activos"      value={!selectedId ? '—' : loadingItems ? '…' : activeItemCount} />
+          </div>
+        )}
 
-        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-800 leading-relaxed">
-            <span className="font-semibold">Los cambios aplican únicamente a nuevas entregas.</span>{' '}
-            Las entregas ya generadas conservan su snapshot histórico y no serán modificadas retroactivamente.
-          </p>
+        {activeConfigTab === 'checklist' && (
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 leading-relaxed">
+              <span className="font-semibold">Los cambios aplican únicamente a nuevas entregas.</span>{' '}
+              Las entregas ya generadas conservan su snapshot histórico y no serán modificadas retroactivamente.
+            </p>
+          </div>
+        )}
+
+        {/* Tab bar */}
+        <div className="flex border-b border-slate-200 mt-4 -mb-4 -mx-6 px-6">
+          {(['checklist', 'responsables'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveConfigTab(tab)}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize',
+                activeConfigTab === tab
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+              )}
+            >
+              {tab === 'checklist' ? 'Checklist' : 'Responsables'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ── Split layout ──────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0">
+      {/* ── Tab: Responsables ─────────────────────────────────────────────── */}
+      {activeConfigTab === 'responsables' && <ResponsablesConfigTab />}
+
+      {/* ── Split layout (Tab: Checklist) ─────────────────────────────────── */}
+      {activeConfigTab === 'checklist' && <div className="flex flex-1 min-h-0">
 
         {/* Left sidebar */}
         <div className="w-72 shrink-0 bg-white border-r border-slate-200 flex flex-col">
@@ -1209,7 +1236,7 @@ export function ChecklistConfiguracion() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
