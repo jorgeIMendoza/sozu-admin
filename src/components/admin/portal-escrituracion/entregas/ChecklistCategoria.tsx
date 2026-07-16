@@ -7,13 +7,15 @@ interface ChecklistCategoriaRowProps {
   isExpanded: boolean;
   isSelected: boolean;
   itemsLoading: Set<number>;
-  entidadesER: EntidadER[];
+  supervisores: EntidadER[];
+  tecnicos: EntidadER[];
   getEstatusNombre: (id: number) => string;
   onToggle: () => void;
   onSelect: () => void;
   onActualizarEstatus: (itemId: number, estatus: number) => void;
   onOpenNoCumple: (itemId: number, nombre: string) => void;
-  onAsignarResponsable: (itemId: number, entidadId: number | null) => void;
+  onAsignarSupervisor: (itemId: number, entidadId: number | null) => void;
+  onAsignarTecnico: (itemId: number, entidadId: number | null) => void;
   onOpenEvidencia: (itemId: number, nombre: string) => void;
 }
 
@@ -22,13 +24,15 @@ export function ChecklistCategoriaRow({
   isExpanded,
   isSelected,
   itemsLoading,
-  entidadesER,
+  supervisores,
+  tecnicos,
   getEstatusNombre,
   onToggle,
   onSelect,
   onActualizarEstatus,
   onOpenNoCumple,
-  onAsignarResponsable,
+  onAsignarSupervisor,
+  onAsignarTecnico,
   onOpenEvidencia,
 }: ChecklistCategoriaRowProps) {
   const catApl = cat.items.filter(i => i.id_estatus_checklist !== ESTATUS_CHECKLIST.NO_APLICA);
@@ -90,11 +94,13 @@ export function ChecklistCategoriaRow({
           key={item.id}
           item={item}
           isLoading={itemsLoading.has(item.id)}
-          entidadesER={entidadesER}
+          supervisores={supervisores}
+          tecnicos={tecnicos}
           getEstatusNombre={getEstatusNombre}
           onActualizarEstatus={onActualizarEstatus}
           onOpenNoCumple={onOpenNoCumple}
-          onAsignarResponsable={onAsignarResponsable}
+          onAsignarSupervisor={onAsignarSupervisor}
+          onAsignarTecnico={onAsignarTecnico}
           onOpenEvidencia={onOpenEvidencia}
         />
       ))}

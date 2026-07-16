@@ -1,42 +1,61 @@
 import { useState } from 'react';
-import { Loader2, CheckCircle2, Wrench, CheckCheck, X, RotateCcw, Camera, User } from 'lucide-react';
+import { Loader2, CheckCircle2, Wrench, CheckCheck, X, RotateCcw, Camera, User, UserCheck } from 'lucide-react';
 import { type ChecklistItem, type EntidadER, ESTATUS_CHECKLIST, ITEM_CLS } from './EntregaTypes';
 
 interface ChecklistConceptoProps {
   item: ChecklistItem;
   isLoading: boolean;
-  entidadesER: EntidadER[];
+  supervisores: EntidadER[];
+  tecnicos: EntidadER[];
   getEstatusNombre: (id: number) => string;
   onActualizarEstatus: (itemId: number, estatus: number) => void;
   onOpenNoCumple: (itemId: number, nombre: string) => void;
-  onAsignarResponsable: (itemId: number, entidadId: number | null) => void;
+  onAsignarSupervisor: (itemId: number, entidadId: number | null) => void;
+  onAsignarTecnico: (itemId: number, entidadId: number | null) => void;
   onOpenEvidencia: (itemId: number, nombre: string) => void;
 }
+
+type PanelMode = 'supervisor' | 'tecnico' | null;
 
 export function ChecklistConcepto({
   item,
   isLoading,
-  entidadesER,
+  supervisores,
+  tecnicos,
   getEstatusNombre,
   onActualizarEstatus,
   onOpenNoCumple,
-  onAsignarResponsable,
+  onAsignarSupervisor,
+  onAsignarTecnico,
   onOpenEvidencia,
 }: ChecklistConceptoProps) {
-  const [showER, setShowER]   = useState(false);
-  const [erSearch, setErSearch] = useState('');
+  const [panel, setPanel]     = useState<PanelMode>(null);
+  const [search, setSearch]   = useState('');
 
-  const entidadAsignada = entidadesER.find(e => e.id === item.id_responsable_er) ?? null;
-  const filteredER = entidadesER
-    .filter(e => e.nombre.toLowerCase().includes(erSearch.toLowerCase()))
-    .slice(0, 8);
+  const supervisorAsignado = supervisores.find(e => e.id === item.id_supervisor_er) ?? null;
+  const tecnicoAsignado    = tecnicos.find(e => e.id === item.id_tecnico_er) ?? null;
+
+  // Legacy: fallback display cuando no hay nuevas cols pero sí la antigua
+  const legacyNombre = !supervisorAsignado && !tecnicoAsignado && item.id_responsable_er
+    ? (supervisores.find(e => e.id === item.id_responsable_er) ?? tecnicos.find(e => e.id === item.id_responsable_er))?.nombre ?? null
+    : null;
 
   const isPendiente = item.id_estatus_checklist === ESTATUS_CHECKLIST.PENDIENTE;
 
-  const handleSelectER = (erId: number | null) => {
-    onAsignarResponsable(item.id, erId);
-    setShowER(false);
-    setErSearch('');
+  const activeList   = panel === 'supervisor' ? supervisores : tecnicos;
+  const filteredList = activeList.filter(e => e.nombre.toLowerCase().includes(search.toLowerCase())).slice(0, 8);
+  const currentId    = panel === 'supervisor' ? item.id_supervisor_er : item.id_tecnico_er;
+  const onSelect     = panel === 'supervisor' ? onAsignarSupervisor : onAsignarTecnico;
+
+  const togglePanel = (mode: PanelMode) => {
+    if (panel === mode) { setPanel(null); setSearch(''); }
+    else { setPanel(mode); setSearch(''); }
+  };
+
+  const handleSelect = (id: number | null) => {
+    onSelect(item.id, id);
+    setPanel(null);
+    setSearch('');
   };
 
   return (
@@ -46,15 +65,31 @@ export function ChecklistConcepto({
         {/* ── Fila principal ── */}
         <div className="flex items-start justify-between gap-3">
 
-          {/* Izquierda: ícono + nombre + responsable asignado */}
+          {/* Izquierda: ícono + nombre + responsables asignados */}
           <div className="flex items-start gap-2 min-w-0">
             <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${ITEM_CLS[item.id_estatus_checklist] ?? 'text-slate-400'}`} />
             <div className="min-w-0">
               <span className="text-xs text-slate-700 leading-tight">{item.nombre}</span>
-              {entidadAsignada && (
+
+              {/* Supervisor asignado */}
+              {supervisorAsignado && (
                 <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-blue-500">
+                  <UserCheck className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">Sup: {supervisorAsignado.nombre}</span>
+                </div>
+              )}
+              {/* Técnico asignado */}
+              {tecnicoAsignado && (
+                <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-orange-500">
+                  <Wrench className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">Téc: {tecnicoAsignado.nombre}</span>
+                </div>
+              )}
+              {/* Legacy fallback */}
+              {legacyNombre && !supervisorAsignado && !tecnicoAsignado && (
+                <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-slate-400">
                   <User className="w-2.5 h-2.5 shrink-0" />
-                  <span className="truncate">{entidadAsignada.nombre}</span>
+                  <span className="truncate">{legacyNombre}</span>
                 </div>
               )}
             </div>
@@ -70,7 +105,6 @@ export function ChecklistConcepto({
               <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
             ) : (
               <div className="flex items-center gap-1">
-                {/* Botones de avance de estatus (existentes) */}
                 {isPendiente && (<>
                   <button
                     onClick={() => onActualizarEstatus(item.id, ESTATUS_CHECKLIST.CUMPLE)}
@@ -126,7 +160,6 @@ export function ChecklistConcepto({
                   </button>
                 )}
 
-                {/* ── Revertir a Pendiente (Fase 2) ── */}
                 {!isPendiente && (
                   <button
                     onClick={() => onActualizarEstatus(item.id, ESTATUS_CHECKLIST.PENDIENTE)}
@@ -138,7 +171,7 @@ export function ChecklistConcepto({
               </div>
             )}
 
-            {/* ── Evidencia (Fase 2) ── */}
+            {/* Evidencia */}
             <button
               onClick={() => onOpenEvidencia(item.id, item.nombre)}
               title="Cargar evidencia"
@@ -146,12 +179,20 @@ export function ChecklistConcepto({
               <Camera className="w-3.5 h-3.5" />
             </button>
 
-            {/* ── Responsable institucional (Fase 2) ── */}
+            {/* Supervisor */}
             <button
-              onClick={() => { setShowER(p => !p); setErSearch(''); }}
-              title={entidadAsignada ? `Responsable: ${entidadAsignada.nombre}` : 'Asignar responsable'}
+              onClick={() => togglePanel('supervisor')}
+              title={supervisorAsignado ? `Supervisor: ${supervisorAsignado.nombre}` : 'Asignar supervisor'}
               className="p-0.5 rounded transition-colors">
-              <User className={`w-3.5 h-3.5 ${entidadAsignada ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500'}`} />
+              <UserCheck className={`w-3.5 h-3.5 ${supervisorAsignado ? 'text-blue-500' : 'text-slate-300 hover:text-blue-400'}`} />
+            </button>
+
+            {/* Técnico */}
+            <button
+              onClick={() => togglePanel('tecnico')}
+              title={tecnicoAsignado ? `Técnico: ${tecnicoAsignado.nombre}` : 'Asignar técnico'}
+              className="p-0.5 rounded transition-colors">
+              <Wrench className={`w-3.5 h-3.5 ${tecnicoAsignado ? 'text-orange-500' : 'text-slate-300 hover:text-orange-400'}`} />
             </button>
           </div>
         </div>
@@ -163,37 +204,44 @@ export function ChecklistConcepto({
           </p>
         )}
 
-        {/* ── Panel de asignación de responsable (Fase 2) ── */}
-        {showER && (
+        {/* ── Panel de asignación (supervisor o técnico) ── */}
+        {panel !== null && (
           <div className="ml-5 mt-2 space-y-1.5 max-w-xs">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {panel === 'supervisor' ? 'Asignar Supervisor Responsable' : 'Asignar Técnico Responsable'}
+            </p>
             <input
               type="text"
-              value={erSearch}
-              onChange={e => setErSearch(e.target.value)}
-              placeholder="Buscar responsable…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={panel === 'supervisor' ? 'Buscar supervisor…' : 'Buscar técnico…'}
               autoFocus
               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
             <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-xl border border-slate-100 bg-white shadow-sm">
-              {item.id_responsable_er !== null && (
+              {currentId !== null && (
                 <button
                   onMouseDown={e => e.preventDefault()}
-                  onClick={() => handleSelectER(null)}
+                  onClick={() => handleSelect(null)}
                   className="w-full text-left px-2.5 py-1.5 text-[11px] text-red-500 hover:bg-red-50 transition-colors flex items-center gap-1">
-                  <X className="w-3 h-3" /> Quitar responsable
+                  <X className="w-3 h-3" /> Quitar {panel === 'supervisor' ? 'supervisor' : 'técnico'}
                 </button>
               )}
-              {filteredER.length === 0 ? (
+              {filteredList.length === 0 ? (
                 <p className="text-[11px] text-slate-400 px-2.5 py-1.5">
-                  {erSearch ? 'Sin resultados' : 'Sin responsables disponibles'}
+                  {search
+                    ? 'Sin resultados'
+                    : panel === 'supervisor'
+                      ? 'Sin supervisores disponibles'
+                      : 'Sin técnicos disponibles'}
                 </p>
-              ) : filteredER.map(er => (
+              ) : filteredList.map(er => (
                 <button
                   key={er.id}
                   onMouseDown={e => e.preventDefault()}
-                  onClick={() => handleSelectER(er.id)}
+                  onClick={() => handleSelect(er.id)}
                   className={`w-full text-left px-2.5 py-1.5 text-[11px] transition-colors ${
-                    item.id_responsable_er === er.id
+                    currentId === er.id
                       ? 'bg-blue-50 text-blue-700 font-medium'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}>
