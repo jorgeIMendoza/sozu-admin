@@ -24,6 +24,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
@@ -56,7 +57,11 @@ export const PortalEscrituracionLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { disabledPaths } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo)
+  const visibleNavItems = navItems.filter((i) => !disabledPaths.has(i.path));
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -66,7 +71,7 @@ export const PortalEscrituracionLayout = () => {
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const currentSection = navItems.find((i) => isActive(i.path))?.label || "Escrituración";
+  const currentSection = visibleNavItems.find((i) => isActive(i.path))?.label || "Escrituración";
 
   const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
   const userName = rawName.trim().split(/\s+/).slice(0, 2).join(" ");
@@ -85,7 +90,7 @@ export const PortalEscrituracionLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = isActive(item.path);
           return (
             <button

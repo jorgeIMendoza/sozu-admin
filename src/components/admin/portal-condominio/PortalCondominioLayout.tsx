@@ -25,6 +25,7 @@ import { SozuLogo } from "@/components/ui/SozuLogo";
 import { CondominioProvider, useCondominio } from "@/contexts/CondominioContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { usePortalNav } from "@/hooks/usePortalNav";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 
 const CONDOMINIO_MENU_ID = 30;
 
@@ -73,14 +74,19 @@ const PortalCondominioLayoutInner = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navFromDb = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
+  const { disabledPaths } = useAllowedMenus();
   const navItems = (() => {
-    if (navFromDb.some((i) => i.path === TITULARIDAD_PATH)) return navFromDb;
-    const item = { path: TITULARIDAD_PATH, label: "Titularidad", icon: FileCheck };
-    const idx = navFromDb.findIndex((i) => i.path === COBRANZA_PATH);
-    if (idx === -1) return [...navFromDb, item];
-    const copy = [...navFromDb];
-    copy.splice(idx + 1, 0, item);
-    return copy;
+    const composed = (() => {
+      if (navFromDb.some((i) => i.path === TITULARIDAD_PATH)) return navFromDb;
+      const item = { path: TITULARIDAD_PATH, label: "Titularidad", icon: FileCheck };
+      const idx = navFromDb.findIndex((i) => i.path === COBRANZA_PATH);
+      if (idx === -1) return [...navFromDb, item];
+      const copy = [...navFromDb];
+      copy.splice(idx + 1, 0, item);
+      return copy;
+    })();
+    // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo)
+    return composed.filter((i) => !disabledPaths.has(i.path));
   })();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
