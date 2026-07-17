@@ -448,8 +448,8 @@ const AgentInicio = () => {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard
               label="Comisión pagada"
-              labelClass="text-[#0E7A45]"
-              valueClass="text-[#0E7A45]"
+              labelClass="text-[hsl(158_64%_38%)]"
+              valueClass="text-[hsl(158_64%_38%)]"
               value={mask(formatCurrency(metrics?.comisionPagada || 0))}
               sublabel="cobrado"
               onClick={() => navigate('/admin/agent/comisiones')}
@@ -463,8 +463,8 @@ const AgentInicio = () => {
             />
             <MetricCard
               label="Ventas activas"
-              labelClass="text-[#16A45E]"
-              valueClass="text-[#16A45E]"
+              labelClass="text-[hsl(158_64%_38%)]"
+              valueClass="text-[hsl(158_64%_38%)]"
               variant="count"
               value={mask(String(metrics?.ventasActivas || 0))}
               sublabel="en proceso"
@@ -731,7 +731,7 @@ function MetricCard({ label, value, sublabel, variant = 'money', labelClass, val
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <span className={cn("text-[10px] font-semibold uppercase tracking-[0.08em]", labelClass || "text-[#8A929B]")}>{label}</span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#C7CDD4] transition-colors group-hover:text-[#16A45E]" strokeWidth={1.75} />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#C7CDD4] transition-colors group-hover:text-[hsl(158_64%_38%)]" strokeWidth={1.75} />
       </div>
       <p className={cn(
         "font-bold leading-none tabular-nums",

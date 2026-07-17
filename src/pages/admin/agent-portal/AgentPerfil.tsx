@@ -630,7 +630,7 @@ const AgentPerfil = () => {
         {/* Avatar */}
         <button
           type="button"
-          className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#16A45E] focus-visible:ring-offset-2"
+          className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)] focus-visible:ring-offset-2"
           onClick={() => canEdit && setShowPhotoModal(true)}
           disabled={!canEdit}
           title={canEdit ? "Cambiar foto de perfil" : undefined}
@@ -643,7 +643,7 @@ const AgentPerfil = () => {
               className="h-[72px] w-[72px] rounded-full object-cover"
             />
           ) : (
-            <div className="h-[72px] w-[72px] rounded-full bg-[#16A45E] flex items-center justify-center text-white font-extrabold text-2xl">
+            <div className="h-[72px] w-[72px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-extrabold text-2xl">
               {(displayName || "A")[0]?.toUpperCase()}
             </div>
           )}
@@ -674,8 +674,8 @@ const AgentPerfil = () => {
           </div>
           {agencyName && (
             <div className="flex items-center gap-1.5 mt-1.5">
-              <span className="inline-block h-[7px] w-[7px] rounded-full bg-[#16A45E] shrink-0" />
-              <span className="text-[11px] font-semibold text-[#0E7A45]">{agencyName}</span>
+              <span className="inline-block h-[7px] w-[7px] rounded-full bg-[hsl(158_64%_38%)] shrink-0" />
+              <span className="text-[11px] font-semibold text-[hsl(158_64%_38%)]">{agencyName}</span>
             </div>
           )}
 
@@ -699,7 +699,7 @@ const AgentPerfil = () => {
                     }}
                     maxLength={280}
                     placeholder="Escribe tu presentación…"
-                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-xl border border-[#ECEEF0] px-3 py-2.5 text-[12.5px] text-[#171A1D] leading-relaxed outline-none focus:ring-2 focus:ring-[#16A45E]/30"
+                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-xl border border-[#ECEEF0] px-3 py-2.5 text-[12.5px] text-[#171A1D] leading-relaxed outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
                   />
                   <div className="mt-1.5 flex items-center justify-between gap-3 flex-wrap">
                     <span className="text-[10.5px] italic text-[#9AA3AD]">
@@ -710,7 +710,7 @@ const AgentPerfil = () => {
                       <button
                         onClick={handleFraseSave}
                         disabled={savingFrase}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A45E] px-3.5 py-1.5 text-[11.5px] font-bold text-white disabled:opacity-50 transition-opacity hover:opacity-90"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(158_64%_38%)] px-3.5 py-1.5 text-[11.5px] font-bold text-white disabled:opacity-50 transition-opacity hover:opacity-90"
                       >
                         {savingFrase ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={2.5} />}
                         Guardar
@@ -729,10 +729,10 @@ const AgentPerfil = () => {
         <div className="w-full sm:w-[220px] shrink-0 sm:border-l sm:border-[#F2F4F5] sm:pl-5">
           <div className="flex items-baseline justify-between">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Activación</span>
-            <span className="text-[18px] font-extrabold tabular-nums text-[#0E7A45]">{percentage}%</span>
+            <span className="text-[18px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">{percentage}%</span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-[#EEF0F2] overflow-hidden">
-            <div className="h-full rounded-full bg-[#16A45E] transition-all duration-700" style={{ width: `${percentage}%` }} />
+            <div className="h-full rounded-full bg-[hsl(158_64%_38%)] transition-all duration-700" style={{ width: `${percentage}%` }} />
           </div>
           <p className="mt-1.5 text-[10px] font-medium text-[#9AA3AD] leading-snug">
             Se calcula sobre documentos validados y etapas completadas.
@@ -906,9 +906,9 @@ const AgentPerfil = () => {
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-full border-2 text-[12px] font-bold tabular-nums",
                     status === 'complete'
-                      ? "border-[#16A45E] bg-[#16A45E] text-white"
+                      ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
                       : status === 'partial'
-                      ? "border-[#16A45E] bg-[#E8F5EE] text-[#0E7A45] shadow-[0_0_0_4px_rgba(22,164,94,0.14)]"
+                      ? "border-[hsl(158_64%_38%)] bg-[#E8F5EE] text-[hsl(158_64%_38%)] shadow-[0_0_0_4px_rgba(22,164,94,0.14)]"
                       : "border-[#E4E7EA] bg-white text-[#9AA3AD]"
                   )}
                 >
@@ -918,7 +918,7 @@ const AgentPerfil = () => {
                   className={cn(
                     "text-[10.5px] leading-tight",
                     status === 'complete' ? "font-semibold text-[#171A1D]"
-                      : status === 'partial' ? "font-extrabold text-[#0E7A45]"
+                      : status === 'partial' ? "font-extrabold text-[hsl(158_64%_38%)]"
                       : "font-semibold text-[#9AA3AD]"
                   )}
                 >
@@ -949,13 +949,13 @@ const AgentPerfil = () => {
                     onClick={() => setProfileView(STEP_TO_VIEW[f.block.stepId])}
                     className="flex cursor-pointer items-center gap-3 rounded-xl border border-[#DCEEE3] bg-[#F0FAF4] px-3.5 py-3"
                   >
-                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[#CFE9DA] bg-white text-[11px] font-extrabold tabular-nums text-[#0E7A45]">
+                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[#CFE9DA] bg-white text-[11px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">
                       {i + 1}
                     </span>
                     <span className="flex-1 text-[12.5px] font-semibold text-[#16331F]">
                       <strong className="font-extrabold">{f.block.label}</strong> - {f.item}
                     </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[#0E7A45]" strokeWidth={2} />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-[hsl(158_64%_38%)]" strokeWidth={2} />
                   </div>
                 ))}
               </div>
@@ -967,7 +967,7 @@ const AgentPerfil = () => {
       {/* HERO MOTOR · expediente */}
       <div className="flex flex-wrap gap-[22px] rounded-2xl border border-[#CFE9DA] bg-gradient-to-br from-[#F0FAF4] to-[#FBFEFC] p-[22px]">
         <div className="min-w-[240px] flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-[#0E7A45]">
+          <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-[hsl(158_64%_38%)]">
             Tu expediente · el motor de tu activación
           </div>
           <div className="mt-2 text-[21px] font-extrabold leading-[1.25] tracking-[-0.4px] text-[#16331F]">
@@ -979,7 +979,7 @@ const AgentPerfil = () => {
           <div className="mt-4 flex flex-wrap items-center gap-3.5">
             <button
               onClick={() => setProfileView('expediente')}
-              className="inline-flex items-center gap-2 rounded-[11px] bg-[#16A45E] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
             >
               <FileText className="h-4 w-4" />
               Gestionar documentos
@@ -993,7 +993,7 @@ const AgentPerfil = () => {
           <div className="mb-3 text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Estado de etapas</div>
           <div className="flex flex-col gap-[11px]">
             {[
-              { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'complete').length, label: 'validadas', bg: 'bg-[#E8F5EE]', color: 'text-[#0E7A45]' },
+              { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'complete').length, label: 'validadas', bg: 'bg-[#E8F5EE]', color: 'text-[hsl(158_64%_38%)]' },
               { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'partial').length, label: 'en proceso', bg: 'bg-[#FBEFD9]', color: 'text-[#B5730A]' },
               { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'pending').length, label: 'pendientes', bg: 'bg-[#EEF0F2]', color: 'text-[#6B7280]' },
             ].map((c) => (
@@ -1018,7 +1018,7 @@ const AgentPerfil = () => {
             const status = getBlockStatus(block.relatedSteps);
             const badge =
               status === 'complete'
-                ? { label: 'Completado', color: 'text-[#0E7A45]', bg: 'bg-[#E8F5EE]' }
+                ? { label: 'Completado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
                 : status === 'partial'
                 ? { label: 'En proceso', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
                 : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' };
@@ -1109,7 +1109,7 @@ const AgentPerfil = () => {
           <div className="flex items-center justify-between gap-3 border-b border-[#ECEEF0] py-[11px]">
             <span className="text-[12px] font-medium text-[#9AA3AD]">Estatus</span>
             <span className="inline-flex items-center gap-1.5 text-right text-[12.5px] font-bold text-[#171A1D]">
-              <span className="h-[7px] w-[7px] rounded-full bg-[#16A45E]" />
+              <span className="h-[7px] w-[7px] rounded-full bg-[hsl(158_64%_38%)]" />
               Activo
             </span>
           </div>
@@ -1152,7 +1152,7 @@ const AgentPerfil = () => {
               const estado = approved ? 'validado' : exists ? 'revision' : 'pendiente';
               const badge =
                 estado === 'validado'
-                  ? { label: 'Validado', color: 'text-[#0E7A45]', bg: 'bg-[#E8F5EE]' }
+                  ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
                   : estado === 'revision'
                   ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
                   : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
@@ -1233,7 +1233,7 @@ const AgentPerfil = () => {
             </div>
             <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Identidad</h2>
             <p className="mt-1 text-[12.5px] font-medium text-[#9AA3AD]">Tu información personal</p>
-            <div className="mt-2.5 mb-4 flex items-center gap-1.5 text-[11px] font-semibold text-[#0E7A45]">
+            <div className="mt-2.5 mb-4 flex items-center gap-1.5 text-[11px] font-semibold text-[hsl(158_64%_38%)]">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
               Sesión segura activa
             </div>
@@ -1254,7 +1254,7 @@ const AgentPerfil = () => {
                   disabled={!perfilPerms.canUpdate || savingPhone}
                   onChange={(e) => setPhoneVal(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   onBlur={() => { if (phoneVal !== (personaDatos?.telefono || '')) savePhone(); }}
-                  className="w-[170px] rounded-[9px] border border-[#ECEEF0] px-3 py-2 text-right text-[13px] font-semibold tabular-nums text-[#171A1D] outline-none focus:ring-2 focus:ring-[#16A45E]/30 disabled:opacity-60"
+                  className="w-[170px] rounded-[9px] border border-[#ECEEF0] px-3 py-2 text-right text-[13px] font-semibold tabular-nums text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -1272,7 +1272,7 @@ const AgentPerfil = () => {
                     {f.valor
                       ? <span className="text-[12.5px] font-bold text-[#171A1D]">{f.valor}</span>
                       : <span className="text-[12.5px] font-medium italic text-[#9AA3AD]">Sin registro</span>}
-                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[#0E7A45]" : "bg-[#EEF0F2] text-[#6B7280]")}>
+                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
                       {f.valor ? 'Validado' : 'Pendiente'}
                     </span>
                   </div>
@@ -1336,7 +1336,7 @@ const AgentPerfil = () => {
                     {f.valor
                       ? <span className="text-[12.5px] font-bold text-[#171A1D]">{f.valor}</span>
                       : <span className="text-[12.5px] font-medium italic text-[#9AA3AD]">Sin registro</span>}
-                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[#0E7A45]" : "bg-[#EEF0F2] text-[#6B7280]")}>
+                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
                       {f.valor ? 'Validado' : 'Pendiente'}
                     </span>
                   </div>
@@ -1379,11 +1379,11 @@ const AgentPerfil = () => {
                     <div>
                       <div className="flex flex-wrap items-center gap-2.5">
                         <span className="text-[14px] font-extrabold text-[#171A1D]">{c.banco?.nombre || 'Banco'}</span>
-                        <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", validada ? "bg-[#E8F5EE] text-[#0E7A45]" : "bg-[#EEF0F2] text-[#6B7280]")}>
+                        <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", validada ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
                           {validada ? 'Validada' : 'Pendiente de activación'}
                         </span>
                         {c.predeterminada && (
-                          <span className="rounded-full bg-[#E8F5EE] px-2.5 py-[3px] text-[9.5px] font-bold text-[#0E7A45]">Predeterminada</span>
+                          <span className="rounded-full bg-[#E8F5EE] px-2.5 py-[3px] text-[9.5px] font-bold text-[hsl(158_64%_38%)]">Predeterminada</span>
                         )}
                       </div>
                       {last4 && (
@@ -1412,7 +1412,7 @@ const AgentPerfil = () => {
           {perfilPerms.canUpdate && (
             <button
               onClick={() => setActiveStep('bank-accounts')}
-              className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[#16A45E] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+              className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
               Agregar cuenta
@@ -1432,17 +1432,17 @@ const AgentPerfil = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Capacitación</h2>
-              <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", tStatus === 'complete' ? "bg-[#E8F5EE] text-[#0E7A45]" : "bg-[#FBEFD9] text-[#B5730A]")}>
+              <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", tStatus === 'complete' ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#FBEFD9] text-[#B5730A]")}>
                 {tStatus === 'complete' ? 'Completada' : 'En curso'}
               </span>
             </div>
             <div className="mt-3.5 rounded-2xl border border-[#ECEEF0] bg-white px-[18px] py-[17px]">
               <div className="flex items-baseline justify-between">
                 <span className="text-[12px] font-semibold text-[#6B7280]">Avance de tu capacitación</span>
-                <span className="text-[14px] font-extrabold tabular-nums text-[#0E7A45]">{pct}%</span>
+                <span className="text-[14px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">{pct}%</span>
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#EEF0F2]">
-                <div className="h-full rounded-full bg-[#16A45E]" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full bg-[hsl(158_64%_38%)]" style={{ width: `${pct}%` }} />
               </div>
             </div>
 
@@ -1481,7 +1481,7 @@ const AgentPerfil = () => {
             {perfilPerms.canUpdate && (
               <button
                 onClick={() => setActiveStep('training')}
-                className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[#16A45E] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
                 Agendar capacitación
@@ -1510,7 +1510,7 @@ const AgentPerfil = () => {
                   type="password"
                   value={f.val}
                   onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-[10px] border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[#16A45E]/30"
+                  className="w-full rounded-[10px] border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
                 />
               </div>
             ))}
@@ -1525,7 +1525,7 @@ const AgentPerfil = () => {
             <button
               onClick={changePassword}
               disabled={savingPw || !pwCurrent || !pwNew || !pwConfirm}
-              className="flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#16A45E] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[hsl(158_64%_38%)] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar contraseña
@@ -1560,7 +1560,7 @@ const AgentPerfil = () => {
             const estado = approved ? 'validado' : exists ? 'revision' : 'pendiente';
             const badge =
               estado === 'validado'
-                ? { label: 'Validado', color: 'text-[#0E7A45]', bg: 'bg-[#E8F5EE]' }
+                ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
                 : estado === 'revision'
                 ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
                 : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
@@ -1595,7 +1595,7 @@ const AgentPerfil = () => {
                   {perfilPerms.canUpdate && (
                     <button
                       onClick={() => { setDocDetail(null); setActiveStep(docDetail.step); }}
-                      className="inline-flex shrink-0 items-center gap-2 rounded-[10px] bg-[#16A45E] px-[15px] py-2.5 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
+                      className="inline-flex shrink-0 items-center gap-2 rounded-[10px] bg-[hsl(158_64%_38%)] px-[15px] py-2.5 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
                     >
                       <Upload className="h-[15px] w-[15px]" />
                       Subir documento

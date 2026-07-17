@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -171,7 +171,7 @@ const AgentInventario = () => {
   return (
     <div className="mx-auto max-w-[1040px] pb-8">
       {/* Search bar (título vive en el header del portal) */}
-      <div className="sticky top-16 z-10 -mx-1 bg-background/95 px-1 py-1 backdrop-blur-sm">
+      <div className="sticky top-16 z-10 -mx-1 bg-background px-1 py-1">
         <div className="relative flex items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
@@ -183,7 +183,7 @@ const AgentInventario = () => {
                 track({ page: 'agent_inventario', elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
               }
             }}
-            className="h-11 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
+            className="h-11 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
           />
         </div>
       </div>
@@ -224,7 +224,7 @@ const AgentInventario = () => {
   );
 };
 
-function ProjectCard({
+const ProjectCard = memo(function ProjectCard({
   proyecto,
   formatCurrency,
   canRead,
@@ -270,7 +270,7 @@ function ProjectCard({
 
   return (
     <>
-      <div className="group overflow-hidden rounded-md border border-[#E7E9EC] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow duration-150 hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+      <div className="overflow-hidden rounded-md border border-[#E7E9EC] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
         {/* Image */}
         <div
           className="relative aspect-[16/9] w-full cursor-pointer overflow-hidden bg-gradient-to-br from-[#E4E7EA] to-[#CBD3D9]"
@@ -282,7 +282,7 @@ function ProjectCard({
               w={640}
               resize="cover"
               alt={proyecto.nombre}
-              className="h-full w-full object-cover object-[center_75%] transition-transform duration-300 group-hover:scale-[1.02]"
+              className="h-full w-full object-cover object-[center_75%] transform-gpu [content-visibility:auto]"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
@@ -293,11 +293,11 @@ function ProjectCard({
           {/* Availability badge */}
           <div className="absolute right-3 top-3">
             {isAgotado ? (
-              <span className="inline-flex items-center rounded-md bg-black/70 px-3 py-1.5 text-[12px] font-bold text-white backdrop-blur-sm shadow-sm">
+              <span className="inline-flex items-center rounded-md bg-black/80 px-3 py-1.5 text-[12px] font-bold text-white shadow-sm">
                 Agotado
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-[#16A45E] px-3 py-1.5 text-[12px] font-bold tabular-nums text-white shadow-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(158_64%_38%)] px-3 py-1.5 text-[12px] font-bold tabular-nums text-white shadow-sm">
                 <span className="h-1.5 w-1.5 rounded-full bg-white" />
                 {proyecto.unidades_disponibles} disponibles
               </span>
@@ -315,7 +315,7 @@ function ProjectCard({
             </p>
           )}
           {!isAgotado && proyecto.precio_desde && (
-            <p className="mt-2.5 text-[13px] font-bold tabular-nums text-[#0E7A45]">
+            <p className="mt-2.5 text-[13px] font-bold tabular-nums text-[hsl(158_64%_38%)]">
               Desde {formatCurrency(proyecto.precio_desde)}
             </p>
           )}
@@ -337,7 +337,7 @@ function ProjectCard({
             <div className="mt-3.5 flex items-center gap-2">
               <button
                 onClick={onViewProject}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] hover:border-primary hover:bg-primary/[0.05] hover:text-primary"
               >
                 <Eye className="h-3.5 w-3.5" />
                 Ver
@@ -345,7 +345,7 @@ function ProjectCard({
               {!isAgotado && (
                 <button
                   onClick={onViewUnits}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[#ECEEF0] py-2.5 text-[12px] font-semibold text-[#4B5563] hover:border-primary hover:bg-primary/[0.05] hover:text-primary"
                 >
                   <Building2 className="h-3.5 w-3.5" />
                   Inventario
@@ -359,7 +359,7 @@ function ProjectCard({
                   track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
                   setShareOpen(true);
                 }}
-                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md bg-[#16A45E] text-white transition-opacity hover:opacity-90"
+                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md bg-[hsl(158_64%_38%)] text-white hover:brightness-95"
               >
                 <Share2 className="h-4 w-4" />
               </button>
@@ -375,7 +375,7 @@ function ProjectCard({
           </DialogHeader>
           <button
             onClick={() => handleShare("web")}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[#16A45E] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#128A4F]"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[hsl(158_64%_31%)]"
           >
             <Globe className="h-4 w-4" /> Ver página web
           </button>
@@ -401,6 +401,7 @@ function ProjectCard({
       </Dialog>
     </>
   );
-}
+});
+ProjectCard.displayName = "ProjectCard";
 
 export default AgentInventario;

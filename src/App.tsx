@@ -145,6 +145,7 @@ const AgentPipeline = lazyRetry(() => import("./pages/admin/agent-portal/AgentPi
 const AgentComisiones = lazyRetry(() => import("./pages/admin/agent-portal/AgentComisiones"));
 const AgentPerfil = lazyRetry(() => import("./pages/admin/agent-portal/AgentPerfil"));
 const AgentProspectos = lazyRetry(() => import("./pages/admin/agent-portal/AgentProspectos"));
+const AgentProspectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/AgentProspectoDetalle"));
 const AgentUnidadesProyecto = lazyRetry(() => import("./pages/admin/agent-portal/AgentUnidadesProyecto"));
 const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/AgentProyectoDetalle"));
 
@@ -537,6 +538,7 @@ const App = () => (
                     <Route path="agent/pipeline" element={<AgentPipeline />} />
                     <Route path="agent/comisiones" element={<AgentComisiones />} />
                     <Route path="agent/prospectos" element={<AgentProspectos />} />
+                    <Route path="agent/prospectos/:id" element={<AgentProspectoDetalle />} />
                     <Route path="agent/perfil" element={<AgentPerfil />} />
                     <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                     <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
@@ -823,6 +825,7 @@ const App = () => (
                   <Route path="agent/pipeline" element={<AgentPipeline />} />
                   <Route path="agent/comisiones" element={<AgentComisiones />} />
                   <Route path="agent/prospectos" element={<AgentProspectos />} />
+                  <Route path="agent/prospectos/:id" element={<AgentProspectoDetalle />} />
                   <Route path="agent/perfil" element={<AgentPerfil />} />
                   <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />

@@ -9,7 +9,9 @@ import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Lock, CheckCircle2, AlertCircle, DollarSign, Clock, FileText, CalendarCheck, Upload, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Lock, CheckCircle2, AlertCircle, DollarSign, Clock, FileText, CalendarCheck, Upload, EyeOff, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -38,6 +40,7 @@ const AgentComisiones = () => {
   const { steps, percentage, isLoading: onboardingLoading, canAccessComisiones, missingForComisiones } = useAgentOnboardingStatus(personaId);
   const { presentationMode, mask } = useAgentPresentation();
   const [activeTab, setActiveTab] = useState<TabKey>('todas');
+  const [viewerDoc, setViewerDoc] = useState<{ url: string; title: string } | null>(null);
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
 
@@ -240,11 +243,9 @@ const AgentComisiones = () => {
   if (isAgentRole && !onboardingLoading && !canReceivePayments) {
     return (
       <div className="pb-24">
-        <AgentPortalHeader>
-          <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Comisiones</h1>
-        </AgentPortalHeader>
-        <div className="mx-auto max-w-[920px] p-4 space-y-5">
-        <div className="rounded-2xl border border-[#ECEEF0] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
+        <AgentPortalHeader />
+        <div className="mx-auto max-w-[1040px] pt-1 space-y-5">
+        <div className="rounded-md border border-[#E7E9EC] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
               <Lock className="h-5 w-5 text-amber-600" />
@@ -264,15 +265,15 @@ const AgentComisiones = () => {
             {missingForComisiones.length === 0 && <CheckItem label="Perfil completo" done={true} />}
           </div>
 
-          <button
+          <Button
             onClick={() => {
               track({ page: 'agent_comisiones', elementId: 'btn_completar_perfil_comisiones', elementLabel: 'Completar perfil' });
               navigate('/admin/agent/perfil');
             }}
-            className="w-full py-2.5 rounded-xl bg-[#16A45E] text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           >
             Completar perfil
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -281,17 +282,13 @@ const AgentComisiones = () => {
 
   return (
     <div className="pb-24">
-      <AgentPortalHeader>
-        <div>
-          <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Comisiones</h1>
-          <p className="mt-1 text-[13px] font-medium text-[#9AA3AD]">Tu wallet de ingresos</p>
-        </div>
-      </AgentPortalHeader>
+      <AgentPortalHeader />
 
+      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
       {/* Banner modo presentación */}
       {presentationMode && (
-        <div className="mx-auto mb-4 max-w-[920px] px-4">
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
+        <div>
+          <div className="flex items-center gap-2.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
             <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
             <span className="text-[12px] font-semibold text-[#B5601C]">
               Modo presentación activo · tus ingresos están ocultos. Desactívalo en la barra superior para verlos.
@@ -301,13 +298,13 @@ const AgentComisiones = () => {
       )}
 
       {/* Summary cards */}
-      <div className="mx-auto mb-4 grid max-w-[920px] grid-cols-2 gap-3.5 px-4">
-        <div className="rounded-2xl bg-[#1F5A3D] p-[18px]">
+      <div className="grid grid-cols-2 gap-3.5">
+        <div className="rounded-md bg-primary p-[18px]">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-white/65">Total cobrado</p>
           <p className="mt-2 text-[24px] font-extrabold tabular-nums text-white">{mask(formatCurrency(totalCobrado))}</p>
           <p className="mt-1 text-[10px] font-semibold text-white/55">MXN · acumulado</p>
         </div>
-        <div className="rounded-2xl border border-[#ECEEF0] bg-white p-[18px]">
+        <div className="rounded-md border border-[#ECEEF0] bg-white p-[18px]">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
           <p className="mt-2 text-[24px] font-extrabold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
           <p className="mt-1 text-[10px] font-semibold text-[#9AA3AD]">MXN · en proceso</p>
@@ -315,7 +312,7 @@ const AgentComisiones = () => {
       </div>
 
       {/* Status tabs */}
-      <div className="mx-auto mb-4 max-w-[920px] px-4">
+      <div>
         <ScrollArea className="w-full whitespace-nowrap">
           <div className="flex gap-2 pb-2">
             {visibleTabs.map(tab => {
@@ -330,9 +327,9 @@ const AgentComisiones = () => {
                     setActiveTab(tab.key);
                   }}
                   className={cn(
-                    "whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-all tabular-nums",
+                    "whitespace-nowrap rounded-md border px-3.5 py-2 text-[12.5px] font-semibold transition-all tabular-nums",
                     activeTab === tab.key
-                      ? "border-[#16A45E] bg-[#16A45E] text-white"
+                      ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
                       : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
                   )}
                 >
@@ -346,7 +343,7 @@ const AgentComisiones = () => {
       </div>
 
       {/* List */}
-      <div className="mx-auto max-w-[920px] space-y-2.5 px-4">
+      <div className="space-y-2.5">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
@@ -360,7 +357,7 @@ const AgentComisiones = () => {
             const status = getStatusConfig(c.detailed_status);
             const StatusIcon = status.icon;
             return (
-              <div key={`${c.id_cuenta_cobranza}-${idx}`} className="rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
+              <div key={`${c.id_cuenta_cobranza}-${idx}`} className="rounded-md border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className="text-[13.5px] font-bold text-[#171A1D]">
@@ -386,26 +383,22 @@ const AgentComisiones = () => {
                       {status.label}
                     </Badge>
                     {c.detailed_status === 'pagada' && c.url_evidencia_pago && (
-                      <a
-                        href={c.url_evidencia_pago}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-[hsl(var(--agent-primary))] font-medium underline"
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setViewerDoc({ url: c.url_evidencia_pago, title: `Comprobante · ${c.cuenta_cobranza_label}` }); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-[#E7E9EC] px-2 py-1 text-[10px] font-semibold text-primary hover:bg-[#F6F7F8]"
                       >
-                        Ver comprobante
-                      </a>
+                        <FileText className="h-3 w-3" /> Ver comprobante
+                      </button>
                     )}
                     {c.factura_url && (
-                      <a
-                        href={c.factura_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-[hsl(var(--agent-primary))] font-medium underline"
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setViewerDoc({ url: c.factura_url, title: `Factura · ${c.cuenta_cobranza_label}` }); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-[#E7E9EC] px-2 py-1 text-[10px] font-semibold text-primary hover:bg-[#F6F7F8]"
                       >
-                        Ver factura
-                      </a>
+                        <FileText className="h-3 w-3" /> Ver factura
+                      </button>
                     )}
                   </div>
                   {c.precio_final > 0 && (
@@ -430,6 +423,33 @@ const AgentComisiones = () => {
           })
         )}
       </div>
+      </div>
+
+      {/* Visor interno de documento (factura / comprobante) */}
+      <Dialog open={!!viewerDoc} onOpenChange={(v) => { if (!v) setViewerDoc(null); }}>
+        <DialogContent className="max-w-4xl gap-0 p-0">
+          <DialogHeader className="flex-row items-center justify-between gap-3 border-b border-[#ECEEF0] px-5 py-3.5 space-y-0">
+            <DialogTitle className="text-[15px] font-bold text-[#171A1D]">{viewerDoc?.title || 'Documento'}</DialogTitle>
+            {viewerDoc?.url && (
+              <a
+                href={viewerDoc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mr-6 inline-flex items-center gap-1.5 rounded-md border border-[#E7E9EC] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+              >
+                Abrir en pestaña <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </DialogHeader>
+          {viewerDoc?.url && (
+            <iframe
+              src={viewerDoc.url}
+              title={viewerDoc.title}
+              className="h-[78vh] w-full rounded-b-md bg-[#F6F7F8]"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -499,7 +519,7 @@ function AgentFacturaUploadButton({
           track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
           fileRef.current?.click();
         }}
-        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[#16A45E] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
+        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-md bg-primary text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
       >
         {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading ? 'Subiendo...' : 'Subir factura'}
