@@ -32,15 +32,23 @@ export function useAllowedMenus() {
         .from('submenus')
         .select('vista_front_end, activo, menus!inner(activo)')
         .range(0, 4999);
-      const set = new Set<string>();
+      // Una misma ruta puede tener VARIOS submenús (p. ej. duplicados en un menú
+      // viejo desactivado). La ruta solo debe apagarse si NINGÚN submenú activo
+      // (con menú activo) la provee; si al menos uno la sirve, se muestra —incluido
+      // Super Admin—. Antes bastaba un duplicado apagado para ocultar la ruta real.
+      const enabled = new Set<string>();
+      const disabled = new Set<string>();
       (data ?? []).forEach((s: any) => {
         if (!s.vista_front_end) return;
         const menuActivo = s.menus?.activo !== false;
-        if (s.activo === false || !menuActivo) {
-          set.add(s.vista_front_end);
+        if (s.activo !== false && menuActivo) {
+          enabled.add(s.vista_front_end);
+        } else {
+          disabled.add(s.vista_front_end);
         }
       });
-      setDisabledPaths(set);
+      enabled.forEach((p) => disabled.delete(p));
+      setDisabledPaths(disabled);
     } catch (err) {
       // Fail-open: si no se pudo cargar, no ocultar nada extra.
       console.error('Error fetching disabled submenu paths:', err);
