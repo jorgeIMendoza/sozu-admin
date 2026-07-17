@@ -447,8 +447,8 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const labelCls = "mb-1.5 block text-[11px] font-semibold text-[#4B5563]";
   const labelBoldCls = "mb-2 text-[11px] font-bold text-[#4B5563]";
-  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[13px] font-medium text-[#171A1D] outline-none transition-all placeholder:text-[#9AA3AD] focus:border-[#16A45E] focus:ring-2 focus:ring-[#16A45E]/15";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[#16A45E] focus:ring-2 focus:ring-[#16A45E]/15 focus:ring-offset-0";
+  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[13px] font-medium text-[#171A1D] outline-none transition-all placeholder:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15";
+  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
   const rfcInvalid = !!rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc);
   const curpInvalid = !!curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp);
 
@@ -501,14 +501,14 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           {/* Desarrollos de interés — búsqueda + lista */}
           <div>
             <div className={labelBoldCls}>
-              Desarrollos de Interés {!isEditMode && <span className="text-[#16A45E]">*</span>}
+              Desarrollos de Interés {!isEditMode && <span className="text-[hsl(158_64%_38%)]">*</span>}
             </div>
 
             {/* Seleccionados */}
             {selectedProyectosList.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {selectedProyectosList.map((s) => (
-                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md border border-[#D6ECE0] bg-[#EAF6F0] px-2 py-1 text-[12px] font-medium text-[#0E7A45]">
+                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md border border-[#D6ECE0] bg-[#EAF6F0] px-2 py-1 text-[12px] font-medium text-[hsl(158_64%_38%)]">
                     {s.nombre}
                     {(!isEditMode || editProyectos.length > 1) && (
                       <button
@@ -523,7 +523,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                             setSelectedProyectoIds((prev) => prev.filter((id) => id !== s.id));
                           }
                         }}
-                        className="rounded p-0.5 text-[#0E7A45]/70 hover:bg-[#0E7A45]/10 hover:text-[#0E7A45]"
+                        className="rounded p-0.5 text-[hsl(158_64%_38%)]/70 hover:bg-[hsl(158_64%_38%)]/10 hover:text-[hsl(158_64%_38%)]"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -590,7 +590,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             <div className="flex flex-col gap-3">
               {/* Tipo de persona — segmented */}
               <div>
-                <div className={labelCls}>Tipo de Persona <span className="text-[#16A45E]">*</span></div>
+                <div className={labelCls}>Tipo de Persona <span className="text-[hsl(158_64%_38%)]">*</span></div>
                 <div className="flex max-w-[240px] rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-[3px]">
                   {[{ v: "pf", l: "Física" }, { v: "pm", l: "Moral" }].map((o) => (
                     <button
@@ -612,7 +612,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
               {/* Nombre */}
               <div>
-                <div className={labelCls}>Nombre Completo <span className="text-[#16A45E]">*</span></div>
+                <div className={labelCls}>Nombre Completo <span className="text-[hsl(158_64%_38%)]">*</span></div>
                 <input
                   className={inputCls}
                   placeholder="Nombre y apellidos"
@@ -624,7 +624,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               {/* Email + Teléfono */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <div className={labelCls}>Email <span className="text-[#16A45E]">*</span></div>
+                  <div className={labelCls}>Email <span className="text-[hsl(158_64%_38%)]">*</span></div>
                   <input
                     type="email"
                     className={cn(inputCls, "disabled:bg-[#F6F7F8] disabled:text-[#9AA3AD]")}
@@ -638,7 +638,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   )}
                 </div>
                 <div>
-                  <div className={labelCls}>Teléfono <span className="text-[#16A45E]">*</span> (+52)</div>
+                  <div className={labelCls}>Teléfono <span className="text-[hsl(158_64%_38%)]">*</span> (+52)</div>
                   <div className="flex gap-2">
                     <Select value={clavePais} onValueChange={setClavePais}>
                       <SelectTrigger className={cn(triggerCls, "w-[70px] shrink-0")}>
@@ -704,7 +704,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             type="button"
             onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
             disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A45E] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#128A4F] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(158_64%_38%)] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[hsl(158_64%_31%)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
           </button>

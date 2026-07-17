@@ -287,7 +287,7 @@ const AgentPipeline = () => {
                   track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
                   navigate('/admin/agent/inventario/unidades?openFilters=true');
                 }}
-                className="flex items-center gap-1.5 rounded-[10px] bg-[#16A45E] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
+                className="flex items-center gap-1.5 rounded-[10px] bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
               >
                 <Plus className="h-4 w-4" />
                 Nueva oferta
@@ -314,7 +314,7 @@ const AgentPipeline = () => {
                 className={cn(
                   "shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
                   isActive
-                    ? "border-[#16A45E] bg-[#16A45E] text-white"
+                    ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
                     : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
                 )}
               >
@@ -334,7 +334,7 @@ const AgentPipeline = () => {
             placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
+            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
           />
         </div>
       </div>
@@ -532,7 +532,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
             <button
               onClick={handleConfirmApartado}
               disabled={!apartadoEmail.trim() || sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[#16A45E] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[hsl(158_64%_38%)] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
             >
               {sendingApartado ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
               {sendingApartado ? "Creando…" : "Enviar link"}
@@ -543,7 +543,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-bold text-[#0E7A45]">
+          <span className="text-[12px] font-bold text-[hsl(158_64%_38%)]">
             Oferta: {ofertaLabel}
           </span>
           <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
@@ -610,7 +610,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition-colors",
                 hasUrl
-                  ? "border-[#D7EFE1] bg-[#EAF6F0] text-[#0E7A45] hover:bg-[#DDF0E6]"
+                  ? "border-[#D7EFE1] bg-[#EAF6F0] text-[hsl(158_64%_38%)] hover:bg-[#DDF0E6]"
                   : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
               )}
             >

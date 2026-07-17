@@ -13,6 +13,9 @@ const PUBLIC_MARKER = "/storage/v1/object/public/";
 
 export function optimizedImage(url: string | null | undefined, opts: OptimizeOpts = {}): string {
   if (!url) return "";
+  // El endpoint render/image solo existe en Supabase Cloud (*.supabase.co).
+  // En self-hosted (dev: supabase-dev.sozu.com) 404ea y rompe la imagen.
+  if (!url.includes(".supabase.co/")) return url;
   const idx = url.indexOf(PUBLIC_MARKER);
   if (idx === -1) return url; // no es storage público de Supabase → dejar igual
 

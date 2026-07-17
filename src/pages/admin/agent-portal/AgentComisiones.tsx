@@ -269,7 +269,7 @@ const AgentComisiones = () => {
               track({ page: 'agent_comisiones', elementId: 'btn_completar_perfil_comisiones', elementLabel: 'Completar perfil' });
               navigate('/admin/agent/perfil');
             }}
-            className="w-full py-2.5 rounded-xl bg-[#16A45E] text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+            className="w-full py-2.5 rounded-xl bg-[hsl(158_64%_38%)] text-white text-sm font-semibold active:scale-[0.98] transition-transform"
           >
             Completar perfil
           </button>
@@ -332,7 +332,7 @@ const AgentComisiones = () => {
                   className={cn(
                     "whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-all tabular-nums",
                     activeTab === tab.key
-                      ? "border-[#16A45E] bg-[#16A45E] text-white"
+                      ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
                       : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
                   )}
                 >
@@ -499,7 +499,7 @@ function AgentFacturaUploadButton({
           track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
           fileRef.current?.click();
         }}
-        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[#16A45E] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
+        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-lg bg-[hsl(158_64%_38%)] text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
       >
         {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading ? 'Subiendo...' : 'Subir factura'}
