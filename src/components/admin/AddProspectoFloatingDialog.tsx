@@ -29,7 +29,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const queryClient = useQueryClient();
-  const { accessibleProjectIds, isLoading: isLoadingAccess } = useProjectAccess();
+  const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
   const { track } = useCtaTracker();
   const hasTrackedFieldFill = useRef(false);
 
@@ -168,18 +168,22 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     }
   }, [open, preSelectedPersonaId, misProspectos]);
 
-  // Solo los desarrollos ASIGNADOS al agente (nunca el catálogo completo, ni para
-  // super admin / super admin fake). Un prospecto solo puede interesarse en lo que el agente maneja.
+  // Un agente solo ve los desarrollos ASIGNADOS a él (un prospecto solo puede
+  // interesarse en lo que el agente maneja). Excepción: usuarios con acceso
+  // irrestricto (Super Admin / Admin de Proyecto / ver_todos_proyectos) ven el
+  // catálogo completo de proyectos activos, porque administran todo.
   const { data: proyectos = [] } = useQuery({
-    queryKey: ["desarrollos-activos-floating", accessibleProjectIds],
+    queryKey: ["desarrollos-activos-floating", hasUnrestrictedAccess, accessibleProjectIds],
     queryFn: async () => {
-      if (accessibleProjectIds.length === 0) return [];
-      const { data, error } = await supabase
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) return [];
+      let query = supabase
         .from("proyectos")
         .select("id, nombre")
-        .eq("activo", true)
-        .in("id", accessibleProjectIds)
-        .order("nombre");
+        .eq("activo", true);
+      if (!hasUnrestrictedAccess) {
+        query = query.in("id", accessibleProjectIds);
+      }
+      const { data, error } = await query.order("nombre");
       if (error) throw error;
       return data || [];
     },
