@@ -177,6 +177,7 @@ type ContactRow = {
   meta_platform: string | null;
   meta_created_time: string | null;
   meta_field_data: any[] | null;
+  categoria_ids: number[];
 };
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
@@ -195,6 +196,102 @@ function DateChip({ date }: { date: string | null }) {
   );
 }
 
+// ─── Categorías de contacto (procedencia) ──────────────────────────────────────
+const fetchCrmCategorias = async (): Promise<{ id: number; nombre: string }[]> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_categorias")
+    .select("id, nombre")
+    .eq("activo", true)
+    .order("orden");
+  if (error) return []; // tabla aún no desplegada en este ambiente → sin categorías
+  return data ?? [];
+};
+
+function CategoryTagPicker({
+  catalog, selected, onToggle, saving,
+}: {
+  catalog: { id: number; nombre: string }[];
+  selected: number[];
+  onToggle: (id: number) => void;
+  saving?: boolean;
+}) {
+  if (!catalog.length) return null;
+  const sel = new Set(selected);
+  const chosen = catalog.filter((c) => sel.has(c.id));
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {chosen.map((c) => (
+        <Badge key={c.id} variant="secondary" className="gap-1 pr-1 font-normal">
+          {c.nombre}
+          <button type="button" aria-label={`Quitar ${c.nombre}`} onClick={() => onToggle(c.id)}
+            className="rounded-sm hover:text-destructive">
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs">
+            <Plus className="h-3 w-3 mr-1" />Categoría
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-52">
+          {catalog.map((c) => (
+            <DropdownMenuItem key={c.id} onSelect={(e) => { e.preventDefault(); onToggle(c.id); }}>
+              <Check className={`h-3.5 w-3.5 mr-2 ${sel.has(c.id) ? "opacity-100" : "opacity-0"}`} />
+              {c.nombre}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+    </div>
+  );
+}
+
+// Editor de categorías en la ficha: persiste al instante (soft-delete vía activo=false).
+function ContactCategories({ contactId }: { contactId: number }) {
+  const qc = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const { data: selected = [], refetch } = useQuery({
+    queryKey: ["contact-categorias", contactId],
+    queryFn: async (): Promise<number[]> => {
+      const { data, error } = await (supabase as any)
+        .from("entidades_relacionadas_categorias")
+        .select("id_categoria")
+        .eq("id_entidad_relacionada", contactId)
+        .eq("activo", true);
+      if (error) return [];
+      return (data ?? []).map((r: any) => r.id_categoria as number);
+    },
+  });
+  if (!catalog.length) return null;
+  const has = (id: number) => (selected as number[]).includes(id);
+  const toggle = async (id: number) => {
+    setSaving(true);
+    try {
+      const tbl = (supabase as any).from("entidades_relacionadas_categorias");
+      const { error } = has(id)
+        ? await tbl.update({ activo: false }).eq("id_entidad_relacionada", contactId).eq("id_categoria", id)
+        : await tbl.upsert({ id_entidad_relacionada: contactId, id_categoria: id, activo: true },
+            { onConflict: "id_entidad_relacionada,id_categoria" });
+      if (error) throw error;
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo guardar la categoría");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <CField label="Categorías">
+      <CategoryTagPicker catalog={catalog} selected={selected as number[]} onToggle={toggle} saving={saving} />
+    </CField>
+  );
+}
+
 export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
@@ -207,6 +304,7 @@ export function CrmContacts() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterLifecycle, setFilterLifecycle] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
+  const [filterCategoria, setFilterCategoria] = useState("all");
   const [page, setPage] = useState(0);
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
@@ -241,8 +339,14 @@ export function CrmContacts() {
     },
   });
 
+  const { data: categoriasCatalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const catNameMap = useMemo<Record<number, string>>(
+    () => Object.fromEntries((categoriasCatalog as any[]).map((c: any) => [c.id, c.nombre])),
+    [categoriasCatalog],
+  );
+
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -276,12 +380,22 @@ export function CrmContacts() {
         }
       }
 
+      // Filtro por categoría (procedencia) vía tabla puente.
+      let catErIds: number[] | null = null;
+      if (filterCategoria !== "all") {
+        const { data: catRows } = await (supabase as any).from("entidades_relacionadas_categorias")
+          .select("id_entidad_relacionada").eq("activo", true).eq("id_categoria", Number(filterCategoria));
+        catErIds = (catRows ?? []).map((r: any) => Number(r.id_entidad_relacionada));
+        if (!catErIds.length) return { rows: [], count: 0 };
+      }
+
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
         q = q.in("id_tipo_entidad", tipoFilter).eq("activo", true);
         if (proyectoId) q = q.eq("id_proyecto", proyectoId);
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
         if (sourceErIds) q = q.in("id", sourceErIds);
+        if (catErIds) q = q.in("id", catErIds);
         if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
@@ -322,6 +436,18 @@ export function CrmContacts() {
         ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
 
+      // Categorías (procedencia) de cada contacto de la página.
+      const catByEr: Record<number, number[]> = {};
+      const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
+        .select("id_entidad_relacionada, id_categoria")
+        .in("id_entidad_relacionada", ers.map((e: any) => e.id))
+        .eq("activo", true);
+      if (!catAllRes.error) {
+        for (const r of (catAllRes.data ?? [])) {
+          (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
+        }
+      }
+
       const rows: ContactRow[] = ers
         .filter((e: any) => pMap[e.id_persona])
         .map((e: any) => {
@@ -349,6 +475,7 @@ export function CrmContacts() {
             meta_platform: a?.meta_platform ?? null,
             meta_created_time: a?.meta_created_time ?? null,
             meta_field_data: a?.meta_field_data ?? null,
+            categoria_ids: catByEr[e.id] ?? [],
           };
         });
 
@@ -411,6 +538,10 @@ export function CrmContacts() {
           options={[{ v: "all", l: "Todas las fuentes" }, { v: "meta", l: "Solo Meta" }, { v: "manual", l: "Manual" }]} />
         <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
           options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
+        {(categoriasCatalog as any[]).length > 0 && (
+          <CFilter value={filterCategoria} onChange={(v) => { setFilterCategoria(v); setPage(0); }} placeholder="Categoría"
+            options={[{ v: "all", l: "Todas las categorías" }, ...(categoriasCatalog as any[]).map((c: any) => ({ v: String(c.id), l: c.nombre }))]} />
+        )}
       </div>
 
       {/* Table card */}
@@ -459,11 +590,22 @@ export function CrmContacts() {
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
+                              <span className="inline-flex items-center gap-2.5 max-w-[300px]">
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                <span className="flex flex-col min-w-0">
+                                  <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                  {c.categoria_ids?.length ? (
+                                    <span className="flex flex-wrap gap-1 mt-0.5">
+                                      {c.categoria_ids.map((cid) => (
+                                        <span key={cid} className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                                          {catNameMap[cid] ?? "—"}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  ) : null}
+                                </span>
                               </span>
                             </td>
                           );
@@ -648,7 +790,8 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo" });
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categorias: [] as number[] });
+  const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
 
   const submit = async () => {
     if (!form.full_name) return;
@@ -682,9 +825,16 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         id_propietario: user?.id ?? null,
       });
       if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
+      // 4. Categorías (procedencia) seleccionadas (best-effort: si la tabla aún no existe, el contacto igual queda creado)
+      if (form.categorias.length) {
+        const { error: cErr } = await (supabase as any).from("entidades_relacionadas_categorias").insert(
+          form.categorias.map((cid) => ({ id_entidad_relacionada: er.id, id_categoria: cid, activo: true })),
+        );
+        if (cErr) console.warn("crm_categorias no disponible:", cErr.message);
+      }
       toast.success("Contacto creado");
       setOpen(false);
-      setForm({ ...form, full_name: "", email: "", phone: "" });
+      setForm({ ...form, full_name: "", email: "", phone: "", categorias: [] });
       onCreated();
     } catch (e: any) {
       toast.error(mensajeErrorContacto(e));
@@ -710,6 +860,18 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               <SelectContent>{developments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
             </Select>
           </CField>
+          {catalog.length > 0 && (
+            <CField label="Categorías">
+              <CategoryTagPicker
+                catalog={catalog}
+                selected={form.categorias}
+                onToggle={(id) => setForm((f) => ({
+                  ...f,
+                  categorias: f.categorias.includes(id) ? f.categorias.filter((x) => x !== id) : [...f.categorias, id],
+                }))}
+              />
+            </CField>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <CField label="Estado del lead">
               <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
@@ -1321,6 +1483,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
 
   return (
     <div className="space-y-3 text-sm">
+      {contact.id ? <ContactCategories contactId={Number(contact.id)} /> : null}
       <CField label="Correo electrónico">
         <Input className="h-8 text-sm" type="email" value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
