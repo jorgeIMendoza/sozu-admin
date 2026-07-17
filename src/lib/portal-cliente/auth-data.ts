@@ -80,7 +80,7 @@ interface AuthState {
     fullName: string;
   }) => PreClientSession;
 
-  // Pedir magic link (mock — registra el request y "envía" el email visual)
+  // Pedir magic link (mock - registra el request y "envía" el email visual)
   requestMagicLink: (input: {
     email: string;
     prospectId: string;
@@ -163,7 +163,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ),
     }));
 
-    // Necesitamos el fullName del prospect — viene del offer-data store
+    // Necesitamos el fullName del prospect - viene del offer-data store
     // Para no acoplar stores aquí, el caller (VerifyTokenPage) hace el lookup
     // y llama createSessionForProspect manualmente con los datos completos.
     return { success: true };

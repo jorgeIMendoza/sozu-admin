@@ -60,7 +60,7 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
 
         {expanded && (
           <div className="border-t border-border">
-            {/* Video embed — active projects only, not post_entrega */}
+            {/* Video embed - active projects only, not post_entrega */}
             {!isCompleted && featuredVideoUrl && (
               <div className="min-w-0">
                 <div className="aspect-video w-full max-w-full bg-black overflow-hidden">
@@ -87,7 +87,7 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
 
             {/* Progress bar + milestones */}
             <div className="p-4 space-y-3">
-              {data.lastUpdated && data.lastUpdated !== "—" && (
+              {data.lastUpdated && data.lastUpdated !== "-" && (
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                   <Calendar className="w-3 h-3" />
                   Última actualización · <span className="font-medium text-foreground">{data.lastUpdated}</span>

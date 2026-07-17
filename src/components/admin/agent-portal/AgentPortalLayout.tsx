@@ -302,7 +302,7 @@ export const AgentPortalLayout = () => {
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
           <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            <p className="text-[16px] font-bold text-foreground tracking-tight truncate">{currentSection}</p>
+            <p className="text-xl lg:text-2xl font-bold text-foreground tracking-tight truncate">{currentSection}</p>
             <div className="ml-auto flex items-center gap-3">
               {canImpersonate && <AgentPortalImpersonationSelector />}
               <PresentationToggle />
@@ -321,7 +321,7 @@ export const AgentPortalLayout = () => {
                 <Menu className="h-5 w-5" />
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{currentSection}</p>
+                <p className="text-[17px] font-bold text-foreground tracking-tight truncate">{currentSection}</p>
               </div>
               <PresentationToggle />
               {renderProfileMenu()}

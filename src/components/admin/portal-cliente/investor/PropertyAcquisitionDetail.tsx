@@ -213,7 +213,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
             </div>
           </section>
 
-          {/* Precio de compra (mobile only — desktop shows in right col) */}
+          {/* Precio de compra (mobile only - desktop shows in right col) */}
           <div className="md:hidden">
             <FinancialSideCard investment={investment} onPay={handlePay} />
           </div>
@@ -235,7 +235,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
             <FichaTecnicaSection propDetalle={propDetalle} />
           ) : null}
 
-          {/* Agente (mobile only — desktop shows in right col) */}
+          {/* Agente (mobile only - desktop shows in right col) */}
           <div className="md:hidden">
             <AgentSideCard investment={investment} />
           </div>
@@ -658,7 +658,7 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
         </button>
       )}
 
-      {/* Comprobante / CEP — misma modal chica que en Pagos */}
+      {/* Comprobante / CEP - misma modal chica que en Pagos */}
       <DocViewerPortal
         open={!!preview}
         onClose={() => setPreview(null)}
@@ -710,7 +710,7 @@ const FinancialSideCard = ({ investment, onPay }: { investment: InvestmentProper
         </div>
       </div>
 
-      {property.deliveryDate && property.deliveryDate !== "—" && (
+      {property.deliveryDate && property.deliveryDate !== "-" && (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-4">
           <Calendar className="w-3.5 h-3.5 shrink-0" />
           <span>Entrega: <span className="font-medium text-foreground">{property.deliveryDate}</span></span>

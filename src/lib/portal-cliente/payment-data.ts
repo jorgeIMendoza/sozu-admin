@@ -181,7 +181,7 @@ export function usePaymentSchedule(cuentaId: string | undefined) {
 /**
  * Aplicaciones de pago (pagos dispersados) por acuerdo. Un acuerdo puede tener
  * varias filas en `aplicaciones_pago`, cada una ligada a un `pago` distinto.
- * Excluye multas (`es_multa=true`) — esas no cuentan como abono al concepto.
+ * Excluye multas (`es_multa=true`) - esas no cuentan como abono al concepto.
  */
 async function fetchApplicationsByAcuerdo(
   acuerdoIds: number[],
@@ -226,7 +226,7 @@ async function fetchApplicationsByAcuerdo(
       date,
       dateDisplay: date
         ? new Date(date + "T12:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })
-        : "—",
+        : "-",
       trackingKey: pago.clave_rastreo ? String(pago.clave_rastreo) : undefined,
       cepUrl: pago.url_cep ? String(pago.url_cep) : undefined,
       evidenceUrl: pago.url_recibo ? String(pago.url_recibo) : undefined,

@@ -29,7 +29,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const queryClient = useQueryClient();
-  const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: isLoadingAccess } = useProjectAccess();
+  const { accessibleProjectIds, isLoading: isLoadingAccess } = useProjectAccess();
   const { track } = useCtaTracker();
   const hasTrackedFieldFill = useRef(false);
 
@@ -168,22 +168,18 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     }
   }, [open, preSelectedPersonaId, misProspectos]);
 
-  // Fetch all developments the agent has access to (for prospect interest registration)
+  // Solo los desarrollos ASIGNADOS al agente (nunca el catálogo completo, ni para
+  // super admin / super admin fake). Un prospecto solo puede interesarse en lo que el agente maneja.
   const { data: proyectos = [] } = useQuery({
-    queryKey: ["desarrollos-activos-floating", accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ["desarrollos-activos-floating", accessibleProjectIds],
     queryFn: async () => {
-      let query = supabase
+      if (accessibleProjectIds.length === 0) return [];
+      const { data, error } = await supabase
         .from("proyectos")
         .select("id, nombre")
         .eq("activo", true)
+        .in("id", accessibleProjectIds)
         .order("nombre");
-
-      if (!hasUnrestrictedAccess) {
-        if (accessibleProjectIds.length === 0) return [];
-        query = query.in("id", accessibleProjectIds);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -286,6 +282,12 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         throw new Error("La CURP no tiene un formato válido. Debe tener 18 caracteres alfanuméricos (Ej: ABCD123456HMNEFD01)");
       }
 
+      // El prospecto debe quedar ligado a un agente dueño. Sin persona de agente
+      // (ej. Super Admin sin id_persona) se crearía huérfano/invisible → error explícito.
+      if (!isEditMode && !effectivePersonaId) {
+        throw new Error("Tu usuario no tiene un perfil de agente asociado, no puedes crear prospectos.");
+      }
+
       if (isEditMode && selectedProspectoId) {
         // Update existing persona
         const { error: updateError } = await supabase
@@ -379,7 +381,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         toast.error("La CURP ingresada ya está registrada en el sistema. Por favor, verifica e ingresa una CURP diferente.");
       } else if (msg.includes("personas_email_key") || msg.includes("duplicate") && msg.includes("email")) {
         toast.error("El email ingresado ya está registrado en el sistema. Por favor, verifica e ingresa un email diferente.");
-      } else if (msg.includes("RFC") || msg.includes("CURP") || msg.includes("teléfono") || msg.includes("obligatorios")) {
+      } else if (msg.includes("RFC") || msg.includes("CURP") || msg.includes("teléfono") || msg.includes("obligatorios") || msg.includes("agente")) {
         toast.error(msg);
       } else {
         toast.error("No se pudo guardar el prospecto. Verifica los datos e intenta de nuevo.");
@@ -466,7 +468,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
       >
         <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-          <DialogTitle className="text-[18px] font-extrabold text-[#171A1D]">
+          <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
             {isEditMode ? "Editar Prospecto" : "Nuevo Prospecto"}
           </DialogTitle>
         </DialogHeader>
@@ -498,7 +500,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             )}
           </div>
 
-          {/* Desarrollos de interés — búsqueda + lista */}
+          {/* Desarrollos de interés - búsqueda + lista */}
           <div>
             <div className={labelBoldCls}>
               Desarrollos de Interés {!isEditMode && <span className="text-[hsl(158_64%_38%)]">*</span>}
@@ -588,7 +590,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               Información básica · datos sensibles
             </div>
             <div className="flex flex-col gap-3">
-              {/* Tipo de persona — segmented */}
+              {/* Tipo de persona - segmented */}
               <div>
                 <div className={labelCls}>Tipo de Persona <span className="text-[hsl(158_64%_38%)]">*</span></div>
                 <div className="flex max-w-[240px] rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-[3px]">
@@ -634,7 +636,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                     disabled={isEditMode && !!selectedProspectoId}
                   />
                   {existingPersonaId && !isEditMode && (
-                    <p className="mt-1 text-[10px] font-medium text-blue-600">✓ Persona existente — se vinculará al prospecto</p>
+                    <p className="mt-1 text-[10px] font-medium text-blue-600">✓ Persona existente - se vinculará al prospecto</p>
                   )}
                 </div>
                 <div>

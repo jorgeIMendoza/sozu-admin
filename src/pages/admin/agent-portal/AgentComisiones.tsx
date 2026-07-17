@@ -244,7 +244,7 @@ const AgentComisiones = () => {
     return (
       <div className="pb-24">
         <AgentPortalHeader />
-        <div className="mx-auto max-w-[1040px] pt-1 space-y-5">
+        <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
         <div className="rounded-md border border-[#E7E9EC] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
@@ -301,12 +301,12 @@ const AgentComisiones = () => {
       <div className="grid grid-cols-2 gap-3.5">
         <div className="rounded-md bg-primary p-[18px]">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-white/65">Total cobrado</p>
-          <p className="mt-2 text-[24px] font-extrabold tabular-nums text-white">{mask(formatCurrency(totalCobrado))}</p>
+          <p className="mt-2 text-[24px] font-bold tabular-nums text-white">{mask(formatCurrency(totalCobrado))}</p>
           <p className="mt-1 text-[10px] font-semibold text-white/55">MXN · acumulado</p>
         </div>
         <div className="rounded-md border border-[#ECEEF0] bg-white p-[18px]">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
-          <p className="mt-2 text-[24px] font-extrabold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
+          <p className="mt-2 text-[24px] font-bold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
           <p className="mt-1 text-[10px] font-semibold text-[#9AA3AD]">MXN · en proceso</p>
         </div>
       </div>
@@ -372,7 +372,7 @@ const AgentComisiones = () => {
                         : c.propiedad ? `Departamento ${c.propiedad}` : 'Sin unidad'}
                     </p>
                   </div>
-                  <p className="shrink-0 text-[16px] font-extrabold tabular-nums text-[#171A1D]">
+                  <p className="shrink-0 text-[16px] font-bold tabular-nums text-[#171A1D]">
                     {mask(formatCurrency(c.monto_comision || 0))}
                   </p>
                 </div>

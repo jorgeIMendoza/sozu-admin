@@ -142,7 +142,7 @@ const PwCheck = ({ label, ok }: { label: string; ok: boolean }) => (
 
 /**
  * Botones separados (no clases dinámicas) para que Tailwind no purgue bg-emerald.
- * El config del proyecto define emerald como DEFAULT/light/pale — no existen 500/600.
+ * El config del proyecto define emerald como DEFAULT/light/pale - no existen 500/600.
  */
 const PrimaryBtn = ({
   onClick, loading, label, disabled = false,
@@ -521,7 +521,7 @@ const ClientePerfil = () => {
     enabled: !!effectivePersonaId,
   });
 
-  /* Catalogs — lazy */
+  /* Catalogs - lazy */
   const { data: regimenOptions = [] } = useQuery({
     queryKey: ["regimen-options"],
     queryFn: async () => {
@@ -620,7 +620,7 @@ const ClientePerfil = () => {
           tipo: 'email',
           from: 'Notificaciones Sozu <notificaciones@sozu.com>',
           email: correos,
-          asunto: `Cambio en perfil de cliente — ${clienteEmail || displayName}`,
+          asunto: `Cambio en perfil de cliente - ${clienteEmail || displayName}`,
           mensajeWA: `Cliente ${clienteEmail || displayName}: ${actividad}`,
           mensaje: { nombre: 'Equipo SOZU', actividad, detalles },
         },
@@ -671,7 +671,7 @@ const ClientePerfil = () => {
       queryClient.refetchQueries({ queryKey: ["cliente-perfil-persona", effectivePersonaId] });
       toast.success("Datos personales actualizados");
       setShowEditPersonal(false);
-      notificarCambioCliente('Actualización de datos personales', `Nombre: ${payload.nombre_legal || '—'}, RFC: ${payload.rfc || '—'}, CURP: ${payload.curp || '—'}`);
+      notificarCambioCliente('Actualización de datos personales', `Nombre: ${payload.nombre_legal || '-'}, RFC: ${payload.rfc || '-'}, CURP: ${payload.curp || '-'}`);
     } finally {
       setSavingPersonal(false);
     }
@@ -813,7 +813,7 @@ const ClientePerfil = () => {
       queryClient.refetchQueries({ queryKey: ["cliente-perfil-persona", effectivePersonaId] });
       toast.success("Datos fiscales actualizados");
       setShowEditFiscal(false);
-      notificarCambioCliente('Actualización de datos fiscales', `Régimen: ${payload.regimen || '—'}, CP: ${payload.direccion_fiscal_codigo_postal || '—'}, Calle: ${payload.direccion_fiscal_calle || '—'}`);
+      notificarCambioCliente('Actualización de datos fiscales', `Régimen: ${payload.regimen || '-'}, CP: ${payload.direccion_fiscal_codigo_postal || '-'}, Calle: ${payload.direccion_fiscal_calle || '-'}`);
     } finally {
       setSavingFiscal(false);
     }
@@ -1245,7 +1245,7 @@ const ClientePerfil = () => {
                 ]}
               />
 
-              {/* Seguridad card — inline (needs red logout button) */}
+              {/* Seguridad card - inline (needs red logout button) */}
               <section style={{ background:'#fff', border:'1px solid #ededf0', borderRadius:8, padding:'18px 20px', display:'flex', flexDirection:'column' }}>
                 <div style={{ display:'flex', alignItems:'flex-start', gap:11 }}>
                   <div style={{ width:36, height:36, borderRadius:6, background:'#eaf6ef', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -1496,7 +1496,7 @@ const ClientePerfil = () => {
         )}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Editar datos personales
+            MODAL - Editar datos personales
         ══════════════════════════════════════════════ */}
         {(() => {
           const onClose = () => setShowEditPersonal(false);
@@ -1583,7 +1583,7 @@ const ClientePerfil = () => {
         })()}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Editar datos fiscales
+            MODAL - Editar datos fiscales
         ══════════════════════════════════════════════ */}
         {(() => {
           const onClose = () => setShowEditFiscal(false);
@@ -1597,7 +1597,7 @@ const ClientePerfil = () => {
                     onChange={(v) => setEditFiscal(f => ({ ...f, regimen: v }))}
                     options={regimenOptions}
                     placeholder="Buscar régimen fiscal..."
-                    getLabel={(o) => `${o.id} — ${o.nombre}`}
+                    getLabel={(o) => `${o.id} - ${o.nombre}`}
                     getValue={(o) => String(o.id)}
                   />
                 </FormField>
@@ -1607,7 +1607,7 @@ const ClientePerfil = () => {
                     onChange={(v) => setEditFiscal(f => ({ ...f, uso_cfdi: v }))}
                     options={usoCfdiOptions}
                     placeholder="Buscar uso CFDI..."
-                    getLabel={(o) => `${o.codigo} — ${o.nombre}`}
+                    getLabel={(o) => `${o.codigo} - ${o.nombre}`}
                     getValue={(o) => o.codigo}
                   />
                 </FormField>
@@ -1678,7 +1678,7 @@ const ClientePerfil = () => {
         })()}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Cambiar contraseña
+            MODAL - Cambiar contraseña
         ══════════════════════════════════════════════ */}
         {(() => {
           const content = (
@@ -1703,7 +1703,7 @@ const ClientePerfil = () => {
                 )}
               </div>
               <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-border/50 shrink-0">
-                {/* Dos botones separados — clases estáticas para que Tailwind no purgue bg-emerald */}
+                {/* Dos botones separados - clases estáticas para que Tailwind no purgue bg-emerald */}
                 {pwReady
                   ? <PrimaryBtn onClick={handleChangePassword} loading={changingPassword} label="Confirmar" />
                   : <GrayBtn label="Confirmar" />}
@@ -1727,7 +1727,7 @@ const ClientePerfil = () => {
         })()}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Verificar contraseña (gate)
+            MODAL - Verificar contraseña (gate)
         ══════════════════════════════════════════════ */}
         {(() => {
           const onClose = () => { setShowPwAuth(false); setPwAuthInput(''); };
@@ -1778,7 +1778,7 @@ const ClientePerfil = () => {
         })()}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Agregar cuenta bancaria
+            MODAL - Agregar cuenta bancaria
         ══════════════════════════════════════════════ */}
         {(() => {
           const onClose = () => { setShowAddCuenta(false); setAddCuenta({ id_banco:'', cuenta_clabe:'', titular:'' }); };
@@ -1859,7 +1859,7 @@ const ClientePerfil = () => {
         })()}
 
         {/* ══════════════════════════════════════════════
-            MODAL — Editar cuenta bancaria
+            MODAL - Editar cuenta bancaria
         ══════════════════════════════════════════════ */}
         {(() => {
           const onClose = () => { setShowEditCuenta(false); setEditCuentaId(null); };
@@ -2014,7 +2014,7 @@ const ClientePerfil = () => {
 /*  Sub-components                             */
 /* ─────────────────────────────────────────── */
 
-/* Modal de confirmación de datos extraídos (CURP / CSF) — editable antes de guardar */
+/* Modal de confirmación de datos extraídos (CURP / CSF) - editable antes de guardar */
 const ConfirmDataModal = ({
   data, saving, onCancel, onConfirm,
 }: {

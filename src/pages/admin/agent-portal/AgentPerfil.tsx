@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
@@ -15,7 +15,7 @@ import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/ho
 import {
   FileText, Receipt, Landmark, GraduationCap,
   Check, AlertTriangle, ChevronRight, Loader2,
-  Camera, Trash2, Upload, ArrowLeft, Eye
+  Camera, Trash2, Upload, ArrowLeft, Eye, Pencil, Plus, UploadCloud, RotateCcw
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -57,10 +57,12 @@ const ACTIVATION_BLOCKS = [
 ];
 
 // Documentos del expediente del agente (tipos reales en `documentos`)
-const EXPEDIENTE_DOCS: { nombre: string; emisor: string; hint: string; tipos: number[]; step: OnboardingStep['id'] }[] = [
-  { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], step: 'fiscal' },
-  { nombre: 'Identificación oficial', emisor: 'INE / Pasaporte', hint: 'Vigente, por ambos lados', tipos: [2, 3, 4], step: 'basic' },
-  { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Documento generado y firmado con SOZU', tipos: [48], step: 'basic' },
+const EXPEDIENTE_DOCS: { nombre: string; emisor: string; hint: string; tipos: number[]; step: OnboardingStep['id']; kind: 'camera' | 'pdf' }[] = [
+  { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], step: 'fiscal', kind: 'pdf' },
+  { nombre: 'INE - Frente', emisor: 'INE', hint: 'Lado con foto', tipos: [2], step: 'basic', kind: 'camera' },
+  { nombre: 'INE - Reverso', emisor: 'INE', hint: 'Lado con domicilio', tipos: [3], step: 'basic', kind: 'camera' },
+  { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [4], step: 'basic', kind: 'camera' },
+  { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Documento generado y firmado con SOZU', tipos: [48], step: 'basic', kind: 'pdf' },
 ];
 
 const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'> = {
@@ -69,6 +71,278 @@ const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'>
   'bank-accounts': 'bank',
   training: 'training',
 };
+
+// Umbral de porcentaje que dispara el festejo de perfil completo.
+const CELEBRATION_THRESHOLD = 100;
+
+// Nombre de cada subsección (se muestra en el header junto a la flecha de regreso).
+const SUBSECTION_TITLES: Record<string, string> = {
+  expediente: 'Expediente',
+  identidad: 'Identidad',
+  fiscal: 'Información fiscal',
+  bank: 'Cuenta bancaria',
+  training: 'Capacitación',
+};
+
+// Badge de estatus reutilizable para las filas de "Secciones de tu perfil".
+function sectionBadge(status: string) {
+  return status === 'complete'
+    ? { label: 'Completado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
+    : status === 'partial'
+    ? { label: 'En proceso', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
+    : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' };
+}
+
+// Zona profesional de subida: arrastra o selecciona (PDF).
+function DocDropzone({ accept, uploading, onFile }: { accept: string; uploading: boolean; onFile: (f: File) => void }) {
+  const [drag, setDrag] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pick = (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    if (accept.includes('.pdf') && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Solo se permiten archivos PDF.');
+      return;
+    }
+    onFile(f);
+  };
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
+      onClick={() => !uploading && inputRef.current?.click()}
+      className={cn(
+        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors",
+        drag ? "border-[hsl(158_64%_38%)] bg-[#F0FAF4]" : "border-[#D6DBDF] bg-[#FAFBFB] hover:border-[hsl(158_64%_38%)]"
+      )}
+    >
+      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+      {uploading ? (
+        <Loader2 className="h-8 w-8 animate-spin text-[hsl(158_64%_38%)]" />
+      ) : (
+        <UploadCloud className="h-8 w-8 text-[hsl(158_64%_38%)]" strokeWidth={1.6} />
+      )}
+      <div>
+        <p className="text-[14px] font-bold text-[#171A1D]">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
+        <p className="mt-1 text-[12px] font-medium text-[#9AA3AD]">o haz clic para seleccionar · Solo PDF</p>
+      </div>
+    </div>
+  );
+}
+// Captura de documento con cámara (sin IA). Recorta SOLO el recuadro de guía.
+// Soporta varios pasos (INE: frente + reverso) o uno solo (pasaporte).
+function SimpleCameraCaptureDialog({ open, onOpenChange, personaId, titulo, steps, onUploaded }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  personaId: number | null | undefined;
+  titulo: string;
+  steps: { tipo: number; label: string }[];
+  onUploaded: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const blobsRef = useRef<Record<number, Blob>>({});
+  const [ready, setReady] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const current = steps[stepIndex] || { tipo: 0, label: '' };
+  const subLabel = steps.length > 1 && current.label ? `${titulo} - ${current.label}` : titulo;
+
+  const stop = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setReady(false);
+  };
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setReady(true);
+    } catch {
+      toast.error('No se pudo acceder a la cámara. Verifica los permisos.');
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      blobsRef.current = {};
+      setStepIndex(0);
+      setPreview(null);
+      setPendingBlob(null);
+      start();
+    } else {
+      stop();
+      blobsRef.current = {};
+      setStepIndex(0);
+      setPreview(null);
+      setPendingBlob(null);
+    }
+    return () => stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Captura recortando EXACTO al recuadro de guía (inset-5 = 20px) considerando object-cover.
+  const capture = () => {
+    const v = videoRef.current, c = canvasRef.current;
+    if (!v || !c) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const cW = v.clientWidth, cH = v.clientHeight, vW = v.videoWidth, vH = v.videoHeight;
+    if (!vW || !vH || !cW || !cH) {
+      c.width = vW; c.height = vH;
+      ctx.drawImage(v, 0, 0);
+    } else {
+      const scale = Math.max(cW / vW, cH / vH);
+      const offX = (vW - cW / scale) / 2;
+      const offY = (vH - cH / scale) / 2;
+      const inset = 20; // inset-5
+      const sx = Math.max(0, offX + inset / scale);
+      const sy = Math.max(0, offY + inset / scale);
+      const sw = Math.min((cW - 2 * inset) / scale, vW - sx);
+      const sh = Math.min((cH - 2 * inset) / scale, vH - sy);
+      c.width = Math.round(sw);
+      c.height = Math.round(sh);
+      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    }
+    c.toBlob((blob) => {
+      if (!blob) return;
+      setPendingBlob(blob);
+      setPreview(URL.createObjectURL(blob));
+      stop();
+    }, 'image/jpeg', 0.9);
+  };
+
+  const repeat = () => { setPreview(null); setPendingBlob(null); start(); };
+
+  const uploadOne = async (tipo: number, blob: Blob) => {
+    const file = new File([blob], `doctype${tipo}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const path = `expediente/${personaId}/${tipo}_${Date.now()}.jpg`;
+    const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+    if (upErr) throw upErr;
+    const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+    await (supabase as any).from('documentos').update({ activo: false })
+      .eq('id_persona', personaId).eq('id_tipo_documento', tipo).eq('activo', true);
+    const { error: insErr } = await (supabase as any).from('documentos').insert({
+      url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: 1,
+    });
+    if (insErr) throw insErr;
+  };
+
+  const cont = async () => {
+    if (!pendingBlob) return;
+    blobsRef.current[current.tipo] = pendingBlob;
+    // Avanzar de paso NO requiere persona (solo la subida final).
+    if (stepIndex < steps.length - 1) {
+      setStepIndex((i) => i + 1);
+      setPreview(null);
+      setPendingBlob(null);
+      start();
+      return;
+    }
+    if (!personaId) {
+      toast.error('Tu usuario no tiene un perfil de persona asociado, no se puede guardar el documento.');
+      return;
+    }
+    setUploading(true);
+    try {
+      for (const st of steps) {
+        const b = blobsRef.current[st.tipo];
+        if (b) await uploadOne(st.tipo, b);
+      }
+      toast.success('Documento guardado. Queda pendiente de validación.');
+      onUploaded();
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo guardar el documento.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md bg-white p-0 gap-0 overflow-hidden">
+        <DialogHeader className="border-b border-[#ECEEF0] px-5 py-4 space-y-0 pr-10">
+          <DialogTitle className="text-[16px] font-bold text-[#171A1D]">Captura de tu documento</DialogTitle>
+          <p className="mt-0.5 text-[12.5px] font-medium text-[#9AA3AD]">
+            {subLabel}{steps.length > 1 ? ` · Paso ${stepIndex + 1} de ${steps.length}` : ''}
+          </p>
+        </DialogHeader>
+        <div className="p-4">
+          <p className="mb-2 text-center text-[13px] font-medium text-[#6B7280]">
+            {preview ? 'Revisa que se vea completo y legible.' : 'Encuadra el documento y captura.'}
+          </p>
+          <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-black">
+            {preview ? (
+              <img src={preview} alt="Captura" className="h-full w-full object-contain" />
+            ) : (
+              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+            )}
+            {!preview && <div className="pointer-events-none absolute inset-5 rounded-md border-2 border-white/70" />}
+            <canvas ref={canvasRef} className="hidden" />
+            {!ready && !preview && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex gap-2">
+            {preview ? (
+              <>
+                <button onClick={repeat} disabled={uploading}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[#ECEEF0] px-4 py-2.5 text-[13px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50">
+                  <RotateCcw className="h-4 w-4" /> Repetir
+                </button>
+                <button onClick={cont} disabled={uploading}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" strokeWidth={2.5} />} Continuar
+                </button>
+              </>
+            ) : (
+              <button onClick={capture} disabled={!ready}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                <Camera className="h-4 w-4" /> Capturar
+              </button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+// Fila compartida de "Secciones de tu perfil" (Documentos + etapas). Un solo estilo.
+function ProfileSectionRow({ title, description, badge, onClick }: {
+  title: string;
+  description: string;
+  badge?: { label: string; color: string; bg: string } | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px] text-left hover:border-[#CBD2D9]"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-[13.5px] font-bold text-[#171A1D]">{title}</span>
+          {badge && (
+            <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>{badge.label}</span>
+          )}
+        </div>
+        <p className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">{description}</p>
+      </div>
+      <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#9AA3AD]" strokeWidth={2} />
+    </button>
+  );
+}
 
 const AgentPerfil = () => {
   const { profile, user, refreshProfile } = useAuth();
@@ -80,7 +354,7 @@ const AgentPerfil = () => {
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const loggedInEmail = user?.email || profile?.email;
   const canEdit = !!loggedInEmail && !!agentEmail && loggedInEmail === agentEmail;
-  const { steps, completedCount, totalSteps, percentage, isLoading, missingByStep } = useAgentOnboardingStatus(personaId);
+  const { steps, percentage, isLoading, missingByStep } = useAgentOnboardingStatus(personaId);
   const { appointments: trainingAppointments = [] } = useAgentTrainingAppointments(personaId);
   const { permissions } = useAgentPortalPermissions();
   const perfilPerms = permissions['/admin/agent/perfil'];
@@ -355,22 +629,7 @@ const AgentPerfil = () => {
     staleTime: Infinity,
   });
 
-  // Edición inline (teléfono, uso CFDI)
-  const [phoneVal, setPhoneVal] = useState('');
-  const [savingPhone, setSavingPhone] = useState(false);
   const [savingCfdi, setSavingCfdi] = useState(false);
-  useEffect(() => { setPhoneVal(personaDatos?.telefono || ''); }, [personaDatos?.telefono]);
-
-  const savePhone = async () => {
-    if (!personaId) return;
-    setSavingPhone(true);
-    try {
-      await (supabase as any).from('personas').update({ telefono: phoneVal.trim() || null }).eq('id', personaId);
-      queryClient.invalidateQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
-    } finally {
-      setSavingPhone(false);
-    }
-  };
 
   const saveUsoCfdi = async (codigo: string) => {
     if (!personaId) return;
@@ -386,6 +645,109 @@ const AgentPerfil = () => {
   const darDeBajaCuenta = async (id: number) => {
     await (supabase as any).from('cuentas_bancarias').update({ activo: false }).eq('id', id);
     queryClient.invalidateQueries({ queryKey: ['agent-perfil-bancos', personaId] });
+  };
+
+  // Subida directa de PDF (constancia fiscal) → documentos, pendiente de validación.
+  const [cameraDoc, setCameraDoc] = useState<{ titulo: string; steps: { tipo: number; label: string }[] } | null>(null);
+  // INE = frente(2)+reverso(3) en un solo flujo. Pasaporte(4) independiente.
+  const openCameraForDoc = (tipos: number[], nombre: string) => {
+    const t = tipos[0];
+    if (t === 2 || t === 3) {
+      setCameraDoc({ titulo: 'INE', steps: [{ tipo: 2, label: 'Frente' }, { tipo: 3, label: 'Reverso' }] });
+    } else {
+      setCameraDoc({ titulo: nombre, steps: [{ tipo: t, label: '' }] });
+    }
+  };
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const uploadDocPdf = async (file: File, tipo: number) => {
+    if (!personaId) { toast.error('Tu usuario no tiene un perfil de persona asociado.'); return; }
+    setUploadingDoc(true);
+    try {
+      const path = `expediente/${personaId}/${tipo}_${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+      await (supabase as any).from('documentos').update({ activo: false })
+        .eq('id_persona', personaId).eq('id_tipo_documento', tipo).eq('activo', true);
+      const { error: insErr } = await (supabase as any).from('documentos').insert({
+        url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: 1,
+      });
+      if (insErr) throw insErr;
+      queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
+      toast.success('Documento subido. Queda pendiente de validación.');
+      setDocDetail(null);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo subir el documento.');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  // Edición de información de Identidad vía modal. Correo NO se edita (solo lectura).
+  const [identEditOpen, setIdentEditOpen] = useState(false);
+  const [savingIdent, setSavingIdent] = useState(false);
+  const [identForm, setIdentForm] = useState<Record<string, string>>({});
+  const openIdentEdit = () => {
+    setIdentForm({
+      nombre_legal: personaDatos?.nombre_legal || '',
+      telefono: personaDatos?.telefono || '',
+      curp: personaDatos?.curp || '',
+      fecha_nacimiento: (personaDatos?.fecha_nacimiento || '').slice(0, 10),
+      sexo: personaDatos?.sexo || '',
+      direccion_calle: personaDatos?.direccion_calle || '',
+      direccion_num_ext: personaDatos?.direccion_num_ext || '',
+      direccion_colonia: personaDatos?.direccion_colonia || '',
+      direccion_codigo_postal: personaDatos?.direccion_codigo_postal || '',
+    });
+    setIdentEditOpen(true);
+  };
+  const setIdent = (k: string, v: string) => setIdentForm((p) => ({ ...p, [k]: v }));
+  const saveIdent = async () => {
+    // Sin persona asociada (p. ej. Super Admin sin id_persona) → no hay fila que editar.
+    if (!personaId) {
+      toast.error('Tu usuario no tiene un perfil de persona asociado, no hay datos que editar.');
+      return;
+    }
+    // Campos obligatorios
+    const faltantes: string[] = [];
+    if (!identForm.nombre_legal?.trim()) faltantes.push('Nombre completo');
+    if (!identForm.telefono?.trim()) faltantes.push('Teléfono');
+    else if (identForm.telefono.trim().length !== 10) faltantes.push('Teléfono (10 dígitos)');
+    if (!identForm.curp?.trim()) faltantes.push('CURP');
+    if (faltantes.length > 0) {
+      toast.error(`Faltan campos obligatorios: ${faltantes.join(', ')}.`);
+      return;
+    }
+    setSavingIdent(true);
+    try {
+      const payload = {
+        nombre_legal: identForm.nombre_legal?.trim() || null,
+        telefono: identForm.telefono?.trim() || null,
+        curp: identForm.curp?.trim().toUpperCase() || null,
+        fecha_nacimiento: identForm.fecha_nacimiento || null,
+        sexo: identForm.sexo || null,
+        direccion_calle: identForm.direccion_calle?.trim() || null,
+        direccion_num_ext: identForm.direccion_num_ext?.trim() || null,
+        direccion_colonia: identForm.direccion_colonia?.trim() || null,
+        direccion_codigo_postal: identForm.direccion_codigo_postal?.trim() || null,
+      };
+      const { data: updated, error } = await (supabase as any)
+        .from('personas')
+        .update(payload)
+        .eq('id', personaId)
+        .select('id');
+      if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se pudo guardar: no tienes permiso para editar este perfil (RLS).');
+      }
+      await queryClient.refetchQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
+      toast.success('Información actualizada');
+      setIdentEditOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo guardar la información.');
+    } finally {
+      setSavingIdent(false);
+    }
   };
 
   // Documentos del expediente (tipos de agente)
@@ -405,29 +767,39 @@ const AgentPerfil = () => {
     staleTime: 30_000,
   });
 
-  // Desarrollos asignados (para bloque "Asignado por SOZU")
-  const { accessibleProjectIds, hasUnrestrictedAccess } = useProjectAccess();
+  // Estatus agregado de Documentos (para la fila "Documentos" en Secciones)
+  const docsStatus = (() => {
+    const total = EXPEDIENTE_DOCS.length;
+    let validated = 0, uploaded = 0;
+    EXPEDIENTE_DOCS.forEach((d) => {
+      const rows = expedienteDocs.filter((x: any) => d.tipos.includes(x.id_tipo_documento));
+      if (rows.some((x: any) => x.id_estatus_verificacion === 2)) validated++;
+      else if (rows.length > 0) uploaded++;
+    });
+    if (total > 0 && validated === total) return 'complete';
+    if (validated + uploaded > 0) return 'partial';
+    return 'pending';
+  })();
+
+  // Desarrollos ASIGNADOS al agente (solo los suyos, nunca el catálogo completo).
+  const { accessibleProjectIds } = useProjectAccess();
   const { data: misDesarrollos = [] } = useQuery({
-    queryKey: ['agent-perfil-desarrollos', hasUnrestrictedAccess ? 'all' : accessibleProjectIds],
+    queryKey: ['agent-perfil-desarrollos', accessibleProjectIds],
     queryFn: async (): Promise<string[]> => {
-      let q = (supabase as any)
+      if (accessibleProjectIds.length === 0) return [];
+      const { data } = await (supabase as any)
         .from('proyectos')
         .select('nombre')
         .eq('activo', true)
         .eq('publicar', true)
+        .in('id', accessibleProjectIds)
         .order('nombre');
-      if (!hasUnrestrictedAccess) {
-        if (accessibleProjectIds.length === 0) return [];
-        q = q.in('id', accessibleProjectIds);
-      }
-      const { data } = await q;
       return (data || []).map((p: any) => p.nombre).filter(Boolean);
     },
     staleTime: 60_000,
   });
+  const [showAllDesarrollos, setShowAllDesarrollos] = useState(false);
   const confettiFiredRef = useRef(false);
-  const prevPercentageRef = useRef<number | null>(null);
-  const [showTrumpets, setShowTrumpets] = useState(false);
 
   // Log page view
   useEffect(() => {
@@ -435,143 +807,23 @@ const AgentPerfil = () => {
     track({ page: 'agent_perfil', elementId: 'page_view', elementType: 'page' });
   }, []);
 
-  // Play celebration fanfare - louder, longer, richer
-  const playCelebrationSound = useCallback(async () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
-
-      const master = audioCtx.createGain();
-      master.gain.value = 0.55; // Much louder
-      master.connect(audioCtx.destination);
-
-      // Brass-like fanfare: two oscillators per note for richness
-      const notes = [
-        { freq: 523.25, start: 0, dur: 0.20 },
-        { freq: 659.25, start: 0.18, dur: 0.20 },
-        { freq: 783.99, start: 0.36, dur: 0.22 },
-        { freq: 1046.5, start: 0.56, dur: 0.50 },
-        { freq: 783.99, start: 1.10, dur: 0.14 },
-        { freq: 880.0,  start: 1.24, dur: 0.14 },
-        { freq: 1046.5, start: 1.38, dur: 0.18 },
-        { freq: 1174.66, start: 1.56, dur: 0.60 },
-        { freq: 1318.51, start: 2.20, dur: 0.70 },
-      ];
-
-      notes.forEach(({ freq, start, dur }) => {
-        // Primary oscillator - sawtooth for brass timbre
-        const osc1 = audioCtx.createOscillator();
-        const gain1 = audioCtx.createGain();
-        osc1.type = 'sawtooth';
-        osc1.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
-        gain1.gain.setValueAtTime(0, audioCtx.currentTime + start);
-        gain1.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + start + 0.025);
-        gain1.gain.setValueAtTime(0.15, audioCtx.currentTime + start + 0.06);
-        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
-        osc1.connect(gain1);
-        gain1.connect(master);
-        osc1.start(audioCtx.currentTime + start);
-        osc1.stop(audioCtx.currentTime + start + dur + 0.05);
-
-        // Second oscillator - triangle an octave below for warmth
-        const osc2 = audioCtx.createOscillator();
-        const gain2 = audioCtx.createGain();
-        osc2.type = 'triangle';
-        osc2.frequency.setValueAtTime(freq * 0.5, audioCtx.currentTime + start);
-        gain2.gain.setValueAtTime(0, audioCtx.currentTime + start);
-        gain2.gain.linearRampToValueAtTime(0.10, audioCtx.currentTime + start + 0.03);
-        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
-        osc2.connect(gain2);
-        gain2.connect(master);
-        osc2.start(audioCtx.currentTime + start);
-        osc2.stop(audioCtx.currentTime + start + dur + 0.05);
-      });
-    } catch (e) {
-      // Audio no soportado/bloqueado
-    }
-  }, []);
-
-  // Fire confetti + streamers + trumpets when profile reaches 100% FOR THE FIRST TIME EVER
-  const celebrationStorageKey = `agent_celebration_fired_${personaId}`;
+  // Festejo sobrio al alcanzar el umbral por primera vez (sin sonido, sin overlay,
+  // sin bucle rAF prolongado → evita lag). 2 ráfagas cortas laterales + burst central.
+  const celebrationStorageKey = `agent_celebration_fired_${CELEBRATION_THRESHOLD}_${personaId}`;
   useEffect(() => {
-    if (!isLoading && percentage === 100 && !confettiFiredRef.current) {
-      const alreadyCelebrated = localStorage.getItem(celebrationStorageKey);
-      if (!alreadyCelebrated) {
-        confettiFiredRef.current = true;
-        localStorage.setItem(celebrationStorageKey, 'true');
+    if (isLoading || percentage < CELEBRATION_THRESHOLD || confettiFiredRef.current) return;
+    if (localStorage.getItem(celebrationStorageKey)) return;
 
-        // Show trumpet overlay
-        setShowTrumpets(true);
-        setTimeout(() => setShowTrumpets(false), 3500);
+    confettiFiredRef.current = true;
+    localStorage.setItem(celebrationStorageKey, 'true');
 
-        // Play fanfare
-        playCelebrationSound();
-
-        // Confetti burst
-        const duration = 3500;
-        const end = Date.now() + duration;
-        const colors = ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24', '#f97316', '#ec4899', '#8b5cf6'];
-
-        // Initial big burst
-        confetti({ particleCount: 80, spread: 100, origin: { x: 0.5, y: 0.4 }, colors, startVelocity: 45 });
-
-        // Streamers (long thin ribbons) from sides
-        const launchStreamers = () => {
-          // Left side streamers
-          confetti({
-            particleCount: 3,
-            angle: 60,
-            spread: 30,
-            origin: { x: 0, y: 0.5 },
-            colors,
-            shapes: ['square'],
-            scalar: 2.2,
-            drift: 0.8,
-            gravity: 0.6,
-            ticks: 300,
-          });
-          // Right side streamers
-          confetti({
-            particleCount: 3,
-            angle: 120,
-            spread: 30,
-            origin: { x: 1, y: 0.5 },
-            colors,
-            shapes: ['square'],
-            scalar: 2.2,
-            drift: -0.8,
-            gravity: 0.6,
-            ticks: 300,
-          });
-        };
-
-        // Continuous confetti + streamers
-        const frame = () => {
-          confetti({
-            particleCount: 4,
-            angle: 60,
-            spread: 65,
-            origin: { x: 0, y: 0.7 },
-            colors,
-            shapes: ['circle', 'square'],
-          });
-          confetti({
-            particleCount: 4,
-            angle: 120,
-            spread: 65,
-            origin: { x: 1, y: 0.7 },
-            colors,
-            shapes: ['circle', 'square'],
-          });
-          launchStreamers();
-          if (Date.now() < end) requestAnimationFrame(frame);
-        };
-        frame();
-      }
-    }
-  }, [percentage, isLoading, playCelebrationSound, celebrationStorageKey]);
+    const colors = ['#10b981', '#059669', '#34d399', '#6ee7b7', '#fbbf24'];
+    // Burst central
+    confetti({ particleCount: 60, spread: 80, startVelocity: 40, origin: { x: 0.5, y: 0.45 }, colors });
+    // Dos ráfagas laterales una sola vez (sin requestAnimationFrame continuo)
+    confetti({ particleCount: 30, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors });
+    confetti({ particleCount: 30, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors });
+  }, [percentage, isLoading, celebrationStorageKey]);
 
   const getBlockStatus = (relatedSteps: readonly string[]) => {
     const related = steps.filter(s => relatedSteps.includes(s.id));
@@ -585,6 +837,13 @@ const AgentPerfil = () => {
     .filter(s => ['fiscal', 'bank-accounts'].includes(s.id))
     .every(s => s.isComplete);
 
+  // Estatus de las 5 secciones del perfil (Documentos + 4 etapas) → alimenta el hero.
+  const sectionStatuses = [docsStatus, ...ACTIVATION_BLOCKS.map((b) => getBlockStatus(b.relatedSteps))];
+  const totalSecciones = sectionStatuses.length;
+  const seccionesValidadas = sectionStatuses.filter((s) => s === 'complete').length;
+  const seccionesEnProceso = sectionStatuses.filter((s) => s === 'partial').length;
+  const seccionesPendientes = sectionStatuses.filter((s) => s === 'pending').length;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -595,38 +854,44 @@ const AgentPerfil = () => {
 
   return (
     <div className="pb-24 relative">
-      {/* Trumpet celebration overlay */}
-      {showTrumpets && (
-        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
-          {/* Left trumpet */}
-          <div className="absolute left-4 top-1/3 animate-fade-in" style={{ animationDuration: '0.4s' }}>
-            <div className="text-6xl animate-bounce" style={{ animationDuration: '0.6s' }}>🎺</div>
+      <AgentPortalHeader>
+        {profileView !== 'overview' && (
+          <div className="flex items-center gap-3 pt-0.5">
+            <button
+              onClick={() => setProfileView('overview')}
+              aria-label="Volver a Perfil"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-[#4B5563] transition-colors hover:bg-gray-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <h2 className="flex-1 truncate text-[18px] font-bold tracking-[-0.3px] text-[#171A1D]">{SUBSECTION_TITLES[profileView]}</h2>
+            {profileView === 'training' && perfilPerms.canUpdate && (
+              <button
+                onClick={() => setActiveStep('training')}
+                className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                <span className="hidden sm:inline">Agendar capacitación</span>
+                <span className="sm:hidden">Agendar</span>
+              </button>
+            )}
+            {profileView === 'bank' && perfilPerms.canUpdate && (
+              <button
+                onClick={() => setActiveStep('bank-accounts')}
+                className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+                <span className="hidden sm:inline">Agregar cuenta</span>
+                <span className="sm:hidden">Agregar</span>
+              </button>
+            )}
           </div>
-          {/* Right trumpet (mirrored) */}
-          <div className="absolute right-4 top-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.15s', animationFillMode: 'both' }}>
-            <div className="text-6xl animate-bounce scale-x-[-1]" style={{ animationDuration: '0.6s' }}>🎺</div>
-          </div>
-          {/* Center celebration text */}
-          <div className="animate-scale-in flex flex-col items-center gap-2" style={{ animationDuration: '0.5s', animationDelay: '0.3s', animationFillMode: 'both' }}>
-            <span className="text-5xl">🎉</span>
-            <div className="bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-2xl">
-              <p className="text-lg font-bold text-center">¡Perfil completo!</p>
-              <p className="text-xs text-emerald-100 text-center">Ya puedes recibir comisiones</p>
-            </div>
-          </div>
-          {/* Bottom trumpets */}
-          <div className="absolute left-1/4 bottom-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.25s', animationFillMode: 'both' }}>
-            <div className="text-4xl animate-bounce" style={{ animationDuration: '0.7s' }}>🎺</div>
-          </div>
-          <div className="absolute right-1/4 bottom-1/3 animate-fade-in" style={{ animationDuration: '0.4s', animationDelay: '0.35s', animationFillMode: 'both' }}>
-            <div className="text-4xl animate-bounce scale-x-[-1]" style={{ animationDuration: '0.7s' }}>🎺</div>
-          </div>
-        </div>
-      )}
-      <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-w-[880px] mx-auto">
+        )}
+      </AgentPortalHeader>
+      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
       {profileView === 'overview' && (<>
       {/* Profile Card */}
-      <div className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-start gap-5">
+      <div className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-start gap-5">
         {/* Avatar */}
         <button
           type="button"
@@ -643,7 +908,7 @@ const AgentPerfil = () => {
               className="h-[72px] w-[72px] rounded-full object-cover"
             />
           ) : (
-            <div className="h-[72px] w-[72px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-extrabold text-2xl">
+            <div className="h-[72px] w-[72px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-bold text-2xl">
               {(displayName || "A")[0]?.toUpperCase()}
             </div>
           )}
@@ -652,24 +917,24 @@ const AgentPerfil = () => {
               <Camera className="h-3.5 w-3.5" />
             </span>
           )}
+          {/* Indicador de estatus activo - puntito sobre el borde del avatar */}
+          <span
+            title="Activo"
+            aria-label="Activo"
+            className="absolute right-1 top-1 h-3 w-3 rounded-full bg-[hsl(158_64%_38%)] ring-[2.5px] ring-white shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
+          />
         </button>
 
         {/* Info + presentación */}
         <div className="flex-1 min-w-[240px]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[19px] font-extrabold tracking-[-0.3px] text-[#171A1D]">
+            <span className="text-[19px] font-bold tracking-[-0.3px] text-[#171A1D]">
               {displayName || "Agente"}
             </span>
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-1">
             <span className="text-[12px] font-semibold text-[#6B7280]">
               {(perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || "Agente Inmobiliario"}
-            </span>
-            <span
-              title="Tu nombre y rol los asigna SOZU; no se editan aquí. Tu foto y presentación sí son editables."
-              className="rounded-full bg-[#F2F4F5] px-2 py-[3px] text-[9px] font-semibold tracking-[0.5px] text-[#9AA3AD]"
-            >
-              NOMBRE Y ROL · SOLO LECTURA
             </span>
           </div>
           {agencyName && (
@@ -678,20 +943,42 @@ const AgentPerfil = () => {
               <span className="text-[11px] font-semibold text-[hsl(158_64%_38%)]">{agencyName}</span>
             </div>
           )}
+          {/* Desarrollos asignados - bajo la agencia (máx 3 visibles + "+N") */}
+          {misDesarrollos.length > 0 && (
+            <div className="mt-2.5">
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.6px] text-[#9AA3AD]">Desarrollos asignados</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(showAllDesarrollos ? misDesarrollos : misDesarrollos.slice(0, 3)).map((d) => (
+                  <span key={d} className="rounded-full border border-[#E4E7EA] bg-white px-2.5 py-[3px] text-[10.5px] font-semibold text-[#4B5563]">
+                    {d}
+                  </span>
+                ))}
+                {misDesarrollos.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllDesarrollos((v) => !v)}
+                    className="rounded-full border border-[#D6ECE0] bg-[#EAF6F0] px-2.5 py-[3px] text-[10.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#DDF0E6]"
+                  >
+                    {showAllDesarrollos ? 'Ver menos' : `+${misDesarrollos.length - 3}`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* Presentación editable */}
+          {/* Presentación: lectura por defecto, edición al pulsar */}
           {(canEdit || perfilExtra?.frase_perfil) && (
             <div className="mt-3.5 pt-3.5 border-t border-[#F2F4F5]">
-              {canEdit ? (
+              {editingFrase ? (
                 <>
                   <p className="text-[11.5px] font-semibold text-[#4B5563] leading-relaxed">
                     Así te presentas ante tus clientes. Aparece cuando compartes una propiedad con un prospecto.
                   </p>
                   <textarea
+                    autoFocus
                     value={fraseValue}
                     rows={3}
                     onChange={e => setFraseValue(e.target.value)}
-                    onFocus={() => setEditingFrase(true)}
                     onInput={(e) => {
                       const el = e.currentTarget;
                       el.style.height = 'auto';
@@ -699,7 +986,7 @@ const AgentPerfil = () => {
                     }}
                     maxLength={280}
                     placeholder="Escribe tu presentación…"
-                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-xl border border-[#ECEEF0] px-3 py-2.5 text-[12.5px] text-[#171A1D] leading-relaxed outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[12.5px] text-[#171A1D] leading-relaxed outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
                   />
                   <div className="mt-1.5 flex items-center justify-between gap-3 flex-wrap">
                     <span className="text-[10.5px] italic text-[#9AA3AD]">
@@ -708,19 +995,43 @@ const AgentPerfil = () => {
                     <span className="flex items-center gap-2.5 shrink-0">
                       <span className="text-[10.5px] font-medium tabular-nums text-[#B7BEC5]">{fraseValue.length}/280</span>
                       <button
+                        onClick={() => setEditingFrase(false)}
+                        disabled={savingFrase}
+                        className="inline-flex items-center rounded-md border border-[#ECEEF0] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button
                         onClick={handleFraseSave}
                         disabled={savingFrase}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(158_64%_38%)] px-3.5 py-1.5 text-[11.5px] font-bold text-white disabled:opacity-50 transition-opacity hover:opacity-90"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-3.5 py-1.5 text-[11.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#F0FAF4] disabled:opacity-50"
                       >
-                        {savingFrase ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={2.5} />}
+                        {savingFrase && <Loader2 className="h-3 w-3 animate-spin" />}
                         Guardar
                       </button>
                     </span>
                   </div>
                 </>
-              ) : (
-                <p className="text-[12.5px] italic text-[#6B7280] leading-relaxed">"{perfilExtra!.frase_perfil}"</p>
-              )}
+              ) : perfilExtra?.frase_perfil ? (
+                <div className="flex items-start justify-between gap-3">
+                  <p className="flex-1 text-[12.5px] italic text-[#4B5563] leading-relaxed">"{perfilExtra.frase_perfil}"</p>
+                  {canEdit && (
+                    <button
+                      onClick={() => { setFraseValue(perfilExtra.frase_perfil || ''); setEditingFrase(true); }}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-2.5 py-1.5 text-[11px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Editar
+                    </button>
+                  )}
+                </div>
+              ) : canEdit ? (
+                <button
+                  onClick={() => { setFraseValue(''); setEditingFrase(true); }}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[#D6DBDF] px-3.5 py-2 text-[12px] font-semibold text-[#4B5563] transition-colors hover:border-[hsl(158_64%_38%)] hover:text-[hsl(158_64%_38%)]"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Agregar presentación
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -729,7 +1040,7 @@ const AgentPerfil = () => {
         <div className="w-full sm:w-[220px] shrink-0 sm:border-l sm:border-[#F2F4F5] sm:pl-5">
           <div className="flex items-baseline justify-between">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Activación</span>
-            <span className="text-[18px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">{percentage}%</span>
+            <span className="text-[18px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{percentage}%</span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-[#EEF0F2] overflow-hidden">
             <div className="h-full rounded-full bg-[hsl(158_64%_38%)] transition-all duration-700" style={{ width: `${percentage}%` }} />
@@ -739,6 +1050,7 @@ const AgentPerfil = () => {
           </p>
         </div>
       </div>
+
 
       {/* Hidden file input (outside any button) */}
       <input
@@ -753,7 +1065,7 @@ const AgentPerfil = () => {
       <Dialog open={showPhotoModal} onOpenChange={(open) => { if (!open) closePhotoModal(); }}>
         <DialogContent
           style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}
-          className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[360px] p-0 overflow-hidden rounded-2xl border-0 shadow-2xl [&>button]:text-white/80 [&>button:hover]:text-white"
+          className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[360px] p-0 overflow-hidden rounded-md border-0 shadow-2xl [&>button]:text-white/80 [&>button:hover]:text-white"
         >
           {!pendingFile ? (
             /* ── Phase 1: Options ── */
@@ -783,7 +1095,7 @@ const AgentPerfil = () => {
               <div className="px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-1">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-3 w-full rounded-xl px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-[hsl(var(--agent-primary))]/10 hover:bg-[hsl(var(--agent-primary))]/15 active:bg-[hsl(var(--agent-primary))]/20 transition-colors cursor-pointer"
+                  className="flex items-center gap-3 w-full rounded-md px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-[hsl(var(--agent-primary))]/10 hover:bg-[hsl(var(--agent-primary))]/15 active:bg-[hsl(var(--agent-primary))]/20 transition-colors cursor-pointer"
                 >
                   <div className="h-8 w-8 rounded-full bg-[hsl(var(--agent-primary))]/15 flex items-center justify-center shrink-0">
                     <Upload className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
@@ -800,7 +1112,7 @@ const AgentPerfil = () => {
                   <button
                     onClick={handlePhotoDelete}
                     disabled={deletingPhoto}
-                    className="flex items-center gap-3 w-full rounded-xl px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-red-50 hover:bg-red-100 active:bg-red-200 transition-colors disabled:opacity-50 cursor-pointer"
+                    className="flex items-center gap-3 w-full rounded-md px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-red-50 hover:bg-red-100 active:bg-red-200 transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                       {deletingPhoto
@@ -817,7 +1129,7 @@ const AgentPerfil = () => {
 
                 <button
                   onClick={closePhotoModal}
-                  className="mt-0.5 w-full rounded-xl px-4 min-h-[44px] text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors text-center cursor-pointer"
+                  className="mt-0.5 w-full rounded-md px-4 min-h-[44px] text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors text-center cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -848,7 +1160,7 @@ const AgentPerfil = () => {
                 <button
                   onClick={handlePhotoConfirm}
                   disabled={uploadingPhoto}
-                  className="w-full rounded-xl min-h-[52px] text-sm font-semibold bg-[hsl(var(--agent-primary))] hover:opacity-90 active:opacity-80 text-white transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full rounded-md min-h-[52px] text-sm font-semibold bg-[hsl(var(--agent-primary))] hover:opacity-90 active:opacity-80 text-white transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {uploadingPhoto ? (
                     <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</>
@@ -859,7 +1171,7 @@ const AgentPerfil = () => {
                 <button
                   onClick={() => { setPendingFile(null); if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); } }}
                   disabled={uploadingPhoto}
-                  className="w-full rounded-xl min-h-[44px] text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  className="w-full rounded-md min-h-[44px] text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   Volver
                 </button>
@@ -871,7 +1183,7 @@ const AgentPerfil = () => {
 
       {/* Aviso proactivo */}
       {isAgentRole && !canReceivePayments && (
-        <div className="flex items-center gap-3 rounded-xl border border-[#EBCBA6] bg-[#FBE3CE] px-3.5 py-3">
+        <div className="flex items-center gap-3 rounded-md border border-[#EBCBA6] bg-[#FBE3CE] px-3.5 py-3">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#B5601C] text-white">
             <AlertTriangle className="h-3 w-3" />
           </span>
@@ -890,87 +1202,13 @@ const AgentPerfil = () => {
         </div>
       )}
 
-      {/* PROGRESO */}
-      <div className="rounded-2xl border border-[#ECEEF0] bg-white p-5 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
-        <div className="mb-4 text-[10.5px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">Progreso</div>
-        <div className="flex items-start justify-between gap-1">
-          {ACTIVATION_BLOCKS.map((block) => {
-            const status = getBlockStatus(block.relatedSteps);
-            return (
-              <button
-                key={block.stepId}
-                onClick={() => setProfileView(STEP_TO_VIEW[block.stepId])}
-                className="flex flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-[10px] px-0.5 py-1.5 text-center hover:bg-[#F7F9F8]"
-              >
-                <span
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border-2 text-[12px] font-bold tabular-nums",
-                    status === 'complete'
-                      ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
-                      : status === 'partial'
-                      ? "border-[hsl(158_64%_38%)] bg-[#E8F5EE] text-[hsl(158_64%_38%)] shadow-[0_0_0_4px_rgba(22,164,94,0.14)]"
-                      : "border-[#E4E7EA] bg-white text-[#9AA3AD]"
-                  )}
-                >
-                  {status === 'complete' ? <Check className="h-4 w-4" strokeWidth={3} /> : ACTIVATION_BLOCKS.indexOf(block) + 1}
-                </span>
-                <span
-                  className={cn(
-                    "text-[10.5px] leading-tight",
-                    status === 'complete' ? "font-semibold text-[#171A1D]"
-                      : status === 'partial' ? "font-extrabold text-[hsl(158_64%_38%)]"
-                      : "font-semibold text-[#9AA3AD]"
-                  )}
-                >
-                  {block.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Lo que te falta */}
-        {(() => {
-          const faltantes = ACTIVATION_BLOCKS
-            .filter((b) => getBlockStatus(b.relatedSteps) !== 'complete')
-            .map((b) => ({ block: b, item: (missingByStep[b.stepId] || [])[0] }))
-            .filter((f) => f.item);
-          if (faltantes.length === 0) return null;
-          return (
-            <div className="mt-[18px] border-t border-[#F2F4F5] pt-4">
-              <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
-                Lo que te falta para activarte
-              </div>
-              <div className="flex flex-col gap-2">
-                {faltantes.map((f, i) => (
-                  <div
-                    key={f.block.stepId}
-                    tabIndex={0}
-                    onClick={() => setProfileView(STEP_TO_VIEW[f.block.stepId])}
-                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-[#DCEEE3] bg-[#F0FAF4] px-3.5 py-3"
-                  >
-                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[#CFE9DA] bg-white text-[11px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 text-[12.5px] font-semibold text-[#16331F]">
-                      <strong className="font-extrabold">{f.block.label}</strong> - {f.item}
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[hsl(158_64%_38%)]" strokeWidth={2} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
       {/* HERO MOTOR · expediente */}
-      <div className="flex flex-wrap gap-[22px] rounded-2xl border border-[#CFE9DA] bg-gradient-to-br from-[#F0FAF4] to-[#FBFEFC] p-[22px]">
+      <div className="flex flex-wrap gap-[22px] rounded-md border border-[#CFE9DA] bg-gradient-to-br from-[#F0FAF4] to-[#FBFEFC] p-[22px]">
         <div className="min-w-[240px] flex-1">
           <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-[hsl(158_64%_38%)]">
             Tu expediente · el motor de tu activación
           </div>
-          <div className="mt-2 text-[21px] font-extrabold leading-[1.25] tracking-[-0.4px] text-[#16331F]">
+          <div className="mt-2 text-[21px] font-bold leading-[1.25] tracking-[-0.4px] text-[#16331F]">
             Tu información se construye desde tus documentos.
           </div>
           <p className="mt-2 text-[13px] font-medium leading-relaxed text-[#3F5A4A]">
@@ -979,26 +1217,26 @@ const AgentPerfil = () => {
           <div className="mt-4 flex flex-wrap items-center gap-3.5">
             <button
               onClick={() => setProfileView('expediente')}
-              className="inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
             >
               <FileText className="h-4 w-4" />
               Gestionar documentos
             </button>
             <span className="text-[12px] font-semibold tabular-nums text-[#3F5A4A]">
-              {completedCount} de {totalSteps} etapas completadas
+              {seccionesValidadas} de {totalSecciones} secciones completadas
             </span>
           </div>
         </div>
-        <div className="w-[210px] shrink-0 rounded-[13px] border border-[#DCEEE3] bg-white p-[15px]">
-          <div className="mb-3 text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Estado de etapas</div>
+        <div className="w-[210px] shrink-0 rounded-md border border-[#DCEEE3] bg-white p-[15px]">
+          <div className="mb-3 text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Estado de secciones</div>
           <div className="flex flex-col gap-[11px]">
             {[
-              { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'complete').length, label: 'validadas', bg: 'bg-[#E8F5EE]', color: 'text-[hsl(158_64%_38%)]' },
-              { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'partial').length, label: 'en proceso', bg: 'bg-[#FBEFD9]', color: 'text-[#B5730A]' },
-              { n: ACTIVATION_BLOCKS.filter((b) => getBlockStatus(b.relatedSteps) === 'pending').length, label: 'pendientes', bg: 'bg-[#EEF0F2]', color: 'text-[#6B7280]' },
+              { n: seccionesValidadas, label: 'validadas', bg: 'bg-[#E8F5EE]', color: 'text-[hsl(158_64%_38%)]' },
+              { n: seccionesEnProceso, label: 'en proceso', bg: 'bg-[#FBEFD9]', color: 'text-[#B5730A]' },
+              { n: seccionesPendientes, label: 'pendientes', bg: 'bg-[#EEF0F2]', color: 'text-[#6B7280]' },
             ].map((c) => (
               <div key={c.label} className="flex items-center gap-2.5">
-                <span className={cn("flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] text-[11px] font-extrabold tabular-nums", c.bg, c.color)}>
+                <span className={cn("flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums", c.bg, c.color)}>
                   {c.n}
                 </span>
                 <span className="text-[12px] font-semibold text-[#4B5563]">{c.label}</span>
@@ -1014,134 +1252,47 @@ const AgentPerfil = () => {
           Secciones de tu perfil
         </div>
         <div className="flex flex-col gap-2.5">
-          {ACTIVATION_BLOCKS.map((block) => {
-            const status = getBlockStatus(block.relatedSteps);
-            const badge =
-              status === 'complete'
-                ? { label: 'Completado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
-                : status === 'partial'
-                ? { label: 'En proceso', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-                : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' };
-            return (
-              <button
-                key={block.stepId}
-                onClick={() => {
-                  track({ page: 'agent_perfil', elementId: 'btn_etapa_onboarding', elementLabel: block.label, metadata: { step_id: block.stepId } });
-                  setProfileView(STEP_TO_VIEW[block.stepId]);
-                }}
-                className="flex w-full items-center gap-3 rounded-xl border border-[#ECEEF0] bg-white px-4 py-[15px] text-left transition-shadow hover:shadow-[0_4px_14px_rgba(20,30,25,0.06)]"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="text-[13.5px] font-bold text-[#171A1D]">{block.label}</span>
-                    <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">{block.description}</p>
-                  {block.stepId === 'training' && sortedTrainingAppointments.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {sortedTrainingAppointments.map((cita) => {
-                        const trainingStatus = getTrainingAppointmentStatus(cita);
-                        return (
-                          <div key={cita.id} className="rounded-lg border border-[#ECEEF0] bg-[#FAFBFB] px-2.5 py-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold text-[#171A1D]">{cita.display_name}</p>
-                                <p className="text-[11px] text-[#9AA3AD]">
-                                  {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                  {cita.hora_inicio ? ` · ${cita.hora_inicio.slice(0, 5)}` : ''}
-                                </p>
-                              </div>
-                              <Badge
-                                variant={trainingStatus.tone === 'danger' ? 'destructive' : 'outline'}
-                                className={cn(
-                                  "shrink-0 border-0 text-[10px]",
-                                  trainingStatus.tone === 'success' && "bg-emerald-500 text-white",
-                                  trainingStatus.tone === 'warning' && "bg-amber-500 text-white",
-                                  trainingStatus.tone === 'info' && "bg-blue-500 text-white",
-                                  trainingStatus.tone === 'neutral' && "bg-gray-400 text-white",
-                                )}
-                              >
-                                {trainingStatus.label}
-                              </Badge>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#9AA3AD]" strokeWidth={2} />
-              </button>
-            );
-          })}
+          {/* Documentos - primero: todos los documentos del portal a subir */}
+          <ProfileSectionRow
+            title="Documentos"
+            description="Sube y consulta todos tus documentos"
+            badge={sectionBadge(docsStatus)}
+            onClick={() => {
+              track({ page: 'agent_perfil', elementId: 'btn_seccion_documentos' });
+              setProfileView('expediente');
+            }}
+          />
+
+          {ACTIVATION_BLOCKS.map((block) => (
+            <ProfileSectionRow
+              key={block.stepId}
+              title={block.label}
+              description={block.description}
+              badge={sectionBadge(getBlockStatus(block.relatedSteps))}
+              onClick={() => {
+                track({ page: 'agent_perfil', elementId: 'btn_etapa_onboarding', elementLabel: block.label, metadata: { step_id: block.stepId } });
+                setProfileView(STEP_TO_VIEW[block.stepId]);
+              }}
+            />
+          ))}
 
           {/* Seguridad */}
           {canEdit && (
-            <button
+            <ProfileSectionRow
+              title="Seguridad"
+              description="Acceso y contraseña"
               onClick={() => setSecurityOpen(true)}
-              className="flex w-full items-center gap-3 rounded-xl border border-[#ECEEF0] bg-white px-4 py-[15px] text-left transition-shadow hover:shadow-[0_4px_14px_rgba(20,30,25,0.06)]"
-            >
-              <div className="min-w-0 flex-1">
-                <span className="text-[13.5px] font-bold text-[#171A1D]">Seguridad</span>
-                <p className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">Acceso y contraseña</p>
-              </div>
-              <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#9AA3AD]" strokeWidth={2} />
-            </button>
+            />
           )}
         </div>
       </div>
 
-      {/* ASIGNADO POR SOZU · SOLO LECTURA */}
-      <div className="rounded-2xl border border-dashed border-[#D6DBDF] bg-[#FAFBFB] p-5">
-        <div className="mb-3.5 flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AA3AD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-          <span className="text-[10.5px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">Asignado por SOZU · Solo lectura</span>
-        </div>
-        <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2">
-          <div className="flex items-center justify-between gap-3 border-b border-[#ECEEF0] py-[11px]">
-            <span className="text-[12px] font-medium text-[#9AA3AD]">Rol / Puesto</span>
-            <span className="text-right text-[12.5px] font-bold text-[#171A1D]">
-              {(perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || 'Agente Inmobiliario'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3 border-b border-[#ECEEF0] py-[11px]">
-            <span className="text-[12px] font-medium text-[#9AA3AD]">Estatus</span>
-            <span className="inline-flex items-center gap-1.5 text-right text-[12.5px] font-bold text-[#171A1D]">
-              <span className="h-[7px] w-[7px] rounded-full bg-[hsl(158_64%_38%)]" />
-              Activo
-            </span>
-          </div>
-        </div>
-        {misDesarrollos.length > 0 && (
-          <div className="pt-3.5">
-            <div className="mb-2 text-[12px] font-medium text-[#9AA3AD]">Desarrollos asignados</div>
-            <div className="flex flex-wrap gap-1.5">
-              {misDesarrollos.map((d) => (
-                <span key={d} className="rounded-full border border-[#E4E7EA] bg-white px-3 py-[5px] text-[11.5px] font-bold text-[#4B5563]">
-                  {d}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
       </>)}
 
       {/* ===== VISTA: EXPEDIENTE ===== */}
       {profileView === 'expediente' && (
         <div>
-          <div
-            tabIndex={0}
-            onClick={() => setProfileView('overview')}
-            className="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#6B7280]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Perfil
-          </div>
-          <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Expediente</h2>
-          <p className="mt-1.5 max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6B7280]">
+          <p className="max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6B7280]">
             Sube cada documento; leemos los datos por ti y solo los validas. El orden sugerido está marcado con número.
           </p>
           <div className="mt-[18px] flex flex-col gap-2.5">
@@ -1160,11 +1311,9 @@ const AgentPerfil = () => {
               return (
                 <div
                   key={doc.nombre}
-                  tabIndex={0}
-                  onClick={() => setDocDetail(doc)}
-                  className="flex cursor-pointer items-center gap-3.5 rounded-[13px] border border-[#ECEEF0] bg-white px-4 py-[15px] transition-shadow hover:shadow-[0_4px_14px_rgba(20,30,25,0.06)]"
+                  className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px]"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F2F4F5] text-[12px] font-extrabold tabular-nums text-[#6B7280]">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[12px] font-bold tabular-nums text-[#6B7280]">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -1181,24 +1330,22 @@ const AgentPerfil = () => {
                   <div className="flex shrink-0 items-center gap-2">
                     {perfilPerms.canUpdate && (
                       <button
-                        title="Subir"
-                        onClick={(e) => { e.stopPropagation(); setActiveStep(doc.step); }}
-                        className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                        title={doc.kind === 'camera' ? 'Tomar foto' : 'Subir documento'}
+                        onClick={() => doc.kind === 'camera' ? openCameraForDoc(doc.tipos, doc.nombre) : setDocDetail(doc)}
+                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                       >
-                        <Upload className="h-4 w-4" />
+                        {doc.kind === 'camera' ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
                       </button>
                     )}
-                    <button
-                      title={url ? "Ver documento" : "Sin documento"}
-                      disabled={!url}
-                      onClick={(e) => { e.stopPropagation(); if (url) setViewer({ url, nombre: doc.nombre }); }}
-                      className={cn(
-                        "flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-[#ECEEF0] transition-colors",
-                        url ? "bg-white text-[#4B5563] hover:bg-[#F6F7F8]" : "bg-white text-[#C4CACF] cursor-not-allowed"
-                      )}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+                    {url && (
+                      <button
+                        title="Ver documento"
+                        onClick={() => setViewer({ url, nombre: doc.nombre })}
+                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1209,76 +1356,50 @@ const AgentPerfil = () => {
 
       {/* ===== VISTA: IDENTIDAD ===== */}
       {profileView === 'identidad' && (() => {
+        const canEditInfo = perfilPerms.canUpdate;
         const fmtFecha = (f?: string | null) => {
           if (!f) return null;
           const [y, m, d] = f.slice(0, 10).split('-');
           return d && m && y ? `${d}/${m}/${y}` : f;
         };
-        const sexoLabel = personaDatos?.sexo === 'H' || personaDatos?.sexo === 'M'
-          ? (personaDatos.sexo === 'H' ? 'Hombre' : 'Mujer')
-          : personaDatos?.sexo || null;
-        const domParticular = [personaDatos?.direccion_calle, personaDatos?.direccion_num_ext, personaDatos?.direccion_colonia, personaDatos?.direccion_codigo_postal]
-          .filter(Boolean).join(', ');
-        const derivados = [
-          { label: 'Nombre completo', valor: personaDatos?.nombre_legal, fuente: 'Constancia fiscal' },
-          { label: 'CURP', valor: personaDatos?.curp, fuente: 'CURP / Acta de nacimiento' },
-          { label: 'Fecha de nacimiento', valor: fmtFecha(personaDatos?.fecha_nacimiento), fuente: 'Acta de nacimiento' },
-          { label: 'Sexo', valor: sexoLabel, fuente: 'Acta de nacimiento' },
-          { label: 'Dirección particular', valor: domParticular || null, fuente: 'Comprobante de domicilio' },
+        const sexoLabel = personaDatos?.sexo === 'H' ? 'Hombre' : personaDatos?.sexo === 'M' ? 'Mujer' : (personaDatos?.sexo || null);
+        const domParticular = [personaDatos?.direccion_calle, personaDatos?.direccion_num_ext, personaDatos?.direccion_colonia, personaDatos?.direccion_codigo_postal].filter(Boolean).join(', ');
+        const campos = [
+          { label: 'Email · solo lectura', value: personaDatos?.email || agentEmail },
+          { label: 'Teléfono', value: personaDatos?.telefono },
+          { label: 'Nombre completo', value: personaDatos?.nombre_legal },
+          { label: 'CURP', value: personaDatos?.curp },
+          { label: 'Fecha de nacimiento', value: fmtFecha(personaDatos?.fecha_nacimiento) },
+          { label: 'Sexo', value: sexoLabel },
+          { label: 'Dirección particular', value: domParticular || null },
         ];
         return (
           <div>
-            <div tabIndex={0} onClick={() => setProfileView('overview')} className="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#6B7280]">
-              <ArrowLeft className="h-4 w-4" />Perfil
-            </div>
-            <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Identidad</h2>
-            <p className="mt-1 text-[12.5px] font-medium text-[#9AA3AD]">Tu información personal</p>
-            <div className="mt-2.5 mb-4 flex items-center gap-1.5 text-[11px] font-semibold text-[hsl(158_64%_38%)]">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-              Sesión segura activa
-            </div>
-
-            {/* Contacto */}
-            <div className="mb-3 rounded-2xl border border-[#ECEEF0] bg-white p-5">
-              <div className="mb-3.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Contacto</div>
-              <div className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-2.5">
-                <span className="text-[12px] font-medium text-[#9AA3AD]">Email (tu acceso)</span>
-                <span className="text-right text-[12.5px] font-bold text-[#171A1D]">{personaDatos?.email || agentEmail}</span>
+            {/* Información personal (texto + editar) */}
+            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Información personal</span>
+                {canEditInfo && (
+                  <button
+                    onClick={openIdentEdit}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[11.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+                )}
               </div>
-              <div className="flex items-center justify-between gap-3 pt-3">
-                <span className="text-[12px] font-medium text-[#9AA3AD]">Teléfono <span className="text-[#B5601C]">· captura manual</span></span>
-                <input
-                  inputMode="numeric"
-                  placeholder="10 dígitos"
-                  value={phoneVal}
-                  disabled={!perfilPerms.canUpdate || savingPhone}
-                  onChange={(e) => setPhoneVal(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  onBlur={() => { if (phoneVal !== (personaDatos?.telefono || '')) savePhone(); }}
-                  className="w-[170px] rounded-[9px] border border-[#ECEEF0] px-3 py-2 text-right text-[13px] font-semibold tabular-nums text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30 disabled:opacity-60"
-                />
-              </div>
-            </div>
-
-            {/* Datos derivados */}
-            <div className="rounded-2xl border border-[#ECEEF0] bg-white p-5">
-              <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Datos derivados de tus documentos</div>
-              {derivados.map((f) => (
-                <div key={f.label} className="flex items-start justify-between gap-3.5 border-b border-[#F2F4F5] py-3">
-                  <div className="min-w-0">
-                    <div className="text-[12px] font-medium text-[#9AA3AD]">{f.label}</div>
-                    <div className="mt-0.5 text-[10.5px] text-[#B7BEC5]">Tomado de: {f.fuente}</div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2.5 text-right">
-                    {f.valor
-                      ? <span className="text-[12.5px] font-bold text-[#171A1D]">{f.valor}</span>
-                      : <span className="text-[12.5px] font-medium italic text-[#9AA3AD]">Sin registro</span>}
-                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
-                      {f.valor ? 'Validado' : 'Pendiente'}
+              <div className="divide-y divide-[#F2F4F5]">
+                {campos.map((c) => (
+                  <div key={c.label} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="text-[12px] font-medium text-[#9AA3AD]">{c.label}</span>
+                    <span className={cn("text-right text-[12.5px] font-semibold", c.value ? "text-[#171A1D]" : "text-[#9AA3AD]")}>
+                      {c.value || 'Sin registro'}
                     </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+
           </div>
         );
       })()}
@@ -1292,19 +1413,14 @@ const AgentPerfil = () => {
           { label: 'Régimen fiscal', valor: personaDatos?.regimen },
           { label: 'Domicilio fiscal', valor: domFiscal || null },
         ];
+        const fiscalDocs = EXPEDIENTE_DOCS.filter((d) => d.step === 'fiscal');
         return (
           <div>
-            <div tabIndex={0} onClick={() => setProfileView('overview')} className="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#6B7280]">
-              <ArrowLeft className="h-4 w-4" />Perfil
-            </div>
-            <h2 className="mb-4 text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Información fiscal</h2>
-
             {/* Uso CFDI */}
-            <div className="mb-3 rounded-2xl border border-[#ECEEF0] bg-white p-5">
+            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5">
                 <div>
-                  <div className="text-[12px] font-medium text-[#9AA3AD]">Uso del CFDI <span className="text-[#B5601C]">· tu selección (catálogo SAT)</span></div>
-                  {!personaDatos?.uso_cfdi && <div className="mt-0.5 text-[11px] font-bold text-[#B5730A]">Elige tu Uso de CFDI</div>}
+                  <div className="text-[12px] font-medium text-[#9AA3AD]">Uso del CFDI</div>
                 </div>
                 <select
                   value={personaDatos?.uso_cfdi || ''}
@@ -1323,25 +1439,83 @@ const AgentPerfil = () => {
               </div>
             </div>
 
-            {/* Datos derivados */}
-            <div className="rounded-2xl border border-[#ECEEF0] bg-white p-5">
-              <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Datos derivados de tus documentos</div>
-              {derivados.map((f) => (
-                <div key={f.label} className="flex items-start justify-between gap-3.5 border-b border-[#F2F4F5] py-3">
-                  <div className="min-w-0">
-                    <div className="text-[12px] font-medium text-[#9AA3AD]">{f.label}</div>
-                    <div className="mt-0.5 text-[10.5px] text-[#B7BEC5]">Tomado de: Constancia fiscal</div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2.5 text-right">
-                    {f.valor
-                      ? <span className="text-[12.5px] font-bold text-[#171A1D]">{f.valor}</span>
-                      : <span className="text-[12.5px] font-medium italic text-[#9AA3AD]">Sin registro</span>}
-                    <span className={cn("rounded-full px-2 py-[3px] text-[9px] font-bold", f.valor ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
-                      {f.valor ? 'Validado' : 'Pendiente'}
+            {/* Información fiscal (texto + editar) */}
+            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Información fiscal</span>
+                {perfilPerms.canUpdate && (
+                  <button
+                    onClick={() => setActiveStep('fiscal')}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[11.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+                )}
+              </div>
+              <div className="divide-y divide-[#F2F4F5]">
+                {derivados.map((f) => (
+                  <div key={f.label} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="text-[12px] font-medium text-[#9AA3AD]">{f.label}</span>
+                    <span className={cn("text-right text-[12.5px] font-semibold", f.valor ? "text-[#171A1D]" : "text-[#9AA3AD]")}>
+                      {f.valor || 'Sin registro'}
                     </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* Documentos fiscales */}
+            <div className="rounded-md border border-[#ECEEF0] bg-white p-5">
+              <div className="mb-3 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Documentos fiscales</div>
+              <div className="flex flex-col gap-2.5">
+                {fiscalDocs.map((doc) => {
+                  const rows = expedienteDocs.filter((d: any) => doc.tipos.includes(d.id_tipo_documento));
+                  const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
+                  const exists = rows.length > 0;
+                  const url = rows.find((d: any) => d.url)?.url || null;
+                  const badge = approved
+                    ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
+                    : exists
+                    ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
+                    : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
+                  return (
+                    <div key={doc.nombre} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="text-[13px] font-bold text-[#171A1D]">{doc.nombre}</span>
+                          <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>{badge.label}</span>
+                        </div>
+                        <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{doc.emisor} · {exists ? 'Cargado' : 'Sin cargar'}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {perfilPerms.canUpdate && (
+                          <button
+                            title={exists ? 'Reemplazar' : 'Subir'}
+                            onClick={() => setActiveStep(doc.step)}
+                            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                          >
+                            <Upload className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button
+                          title={url ? 'Ver documento' : 'Sin documento'}
+                          disabled={!url}
+                          onClick={() => { if (url) setViewer({ url, nombre: doc.nombre }); }}
+                          className={cn(
+                            "flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] transition-colors",
+                            url ? "bg-white text-[#4B5563] hover:bg-[#F6F7F8]" : "bg-white text-[#C4CACF] cursor-not-allowed"
+                          )}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         );
@@ -1350,14 +1524,7 @@ const AgentPerfil = () => {
       {/* ===== VISTA: CUENTA DE DISPERSIÓN ===== */}
       {profileView === 'bank' && (
         <div>
-          <div tabIndex={0} onClick={() => setProfileView('overview')} className="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#6B7280]">
-            <ArrowLeft className="h-4 w-4" />Perfil
-          </div>
-          <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Cuenta de dispersión de comisiones</h2>
-          <p className="mt-1.5 max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6B7280]">
-            Es a donde SOZU te paga tus comisiones. Por seguridad, validamos que cada cuenta sea tuya antes de activarla.
-          </p>
-          <div className="mt-3.5 flex items-start gap-3 rounded-xl border border-[#C9DCF2] bg-[#EAF2FB] px-4 py-3">
+          <div className="flex items-start gap-3 rounded-md border border-[#C9DCF2] bg-[#EAF2FB] px-4 py-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2A6FDB" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
             <div className="text-[12px] font-medium leading-relaxed text-[#2A557F]">
               Por tu seguridad, una cuenta nueva queda <strong>pendiente de activación</strong> hasta que validemos que es tuya.
@@ -1366,7 +1533,7 @@ const AgentPerfil = () => {
 
           <div className="mt-4 flex flex-col gap-2.5">
             {bankAccounts.length === 0 && (
-              <div className="rounded-[13px] border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
+              <div className="rounded-md border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
                 Aún no tienes cuentas registradas.
               </div>
             )}
@@ -1374,11 +1541,11 @@ const AgentPerfil = () => {
               const validada = c.id_estatus_verificacion === 2;
               const last4 = (c.cuenta_clabe || '').slice(-4);
               return (
-                <div key={c.id} className="rounded-[13px] border border-[#ECEEF0] bg-white p-4">
+                <div key={c.id} className="rounded-md border border-[#ECEEF0] bg-white p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-[14px] font-extrabold text-[#171A1D]">{c.banco?.nombre || 'Banco'}</span>
+                        <span className="text-[14px] font-bold text-[#171A1D]">{c.banco?.nombre || 'Banco'}</span>
                         <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", validada ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
                           {validada ? 'Validada' : 'Pendiente de activación'}
                         </span>
@@ -1398,7 +1565,7 @@ const AgentPerfil = () => {
                     <div className="mt-3 flex gap-2.5 border-t border-[#F2F4F5] pt-3">
                       <button
                         onClick={() => { if (window.confirm('¿Dar de baja esta cuenta?')) darDeBajaCuenta(c.id); }}
-                        className="rounded-lg border border-[#F0C9C4] bg-white px-3 py-2 text-[11.5px] font-bold text-[#B84A3C] transition-colors hover:bg-[#FBE6E6]"
+                        className="rounded-md border border-[#F0C9C4] bg-white px-3 py-2 text-[11.5px] font-bold text-[#B84A3C] transition-colors hover:bg-[#FBE6E6]"
                       >
                         Dar de baja
                       </button>
@@ -1408,16 +1575,6 @@ const AgentPerfil = () => {
               );
             })}
           </div>
-
-          {perfilPerms.canUpdate && (
-            <button
-              onClick={() => setActiveStep('bank-accounts')}
-              className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
-              Agregar cuenta
-            </button>
-          )}
         </div>
       )}
 
@@ -1427,19 +1584,10 @@ const AgentPerfil = () => {
         const pct = tStatus === 'complete' ? 100 : tStatus === 'partial' ? 50 : 0;
         return (
           <div>
-            <div tabIndex={0} onClick={() => setProfileView('overview')} className="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#6B7280]">
-              <ArrowLeft className="h-4 w-4" />Perfil
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="text-[23px] font-extrabold tracking-[-0.4px] text-[#171A1D]">Capacitación</h2>
-              <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", tStatus === 'complete' ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#FBEFD9] text-[#B5730A]")}>
-                {tStatus === 'complete' ? 'Completada' : 'En curso'}
-              </span>
-            </div>
-            <div className="mt-3.5 rounded-2xl border border-[#ECEEF0] bg-white px-[18px] py-[17px]">
+            <div className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-[17px]">
               <div className="flex items-baseline justify-between">
                 <span className="text-[12px] font-semibold text-[#6B7280]">Avance de tu capacitación</span>
-                <span className="text-[14px] font-extrabold tabular-nums text-[hsl(158_64%_38%)]">{pct}%</span>
+                <span className="text-[14px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{pct}%</span>
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#EEF0F2]">
                 <div className="h-full rounded-full bg-[hsl(158_64%_38%)]" style={{ width: `${pct}%` }} />
@@ -1448,14 +1596,14 @@ const AgentPerfil = () => {
 
             <div className="mt-3.5 flex flex-col gap-2.5">
               {sortedTrainingAppointments.length === 0 && (
-                <div className="rounded-[13px] border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
+                <div className="rounded-md border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
                   Aún no tienes capacitaciones agendadas.
                 </div>
               )}
               {sortedTrainingAppointments.map((cita) => {
                 const st = getTrainingAppointmentStatus(cita);
                 return (
-                  <div key={cita.id} className="flex items-center gap-3.5 rounded-[13px] border border-[#ECEEF0] bg-white px-4 py-[15px]">
+                  <div key={cita.id} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px]">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2.5">
                         <span className="text-[13.5px] font-bold text-[#171A1D]">{cita.display_name || 'Capacitación'}</span>
@@ -1478,15 +1626,6 @@ const AgentPerfil = () => {
               })}
             </div>
 
-            {perfilPerms.canUpdate && (
-              <button
-                onClick={() => setActiveStep('training')}
-                className="mt-3.5 inline-flex items-center gap-2 rounded-[11px] bg-[hsl(158_64%_38%)] px-[17px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                Agendar capacitación
-              </button>
-            )}
           </div>
         );
       })()}
@@ -1494,7 +1633,7 @@ const AgentPerfil = () => {
       {/* Modal cambiar contraseña */}
       <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); } }}>
         <DialogContent className="max-w-[400px] bg-white p-[26px]">
-          <DialogTitle className="text-[17px] font-extrabold text-[#171A1D]">Cambiar contraseña</DialogTitle>
+          <DialogTitle className="text-[17px] font-bold text-[#171A1D]">Cambiar contraseña</DialogTitle>
           <p className="-mt-1 text-[12px] font-medium leading-relaxed text-[#6B7280]">
             Tu nueva contraseña debe tener al menos 6 caracteres.
           </p>
@@ -1510,7 +1649,7 @@ const AgentPerfil = () => {
                   type="password"
                   value={f.val}
                   onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-[10px] border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                  className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
                 />
               </div>
             ))}
@@ -1518,14 +1657,14 @@ const AgentPerfil = () => {
           <div className="mt-[18px] flex gap-2.5">
             <button
               onClick={() => setSecurityOpen(false)}
-              className="shrink-0 rounded-[10px] border border-[#E4E7EA] bg-white px-4 py-2.5 text-[12.5px] font-bold text-[#4B5563]"
+              className="shrink-0 rounded-md border border-[#E4E7EA] bg-white px-4 py-2.5 text-[12.5px] font-bold text-[#4B5563]"
             >
               Cancelar
             </button>
             <button
               onClick={changePassword}
               disabled={savingPw || !pwCurrent || !pwNew || !pwConfirm}
-              className="flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[hsl(158_64%_38%)] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar contraseña
@@ -1547,6 +1686,73 @@ const AgentPerfil = () => {
               className="w-full flex-1 border-0 bg-[#F6F7F8]"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal editar información de Identidad */}
+      <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>
+        <DialogContent className="max-w-[520px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
+          <DialogHeader className="border-b border-[#ECEEF0] px-5 py-4">
+            <DialogTitle className="text-[16px] font-bold text-[#171A1D]">Editar información</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-3.5">
+            {(() => {
+              const lbl = "mb-1 block text-[11px] font-semibold text-[#6B7280]";
+              const inp = "w-full rounded-md border border-[#ECEEF0] px-3 py-2 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30";
+              return (
+                <>
+                  <div>
+                    <label className={lbl}>Email · solo lectura</label>
+                    <input value={personaDatos?.email || agentEmail || ''} disabled className={cn(inp, "bg-[#F6F7F8] text-[#9AA3AD]")} />
+                  </div>
+                  <div>
+                    <label className={lbl}>Nombre completo *</label>
+                    <input value={identForm.nombre_legal || ''} onChange={(e) => setIdent('nombre_legal', e.target.value)} placeholder="Nombre y apellidos" className={inp} />
+                  </div>
+                  <div>
+                    <label className={lbl}>Teléfono *</label>
+                    <input inputMode="numeric" value={identForm.telefono || ''} onChange={(e) => setIdent('telefono', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10 dígitos" className={cn(inp, "tabular-nums")} />
+                  </div>
+                  <div>
+                    <label className={lbl}>CURP *</label>
+                    <input value={identForm.curp || ''} maxLength={18} onChange={(e) => setIdent('curp', e.target.value.toUpperCase())} placeholder="18 caracteres" className={cn(inp, "uppercase tabular-nums")} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={lbl}>Fecha de nacimiento</label>
+                      <input type="date" value={identForm.fecha_nacimiento || ''} onChange={(e) => setIdent('fecha_nacimiento', e.target.value)} className={inp} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Sexo</label>
+                      <select value={identForm.sexo || ''} onChange={(e) => setIdent('sexo', e.target.value)} className={inp}>
+                        <option value="">Sin especificar</option>
+                        <option value="H">Hombre</option>
+                        <option value="M">Mujer</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={lbl}>Dirección particular</label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <input value={identForm.direccion_calle || ''} onChange={(e) => setIdent('direccion_calle', e.target.value)} placeholder="Calle" className={inp} />
+                      <input value={identForm.direccion_num_ext || ''} onChange={(e) => setIdent('direccion_num_ext', e.target.value)} placeholder="Número exterior" className={inp} />
+                      <input value={identForm.direccion_colonia || ''} onChange={(e) => setIdent('direccion_colonia', e.target.value)} placeholder="Colonia" className={inp} />
+                      <input inputMode="numeric" maxLength={5} value={identForm.direccion_codigo_postal || ''} onChange={(e) => setIdent('direccion_codigo_postal', e.target.value.replace(/\D/g, '').slice(0, 5))} placeholder="C.P." className={cn(inp, "tabular-nums")} />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-[#ECEEF0] px-5 py-3.5">
+            <button onClick={() => setIdentEditOpen(false)} disabled={savingIdent} className="inline-flex items-center rounded-md border border-[#ECEEF0] px-4 py-2 text-[12.5px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50">
+              Cancelar
+            </button>
+            <button onClick={saveIdent} disabled={savingIdent} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#F0FAF4] disabled:opacity-50">
+              {savingIdent && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Guardar
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1585,23 +1791,21 @@ const AgentPerfil = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3 pr-7">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <DialogTitle className="text-[18px] font-extrabold text-[#171A1D]">{docDetail.nombre}</DialogTitle>
+                      <DialogTitle className="text-[18px] font-bold text-[#171A1D]">{docDetail.nombre}</DialogTitle>
                       <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>
                         {badge.label}
                       </span>
                     </div>
                     <p className="mt-1.5 text-[12px] font-medium text-[#9AA3AD]">{docDetail.emisor} · {docDetail.hint}</p>
                   </div>
-                  {perfilPerms.canUpdate && (
-                    <button
-                      onClick={() => { setDocDetail(null); setActiveStep(docDetail.step); }}
-                      className="inline-flex shrink-0 items-center gap-2 rounded-[10px] bg-[hsl(158_64%_38%)] px-[15px] py-2.5 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
-                    >
-                      <Upload className="h-[15px] w-[15px]" />
-                      Subir documento
-                    </button>
-                  )}
                 </div>
+
+                {/* Subida por dropzone (solo docs PDF llegan a este modal) */}
+                {perfilPerms.canUpdate && (
+                  <div className="mt-[18px] border-t border-[#ECEEF0] pt-4">
+                    <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => uploadDocPdf(f, docDetail.tipos[0])} />
+                  </div>
+                )}
 
                 {datos.length > 0 && (
                   <div className="mt-[18px] border-t border-[#ECEEF0] pt-4">
@@ -1642,6 +1846,21 @@ const AgentPerfil = () => {
           }}
         />
       )}
+
+      {/* Captura simple con cámara (sin IA) para documentos de identidad */}
+      <SimpleCameraCaptureDialog
+        open={!!cameraDoc}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCameraDoc(null);
+            queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
+          }
+        }}
+        personaId={personaId}
+        titulo={cameraDoc?.titulo ?? 'Documento'}
+        steps={cameraDoc?.steps ?? []}
+        onUploaded={() => queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] })}
+      />
 
       </div>
     </div>

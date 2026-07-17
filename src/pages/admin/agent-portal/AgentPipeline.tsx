@@ -464,7 +464,7 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
       <div className="mt-1.5 flex items-start justify-between gap-3">
         <p className="truncate text-[15px] font-bold text-[#171A1D]">{unitLabel}</p>
         {oferta.precio != null && oferta.precio > 0 && (
-          <span className="shrink-0 text-[16px] font-extrabold tabular-nums text-[#171A1D]">
+          <span className="shrink-0 text-[16px] font-bold tabular-nums text-[#171A1D]">
             {mask(formatCurrency(oferta.precio))}
           </span>
         )}

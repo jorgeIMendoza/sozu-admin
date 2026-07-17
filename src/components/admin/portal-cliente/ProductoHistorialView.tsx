@@ -387,7 +387,7 @@ const ProductoHistorialView = ({ producto, proyectoNombre, numPropiedad }: Props
                         <Receipt className="w-4 h-4" />
                       </IconBtn>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground/40">—</span>
+                      <span className="text-[11px] text-muted-foreground/40">-</span>
                     )}
                   </td>
                 </tr>

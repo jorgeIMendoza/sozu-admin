@@ -446,7 +446,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EAF6F0] text-[hsl(158_64%_38%)]">
               <CalendarDays className="h-[18px] w-[18px]" />
             </span>
-            <DialogTitle className="text-[18px] font-extrabold text-[#171A1D]">
+            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
               {rescheduleData ? "Reagendar Cita" : "Agendar Cita al Showroom"}
             </DialogTitle>
           </DialogHeader>
@@ -506,7 +506,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                     <div key={cita.id} className={cn("rounded-md px-3 py-2 space-y-0.5 border", color.bg, color.border)}>
                       <div className={cn("flex items-center gap-1.5 text-xs font-medium", color.text)}>
                         <CalendarCheck className="h-3.5 w-3.5" />
-                        Cita existente{projName ? ` — ${projName}` : ""}
+                        Cita existente{projName ? ` - ${projName}` : ""}
                       </div>
                       <p className={cn("text-[11px]", color.text)}>
                         {format(new Date(cita.fecha + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })} a las {cita.hora_inicio?.slice(0, 5)}
@@ -636,7 +636,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
               <div className="space-y-2">
                 <div className={cn(labelCls, "flex items-center gap-1.5")}>
                   <Clock className="h-4 w-4" />
-                  Horarios disponibles — {format(new Date(selectedDate + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })}
+                  Horarios disponibles - {format(new Date(selectedDate + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })}
                 </div>
                 <div className="space-y-3">
                   {(() => {
