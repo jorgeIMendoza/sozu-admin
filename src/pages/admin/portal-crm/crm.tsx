@@ -125,6 +125,23 @@ const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "fuera_area", label: "Fuera del área" },
 ];
 
+// Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
+const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
+const MSG_TELEFONO_INVALIDO = "El teléfono no es válido. Usa solo números (opcional + espacios o guiones), de 5 a 20 caracteres. Ej: 3312345678";
+const MSG_EMAIL_INVALIDO = "El correo no es válido. Debe tener el formato nombre@dominio.com";
+
+// Traduce errores crudos de la BD (en inglés) a un mensaje claro en español.
+function mensajeErrorContacto(e: any): string {
+  const m = (e?.message ?? "").toLowerCase();
+  if (m.includes("telefono_formato")) return MSG_TELEFONO_INVALIDO;
+  if (m.includes("email_formato")) return MSG_EMAIL_INVALIDO;
+  if (m.includes("curp_formato")) return "El CURP no tiene un formato válido.";
+  if (m.includes("rfc_formato")) return "El RFC no tiene un formato válido.";
+  if (m.includes("duplicate") || m.includes("unique")) return "Ese contacto ya existe (dato duplicado).";
+  return "No se pudo guardar el contacto. Revisa los datos e inténtalo de nuevo.";
+}
+
 function loadContactColumns(): ColumnConfig[] {
   if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
   try {
@@ -639,14 +656,19 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
 
   const submit = async () => {
     if (!form.full_name) return;
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    // Validación acorde a los CHECK de la tabla personas (evita error crudo de BD).
+    if (email && !PERSONA_EMAIL_RE.test(email)) { toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { toast.error(MSG_TELEFONO_INVALIDO); return; }
     setBusy(true);
     try {
       // 1. Persona (datos de contacto)
       const { data: persona, error: pErr } = await (supabase as any).from("personas").insert({
         tipo_persona: "pf",
         nombre_legal: form.full_name,
-        email: form.email || null,
-        telefono: form.phone || null,
+        email: email || null,
+        telefono: phone || null,
       }).select("id").single();
       if (pErr) throw pErr;
       // 2. Entidad relacionada (prospecto tipo 7)
@@ -669,7 +691,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
       setForm({ ...form, full_name: "", email: "", phone: "" });
       onCreated();
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo crear el contacto");
+      toast.error(mensajeErrorContacto(e));
     } finally {
       setBusy(false);
     }
@@ -996,14 +1018,35 @@ export function CrmContactDetail() {
     },
   });
 
-  // Fase 1: citas, negocios, pipeline y eventos de conversión aún no persisten.
+  // Negocios asociados al contacto (crm_negocios vía crm_negocios_contactos).
+  const { data: contactDeals } = useQuery({
+    queryKey: ["contact-deals", contactId],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const { data: assoc, error } = await (supabase as any).from("crm_negocios_contactos")
+        .select("id_negocio").eq("id_entidad_relacionada", Number(contactId)).eq("activo", true);
+      if (error || !assoc?.length) return [];
+      const dealIds = Array.from(new Set(assoc.map((a: any) => a.id_negocio)));
+      const { data: negocios } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa")
+        .in("id", dealIds).eq("activo", true).order("fecha_creacion", { ascending: false });
+      if (!negocios?.length) return [];
+      const etapaIds = Array.from(new Set(negocios.map((n: any) => n.id_etapa)));
+      const { data: etapas } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre").in("id", etapaIds);
+      const etapaMap = Object.fromEntries((etapas ?? []).map((e: any) => [e.id, e.nombre]));
+      return negocios.map((n: any) => ({ ...n, etapa_nombre: etapaMap[n.id_etapa] ?? "—" }));
+    },
+  });
+
+  // Fase 1: citas, pipeline y eventos de conversión aún no persisten.
   const appointments: any[] = [];
   const deals: any[] = [];
   const pipelineEvents: any[] = [];
   const conversionEvents: any[] = [];
 
   const invalidateAll = () => {
-    ["contact-sozu", "contact-notes", "contact-tasks"].forEach(
+    ["contact-sozu", "contact-notes", "contact-tasks", "contact-deals"].forEach(
       (k) => qc.invalidateQueries({ queryKey: [k, contactId] }),
     );
     // También refrescar la lista de contactos para que refleje los cambios al volver.
@@ -1209,14 +1252,7 @@ export function CrmContactDetail() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="deals">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Negocios <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">Próximamente</span></span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="text-xs text-muted-foreground py-2">La gestión de negocios llegará en una fase posterior.</p>
-              </AccordionContent>
-            </AccordionItem>
+            <DealsCard contactId={contactId!} deals={contactDeals ?? []} onSaved={invalidateAll} />
 
             <AccordionItem value="tickets" className="border-b-0">
               <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
@@ -1251,15 +1287,19 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
       onSaved();
     } catch (e: any) {
       setStatus("error");
-      toast.error(e?.message ?? "No se pudo guardar");
+      toast.error(mensajeErrorContacto(e));
     }
   };
 
   const persistPersona = () => {
     if (!contact.id_persona) return;
+    const email = (form.email || "").trim();
+    const phone = (form.phone || "").trim();
+    if (email && !PERSONA_EMAIL_RE.test(email)) { setStatus("error"); toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { setStatus("error"); toast.error(MSG_TELEFONO_INVALIDO); return; }
     run(() => (supabase as any).from("personas").update({
-      email: form.email || null,
-      telefono: form.phone || null,
+      email: email || null,
+      telefono: phone || null,
       fecha_actualizacion: new Date().toISOString(),
     }).eq("id", contact.id_persona));
   };
@@ -1956,41 +1996,231 @@ function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }:
   );
 }
 
-function DealDialog({ contactId, orgId, developmentId, onSaved }: any) {
+// ─── Negocios en la ficha del contacto (estilo HubSpot) ───────────────────────
+
+// Formatea un monto con su moneda; cae a fmtMXN si la moneda no es válida.
+function fmtMoneda(v: number, moneda?: string): string {
+  try {
+    return new Intl.NumberFormat("es-MX", { style: "currency", currency: moneda || "MXN", maximumFractionDigits: 0 }).format(v);
+  } catch {
+    return fmtMXN(v);
+  }
+}
+
+// Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
+function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
+  const list = deals ?? [];
+  return (
+    <AccordionItem value="deals">
+      <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+        <span className="flex items-center gap-2">Negocios <span className="text-xs text-muted-foreground font-normal">{list.length}</span></span>
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <CreateDealDialog contactId={contactId} onSaved={onSaved}
+              trigger={
+                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
+                  <Plus className="h-3.5 w-3.5" />Agregar
+                </button>
+              } />
+          </div>
+          {!list.length ? (
+            <p className="text-xs text-muted-foreground py-1">Sin negocios asociados</p>
+          ) : (
+            <div className="space-y-1.5">
+              {list.map((d: any) => (
+                <div key={d.id} className="rounded-md border border-border p-2.5 bg-card">
+                  <div className="text-sm font-medium truncate">{d.nombre}</div>
+                  <div className="flex items-center justify-between mt-1 gap-2">
+                    <Badge variant="outline" className="text-[10px] truncate max-w-[150px]">{d.etapa_nombre}</Badge>
+                    <span className="text-xs font-medium tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+// Modal "Crear Negocio" con pestañas "Crear nuevo" / "Agregar existente".
+function CreateDealDialog({ contactId, onSaved, trigger }: { contactId: string; onSaved: () => void; trigger?: React.ReactNode }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ deal_name: "", value: "", deal_stage: "new" });
-  const save = async () => {
-    if (!orgId || !form.deal_name) return;
-    const { error } = await (supabase as any).from("deals").insert({
-      organization_id: orgId, contact_id: contactId, development_id: developmentId,
-      deal_name: form.deal_name, value: form.value ? Number(form.value) : null,
-      deal_stage: form.deal_stage, pipeline: "sales", currency: "MXN",
-      deal_owner: user?.id ?? null,
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Deal creado"); setOpen(false); onSaved();
-  };
+  const [tab, setTab] = useState<"nuevo" | "existente">("nuevo");
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Deal</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo deal</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <DField label="Nombre *"><Input value={form.deal_name} onChange={(e) => setForm({ ...form, deal_name: e.target.value })} /></DField>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Valor (MXN)"><Input type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></DField>
-            <DField label="Etapa">
-              <Select value={form.deal_stage} onValueChange={(v) => setForm({ ...form, deal_stage: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{DEAL_STAGES.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-          </div>
-        </div>
-        <DialogFooter><Button onClick={save} disabled={!form.deal_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear deal</Button></DialogFooter>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setTab("nuevo"); }}>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Negocio</Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Crear Negocio</DialogTitle></DialogHeader>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "nuevo" | "existente")}>
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="nuevo">Crear nuevo</TabsTrigger>
+            <TabsTrigger value="existente">Agregar existente</TabsTrigger>
+          </TabsList>
+          <TabsContent value="nuevo" className="mt-0">
+            <NewDealForm contactId={contactId} userId={user?.id}
+              onDone={(close) => { onSaved(); if (close) setOpen(false); }}
+              onCancel={() => setOpen(false)} />
+          </TabsContent>
+          <TabsContent value="existente" className="mt-0">
+            <ExistingDealForm contactId={contactId}
+              onDone={() => { onSaved(); setOpen(false); }}
+              onCancel={() => setOpen(false)} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Pestaña "Crear nuevo": Nombre*, Pipeline*, Etapa* (dependiente del pipeline), Valor, Moneda.
+function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: string; userId?: string; onDone: (close: boolean) => void; onCancel: () => void }) {
+  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN" };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["crm-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines")
+        .select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  // Etapas dependientes del pipeline elegido (se recargan al cambiarlo).
+  const { data: etapas } = useQuery({
+    queryKey: ["crm-etapas", form.id_pipeline],
+    enabled: !!form.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
+
+  const save = async (close: boolean) => {
+    if (!canSave) return;
+    setSaving(true);
+    const { data: neg, error } = await (supabase as any).from("crm_negocios").insert({
+      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
+      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
+      id_usuario_propietario: userId ?? null,
+    }).select("id").single();
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    const { error: aErr } = await (supabase as any).from("crm_negocios_contactos").insert({
+      id_negocio: neg.id, id_entidad_relacionada: Number(contactId), es_principal: true,
+    });
+    setSaving(false);
+    if (aErr) { toast.error(aErr.message); return; }
+    toast.success("Negocio creado");
+    // "Crear y agregar otro": limpia nombre/valor pero conserva pipeline+etapa para encadenar.
+    setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa });
+    onDone(close);
+  };
+
+  return (
+    <div className="grid gap-3 pt-4">
+      <DField label="Nombre del negocio *">
+        <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus />
+      </DField>
+      <DField label="Pipeline *">
+        <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+          <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+          <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <DField label="Etapa del negocio *">
+        <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+          <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
+          <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <div className="grid grid-cols-2 gap-3">
+        <DField label="Valor">
+          <Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
+        </DField>
+        <DField label="Moneda">
+          <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MXN">Peso mexicano (MXN)</SelectItem>
+              <SelectItem value="USD">Dólar (USD)</SelectItem>
+            </SelectContent>
+          </Select>
+        </DField>
+      </div>
+      <DialogFooter className="gap-2 sm:gap-2">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
+        <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// Pestaña "Agregar existente": busca un negocio ya creado y lo asocia al contacto.
+function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; onDone: () => void; onCancel: () => void }) {
+  const [term, setTerm] = useState("");
+  const [assocId, setAssocId] = useState<number | null>(null);
+  const { data: results, isFetching } = useQuery({
+    queryKey: ["crm-negocios-search", term.trim()],
+    enabled: term.trim().length >= 2,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda").eq("activo", true)
+        .ilike("nombre", `%${term.trim()}%`).order("fecha_creacion", { ascending: false }).limit(20);
+      return (data ?? []) as any[];
+    },
+  });
+  const associate = async (dealId: number) => {
+    setAssocId(dealId);
+    const { error } = await (supabase as any).from("crm_negocios_contactos").insert({
+      id_negocio: dealId, id_entidad_relacionada: Number(contactId),
+    });
+    setAssocId(null);
+    if (error) {
+      toast.error(error.code === "23505" ? "Ese negocio ya está asociado a este contacto" : error.message);
+      return;
+    }
+    toast.success("Negocio asociado"); onDone();
+  };
+  return (
+    <div className="grid gap-3 pt-4">
+      <div className="relative">
+        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Buscar negocio por nombre" className="pl-8" autoFocus />
+      </div>
+      {term.trim().length < 2 ? (
+        <p className="text-xs text-muted-foreground">Escribe al menos 2 caracteres para buscar.</p>
+      ) : isFetching ? (
+        <p className="text-xs text-muted-foreground">Buscando…</p>
+      ) : !results?.length ? (
+        <p className="text-xs text-muted-foreground">Sin resultados.</p>
+      ) : (
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {results.map((d) => (
+            <button key={d.id} onClick={() => associate(d.id)} disabled={assocId === d.id}
+              className="w-full text-left rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50">
+              <div className="text-sm font-medium truncate">{d.nombre}</div>
+              <div className="text-xs text-muted-foreground tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+      </DialogFooter>
+    </div>
   );
 }
 
