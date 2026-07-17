@@ -50,7 +50,8 @@ export type PortalName =
   | "notaria"
   | "crm"
   | "condominio"
-  | "bancos";
+  | "bancos"
+  | "socio-bancario";
 
 export type EventoPortalTipo =
   | "page_view"
