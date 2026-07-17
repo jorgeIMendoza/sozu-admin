@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Inbox,
@@ -19,6 +19,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 import { AdministracionFiltersProvider } from "@/contexts/AdministracionFiltersContext";
@@ -87,6 +88,19 @@ export const PortalAdministracionLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = profile?.rol_nombre === "Super Administrador";
   const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { disabledPaths } = useAllowedMenus();
+
+  // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => !disabledPaths.has(item.path)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [disabledPaths]
+  );
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -97,7 +111,7 @@ export const PortalAdministracionLayout = () => {
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const currentSection = (() => {
-    for (const g of navGroups) {
+    for (const g of visibleNavGroups) {
       for (const item of g.items) {
         if (isActive(item.path)) return item.label;
       }
@@ -122,7 +136,7 @@ export const PortalAdministracionLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}

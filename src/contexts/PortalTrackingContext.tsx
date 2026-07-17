@@ -51,6 +51,7 @@ export type PortalName =
   | "crm"
   | "condominio"
   | "bancos"
+  | "legal-flow"
   | "socio-bancario";
 
 export type EventoPortalTipo =
