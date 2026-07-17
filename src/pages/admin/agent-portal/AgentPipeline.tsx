@@ -11,8 +11,9 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Plus, Lock, Mail, Search, ExternalLink, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -265,40 +266,36 @@ const AgentPipeline = () => {
 
   return (
     <div className="pb-24">
-      <AgentPortalHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Pipeline</h1>
-            {!isLoading && (
-              <p className="mt-1 text-[12.5px] font-medium tabular-nums text-[#9AA3AD]">
-                {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} en proceso · Últimos 30 días
-              </p>
-            )}
-          </div>
-          {pipelinePerms.canCreate && (
-            isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-[#9AA3AD]">
-                <Lock className="h-3.5 w-3.5" />
-                Completa tu capacitación
-              </span>
-            ) : (
-              <button
-                onClick={() => {
-                  track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
-                  navigate('/admin/agent/inventario/unidades?openFilters=true');
-                }}
-                className="flex items-center gap-1.5 rounded-[10px] bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva oferta
-              </button>
-            )
-          )}
-        </div>
-      </AgentPortalHeader>
+      <AgentPortalHeader />
+
+      {/* Toolbar */}
+      <div className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 pt-1 pb-3">
+        {!isLoading ? (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A929B]">
+            {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} · últimos 30 días
+          </p>
+        ) : <span />}
+        {pipelinePerms.canCreate && (
+          isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
+            <span className="flex items-center gap-1 text-xs font-medium text-[#9AA3AD]">
+              <Lock className="h-3.5 w-3.5" /> Completa tu capacitación
+            </span>
+          ) : (
+            <Button
+              onClick={() => {
+                track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
+                navigate('/admin/agent/inventario/unidades?openFilters=true');
+              }}
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Nueva oferta
+            </Button>
+          )
+        )}
+      </div>
 
       {/* Stage Filters */}
-      <ScrollArea className="mx-auto w-full max-w-[1000px] px-4 pb-3">
+      <ScrollArea className="mx-auto w-full max-w-[1040px] pb-3">
         <div className="flex gap-2 py-1">
           {STAGES.map(stage => {
             const count = stage.key === 'all' ? nonExpiredOfertas.length : (grouped[stage.key]?.length || 0);
@@ -312,7 +309,7 @@ const AgentPipeline = () => {
                   setActiveStage(stage.key);
                 }}
                 className={cn(
-                  "shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
+                  "shrink-0 whitespace-nowrap rounded-md border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
                   isActive
                     ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
                     : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
@@ -327,22 +324,22 @@ const AgentPipeline = () => {
       </ScrollArea>
 
       {/* Prospect search */}
-      <div className="mx-auto max-w-[1000px] px-4 pb-2">
+      <div className="mx-auto max-w-[1040px] pb-2">
         <div className="relative flex items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
             placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
+            className="h-11 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
           />
         </div>
       </div>
 
       {/* Banner modo presentación */}
       {presentationMode && (
-        <div className="mx-auto mb-2 max-w-[1000px] px-4">
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
+        <div className="mx-auto mb-2 max-w-[1040px]">
+          <div className="flex items-center gap-2.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
             <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
             <span className="text-[12px] font-semibold text-[#B5601C]">
               Modo presentación · nombres de prospecto y montos ocultos. Desactívalo arriba para verlos.
@@ -352,7 +349,7 @@ const AgentPipeline = () => {
       )}
 
       {/* Offer Cards */}
-      <div className="mx-auto max-w-[1000px] space-y-2.5 px-4">
+      <div className="mx-auto max-w-[1040px] space-y-2.5 px-4">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
@@ -489,12 +486,12 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   };
 
   return (
-    <div onClick={onClick} className="relative cursor-pointer rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.08)]">
+    <div onClick={onClick} className="relative cursor-pointer rounded-md border border-[#E7E9EC] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-[#CBD2D9]">
       {/* Overlay: captura email para apartado provisional */}
       {apartadoDialogOpen && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute inset-0 rounded-xl bg-white z-10 flex flex-col p-3.5 gap-3"
+          className="absolute inset-0 rounded-md bg-white z-10 flex flex-col p-3.5 gap-3"
         >
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-gray-700">Correo del prospecto</p>

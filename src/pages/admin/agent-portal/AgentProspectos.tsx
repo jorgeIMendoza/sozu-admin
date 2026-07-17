@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,6 +39,7 @@ const AgentProspectos = () => {
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [editPersonaId, setEditPersonaId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     registrarVista('/admin/agent/prospectos');
@@ -106,10 +108,9 @@ const AgentProspectos = () => {
     );
   }, [prospectos, search]);
 
-  const openEdit = (id: number) => {
-    setEditPersonaId(id);
-    setAddProspectoOpen(true);
-    track({ page: 'agent_prospectos', elementId: 'btn_editar_prospecto', metadata: { persona_id: id } });
+  const openDetalle = (id: number) => {
+    track({ page: 'agent_prospectos', elementId: 'btn_ver_prospecto', metadata: { persona_id: id } });
+    navigate(`/admin/agent/prospectos/${id}`);
   };
 
   return (
@@ -181,7 +182,7 @@ const AgentProspectos = () => {
                 <button
                   key={p.id_persona}
                   type="button"
-                  onClick={() => openEdit(p.id_persona)}
+                  onClick={() => openDetalle(p.id_persona)}
                   className="group flex items-start gap-3 rounded-md border border-[#E7E9EC] bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-[#CBD2D9]"
                 >
                   <Avatar className="h-10 w-10 shrink-0">
