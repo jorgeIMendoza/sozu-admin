@@ -4,7 +4,7 @@ import {
   Users as UsersIcon, ShieldCheck, GitBranch, FormInput, Webhook,
   Plug, FileClock, CheckCircle2, AlertTriangle, Plus, Search, Copy,
   RefreshCw, ExternalLink, Building2, Layers, Settings2, Globe, Clock,
-  BarChart2, Key, Zap, Wifi, WifiOff, Edit2, Trash2, X,
+  BarChart2, Key, Zap, Wifi, WifiOff, Edit2, Trash2, X, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -191,57 +191,26 @@ export function CrmSettingsRoles() {
 // ===================================================================
 // 3) Etapas del pipeline
 // ===================================================================
-const STAGES = [
-  { id: "s1", name: "Nuevo lead",        prob: 5,  color: "bg-slate-400",   deals: 124 },
-  { id: "s2", name: "Contactado",        prob: 15, color: "bg-blue-400",    deals: 86  },
-  { id: "s3", name: "Calificado",        prob: 30, color: "bg-cyan-400",    deals: 52  },
-  { id: "s4", name: "Cita agendada",     prob: 45, color: "bg-violet-400",  deals: 38  },
-  { id: "s5", name: "Propuesta",         prob: 60, color: "bg-amber-400",   deals: 21  },
-  { id: "s6", name: "Negociación",       prob: 75, color: "bg-orange-400",  deals: 14  },
-  { id: "s7", name: "Apartado",          prob: 90, color: "bg-emerald-400", deals: 9   },
-  { id: "s8", name: "Cerrado ganado",    prob: 100,color: "bg-emerald-600", deals: 47  },
-  { id: "s9", name: "Cerrado perdido",   prob: 0,  color: "bg-rose-400",    deals: 63  },
-];
 
 export function CrmSettingsPipelineStages() {
+  const { data: pipelines } = usePipelinesList();
+  const [sel, setSel] = useState<string>("");
+  const selId = sel ? Number(sel) : (pipelines?.[0]?.id ?? null);
   return (
     <div>
       <PageHeader
         title="Etapas del pipeline"
-        description="Configura las etapas del funnel comercial y su probabilidad de cierre."
-        actions={<><MockBadge /><Button size="sm" onClick={() => toast.info("Nueva etapa (mock)")}><Plus className="h-4 w-4 mr-1" /> Nueva etapa</Button></>}
+        description="Cada pipeline tiene su propio embudo. Elige un pipeline para configurar sus etapas."
       />
-      <Panel>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">#</TableHead>
-              <TableHead>Etapa</TableHead>
-              <TableHead>Probabilidad</TableHead>
-              <TableHead>Deals activos</TableHead>
-              <TableHead className="text-right">Acción</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {STAGES.map((s, i) => (
-              <TableRow key={s.id}>
-                <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className={"h-2.5 w-2.5 rounded-full " + s.color} />
-                    <span className="font-medium">{s.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{s.prob}%</TableCell>
-                <TableCell><Badge variant="secondary">{s.deals}</Badge></TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="outline" onClick={() => toast.info(`Editar ${s.name} (mock)`)}>Editar</Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Panel>
+      <div className="max-w-xs mb-4">
+        <Select value={selId ? String(selId) : ""} onValueChange={setSel}>
+          <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+          <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+      <div className="rounded-xl border bg-card p-4">
+        <PipelineStagesEditor pipelineId={selId} />
+      </div>
     </div>
   );
 }
@@ -1071,106 +1040,206 @@ export function CrmSettingsDevelopments() {
 // ===================================================================
 // CrmSettingsPipelines
 // ===================================================================
-type PipelineStage = { id: string; name: string; probability: number; color: string };
-type Pipeline = { id: string; name: string; description: string; active: boolean; default: boolean; stages: PipelineStage[]; deals_count: number };
 
-const PIPELINES_MOCK: Pipeline[] = [
-  {
-    id: "p1", name: "Pipeline Ventas Principal", description: "Funnel estándar para departamentos residenciales", active: true, default: true, deals_count: 142,
-    stages: [
-      { id: "ps1", name: "Nuevo lead",     probability: 5,  color: "bg-slate-400" },
-      { id: "ps2", name: "Contactado",     probability: 15, color: "bg-blue-400" },
-      { id: "ps3", name: "Calificado",     probability: 30, color: "bg-cyan-400" },
-      { id: "ps4", name: "Cita agendada",  probability: 45, color: "bg-violet-400" },
-      { id: "ps5", name: "Propuesta",      probability: 60, color: "bg-amber-400" },
-      { id: "ps6", name: "Negociación",    probability: 75, color: "bg-orange-400" },
-      { id: "ps7", name: "Apartado",       probability: 90, color: "bg-emerald-400" },
-      { id: "ps8", name: "Cerrado ganado", probability: 100, color: "bg-emerald-600" },
-    ],
-  },
-  {
-    id: "p2", name: "Pipeline Inversionistas", description: "Para clientes con perfil inversionista o multi-propiedad", active: true, default: false, deals_count: 28,
-    stages: [
-      { id: "qi1", name: "Prospecto",       probability: 10, color: "bg-slate-400" },
-      { id: "qi2", name: "Primer contacto", probability: 20, color: "bg-blue-400" },
-      { id: "qi3", name: "Presentación ROI",probability: 40, color: "bg-violet-400" },
-      { id: "qi4", name: "Due diligence",   probability: 65, color: "bg-amber-400" },
-      { id: "qi5", name: "Firma contrato",  probability: 90, color: "bg-emerald-400" },
-      { id: "qi6", name: "Cerrado",         probability: 100, color: "bg-emerald-600" },
-    ],
-  },
-  {
-    id: "p3", name: "Pipeline Preventa", description: "Para desarrollos en etapa de preventa", active: false, default: false, deals_count: 0,
-    stages: [
-      { id: "pv1", name: "Lead preventa",   probability: 5,  color: "bg-slate-400" },
-      { id: "pv2", name: "Calificado",      probability: 25, color: "bg-cyan-400" },
-      { id: "pv3", name: "Tour virtual",    probability: 50, color: "bg-violet-400" },
-      { id: "pv4", name: "Reserva preventa",probability: 80, color: "bg-emerald-400" },
-      { id: "pv5", name: "Cerrado",         probability: 100, color: "bg-emerald-600" },
-    ],
-  },
-];
+// Catálogo de pipelines activos (crm_pipelines). Compartido por ambas pantallas.
+function usePipelinesList() {
+  return useQuery({
+    queryKey: ["cfg-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines")
+        .select("id, nombre, orden, activo").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string; orden: number; activo: boolean }[];
+    },
+  });
+}
+
+// Alta/edición de una etapa (crm_pipeline_etapas).
+function StageDialog({ pipelineId, stage, nextOrden, onClose, onSaved }: { pipelineId: number; stage: any | null; nextOrden: number; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!stage;
+  const [form, setForm] = useState({ nombre: stage?.nombre ?? "", probabilidad: String(stage?.probabilidad ?? "0"), es_ganado: !!stage?.es_ganado, es_perdido: !!stage?.es_perdido });
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!form.nombre.trim()) return;
+    setSaving(true);
+    const payload = { nombre: form.nombre.trim(), probabilidad: Number(form.probabilidad) || 0, es_ganado: form.es_ganado, es_perdido: form.es_perdido };
+    const res = isEdit
+      ? await (supabase as any).from("crm_pipeline_etapas").update(payload).eq("id", stage.id)
+      : await (supabase as any).from("crm_pipeline_etapas").insert({ ...payload, id_pipeline: pipelineId, orden: nextOrden, activo: true });
+    setSaving(false);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success(isEdit ? "Etapa actualizada" : "Etapa creada"); onSaved();
+  };
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{isEdit ? "Editar etapa" : "Nueva etapa"}</DialogTitle></DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5"><Label>Nombre</Label><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus /></div>
+          <div className="grid gap-1.5"><Label>Probabilidad de cierre (%)</Label><Input type="number" min="0" max="100" value={form.probabilidad} onChange={(e) => setForm({ ...form, probabilidad: e.target.value })} /></div>
+          <div className="flex items-center justify-between rounded-md border p-2.5">
+            <Label className="text-sm font-normal">Etapa de cierre ganado</Label>
+            <Switch checked={form.es_ganado} onCheckedChange={(v) => setForm({ ...form, es_ganado: v, es_perdido: v ? false : form.es_perdido })} />
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-2.5">
+            <Label className="text-sm font-normal">Etapa de cierre perdido</Label>
+            <Switch checked={form.es_perdido} onCheckedChange={(v) => setForm({ ...form, es_perdido: v, es_ganado: v ? false : form.es_ganado })} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !form.nombre.trim()}>{isEdit ? "Guardar" : "Crear"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Editor de etapas de un pipeline (lista + reordenar + CRUD). Reutilizado en ambas pantallas.
+function PipelineStagesEditor({ pipelineId }: { pipelineId: number | null }) {
+  const qc = useQueryClient();
+  const [dlg, setDlg] = useState<{ open: boolean; stage: any | null }>({ open: false, stage: null });
+  const { data: stages, isLoading } = useQuery({
+    queryKey: ["cfg-etapas", pipelineId],
+    enabled: !!pipelineId,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden, probabilidad, es_ganado, es_perdido")
+        .eq("id_pipeline", pipelineId).eq("activo", true).order("orden");
+      return (data ?? []) as any[];
+    },
+  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["cfg-etapas", pipelineId] });
+  const list = stages ?? [];
+  const move = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= list.length) return;
+    const a = list[idx], b = list[j];
+    await (supabase as any).from("crm_pipeline_etapas").update({ orden: b.orden }).eq("id", a.id);
+    await (supabase as any).from("crm_pipeline_etapas").update({ orden: a.orden }).eq("id", b.id);
+    invalidate();
+  };
+  const remove = async (id: number) => {
+    const res = await (supabase as any).from("crm_pipeline_etapas").update({ activo: false }).eq("id", id);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success("Etapa eliminada"); invalidate();
+  };
+  if (!pipelineId) return <p className="text-sm text-muted-foreground py-2">Selecciona un pipeline para ver sus etapas.</p>;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">{list.length} etapa(s)</p>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDlg({ open: true, stage: null })}><Plus className="w-3 h-3 mr-1" />Agregar etapa</Button>
+      </div>
+      {isLoading ? <Skeleton className="h-24 w-full" /> : list.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">Sin etapas. Agrega la primera.</p>
+      ) : list.map((s, i) => (
+        <div key={s.id} className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/20">
+          <div className="flex flex-col -my-1">
+            <button disabled={i === 0} onClick={() => move(i, -1)} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+            <button disabled={i === list.length - 1} onClick={() => move(i, 1)} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+          </div>
+          <span className="text-sm flex-1 truncate">{s.nombre}</span>
+          {s.es_ganado && <Badge className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">Ganado</Badge>}
+          {s.es_perdido && <Badge className="text-[10px] bg-red-500/15 text-red-600 dark:text-red-400">Perdido</Badge>}
+          <span className="text-xs text-muted-foreground w-12 text-right shrink-0">{Number(s.probabilidad)}%</span>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-60 hover:opacity-100" onClick={() => setDlg({ open: true, stage: s })}><Edit2 className="w-3 h-3" /></Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive opacity-60 hover:opacity-100" onClick={() => remove(s.id)}><Trash2 className="w-3 h-3" /></Button>
+        </div>
+      ))}
+      {dlg.open && (
+        <StageDialog pipelineId={pipelineId} stage={dlg.stage}
+          nextOrden={list.reduce((m, s) => Math.max(m, s.orden ?? 0), 0) + 10}
+          onClose={() => setDlg({ open: false, stage: null })}
+          onSaved={() => { invalidate(); setDlg({ open: false, stage: null }); }} />
+      )}
+    </div>
+  );
+}
+
+// Alta/edición de un pipeline (crm_pipelines). Solo pide el nombre.
+function PipelineDialog({ pipeline, onClose, onSaved }: { pipeline: any | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!pipeline;
+  const [nombre, setNombre] = useState(pipeline?.nombre ?? "");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!nombre.trim()) return;
+    setSaving(true);
+    let res;
+    if (isEdit) {
+      res = await (supabase as any).from("crm_pipelines").update({ nombre: nombre.trim() }).eq("id", pipeline.id);
+    } else {
+      const { data: maxRow } = await (supabase as any).from("crm_pipelines").select("orden").order("orden", { ascending: false }).limit(1).maybeSingle();
+      const nextOrden = ((maxRow?.orden ?? 0) as number) + 10;
+      res = await (supabase as any).from("crm_pipelines").insert({ nombre: nombre.trim(), orden: nextOrden, activo: true });
+    }
+    setSaving(false);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success(isEdit ? "Pipeline actualizado" : "Pipeline creado"); onSaved();
+  };
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{isEdit ? "Editar pipeline" : "Nuevo pipeline"}</DialogTitle></DialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Nombre del pipeline</Label>
+          <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Ej. Daiku Ventas" />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !nombre.trim()}>{isEdit ? "Guardar" : "Crear"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function CrmSettingsPipelines() {
-  const [selPipeline, setSelPipeline] = useState(PIPELINES_MOCK[0].id);
-  const active = PIPELINES_MOCK.find(p => p.id === selPipeline) ?? PIPELINES_MOCK[0];
-
+  const qc = useQueryClient();
+  const { data: pipelines, isLoading } = usePipelinesList();
+  const [sel, setSel] = useState<number | null>(null);
+  const [dlg, setDlg] = useState<{ open: boolean; pipeline: any | null }>({ open: false, pipeline: null });
+  const list = pipelines ?? [];
+  const selId = sel ?? (list[0]?.id ?? null);
+  const active = list.find((p) => p.id === selId) ?? null;
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["cfg-pipelines"] });
+  const removePipeline = async (id: number) => {
+    const res = await (supabase as any).from("crm_pipelines").update({ activo: false }).eq("id", id);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success("Pipeline eliminado"); if (selId === id) setSel(null); invalidate();
+  };
   return (
     <div className="space-y-4">
-      <PageHeader title="Administración de pipelines" subtitle="Configura pipelines de venta por tipo de propiedad">
-        <MockBadge />
-        <Button size="sm" onClick={() => toast.info("Nuevo pipeline (mock)")}><Plus className="w-4 h-4 mr-1" />Nuevo</Button>
-      </PageHeader>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="space-y-1">
-          {PIPELINES_MOCK.map(p => (
-            <button key={p.id} onClick={() => setSelPipeline(p.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${selPipeline === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>
-              <div className="flex items-center justify-between">
-                <span>{p.name}</span>
-                {!p.active && <span className="text-[10px] text-muted-foreground">Inactivo</span>}
-                {p.default && <Badge className="text-[10px] bg-primary/15 text-primary">Default</Badge>}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{p.deals_count} deals</p>
-            </button>
-          ))}
-        </div>
-
-        <div className="md:col-span-3 space-y-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold">{active.name}</p>
-              <p className="text-xs text-muted-foreground">{active.description}</p>
-            </div>
-            <div className="flex gap-1.5 shrink-0">
-              <Badge variant="outline" className={active.active ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : ""}>{active.active ? "Activo" : "Inactivo"}</Badge>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => toast.info(`Editar ${active.name} (mock)`)}>
-                <Edit2 className="w-3 h-3 mr-1" />Editar
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">{active.stages.length} etapas</p>
-            {active.stages.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-muted/20">
-                <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.color}`} />
-                <span className="text-sm flex-1">{s.name}</span>
-                <span className="text-xs text-muted-foreground w-12 text-right">{s.probability}%</span>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-50 hover:opacity-100"
-                  onClick={() => toast.info(`Editar etapa ${s.name} (mock)`)}>
-                  <Edit2 className="w-3 h-3" />
-                </Button>
-              </div>
+      <PageHeader title="Administración de pipelines"
+        description="Crea y edita los pipelines de negocio. Cada pipeline tiene su propio embudo de etapas."
+        actions={<Button size="sm" onClick={() => setDlg({ open: true, pipeline: null })}><Plus className="w-4 h-4 mr-1" />Nuevo pipeline</Button>} />
+      {isLoading ? <Skeleton className="h-64 w-full" /> : (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-1">
+            {list.length === 0 && <p className="text-xs text-muted-foreground px-1">Sin pipelines. Crea el primero.</p>}
+            {list.map((p) => (
+              <button key={p.id} onClick={() => setSel(p.id)}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${selId === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>
+                {p.nombre}
+              </button>
             ))}
-            <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => toast.info("Agregar etapa (mock)")}>
-              <Plus className="w-3 h-3 mr-1" />Agregar etapa
-            </Button>
+          </div>
+          <div className="md:col-span-3 space-y-4">
+            {!active ? <p className="text-sm text-muted-foreground">Selecciona o crea un pipeline.</p> : (
+              <>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold">{active.nombre}</p>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDlg({ open: true, pipeline: active })}><Edit2 className="w-3 h-3 mr-1" />Editar</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs text-destructive" onClick={() => removePipeline(active.id)}><Trash2 className="w-3 h-3 mr-1" />Eliminar</Button>
+                  </div>
+                </div>
+                <PipelineStagesEditor pipelineId={active.id} />
+              </>
+            )}
           </div>
         </div>
-      </div>
+      )}
+      {dlg.open && <PipelineDialog pipeline={dlg.pipeline} onClose={() => setDlg({ open: false, pipeline: null })} onSaved={() => { invalidate(); setDlg({ open: false, pipeline: null }); }} />}
     </div>
   );
 }
