@@ -677,7 +677,7 @@ export function CreditosHipotecariosDashboard() {
       // Paso 2: cuentas de cobranza — todas las cuentas activas de las propiedades
       const { data: cuentasList } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, id_oferta, fecha_actualizacion')
+        .select('id, id_propiedad, precio_final, id_oferta, fecha_actualizacion, tipo_financiamiento')
         .eq('activo', true)
         .in('id_propiedad', propIds);
       if (!cuentasList?.length) return [];
@@ -838,8 +838,10 @@ export function CreditosHipotecariosDashboard() {
           proyectoNombre,
           unidad,
           clienteNombre: clienteByCuenta[cuenta.id] ?? '—',
-          bancoId: cr.id_banco ?? null,
-          bancoNombre: cr.id_banco ? (bancoMap[cr.id_banco] ?? '—') : '—',
+          bancoId: cuenta.tipo_financiamiento === 'CREDITO_HIPOTECARIO' ? (cr.id_banco ?? null) : null,
+          bancoNombre: cuenta.tipo_financiamiento === 'CREDITO_HIPOTECARIO' && cr.id_banco
+            ? (bancoMap[cr.id_banco] ?? '—')
+            : '—',
           escrituraValue,
           paidAmount,
           mortgageCreditAmount: registeredMortgageAmount,
