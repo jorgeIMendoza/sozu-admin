@@ -67,6 +67,7 @@ import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 
 type ColumnId =
   | "name"
+  | "categoria"
   | "email"
   | "phone"
   | "lead_status"
@@ -86,6 +87,7 @@ type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
 
 const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "name", label: "Nombre", visible: true },
+  { id: "categoria", label: "Categoría", visible: true },
   { id: "email", label: "Correo", visible: true },
   { id: "phone", label: "Número teléfono", visible: true },
   { id: "lead_status", label: "Estado lead", visible: true },
@@ -102,7 +104,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "meta_field_data", label: "Respuestas del formulario", visible: false },
 ];
 
-const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v3";
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
 const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "nuevo", label: "Nuevo" },
@@ -207,49 +209,7 @@ const fetchCrmCategorias = async (): Promise<{ id: number; nombre: string }[]> =
   return data ?? [];
 };
 
-function CategoryTagPicker({
-  catalog, selected, onToggle, saving,
-}: {
-  catalog: { id: number; nombre: string }[];
-  selected: number[];
-  onToggle: (id: number) => void;
-  saving?: boolean;
-}) {
-  if (!catalog.length) return null;
-  const sel = new Set(selected);
-  const chosen = catalog.filter((c) => sel.has(c.id));
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {chosen.map((c) => (
-        <Badge key={c.id} variant="secondary" className="gap-1 pr-1 font-normal">
-          {c.nombre}
-          <button type="button" aria-label={`Quitar ${c.nombre}`} onClick={() => onToggle(c.id)}
-            className="rounded-sm hover:text-destructive">
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
-      ))}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs">
-            <Plus className="h-3 w-3 mr-1" />Categoría
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-52">
-          {catalog.map((c) => (
-            <DropdownMenuItem key={c.id} onSelect={(e) => { e.preventDefault(); onToggle(c.id); }}>
-              <Check className={`h-3.5 w-3.5 mr-2 ${sel.has(c.id) ? "opacity-100" : "opacity-0"}`} />
-              {c.nombre}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-    </div>
-  );
-}
-
-// Editor de categorías en la ficha: persiste al instante (soft-delete vía activo=false).
+// Categoría del contacto en la ficha (select único; persiste al instante).
 function ContactCategories({ contactId }: { contactId: number }) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -267,16 +227,21 @@ function ContactCategories({ contactId }: { contactId: number }) {
     },
   });
   if (!catalog.length) return null;
-  const has = (id: number) => (selected as number[]).includes(id);
-  const toggle = async (id: number) => {
+  const current = (selected as number[])[0];
+  const setCategoria = async (idStr: string) => {
+    const id = Number(idStr);
     setSaving(true);
     try {
-      const tbl = (supabase as any).from("entidades_relacionadas_categorias");
-      const { error } = has(id)
-        ? await tbl.update({ activo: false }).eq("id_entidad_relacionada", contactId).eq("id_categoria", id)
-        : await tbl.upsert({ id_entidad_relacionada: contactId, id_categoria: id, activo: true },
-            { onConflict: "id_entidad_relacionada,id_categoria" });
-      if (error) throw error;
+      const tbl = () => (supabase as any).from("entidades_relacionadas_categorias");
+      const up = await tbl().upsert(
+        { id_entidad_relacionada: contactId, id_categoria: id, activo: true },
+        { onConflict: "id_entidad_relacionada,id_categoria" },
+      );
+      if (up.error) throw up.error;
+      // Select único: desactivar cualquier otra categoría del contacto.
+      const off = await tbl().update({ activo: false })
+        .eq("id_entidad_relacionada", contactId).eq("activo", true).neq("id_categoria", id);
+      if (off.error) throw off.error;
       await refetch();
       qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
     } catch (e: any) {
@@ -286,8 +251,14 @@ function ContactCategories({ contactId }: { contactId: number }) {
     }
   };
   return (
-    <CField label="Categorías">
-      <CategoryTagPicker catalog={catalog} selected={selected as number[]} onToggle={toggle} saving={saving} />
+    <CField label="Categoría">
+      <div className="flex items-center gap-2">
+        <Select value={current != null ? String(current) : ""} onValueChange={setCategoria}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin categoría" /></SelectTrigger>
+          <SelectContent>{catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+        {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
+      </div>
     </CField>
   );
 }
@@ -590,23 +561,26 @@ export function CrmContacts() {
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2.5 max-w-[300px]">
+                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                <span className="flex flex-col min-w-0">
-                                  <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
-                                  {c.categoria_ids?.length ? (
-                                    <span className="flex flex-wrap gap-1 mt-0.5">
-                                      {c.categoria_ids.map((cid) => (
-                                        <span key={cid} className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
-                                          {catNameMap[cid] ?? "—"}
-                                        </span>
-                                      ))}
-                                    </span>
-                                  ) : null}
-                                </span>
+                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
                               </span>
+                            </td>
+                          );
+                        case "categoria":
+                          return (
+                            <td key={col.id} className="p-3">
+                              {c.categoria_ids?.length ? (
+                                <span className="flex flex-wrap gap-1">
+                                  {c.categoria_ids.map((cid) => (
+                                    <span key={cid} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border whitespace-nowrap">
+                                      {catNameMap[cid] ?? "—"}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : <span className="text-muted-foreground">—</span>}
                             </td>
                           );
                         case "email":
@@ -790,7 +764,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categorias: [] as number[] });
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
 
   const submit = async () => {
@@ -825,16 +799,15 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         id_propietario: user?.id ?? null,
       });
       if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
-      // 4. Categorías (procedencia) seleccionadas (best-effort: si la tabla aún no existe, el contacto igual queda creado)
-      if (form.categorias.length) {
-        const { error: cErr } = await (supabase as any).from("entidades_relacionadas_categorias").insert(
-          form.categorias.map((cid) => ({ id_entidad_relacionada: er.id, id_categoria: cid, activo: true })),
-        );
+      // 4. Categoría (procedencia) seleccionada (best-effort: si la tabla aún no existe, el contacto igual queda creado)
+      if (form.categoria) {
+        const { error: cErr } = await (supabase as any).from("entidades_relacionadas_categorias")
+          .insert({ id_entidad_relacionada: er.id, id_categoria: Number(form.categoria), activo: true });
         if (cErr) console.warn("crm_categorias no disponible:", cErr.message);
       }
       toast.success("Contacto creado");
       setOpen(false);
-      setForm({ ...form, full_name: "", email: "", phone: "", categorias: [] });
+      setForm({ ...form, full_name: "", email: "", phone: "", categoria: "" });
       onCreated();
     } catch (e: any) {
       toast.error(mensajeErrorContacto(e));
@@ -861,15 +834,11 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
             </Select>
           </CField>
           {catalog.length > 0 && (
-            <CField label="Categorías">
-              <CategoryTagPicker
-                catalog={catalog}
-                selected={form.categorias}
-                onToggle={(id) => setForm((f) => ({
-                  ...f,
-                  categorias: f.categorias.includes(id) ? f.categorias.filter((x) => x !== id) : [...f.categorias, id],
-                }))}
-              />
+            <CField label="Categoría">
+              <Select value={form.categoria} onValueChange={(v) => setForm({ ...form, categoria: v })}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
+                <SelectContent>{catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
+              </Select>
             </CField>
           )}
           <div className="grid grid-cols-2 gap-3">
