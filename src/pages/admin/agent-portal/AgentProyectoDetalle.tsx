@@ -84,7 +84,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
   }, [emblaApi, onSelect]);
 
   if (images.length === 1) {
-    return <OptImg src={images[0]} w={640} resize="cover" alt={alt} className="w-full aspect-[4/3] object-cover object-center" />;
+    return <OptImg src={images[0]} w={640} h={480} resize="cover" alt={alt} className="w-full aspect-[4/3] object-cover object-center" />;
   }
 
   return (
@@ -93,7 +93,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
         <div className="flex">
           {images.map((url, i) => (
             <div key={i} className="flex-[0_0_100%] min-w-0">
-              <OptImg src={url} w={640} resize="cover" alt={`${alt} ${i + 1}`} className="w-full aspect-[4/3] object-cover object-center" />
+              <OptImg src={url} w={640} h={480} resize="cover" alt={`${alt} ${i + 1}`} className="w-full aspect-[4/3] object-cover object-center" />
             </div>
           ))}
         </div>
@@ -658,7 +658,7 @@ const AgentProyectoDetalle = () => {
                     onClick={() => openLightbox(vistaImgs, i)}
                     className="group relative snap-start w-[240px] shrink-0 aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-gray-100 cursor-zoom-in"
                   >
-                    <OptImg src={v.url} w={640} alt={v.nombre || "Vista"} className="h-full w-full object-contain bg-gray-50 transition-transform group-hover:scale-[1.03]" />
+                    <OptImg src={v.url} w={640} h={480} resize="cover" alt={v.nombre || "Vista"} className="h-full w-full object-cover object-center transition-transform group-hover:scale-[1.03]" />
                     {v.nombre && (
                       <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5 text-left text-[11px] font-medium text-white">
                         {v.nombre}

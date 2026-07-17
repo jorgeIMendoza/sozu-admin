@@ -2,10 +2,6 @@ import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
-  useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
-} from "@dnd-kit/core";
-import {
   ArrowLeft, StickyNote, ClipboardList, CalendarClock, Briefcase,
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
@@ -48,7 +44,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { isToday, isPast, isFuture, parseISO, format as fmtDateFns, addDays, addWeeks, addMonths, addYears } from "date-fns";
 import {
   leadStatusLabel, lifecycleLabel, leadScoreColor, relTime, fmtDate,
-  fmtDateTime, fmtMXN, stageColor, DEAL_STAGES, apptStatusLabel,
+  fmtDateTime, fmtMXN, DEAL_STAGES, apptStatusLabel,
   taskStatusLabel, TASK_STATUS, APPT_STATUS, type DealStage,
 } from "@/lib/crm-lib";
 import {
@@ -124,6 +120,23 @@ const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "proveedor", label: "Proveedor" },
   { value: "fuera_area", label: "Fuera del área" },
 ];
+
+// Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
+const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
+const MSG_TELEFONO_INVALIDO = "El teléfono no es válido. Usa solo números (opcional + espacios o guiones), de 5 a 20 caracteres. Ej: 3312345678";
+const MSG_EMAIL_INVALIDO = "El correo no es válido. Debe tener el formato nombre@dominio.com";
+
+// Traduce errores crudos de la BD (en inglés) a un mensaje claro en español.
+function mensajeErrorContacto(e: any): string {
+  const m = (e?.message ?? "").toLowerCase();
+  if (m.includes("telefono_formato")) return MSG_TELEFONO_INVALIDO;
+  if (m.includes("email_formato")) return MSG_EMAIL_INVALIDO;
+  if (m.includes("curp_formato")) return "El CURP no tiene un formato válido.";
+  if (m.includes("rfc_formato")) return "El RFC no tiene un formato válido.";
+  if (m.includes("duplicate") || m.includes("unique")) return "Ese contacto ya existe (dato duplicado).";
+  return "No se pudo guardar el contacto. Revisa los datos e inténtalo de nuevo.";
+}
 
 function loadContactColumns(): ColumnConfig[] {
   if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
@@ -639,14 +652,19 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
 
   const submit = async () => {
     if (!form.full_name) return;
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    // Validación acorde a los CHECK de la tabla personas (evita error crudo de BD).
+    if (email && !PERSONA_EMAIL_RE.test(email)) { toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { toast.error(MSG_TELEFONO_INVALIDO); return; }
     setBusy(true);
     try {
       // 1. Persona (datos de contacto)
       const { data: persona, error: pErr } = await (supabase as any).from("personas").insert({
         tipo_persona: "pf",
         nombre_legal: form.full_name,
-        email: form.email || null,
-        telefono: form.phone || null,
+        email: email || null,
+        telefono: phone || null,
       }).select("id").single();
       if (pErr) throw pErr;
       // 2. Entidad relacionada (prospecto tipo 7)
@@ -669,7 +687,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
       setForm({ ...form, full_name: "", email: "", phone: "" });
       onCreated();
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo crear el contacto");
+      toast.error(mensajeErrorContacto(e));
     } finally {
       setBusy(false);
     }
@@ -996,14 +1014,40 @@ export function CrmContactDetail() {
     },
   });
 
-  // Fase 1: citas, negocios, pipeline y eventos de conversión aún no persisten.
+  // Negocios del contacto (un negocio pertenece a un solo contacto).
+  const { data: contactDeals } = useQuery({
+    queryKey: ["contact-deals", contactId],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const { data: negocios, error } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, prioridad")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_creacion", { ascending: false });
+      if (error || !negocios?.length) return [];
+      const etapaIds = Array.from(new Set(negocios.map((n: any) => n.id_etapa).filter(Boolean)));
+      const pipeIds = Array.from(new Set(negocios.map((n: any) => n.id_pipeline).filter(Boolean)));
+      const [etRes, pRes] = await Promise.all([
+        etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre").in("id", etapaIds) : Promise.resolve({ data: [] }),
+        pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
+      ]);
+      const etapaMap = Object.fromEntries((etRes.data ?? []).map((e: any) => [e.id, e.nombre]));
+      const pipeMap = Object.fromEntries((pRes.data ?? []).map((p: any) => [p.id, p.nombre]));
+      return negocios.map((n: any) => ({
+        ...n,
+        etapa_nombre: etapaMap[n.id_etapa] ?? "—",
+        pipeline_nombre: n.id_pipeline ? (pipeMap[n.id_pipeline] ?? null) : null,
+      }));
+    },
+  });
+
+  // Fase 1: citas, pipeline y eventos de conversión aún no persisten.
   const appointments: any[] = [];
   const deals: any[] = [];
   const pipelineEvents: any[] = [];
   const conversionEvents: any[] = [];
 
   const invalidateAll = () => {
-    ["contact-sozu", "contact-notes", "contact-tasks"].forEach(
+    ["contact-sozu", "contact-notes", "contact-tasks", "contact-deals"].forEach(
       (k) => qc.invalidateQueries({ queryKey: [k, contactId] }),
     );
     // También refrescar la lista de contactos para que refleje los cambios al volver.
@@ -1209,14 +1253,7 @@ export function CrmContactDetail() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="deals">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Negocios <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">Próximamente</span></span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="text-xs text-muted-foreground py-2">La gestión de negocios llegará en una fase posterior.</p>
-              </AccordionContent>
-            </AccordionItem>
+            <DealsCard contactId={contactId!} deals={contactDeals ?? []} onSaved={invalidateAll} />
 
             <AccordionItem value="tickets" className="border-b-0">
               <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
@@ -1251,15 +1288,19 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
       onSaved();
     } catch (e: any) {
       setStatus("error");
-      toast.error(e?.message ?? "No se pudo guardar");
+      toast.error(mensajeErrorContacto(e));
     }
   };
 
   const persistPersona = () => {
     if (!contact.id_persona) return;
+    const email = (form.email || "").trim();
+    const phone = (form.phone || "").trim();
+    if (email && !PERSONA_EMAIL_RE.test(email)) { setStatus("error"); toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { setStatus("error"); toast.error(MSG_TELEFONO_INVALIDO); return; }
     run(() => (supabase as any).from("personas").update({
-      email: form.email || null,
-      telefono: form.phone || null,
+      email: email || null,
+      telefono: phone || null,
       fecha_actualizacion: new Date().toISOString(),
     }).eq("id", contact.id_persona));
   };
@@ -1956,201 +1997,460 @@ function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }:
   );
 }
 
-function DealDialog({ contactId, orgId, developmentId, onSaved }: any) {
+// ─── Negocios en la ficha del contacto (estilo HubSpot) ───────────────────────
+
+// Formatea un monto con su moneda; cae a fmtMXN si la moneda no es válida.
+function fmtMoneda(v: number, moneda?: string): string {
+  try {
+    return new Intl.NumberFormat("es-MX", { style: "currency", currency: moneda || "MXN", maximumFractionDigits: 0 }).format(v);
+  } catch {
+    return fmtMXN(v);
+  }
+}
+
+// Catálogos fijos del negocio (según el form de HubSpot).
+const TIPO_NEGOCIO_OPTS: { value: string; label: string }[] = [
+  { value: "cliente_nuevo", label: "Cliente nuevo" },
+  { value: "cliente_existente", label: "Cliente existente" },
+];
+const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
+  baja: { label: "Baja", dot: "bg-emerald-500" },
+  media: { label: "Media", dot: "bg-amber-500" },
+  alta: { label: "Alta", dot: "bg-red-500" },
+};
+
+// Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
+function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
+  const list = deals ?? [];
+  return (
+    <AccordionItem value="deals">
+      <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+        <span className="flex items-center gap-2">Negocios <span className="text-xs text-muted-foreground font-normal">{list.length}</span></span>
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <CreateDealDialog contactId={contactId} onSaved={onSaved}
+              trigger={
+                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
+                  <Plus className="h-3.5 w-3.5" />Agregar
+                </button>
+              } />
+          </div>
+          {!list.length ? (
+            <p className="text-xs text-muted-foreground py-1">Sin negocios asociados</p>
+          ) : (
+            <div className="space-y-1.5">
+              {list.map((d: any) => (
+                <div key={d.id} className="rounded-md border border-border p-2.5 bg-card">
+                  <div className="flex items-center gap-1.5">
+                    {d.prioridad && PRIORIDAD_META[d.prioridad] && (
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[d.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[d.prioridad].label}`} />
+                    )}
+                    <div className="text-sm font-medium truncate">{d.nombre}</div>
+                  </div>
+                  {d.pipeline_nombre && <div className="text-[11px] text-muted-foreground truncate">{d.pipeline_nombre}</div>}
+                  <div className="flex items-center justify-between mt-1 gap-2">
+                    <Badge variant="outline" className="text-[10px] truncate max-w-[130px]">{d.etapa_nombre}</Badge>
+                    <span className="text-xs font-medium tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+// Modal "Crear Negocio" con pestañas "Crear nuevo" / "Agregar existente".
+function CreateDealDialog({ contactId, onSaved, trigger }: { contactId: string; onSaved: () => void; trigger?: React.ReactNode }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ deal_name: "", value: "", deal_stage: "new" });
-  const save = async () => {
-    if (!orgId || !form.deal_name) return;
-    const { error } = await (supabase as any).from("deals").insert({
-      organization_id: orgId, contact_id: contactId, development_id: developmentId,
-      deal_name: form.deal_name, value: form.value ? Number(form.value) : null,
-      deal_stage: form.deal_stage, pipeline: "sales", currency: "MXN",
-      deal_owner: user?.id ?? null,
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Deal creado"); setOpen(false); onSaved();
-  };
+  const [tab, setTab] = useState<"nuevo" | "existente">("nuevo");
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Deal</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo deal</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <DField label="Nombre *"><Input value={form.deal_name} onChange={(e) => setForm({ ...form, deal_name: e.target.value })} /></DField>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Valor (MXN)"><Input type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></DField>
-            <DField label="Etapa">
-              <Select value={form.deal_stage} onValueChange={(v) => setForm({ ...form, deal_stage: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{DEAL_STAGES.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-          </div>
-        </div>
-        <DialogFooter><Button onClick={save} disabled={!form.deal_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear deal</Button></DialogFooter>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setTab("nuevo"); }}>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Negocio</Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Crear Negocio</DialogTitle></DialogHeader>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "nuevo" | "existente")}>
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="nuevo">Crear nuevo</TabsTrigger>
+            <TabsTrigger value="existente">Agregar existente</TabsTrigger>
+          </TabsList>
+          <TabsContent value="nuevo" className="mt-0">
+            <NewDealForm contactId={contactId} userId={user?.id}
+              onDone={(close) => { onSaved(); if (close) setOpen(false); }}
+              onCancel={() => setOpen(false)} />
+          </TabsContent>
+          <TabsContent value="existente" className="mt-0">
+            <ExistingDealForm contactId={contactId}
+              onDone={() => { onSaved(); setOpen(false); }}
+              onCancel={() => setOpen(false)} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
 }
 
-// ─── Deals Kanban ─────────────────────────────────────────────────────────────
+// Pestaña "Crear nuevo": Nombre*, Pipeline*, Etapa* (dependiente del pipeline), Valor, Moneda.
+function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: string; userId?: string; onDone: (close: boolean) => void; onCancel: () => void }) {
+  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: userId ?? "", tipo_negocio: "", prioridad: "" };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
 
-type KanbanDeal = {
-  id: string; deal_name: string; deal_stage: DealStage;
-  value: number | null; currency: string;
-  contact_id: string | null; development_id: string | null;
-  contact?: { id: string; full_name: string } | null;
-  development?: { id: string; name: string } | null;
-};
-
-export function CrmDeals() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [devFilter, setDevFilter] = useState("all");
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  const { data: developments } = useQuery({
-    queryKey: ["proyectos-list"],
+  const { data: pipelines } = useQuery({
+    queryKey: ["crm-pipelines"],
     queryFn: async () => {
-      // Solo proyectos SOZU: proyectos con relación de entidad SOZU (id_tipo_entidad=5) y publicados.
-      const { data: rels } = await (supabase as any).from("entidades_relacionadas")
-        .select("id_proyecto").eq("id_tipo_entidad", 5).eq("activo", true).not("id_proyecto", "is", null);
-      const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
-      if (!ids.length) return [];
-      const { data } = await (supabase as any).from("proyectos")
-        .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
-      return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
+      const { data } = await (supabase as any).from("crm_pipelines")
+        .select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  // Etapas dependientes del pipeline elegido (cada pipeline tiene su propio embudo).
+  const { data: etapas } = useQuery({
+    queryKey: ["crm-etapas", form.id_pipeline],
+    enabled: !!form.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  // Propietarios posibles: Super Admin (1) y Agente Interno (9).
+  const { data: owners } = useQuery({
+    queryKey: ["agentes-list"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("usuarios").select("auth_user_id, nombre, email").eq("activo", true).in("rol_id", [1, 9]);
+      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
     },
   });
 
-  const { data: deals, isLoading } = useQuery({
-    queryKey: ["deals-kanban", orgId, devFilter], enabled: !!orgId,
-    queryFn: async () => {
-      let q = (supabase as any).from("deals")
-        .select("id, deal_name, deal_stage, value, currency, contact_id, development_id, contact:contacts(id, full_name), development:developments(id, name)")
-        .eq("organization_id", orgId!).order("created_at", { ascending: false }).limit(500);
-      if (devFilter !== "all") q = q.eq("development_id", devFilter);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data as any[]) as KanbanDeal[];
-    },
-  });
+  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
 
-  const byStage = useMemo(() => {
-    const map: Record<string, KanbanDeal[]> = {};
-    DEAL_STAGES.forEach((s) => (map[s.id] = []));
-    (deals ?? []).forEach((d) => { (map[d.deal_stage] ??= []).push(d); });
-    return map;
-  }, [deals]);
-
-  const stageTotals = useMemo(() => {
-    const t: Record<string, number> = {};
-    DEAL_STAGES.forEach((s) => { t[s.id] = (byStage[s.id] ?? []).reduce((sum, d) => sum + Number(d.value ?? 0), 0); });
-    return t;
-  }, [byStage]);
-
-  const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
-  const handleDragEnd = async (e: DragEndEvent) => {
-    setActiveId(null);
-    const dealId = String(e.active.id);
-    const targetStage = e.over?.id ? String(e.over.id) : null;
-    if (!targetStage) return;
-    const deal = deals?.find((d) => d.id === dealId);
-    if (!deal || deal.deal_stage === targetStage) return;
-
-    qc.setQueryData<KanbanDeal[]>(["deals-kanban", orgId, devFilter],
-      (old) => (old ?? []).map((d) => d.id === dealId ? { ...d, deal_stage: targetStage as DealStage } : d),
-    );
-
-    const patch: any = { deal_stage: targetStage };
-    if (targetStage === "won") patch.won_at = new Date().toISOString();
-    if (targetStage === "lost") patch.lost_at = new Date().toISOString();
-    if (targetStage === "reservation") patch.reservation_date = new Date().toISOString().slice(0, 10);
-    if (targetStage === "contract") patch.contract_date = new Date().toISOString().slice(0, 10);
-    if (targetStage === "down_payment") patch.down_payment_date = new Date().toISOString().slice(0, 10);
-
-    const { error } = await (supabase as any).from("deals").update(patch).eq("id", dealId);
-    if (error) { toast.error(error.message); qc.invalidateQueries({ queryKey: ["deals-kanban"] }); return; }
-    toast.success(`Movido a ${DEAL_STAGES.find((s) => s.id === targetStage)?.label}`);
-    qc.invalidateQueries({ queryKey: ["deals-kanban"] });
-    qc.invalidateQueries({ queryKey: ["contact-pipeline", deal.contact_id] });
-    qc.invalidateQueries({ queryKey: ["contact-conv", deal.contact_id] });
+  const save = async (close: boolean) => {
+    if (!canSave) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_negocios").insert({
+      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
+      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || userId || null,
+      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
+      id_entidad_relacionada: Number(contactId),
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio creado");
+    // "Crear y agregar otro": limpia datos pero conserva pipeline/etapa/propietario para encadenar.
+    setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario });
+    onDone(close);
   };
 
-  const activeDeal = deals?.find((d) => d.id === activeId);
+  return (
+    <div className="grid gap-3 pt-4">
+      <DField label="Nombre del negocio *">
+        <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus />
+      </DField>
+      <DField label="Pipeline *">
+        <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+          <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+          <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <DField label="Etapa del negocio *">
+        <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+          <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
+          <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <div className="grid grid-cols-2 gap-3">
+        <DField label="Valor">
+          <Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
+        </DField>
+        <DField label="Moneda">
+          <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MXN">Peso mexicano (MXN)</SelectItem>
+              <SelectItem value="USD">Dólar (USD)</SelectItem>
+            </SelectContent>
+          </Select>
+        </DField>
+      </div>
+      <DField label="Fecha de cierre">
+        <Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} />
+      </DField>
+      <DField label="Propietario del negocio">
+        <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+          <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
+          <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <div className="grid grid-cols-2 gap-3">
+        <DField label="Tipo de negocio">
+          <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </DField>
+        <DField label="Prioridad">
+          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                <SelectItem key={value} value={value}>
+                  <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </DField>
+      </div>
+      <DialogFooter className="gap-2 sm:gap-2">
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
+        <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// Pestaña "Agregar existente": busca un negocio ya creado y lo asocia al contacto.
+function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; onDone: () => void; onCancel: () => void }) {
+  const [term, setTerm] = useState("");
+  const [assocId, setAssocId] = useState<number | null>(null);
+  const { data: results, isFetching } = useQuery({
+    queryKey: ["crm-negocios-search", term.trim()],
+    enabled: term.trim().length >= 2,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda").eq("activo", true)
+        .ilike("nombre", `%${term.trim()}%`).order("fecha_creacion", { ascending: false }).limit(20);
+      return (data ?? []) as any[];
+    },
+  });
+  const associate = async (dealId: number) => {
+    setAssocId(dealId);
+    // Un negocio pertenece a un solo contacto: asociar = fijar su contacto.
+    const { error } = await (supabase as any).from("crm_negocios")
+      .update({ id_entidad_relacionada: Number(contactId) }).eq("id", dealId);
+    setAssocId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio asociado"); onDone();
+  };
+  return (
+    <div className="grid gap-3 pt-4">
+      <div className="relative">
+        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Buscar negocio por nombre" className="pl-8" autoFocus />
+      </div>
+      {term.trim().length < 2 ? (
+        <p className="text-xs text-muted-foreground">Escribe al menos 2 caracteres para buscar.</p>
+      ) : isFetching ? (
+        <p className="text-xs text-muted-foreground">Buscando…</p>
+      ) : !results?.length ? (
+        <p className="text-xs text-muted-foreground">Sin resultados.</p>
+      ) : (
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {results.map((d) => (
+            <button key={d.id} onClick={() => associate(d.id)} disabled={assocId === d.id}
+              className="w-full text-left rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50">
+              <div className="text-sm font-medium truncate">{d.nombre}</div>
+              <div className="text-xs text-muted-foreground tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// ─── Negocios (vista general, estilo HubSpot) ─────────────────────────────────
+
+function DealMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground truncate">{label}</p>
+      <p className="text-lg font-semibold tabular-nums mt-1">{value}</p>
+    </div>
+  );
+}
+
+export function CrmDeals() {
+  const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["deals-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: owners } = useQuery({
+    queryKey: ["agentes-list"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("usuarios").select("auth_user_id, nombre, email").eq("activo", true).in("rol_id", [1, 9]);
+      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
+    },
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["deals-list", pipelineFilter, ownerFilter, search.trim()],
+    queryFn: async () => {
+      let q = (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, fecha_creacion")
+        .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
+      if (pipelineFilter !== "all") q = q.eq("id_pipeline", Number(pipelineFilter));
+      if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
+      if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
+      const { data: negocios, error } = await q;
+      if (error) throw error;
+      const list = negocios ?? [];
+      if (!list.length) return { rows: [], truncated: false };
+
+      const etapaIds = Array.from(new Set(list.map((n: any) => n.id_etapa).filter(Boolean)));
+      const pipeIds = Array.from(new Set(list.map((n: any) => n.id_pipeline).filter(Boolean)));
+      const ownerIds = Array.from(new Set(list.map((n: any) => n.id_usuario_propietario).filter(Boolean)));
+      const erIds = Array.from(new Set(list.map((n: any) => n.id_entidad_relacionada).filter(Boolean)));
+
+      const [etRes, pRes, oRes, erRes] = await Promise.all([
+        etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre, probabilidad, es_ganado, es_perdido").in("id", etapaIds) : Promise.resolve({ data: [] }),
+        pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
+        ownerIds.length ? (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds) : Promise.resolve({ data: [] }),
+        erIds.length ? (supabase as any).from("entidades_relacionadas").select("id, id_persona").in("id", erIds) : Promise.resolve({ data: [] }),
+      ]);
+      const etapaMap = new Map((etRes.data ?? []).map((e: any) => [e.id, e]));
+      const pipeMap = new Map((pRes.data ?? []).map((p: any) => [p.id, p.nombre]));
+      const ownerMap = new Map((oRes.data ?? []).map((o: any) => [o.auth_user_id, o.nombre]));
+
+      const personaIds = Array.from(new Set((erRes.data ?? []).map((e: any) => e.id_persona).filter(Boolean)));
+      let personaMap = new Map<number, string>();
+      if (personaIds.length) {
+        const { data: ps } = await (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", personaIds);
+        personaMap = new Map((ps ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      }
+      const erMap = new Map((erRes.data ?? []).map((e: any) => [e.id, personaMap.get(e.id_persona) ?? null]));
+
+      const rows = list.map((n: any) => {
+        const et: any = etapaMap.get(n.id_etapa);
+        return {
+          ...n,
+          etapa_nombre: et?.nombre ?? "—",
+          probabilidad: et ? Number(et.probabilidad) : 0,
+          es_ganado: !!et?.es_ganado,
+          es_perdido: !!et?.es_perdido,
+          pipeline_nombre: pipeMap.get(n.id_pipeline) ?? "—",
+          propietario_nombre: n.id_usuario_propietario ? (ownerMap.get(n.id_usuario_propietario) ?? "—") : "—",
+          contacto_nombre: n.id_entidad_relacionada ? (erMap.get(n.id_entidad_relacionada) ?? null) : null,
+        };
+      });
+      return { rows, truncated: list.length === 1000 };
+    },
+  });
+
+  const rows = data?.rows ?? [];
+  const metrics = useMemo(() => {
+    let total = 0, ponderada = 0, abierto = 0, ganado = 0;
+    for (const r of rows) {
+      const v = Number(r.valor ?? 0);
+      total += v;
+      ponderada += v * (Number(r.probabilidad ?? 0) / 100);
+      if (!r.es_ganado && !r.es_perdido) abierto += v;
+      if (r.es_ganado) ganado += v;
+    }
+    return { total, ponderada, abierto, ganado };
+  }, [rows]);
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Pipeline Kanban"
-        description="Arrastra deals entre etapas · cada cambio dispara pipeline_event + conversion_event"
-        actions={
-          <Select value={devFilter} onValueChange={setDevFilter}>
-            <SelectTrigger className="w-[220px]"><SelectValue placeholder="Todos los desarrollos" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los desarrollos</SelectItem>
-              {(developments ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        }
-      />
-      {isLoading ? (
-        <div className="grid grid-cols-3 gap-3"><Skeleton className="h-64" /><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
-      ) : (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4">
-            {DEAL_STAGES.map((s) => (
-              <KanbanColumn key={s.id} id={s.id} label={s.label} deals={byStage[s.id] ?? []} total={stageTotals[s.id] ?? 0} />
-            ))}
-          </div>
-          <DragOverlay>{activeDeal && <DealCard deal={activeDeal} dragging />}</DragOverlay>
-        </DndContext>
-      )}
-    </div>
-  );
-}
+      <PageHeader title="Negocios" description={`${rows.length} negocio(s)`} />
 
-function KanbanColumn({ id, label, deals, total }: { id: string; label: string; deals: KanbanDeal[]; total: number }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return (
-    <div ref={setNodeRef} className={`w-72 shrink-0 rounded-md border bg-muted/30 p-2 ${isOver ? "ring-2 ring-primary" : ""}`}>
-      <div className="flex items-center justify-between px-1 pb-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium px-2 py-0.5 rounded ${stageColor(id)}`}>{label}</span>
-          <span className="text-xs text-muted-foreground">{deals.length}</span>
+      {/* Métricas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <DealMetric label="Cantidad total" value={fmtMXN(metrics.total)} />
+        <DealMetric label="Cantidad ponderada" value={fmtMXN(metrics.ponderada)} />
+        <DealMetric label="Negocio abierto" value={fmtMXN(metrics.abierto)} />
+        <DealMetric label="Cerrado ganado" value={fmtMXN(metrics.ganado)} />
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los pipelines</SelectItem>
+            {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los propietarios</SelectItem>
+            {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar negocio" className="pl-8 h-9" />
         </div>
-        <span className="text-[10px] text-muted-foreground">{fmtMXN(total)}</span>
       </div>
-      <div className="space-y-2 min-h-[80px]">
-        {deals.map((d) => <DealCard key={d.id} deal={d} />)}
-        {!deals.length && <div className="text-[11px] text-muted-foreground p-3 text-center">Sin deals</div>}
-      </div>
-    </div>
-  );
-}
 
-function DealCard({ deal, dragging }: { deal: KanbanDeal; dragging?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
-  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
-  return (
-    <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`p-2.5 cursor-grab active:cursor-grabbing ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}
-    >
-      <div className="text-sm font-medium truncate">{deal.deal_name}</div>
-      <div className="text-xs text-muted-foreground truncate mt-0.5">
-        {deal.contact ? (
-          <Link to={`/admin/portal-crm/ventas/contactos/${deal.contact.id}`} className="hover:underline" onPointerDown={(e) => e.stopPropagation()}>
-            {deal.contact.full_name}
-          </Link>
-        ) : "Sin contacto"}
-      </div>
-      <div className="flex items-center justify-between mt-1.5">
-        <Badge variant="outline" className="text-[10px] truncate max-w-[120px]">{deal.development?.name ?? "—"}</Badge>
-        <span className="text-xs font-medium">{deal.value ? fmtMXN(Number(deal.value)) : "—"}</span>
-      </div>
-    </Card>
+      {/* Tabla */}
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : rows.length === 0 ? (
+        <EmptyState title="Sin negocios" description="No hay negocios que coincidan con los filtros." />
+      ) : (
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre del negocio</TableHead>
+                <TableHead>Pipeline</TableHead>
+                <TableHead>Etapa</TableHead>
+                <TableHead>Contacto</TableHead>
+                <TableHead>Fecha de cierre</TableHead>
+                <TableHead>Propietario</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r: any) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">{r.nombre}</TableCell>
+                  <TableCell className="text-muted-foreground">{r.pipeline_nombre}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-[11px]">{r.etapa_nombre}</Badge></TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {r.contacto_nombre ? (
+                      <Link to={`/admin/portal-crm/ventas/contactos/${r.id_entidad_relacionada}`} className="hover:underline hover:text-primary">
+                        {r.contacto_nombre}
+                      </Link>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground tabular-nums">{r.fecha_cierre_estimada ? fmtDate(r.fecha_cierre_estimada) : "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{r.propietario_nombre}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{r.valor != null ? fmtMoneda(Number(r.valor), r.moneda) : "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+    </div>
   );
 }
 

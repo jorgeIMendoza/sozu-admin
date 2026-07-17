@@ -79,7 +79,7 @@ const ClientePropiedadPago = () => {
         {/* Beneficiario */}
         <DataRow
           label="BENEFICIARIO"
-          value={prop.propiedadBeneficiarioNombre || "—"}
+          value={prop.propiedadBeneficiarioNombre || "-"}
         />
 
         {/* Monto sugerido */}

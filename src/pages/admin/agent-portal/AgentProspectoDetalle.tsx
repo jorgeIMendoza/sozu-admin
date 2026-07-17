@@ -35,7 +35,7 @@ const AgentProspectoDetalle = () => {
   const { profile, user } = useAuth();
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const agentPersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
-  const { accessibleProjectIds, hasUnrestrictedAccess } = useProjectAccess();
+  const { accessibleProjectIds } = useProjectAccess();
   const { mask } = useAgentPresentation();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -64,7 +64,7 @@ const AgentProspectoDetalle = () => {
     enabled: personaId > 0,
   });
 
-  // Entidades del prospecto (proyectos asignados) — del agente
+  // Entidades del prospecto (proyectos asignados) - del agente
   const { data: entidades = [] } = useQuery({
     queryKey: ["prospecto-entidades", personaId, agentPersonaId],
     queryFn: async () => {
@@ -83,16 +83,18 @@ const AgentProspectoDetalle = () => {
   const entidadIds = useMemo(() => entidades.map((e) => e.id), [entidades]);
   const assignedProjectIds = useMemo(() => new Set(entidades.map((e) => e.id_proyecto).filter(Boolean)), [entidades]);
 
-  // Proyectos disponibles (para agregar interés)
+  // Proyectos disponibles (para agregar interés) - SOLO los asignados al agente,
+  // nunca el catálogo completo (ni super admin / super admin fake).
   const { data: proyectos = [] } = useQuery({
-    queryKey: ["prospecto-proyectos-disp", accessibleProjectIds, hasUnrestrictedAccess],
+    queryKey: ["prospecto-proyectos-disp", accessibleProjectIds],
     queryFn: async () => {
-      let q = supabase.from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
-      if (!hasUnrestrictedAccess) {
-        if (accessibleProjectIds.length === 0) return [];
-        q = q.in("id", accessibleProjectIds);
-      }
-      const { data } = await q;
+      if (accessibleProjectIds.length === 0) return [];
+      const { data } = await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .eq("activo", true)
+        .in("id", accessibleProjectIds)
+        .order("nombre");
       return (data || []) as { id: number; nombre: string }[];
     },
   });
@@ -226,20 +228,20 @@ const AgentProspectoDetalle = () => {
   }
 
   const initials = (persona.nombre_legal || persona.email || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join("") || "?";
-  const tel = persona.telefono ? `${persona.clave_pais_telefono === "MX" ? "+52 " : ""}${persona.telefono}` : "—";
+  const tel = persona.telefono ? `${persona.clave_pais_telefono === "MX" ? "+52 " : ""}${persona.telefono}` : "-";
   const tipoLabel = persona.tipo_persona === "pm" ? "Persona Moral" : "Persona Física";
   const infoRows: [string, string][] = [
-    ["Email", persona.email || "—"],
+    ["Email", persona.email || "-"],
     ["Teléfono", tel],
-    ["RFC", persona.rfc || "—"],
-    ["CURP", persona.curp || "—"],
+    ["RFC", persona.rfc || "-"],
+    ["CURP", persona.curp || "-"],
   ];
 
   return (
     <div className="pb-24">
       <AgentPortalHeader />
 
-      <div className="mx-auto max-w-[1000px] pt-1 space-y-4">
+      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
         <button
           onClick={() => navigate("/admin/agent/prospectos")}
           title="Prospectos"
@@ -252,11 +254,11 @@ const AgentProspectoDetalle = () => {
         <SectionCard bodyClassName="p-5 md:p-6">
           <div className="flex flex-wrap items-start gap-4">
             <Avatar className="h-14 w-14 shrink-0">
-              <AvatarFallback className="bg-primary/10 text-lg font-extrabold text-primary">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-lg font-bold text-primary">{initials}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[19px] font-extrabold tracking-[-0.3px] text-[#171A1D]">{mask(persona.nombre_legal || persona.email)}</span>
+                <span className="text-[19px] font-bold tracking-[-0.3px] text-[#171A1D]">{mask(persona.nombre_legal || persona.email)}</span>
                 <Badge className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/10">
                   {entidades.length} {entidades.length === 1 ? "desarrollo" : "desarrollos"}
                 </Badge>
@@ -354,7 +356,7 @@ const AgentProspectoDetalle = () => {
             </div>
           </div>
 
-          {/* Timeline — máx ~6 filas, luego scroll */}
+          {/* Timeline - máx ~6 filas, luego scroll */}
           {timeline.length === 0 ? (
             <p className="py-6 text-center text-[12px] text-[#9AA3AD]">Aún no hay actividad registrada</p>
           ) : (

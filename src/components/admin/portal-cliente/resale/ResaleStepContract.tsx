@@ -38,53 +38,53 @@ ${binding.projectName}, con superficie de ${binding.m2} m².
 
 CLÁUSULAS
 
-PRIMERA — Objeto. El Propietario encomienda al Intermediario la
+PRIMERA - Objeto. El Propietario encomienda al Intermediario la
 promoción y comercialización de su inmueble para localizar comprador,
 promover, negociar y coordinar el cierre de la operación de compraventa.
 
-SEGUNDA — Precio. Las partes acuerdan que el precio de salida será
+SEGUNDA - Precio. Las partes acuerdan que el precio de salida será
 de $${binding.listingPrice.toLocaleString()} MXN, conforme al escenario
 "${scenario.label}".
 
-TERCERA — Honorarios. El Intermediario cobrará una comisión del
+TERCERA - Honorarios. El Intermediario cobrará una comisión del
 ${(binding.commissionRate * 100).toFixed(0)}% sobre el precio efectivamente
 pagado, más el IVA correspondiente. Esta comisión se devenga únicamente
 al formalizarse la compraventa en escritura pública.
 
-CUARTA — Plazo y exclusividad. Vigencia de ${binding.exclusivityMonths}
+CUARTA - Plazo y exclusividad. Vigencia de ${binding.exclusivityMonths}
 meses a partir de la firma, prorrogables tácitamente por periodos iguales
 salvo aviso por escrito con 15 días naturales de anticipación.
 
-QUINTA — Derecho de cancelación. El Propietario puede cancelar este
+QUINTA - Derecho de cancelación. El Propietario puede cancelar este
 contrato dentro de los ${binding.cancellationDays} días naturales
 siguientes a la firma, sin responsabilidad alguna.
 
-SEXTA — Obligaciones de SOZU. Publicidad, atención de prospectos,
+SEXTA - Obligaciones de SOZU. Publicidad, atención de prospectos,
 calificación financiera de compradores, coordinación de visitas y
 asesoría legal y fiscal hasta la firma notarial.
 
-SÉPTIMA — Obligaciones del Propietario. Entregar documentación
+SÉPTIMA - Obligaciones del Propietario. Entregar documentación
 (escritura, predial al corriente, mantenimiento al corriente, INE,
 RFC, CURP, estado civil), permitir visitas razonables, no negociar
 paralelamente bajo exclusividad.
 
-OCTAVA — Gastos a cargo del Propietario. ISR, certificados de libertad
+OCTAVA - Gastos a cargo del Propietario. ISR, certificados de libertad
 de gravamen, no adeudo de predial, agua y mantenimiento, avalúo
 bancario si lo solicita el comprador hipotecario, honorarios notariales.
 
-NOVENA — Forma de pago de la comisión. Al firmar la escritura,
+NOVENA - Forma de pago de la comisión. Al firmar la escritura,
 mediante transferencia electrónica con CFDI emitido por SOZU.
 
-DÉCIMA — Terminación. Por mutuo consentimiento, por venta concretada,
+DÉCIMA - Terminación. Por mutuo consentimiento, por venta concretada,
 por incumplimiento, o por cancelación del Propietario en plazo.
 
-DÉCIMA PRIMERA — Confidencialidad y protección de datos. Conforme a
+DÉCIMA PRIMERA - Confidencialidad y protección de datos. Conforme a
 la Ley Federal de Protección de Datos Personales en Posesión de los
 Particulares.
 
-DÉCIMA SEGUNDA — Jurisdicción. Tribunales de Guadalajara, Jalisco.
+DÉCIMA SEGUNDA - Jurisdicción. Tribunales de Guadalajara, Jalisco.
 
-DÉCIMA TERCERA — Firma electrónica. Las partes reconocen la validez
+DÉCIMA TERCERA - Firma electrónica. Las partes reconocen la validez
 jurídica plena de la firma electrónica conforme al Código de
 Comercio, artículos 89 y 97, mediante el servicio MIFIEL.`;
 

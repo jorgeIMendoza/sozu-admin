@@ -155,7 +155,7 @@ const ActivitySection = ({ portfolio, onPayNow }: ActivitySectionProps) => {
             </div>
           </div>
 
-          {/* Pending items — max 3 */}
+          {/* Pending items - max 3 */}
           {visibleItems.map((item, i) => {
             const styles = urgencyStyles[item.urgency];
             const badge = badgeStyles[item.type] || "bg-muted text-muted-foreground";

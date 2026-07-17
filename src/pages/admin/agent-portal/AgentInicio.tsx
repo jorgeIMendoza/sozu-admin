@@ -1,28 +1,35 @@
-import { useState, useEffect } from "react";
-import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  CalendarPlus, UserPlus, AlertCircle, Loader2,
-  ChevronRight, Calendar, Clock, MapPin, X, Ban, CalendarClock, EyeOff
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
+import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LucideIcon } from "lucide-react";
+import {
+  AlertCircle,
+  Ban,
+  Calendar,
+  CalendarClock,
+  CalendarPlus,
+  ChevronRight,
+  Clock,
+  EyeOff,
+  Loader2,
+  MapPin,
+  UserPlus
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const AgentInicio = () => {
@@ -314,7 +321,7 @@ const AgentInicio = () => {
   return (
     <div className="pb-24">
       <AgentPortalHeader>
-        <div className="mx-auto w-full max-w-[1160px]">
+        <div className="mx-auto w-full max-w-[1040px]">
           <h1 className="text-[20px] font-bold tracking-[-0.3px] text-[#1A1D21] lg:text-[22px]">{fullName}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px]">
             <span className="font-semibold text-[hsl(var(--agent-primary))]">{rolLabel}</span>
@@ -331,7 +338,7 @@ const AgentInicio = () => {
         </div>
       </AgentPortalHeader>
 
-      <div className="mx-auto max-w-[1160px] pt-4 pb-4 lg:pt-6 space-y-4 lg:space-y-5">
+      <div className="mx-auto max-w-[1040px] py-4 space-y-4">
 
       {/* Onboarding Progress Banner - only for Agente Inmobiliario */}
       {isAgentRole && percentage < 100 && (
@@ -350,7 +357,7 @@ const AgentInicio = () => {
               : 'Completa tu perfil para recibir comisiones.'}
           </p>
           <div className="h-2 bg-amber-100 rounded-md overflow-hidden">
-            <div 
+            <div
               className="h-full bg-[hsl(var(--agent-amber))] rounded-md transition-all duration-700"
               style={{ width: `${percentage}%` }}
             />

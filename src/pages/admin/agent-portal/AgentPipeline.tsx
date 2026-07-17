@@ -397,20 +397,25 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     : `O-${String(oferta.id).padStart(6, '0')}`;
 
   const unitLabel = oferta.is_producto
-    ? `${oferta.producto_nombre || 'Producto'} (${oferta.propiedad_nombre})`
+    ? `${oferta.producto_nombre || 'Producto'} · ${oferta.propiedad_nombre}`
     : (oferta.proyecto_nombre
-      ? `${oferta.proyecto_nombre} - ${oferta.propiedad_nombre}`
+      ? `${oferta.proyecto_nombre} · ${oferta.propiedad_nombre}`
       : oferta.propiedad_nombre);
 
   const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
   const hasUrl = !!oferta.url;
+  const ccLabel = oferta.cuenta_cobranza_id
+    ? formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)
+    : '';
 
-  const [apartadoDialogOpen, setApartadoDialogOpen] = useState(false);
-  const [apartadoEmail, setApartadoEmail] = useState("");
-  const [sendingApartado, setSendingApartado] = useState(false);
+  const subParts = [mask(oferta.lead_nombre), oferta.proyecto_nombre, ccLabel].filter(Boolean);
 
-  // Botón "Enviar" original - envía PDF al email del lead ya registrado
-  const handleSendEmail = async (e: React.MouseEvent) => {
+  const genDate = oferta.fecha_generacion ? new Date(oferta.fecha_generacion) : null;
+  const venceDate = genDate ? new Date(genDate) : null;
+  if (venceDate) venceDate.setDate(venceDate.getDate() + 5);
+
+  // Reenviar - envía PDF al email del lead ya registrado
+  const handleReenviar = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasUrl) {
       toast({
@@ -428,198 +433,78 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     });
   };
 
-  // Botón "Apartar" nuevo - captura email → crea apartado_provisional → envía PDF + link
-  const handleOpenApartado = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasUrl) {
-      toast({
-        title: "PDF no disponible",
-        description: "Descarga la oferta primero para generar el PDF.",
-        duration: 5000,
-      });
-      return;
-    }
-    setApartadoEmail("");
-    setApartadoDialogOpen(true);
-  };
-
-  const handleConfirmApartado = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const trimmedEmail = apartadoEmail.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      toast({ title: "Correo inválido", description: "Verifica el formato del correo.", duration: 4000 });
-      return;
-    }
-    setSendingApartado(true);
-    try {
-      const { data: apartado, error: insertError } = await (supabase as any)
-        .from("reservaciones")
-        .insert({ email: trimmedEmail, id_oferta: oferta.id })
-        .select("id")
-        .single();
-
-      if (insertError || !apartado) throw new Error("Error creando apartado");
-
-      const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
-
-      // Enviar PDF + link de apartado (fire-and-forget - el servicio muestra su propio toast)
-      import('@/services/offerEmailService').then(({ sendMultipleOffersEmailDirect }) => {
-        sendMultipleOffersEmailDirect({
-          offerIds: [oferta.id],
-          propertyNumber: oferta.propiedad_nombre || '',
-          recipientEmail: trimmedEmail,
-          reservationLink,
-        });
-      });
-
-      toast({
-        title: "Reservación creada",
-        description: `Link enviado a ${trimmedEmail} - ${reservationLink}`,
-        duration: 8000,
-      });
-      setApartadoDialogOpen(false);
-    } catch {
-      toast({ title: "Error", description: "No se pudo crear la reservación. Intenta de nuevo.", duration: 4000 });
-    } finally {
-      setSendingApartado(false);
-    }
-  };
-
   return (
-    <div onClick={onClick} className="relative cursor-pointer rounded-md border border-[#E7E9EC] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-[#CBD2D9]">
-      {/* Overlay: captura email para apartado provisional */}
-      {apartadoDialogOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute inset-0 rounded-md bg-white z-10 flex flex-col p-3.5 gap-3"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-gray-700">Correo del prospecto</p>
-            <button
-              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+    <div
+      onClick={onClick}
+      className="cursor-pointer rounded-md border border-[#E7E9EC] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-[#CBD2D9]"
+    >
+      {/* Row 1: label + chip / estado */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12px] font-bold text-[hsl(158_64%_38%)]">Oferta: {ofertaLabel}</span>
+          {oferta.inmobiliaria_nombre && (
+            <span
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                oferta.inmobiliaria_nombre === 'Interno'
+                  ? "bg-[#F2F4F5] text-[#6B7280]"
+                  : "bg-[#EAF6F0] text-[hsl(158_64%_38%)]"
+              )}
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <p className="text-[10px] text-gray-400 -mt-1 leading-snug">
-            Se enviará PDF + link de reservación a este correo.
-          </p>
-          <input
-            autoFocus
-            type="email"
-            value={apartadoEmail}
-            onChange={(e) => setApartadoEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); handleConfirmApartado(e as any); }
-              if (e.key === "Escape") { e.stopPropagation(); setApartadoDialogOpen(false); }
-            }}
-            placeholder="email@cliente.com"
-            disabled={sendingApartado}
-            className="w-full h-9 px-2.5 text-[12px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-colors disabled:opacity-50"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
-              disabled={sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmApartado}
-              disabled={!apartadoEmail.trim() || sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[hsl(158_64%_38%)] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
-            >
-              {sendingApartado ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
-              {sendingApartado ? "Creando…" : "Enviar link"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-bold text-[hsl(158_64%_38%)]">
-            Oferta: {ofertaLabel}
-          </span>
-          <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
-            {stageInfo.label}
-          </Badge>
-        </div>
-
-        <p className="truncate text-[14px] font-bold text-[#171A1D]">
-          {unitLabel}
-        </p>
-
-        <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
-          <User className="h-3 w-3 shrink-0" />
-          <span className="truncate">{mask(oferta.lead_nombre)}</span>
-        </div>
-
-        {oferta.inmobiliaria_nombre && (
-          <div className="flex items-center gap-1.5 text-xs">
-            <Building2 className="h-3 w-3 shrink-0 text-[hsl(var(--agent-text-secondary))]" />
-            <span className={cn("truncate font-medium", oferta.inmobiliaria_nombre === 'Interno' ? 'text-orange-600' : 'text-[hsl(var(--agent-primary))]')}>
               {oferta.inmobiliaria_nombre}
             </span>
-          </div>
-        )}
-
-        {oferta.cuenta_cobranza_id && (
-          <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
-            <FileText className="h-3 w-3 shrink-0" />
-            <span>{formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)}</span>
-          </div>
-        )}
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#F2F4F5] pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {oferta.precio != null && oferta.precio > 0 && (
-              <span className="mr-1 text-[14px] font-extrabold tabular-nums text-[#171A1D]">
-                {mask(formatCurrency(oferta.precio))}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
-              title="Ver oferta pública"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ECEEF0] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Ver
-            </button>
-            <button
-              onClick={handleSendEmail}
-              title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors",
-                hasUrl
-                  ? "border-[#ECEEF0] text-[#4B5563] hover:bg-[#F6F7F8]"
-                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
-              )}
-            >
-              <Mail className="h-3.5 w-3.5" />
-              Enviar
-            </button>
-            <button
-              onClick={handleOpenApartado}
-              title={hasUrl ? 'Reservar unidad - envía PDF + link de reservación' : 'Descarga la oferta primero'}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition-colors",
-                hasUrl
-                  ? "border-[#D7EFE1] bg-[#EAF6F0] text-[hsl(158_64%_38%)] hover:bg-[#DDF0E6]"
-                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
-              )}
-            >
-              <Link2 className="h-3.5 w-3.5" />
-              Reservar
-            </button>
-          </div>
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium tabular-nums text-[#9AA3AD]">
-            <Calendar className="h-3 w-3" />
-            {format(new Date(oferta.fecha_generacion), 'dd MMM yyyy', { locale: es })}
-          </span>
+          )}
         </div>
+        <Badge className={cn("shrink-0 border-0 text-[10px]", stageInfo.color)}>
+          {stageInfo.label}
+        </Badge>
+      </div>
+
+      {/* Row 2: title + price */}
+      <div className="mt-1.5 flex items-start justify-between gap-3">
+        <p className="truncate text-[15px] font-bold text-[#171A1D]">{unitLabel}</p>
+        {oferta.precio != null && oferta.precio > 0 && (
+          <span className="shrink-0 text-[16px] font-bold tabular-nums text-[#171A1D]">
+            {mask(formatCurrency(oferta.precio))}
+          </span>
+        )}
+      </div>
+
+      {/* Row 3: subtitle */}
+      {subParts.length > 0 && (
+        <p className="mt-1 truncate text-[12px] font-medium text-[#9AA3AD]">
+          {subParts.join(' · ')}
+        </p>
+      )}
+
+      {/* Row 4: dates */}
+      {genDate && (
+        <p className="mt-1 text-[11.5px] font-medium tabular-nums text-[#9AA3AD]">
+          Generada: {format(genDate, 'dd MMM yyyy', { locale: es })}
+          {venceDate && `  ·  Vence: ${format(venceDate, 'dd MMM yyyy', { locale: es })}`}
+        </p>
+      )}
+
+      {/* Footer: acciones */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#F2F4F5] pt-3">
+        <button
+          onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[#E7E9EC] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+        >
+          Oferta digital <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={handleReenviar}
+          title={hasUrl ? 'Reenviar oferta por correo' : 'Descarga la oferta primero'}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold",
+            hasUrl
+              ? "border-[#E7E9EC] text-[#4B5563] hover:bg-[#F6F7F8]"
+              : "border-[#E7E9EC] text-[#9AA3AD] cursor-not-allowed"
+          )}
+        >
+          <Mail className="h-3.5 w-3.5" /> Reenviar
+        </button>
       </div>
     </div>
   );

@@ -541,7 +541,7 @@ const AgentUnidadesProyecto = () => {
         </div>
       </div>
 
-      {/* Filtros — panel lateral derecho (diseño CC) */}
+      {/* Filtros - panel lateral derecho (diseño CC) */}
       <Sheet open={filtersDrawerOpen} onOpenChange={setFiltersDrawerOpen}>
         <SheetContent side="right" className="light w-full sm:w-[380px] sm:max-w-[380px] p-0 gap-0 flex flex-col">
           <SheetHeader className="space-y-2 border-b px-6 pt-6 pb-4 text-left">
@@ -605,7 +605,7 @@ const AgentUnidadesProyecto = () => {
         )}
       </div>
 
-      {/* Property Detail — modal centrado (izq carrusel · der info) */}
+      {/* Property Detail - modal centrado (izq carrusel · der info) */}
       <Dialog open={!!selectedProperty} onOpenChange={(open) => !open && setSelectedProperty(null)}>
         <DialogContent className="light w-[95vw] max-w-4xl p-0 gap-0 overflow-hidden max-h-[88vh]">
           <DialogTitle className="sr-only">Detalle del departamento</DialogTitle>

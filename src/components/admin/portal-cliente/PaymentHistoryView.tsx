@@ -453,7 +453,7 @@ const PaymentHistoryView = ({ investment }: PaymentHistoryViewProps) => {
         </div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">Último pago</span>
-          <span className="font-semibold text-sm text-foreground">{lastPaid ? fmtShortDate(lastPaid.date) : "—"}</span>
+          <span className="font-semibold text-sm text-foreground">{lastPaid ? fmtShortDate(lastPaid.date) : "-"}</span>
         </div>
       </div>
       <div className="border-t border-border pt-3">

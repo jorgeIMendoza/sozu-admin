@@ -161,7 +161,7 @@ const PaymentReceiptModal = ({ receipt, open, onClose }: PaymentReceiptModalProp
               <div className="bg-card rounded-xl border border-border overflow-hidden divide-y divide-border">
                 <DetailRow label="Cliente" value={receipt.clientName} />
                 <DetailRow label="RFC" value={receipt.clientRFC} mono />
-                <DetailRow label="Propiedad" value={`${receipt.projectName} — U${receipt.unitNumber}`} />
+                <DetailRow label="Propiedad" value={`${receipt.projectName} - U${receipt.unitNumber}`} />
                 {receipt.productName && <DetailRow label="Producto" value={receipt.productName} />}
                 <DetailRow label="Concepto" value={receipt.concept} />
                 <DetailRow label="Método de pago" value={receipt.paymentMethod} />

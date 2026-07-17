@@ -185,7 +185,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[95vh] rounded-t-3xl overflow-hidden max-w-[100vw]">
+        <DrawerContent className="max-h-[95vh] rounded-t-2xl overflow-hidden max-w-[100vw]">
           <DrawerHeader className="text-left pb-2 px-4">
             <DrawerTitle className="text-lg">{title}</DrawerTitle>
             <DrawerDescription className="text-xs">{description}</DrawerDescription>
@@ -202,7 +202,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl border-0">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-md shadow-2xl border-0">
         <DialogHeader>
           <DialogTitle className="text-lg">{title}</DialogTitle>
           <DialogDescription className="text-xs">{description}</DialogDescription>

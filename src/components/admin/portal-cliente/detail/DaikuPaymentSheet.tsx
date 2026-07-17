@@ -217,7 +217,7 @@ const DaikuPaymentSheet = ({
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1 — Transferencia */}
+          {/* Tab 1 - Transferencia */}
           <TabsContent value="transferencia" className="mt-4 space-y-4">
             <div className="flex items-start gap-3 p-4 rounded-xl bg-success/10 border border-success/20">
               <div className="w-8 h-8 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
@@ -259,7 +259,7 @@ const DaikuPaymentSheet = ({
             </button>
           </TabsContent>
 
-          {/* Tab 2 — Efectivo */}
+          {/* Tab 2 - Efectivo */}
           <TabsContent value="efectivo" className="mt-4 space-y-4">
             <div className="flex items-start gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
               <div className="w-8 h-8 rounded-full bg-warning/15 flex items-center justify-center flex-shrink-0">
