@@ -126,6 +126,41 @@ export function validateComprobanteDomicilioPdf(text: string): PdfValidationResu
   return { ok: true };
 }
 
+export function validateActaNacimientoPdf(text: string): PdfValidationResult {
+  const norm = normalizeSpaces(text);
+
+  if (!containsPhrase(norm, "Acta de Nacimiento")) {
+    return { ok: false, reason: "El documento no corresponde a un Acta de Nacimiento oficial." };
+  }
+
+  // Marcadores del acta digital oficial (CEVAR / Registro Civil).
+  const hasIdentificador = /Identificador\s+Electr[oó]nico/i.test(norm);
+  const hasRegistroCivil = /registrocivil\.gob\.mx/i.test(norm) || /Registro\s+Civil/i.test(norm);
+
+  // Firma Electrónica: bloque base64 partido en grupos de 2 caracteres separados
+  // por espacios (cambia por persona, pero el patrón es constante). Ej:
+  // "UE VB RT Ay MD cy OU hN Q1 hS RE E3 fE VE VU FS RE 8g RE FW SU R8 ...".
+  const hasFirmaLabel = /Firma\s+Electr[oó]nica/i.test(norm);
+  const hasFirmaPattern = /(?:[A-Za-z0-9+/]{2}\s){12,}/.test(norm);
+  const hasFirmaElectronica = hasFirmaLabel && hasFirmaPattern;
+
+  if (!hasIdentificador && !hasRegistroCivil && !hasFirmaElectronica) {
+    return {
+      ok: false,
+      reason: "No se detectaron los elementos de un Acta de Nacimiento digital oficial (Identificador Electrónico / Registro Civil / Firma Electrónica).",
+    };
+  }
+
+  // CURP presente (clave de la persona registrada).
+  const hasCurp = /[A-Z]{4}\d{6}[HM][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[0-9A-Z]\d/.test(norm);
+  if (!hasCurp) {
+    return { ok: false, reason: "No se encontró la CURP en el Acta de Nacimiento." };
+  }
+
+  // El acta no caduca → no se valida antigüedad.
+  return { ok: true };
+}
+
 export function validateCSFPdf(text: string): PdfValidationResult {
   const norm = normalizeSpaces(text);
 

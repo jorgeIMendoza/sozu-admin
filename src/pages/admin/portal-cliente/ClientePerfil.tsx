@@ -2,7 +2,7 @@ import {
   User, Mail, FileText, LogOut, Shield, ArrowLeft,
   CheckCircle2, Building2, CreditCard, Lock, Eye, EyeOff,
   BadgeCheck, AlertCircle, Clock, Loader2, Check, X,
-  Download, Pencil, Upload, ChevronRight,
+  Download, Pencil, Upload, ChevronRight, Camera,
 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -23,13 +23,6 @@ async function extractPdfText(file: File): Promise<string> {
   return pages.join("\n").trim();
 }
 
-// Keyword groups for docs without dedicated validators. ALL groups must match (at least one kw per group).
-const PDF_KEYWORDS: Record<number, string[][]> = {
-  1:  [["NACIMIENTO", "ACTA DE NACIMIENTO"], ["REGISTRO CIVIL", "REGISTRO"]],
-  8:  [["CFE", "TELMEX", "IZZI", "TOTALPLAY", "MEGACABLE", "TELEFONOS", "GAS NATURAL", "AGUA", "BANCO",
-        "CLABE", "ESTADO DE CUENTA", "COMPROBANTE DE DOMICILIO", "DOMICILIO"]],
-  11: [["MATRIMONIO", "ACTA DE MATRIMONIO"]],
-};
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,7 +33,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTipoPersonaLabel } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
-import { validateCURPPdf, validateCSFPdf, validateComprobanteDomicilioPdf } from "@/utils/pdfDocumentValidators";
+import { validateCURPPdf, validateCSFPdf, validateActaNacimientoPdf } from "@/utils/pdfDocumentValidators";
+import { extractCURPFields, extractCSFFields, extractActaNacimientoFields } from "@/utils/pdfDocumentExtractors";
+import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
 
 /* ─── helpers ─── */
 const INPUT_CLS =
@@ -408,13 +403,31 @@ const ClientePerfil = () => {
   /* Upload */
   const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  /* Confirmación de datos extraídos (CURP / CSF) antes de capturar en `personas` */
+  const [confirmDoc, setConfirmDoc] = useState<{
+    file: File;
+    primaryTipoId: number;
+    slotKey: string;
+    tipo: "curp" | "csf" | "acta";
+    fields: { key: string; label: string; value: string; personaCol: string | null }[];
+  } | null>(null);
+  const [savingConfirm, setSavingConfirm] = useState(false);
+
+  /* Captura por cámara (INE frente+reverso o pasaporte, sin subir archivos) */
+  const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<"ine" | "pasaporte">("ine");
   const pendingAfterPwRef = useRef<(() => void) | null>(null);
   const justAuthedRef = useRef(false);
   const clienteEmail = isImpersonating ? (impersonatedClienteEmail ?? null) : (profile?.email ?? null);
 
-  const PDF_VALIDATE_TIPO_IDS = [1, 5, 6, 8, 11];
+  // Solo CURP(5) y CSF(6) se auto-validan (estatus 2): son PDF, se validan por
+  // texto y se extraen sus campos. El resto de documentos se aceptan tal cual
+  // (imagen o PDF) y quedan en estatus 1 = "En revisión" para revisión manual.
+  const AUTO_VALIDATE_TIPO_IDS = [5, 6];
   const TIPO_NOMBRE: Record<number, string> = {
-    1: "Acta de nacimiento", 5: "CURP", 6: "Constancia de situación fiscal",
+    1: "Acta de nacimiento", 2: "INE frente", 3: "INE reverso", 4: "Pasaporte",
+    5: "CURP", 6: "Constancia de situación fiscal",
     8: "Comprobante de domicilio", 11: "Acta de matrimonio",
   };
 
@@ -806,14 +819,93 @@ const ClientePerfil = () => {
     }
   };
 
+  // Sube el archivo a storage, expira versiones previas, registra el documento y
+  // (opcional) captura campos extraídos en `personas`. Devuelve true si tuvo éxito.
+  const commitDoc = async (
+    file: File,
+    primaryTipoId: number,
+    estatus: number,
+    personaUpdates?: Record<string, string>,
+  ): Promise<boolean> => {
+    if (!effectivePersonaId) return false;
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+    const path = `personas/${effectivePersonaId}/${primaryTipoId}_${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from("documentos").upload(path, file, { upsert: false });
+    if (uploadErr) { toast.error("Error al subir archivo: " + uploadErr.message); return false; }
+    const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
+
+    // Doc activo más antiguo de este tipo → se marca expirado (referencia de auditoría).
+    // Los demás activos → se desactivan + expiran.
+    const { data: activeDocs } = await (supabase as any)
+      .from("documentos")
+      .select("id")
+      .eq("id_persona", effectivePersonaId)
+      .eq("id_tipo_documento", primaryTipoId)
+      .eq("activo", true)
+      .order("id", { ascending: true });
+
+    if (activeDocs && activeDocs.length > 0) {
+      await (supabase as any)
+        .from("documentos")
+        .update({ id_estatus_verificacion: 4 })
+        .eq("id", activeDocs[0].id);
+      const otherIds = activeDocs.slice(1).map((d: any) => d.id);
+      if (otherIds.length > 0) {
+        await (supabase as any)
+          .from("documentos")
+          .update({ activo: false, id_estatus_verificacion: 4 })
+          .in("id", otherIds);
+      }
+    }
+
+    const { error: insertErr } = await (supabase as any).from("documentos").insert({
+      id_persona: effectivePersonaId,
+      id_tipo_documento: primaryTipoId,
+      url: publicUrl,
+      activo: true,
+      es_draft: false,
+      id_estatus_verificacion: estatus,
+    }).select("id").single();
+    if (insertErr) { console.error("[uploadDoc]", insertErr); toast.error("Error al registrar documento"); return false; }
+
+    // Captura automática de datos del documento en el perfil (CURP/CSF confirmados).
+    if (personaUpdates && Object.keys(personaUpdates).length > 0) {
+      const { error: pErr } = await (supabase as any).from("personas").update(personaUpdates).eq("id", effectivePersonaId);
+      if (pErr) console.error("[uploadDoc] persona update:", pErr);
+      else queryClient.invalidateQueries({ queryKey: ["cliente-perfil-persona", effectivePersonaId] });
+    }
+
+    if (estatus === 2 && clienteEmail) {
+      try {
+        await (supabase as any).from("notificaciones_cliente").insert({
+          email_cliente: clienteEmail,
+          tipo: "exito",
+          categoria: "documentos",
+          titulo: `${TIPO_NOMBRE[primaryTipoId] ?? "Documento"} aprobado`,
+          descripcion: "Tu documento fue validado y aprobado.",
+          url_accion: "/perfil",
+          etiqueta_accion: "Ver perfil",
+          leida: false,
+          descartada: false,
+          activo: true,
+        });
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      } catch { /* non-critical */ }
+    }
+
+    queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] });
+    return true;
+  };
+
   const handleUploadDoc = async (file: File, slotKey: string, primaryTipoId: number) => {
     if (!effectivePersonaId) return;
-    setUploadingSlot(slotKey);
-    try {
-      const isPdfType = PDF_VALIDATE_TIPO_IDS.includes(primaryTipoId);
 
-      if (isPdfType) {
-        // Extract text before uploading — if no text, reject immediately
+    // CURP(5) y CSF(6): PDF obligatorio → validación por texto + extracción de datos.
+    // No se sube todavía; primero el cliente confirma los datos extraídos.
+    if (AUTO_VALIDATE_TIPO_IDS.includes(primaryTipoId)) {
+      setUploadingSlot(slotKey);
+      try {
         let text = "";
         try {
           text = await extractPdfText(file);
@@ -821,7 +913,6 @@ const ClientePerfil = () => {
           toast.error("No se pudo leer el archivo. Intenta de nuevo.");
           return;
         }
-
         if (!text || text.trim().length < 20) {
           toast.error(
             "El archivo debe ser el PDF original del documento oficial. No se aceptan escaneados ni imágenes.",
@@ -833,98 +924,103 @@ const ClientePerfil = () => {
         if (primaryTipoId === 5) {
           const result = validateCURPPdf(text);
           if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
-        } else if (primaryTipoId === 6) {
+          const f = extractCURPFields(text);
+          setConfirmDoc({
+            file, primaryTipoId, slotKey, tipo: "curp",
+            fields: [
+              { key: "curp",             label: "CURP",                 value: f.curp ?? "",   personaCol: "curp" },
+              { key: "nombre",           label: "Nombre completo",      value: f.nombre ?? "", personaCol: "nombre_legal" },
+              { key: "fechaNacimiento",  label: "Fecha de nacimiento",  value: f.fechaNacimiento ?? "", personaCol: null },
+              { key: "sexo",             label: "Sexo",                 value: f.sexo === "H" ? "Hombre" : f.sexo === "M" ? "Mujer" : "", personaCol: null },
+            ],
+          });
+        } else {
           const result = validateCSFPdf(text);
           if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
-        } else if (primaryTipoId === 8) {
-          const result = validateComprobanteDomicilioPdf(text);
-          if (!result.ok) { toast.error(result.reason, { duration: 8000 }); return; }
-        } else {
-          const textUpper = text.toUpperCase();
-          const keywordGroups = PDF_KEYWORDS[primaryTipoId] ?? [];
-          const passes = keywordGroups.every(group =>
-            group.some(kw => textUpper.includes(kw.toUpperCase()))
-          );
-          if (!passes) {
-            toast.error(
-              `El archivo no corresponde a "${TIPO_NOMBRE[primaryTipoId]}". Verifica que sea el documento correcto.`,
-              { duration: 7000 },
-            );
-            return;
-          }
+          const f = extractCSFFields(text);
+          setConfirmDoc({
+            file, primaryTipoId, slotKey, tipo: "csf",
+            fields: [
+              { key: "rfc",          label: "RFC",                 value: f.rfc ?? "",          personaCol: "rfc" },
+              { key: "curp",         label: "CURP",                value: f.curp ?? "",         personaCol: "curp" },
+              { key: "nombre",       label: "Nombre / Razón social",value: f.nombre ?? "",       personaCol: "nombre_legal" },
+              { key: "regimen",      label: "Régimen fiscal",      value: f.regimen ?? "",      personaCol: null },
+              { key: "codigoPostal", label: "Código postal",       value: f.codigoPostal ?? "", personaCol: "direccion_fiscal_codigo_postal" },
+              { key: "calle",        label: "Calle",               value: f.calle ?? "",        personaCol: "direccion_fiscal_calle" },
+              { key: "numExt",       label: "Núm. exterior",       value: f.numExt ?? "",       personaCol: "direccion_fiscal_num_ext" },
+              { key: "numInt",       label: "Núm. interior",       value: f.numInt ?? "",       personaCol: "direccion_fiscal_num_int" },
+              { key: "colonia",      label: "Colonia",             value: f.colonia ?? "",      personaCol: "direccion_fiscal_colonia" },
+            ],
+          });
         }
+      } finally {
+        setUploadingSlot(null);
       }
+      return;
+    }
 
-      // Upload to storage (only reached if validation passed or not a PDF type)
-      const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
-      const path = `personas/${effectivePersonaId}/${primaryTipoId}_${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from("documentos").upload(path, file, { upsert: false });
-      if (uploadErr) { toast.error("Error al subir archivo: " + uploadErr.message); return; }
-      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
-
-      // Oldest active doc of this type → keep active but mark expired (audit reference)
-      // All other active docs → deactivate + expired
-      const { data: activeDocs } = await (supabase as any)
-        .from("documentos")
-        .select("id")
-        .eq("id_persona", effectivePersonaId)
-        .eq("id_tipo_documento", primaryTipoId)
-        .eq("activo", true)
-        .order("id", { ascending: true });
-
-      if (activeDocs && activeDocs.length > 0) {
-        await (supabase as any)
-          .from("documentos")
-          .update({ id_estatus_verificacion: 4 })
-          .eq("id", activeDocs[0].id);
-        const otherIds = activeDocs.slice(1).map((d: any) => d.id);
-        if (otherIds.length > 0) {
-          await (supabase as any)
-            .from("documentos")
-            .update({ activo: false, id_estatus_verificacion: 4 })
-            .in("id", otherIds);
-        }
-      }
-
-      // PDF types validated locally → estatus=2 (verified). Others → estatus=1 (pending review).
-      const newEstatus = isPdfType ? 2 : 1;
-
-      const { error: insertErr } = await (supabase as any).from("documentos").insert({
-        id_persona: effectivePersonaId,
-        id_tipo_documento: primaryTipoId,
-        url: publicUrl,
-        activo: true,
-        es_draft: false,
-        id_estatus_verificacion: newEstatus,
-      }).select("id").single();
-      if (insertErr) { console.error("[uploadDoc]", insertErr); toast.error("Error al registrar documento"); return; }
-
-      if (isPdfType) {
-        toast.success("Documento verificado y aprobado");
-        try {
-          if (clienteEmail) {
-            await (supabase as any).from("notificaciones_cliente").insert({
-              email_cliente: clienteEmail,
-              tipo: "exito",
-              categoria: "documentos",
-              titulo: `${TIPO_NOMBRE[primaryTipoId] ?? "Documento"} aprobado`,
-              descripcion: "Tu documento fue validado y aprobado.",
-              url_accion: "/perfil",
-              etiqueta_accion: "Ver perfil",
-              leida: false,
-              descartada: false,
-              activo: true,
+    // Acta de nacimiento(1): si es PDF con texto oficial válido → auto-valida (con
+    // confirmación de datos). Si es imagen o PDF sin marcadores → En revisión manual.
+    if (primaryTipoId === 1) {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      setUploadingSlot(slotKey);
+      try {
+        if (isPdf) {
+          let text = "";
+          try { text = await extractPdfText(file); } catch { text = ""; }
+          if (text && text.trim().length >= 20 && validateActaNacimientoPdf(text).ok) {
+            const f = extractActaNacimientoFields(text);
+            setConfirmDoc({
+              file, primaryTipoId, slotKey, tipo: "acta",
+              fields: [
+                { key: "curp",            label: "CURP",                value: f.curp ?? "",   personaCol: "curp" },
+                { key: "nombre",          label: "Nombre completo",     value: f.nombre ?? "", personaCol: "nombre_legal" },
+                { key: "fechaNacimiento", label: "Fecha de nacimiento", value: f.fechaNacimiento ?? "", personaCol: null },
+                { key: "sexo",            label: "Sexo",                value: f.sexo === "H" ? "Hombre" : f.sexo === "M" ? "Mujer" : "", personaCol: null },
+                { key: "lugarNacimiento", label: "Lugar de nacimiento", value: f.lugarNacimiento ?? "", personaCol: null },
+              ],
             });
-            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+            return; // el modal confirma y registra (estatus 2)
           }
-        } catch { /* non-critical */ }
-      } else {
-        toast.success("Documento enviado para revisión");
+        }
+        // Imagen o PDF sin texto/marcadores → En revisión manual.
+        const ok = await commitDoc(file, primaryTipoId, 1);
+        if (ok) toast.success("Documento enviado para revisión");
+      } finally {
+        setUploadingSlot(null);
       }
+      return;
+    }
 
-      queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] });
+    // Resto (INE, pasaporte, acta matrimonio, comprobante domicilio):
+    // se acepta el archivo tal cual (imagen o PDF), sin validación → estatus 1 (En revisión).
+    setUploadingSlot(slotKey);
+    try {
+      const ok = await commitDoc(file, primaryTipoId, 1);
+      if (ok) toast.success("Documento enviado para revisión");
     } finally {
       setUploadingSlot(null);
+    }
+  };
+
+  // Confirma los datos extraídos (posiblemente editados) → captura en `personas`
+  // + registra el documento como validado (estatus 2).
+  const handleConfirmDoc = async (editedValues: Record<string, string>) => {
+    if (!confirmDoc) return;
+    setSavingConfirm(true);
+    try {
+      const personaUpdates: Record<string, string> = {};
+      for (const f of confirmDoc.fields) {
+        const val = (editedValues[f.key] ?? f.value).trim();
+        if (f.personaCol && val) personaUpdates[f.personaCol] = val;
+      }
+      const ok = await commitDoc(confirmDoc.file, confirmDoc.primaryTipoId, 2, personaUpdates);
+      if (ok) {
+        toast.success("Documento verificado y datos guardados en tu perfil");
+        setConfirmDoc(null);
+      }
+    } finally {
+      setSavingConfirm(false);
     }
   };
 
@@ -1078,7 +1174,7 @@ const ClientePerfil = () => {
                   const st = best?.status ?? 'missing';
                   const dotColor = st === 'verified' ? green : st === 'review' ? '#f59e0b' : st === 'rejected' ? '#ef4444' : '#d1d5db';
                   const badge = st === 'verified' ? { c:'#3f8f5c', bg:'#d4eadb' } : st === 'review' ? { c:'#92400e', bg:'#fef3c7' } : st === 'rejected' ? { c:'#c0392b', bg:'#fef2f2' } : { c:'#6b7280', bg:'#f3f4f6' };
-                  const badgeLabel = st === 'verified' ? 'Aprobado' : st === 'review' ? 'En revisión' : st === 'rejected' ? 'Rechazado' : s.required ? 'Pendiente' : 'Opcional';
+                  const badgeLabel = st === 'verified' ? 'Aprobado' : st === 'review' ? 'En revisión' : st === 'rejected' ? 'Rechazado' : st === 'expired' ? 'Expirado' : 'Pendiente';
                   return (
                     <div key={s.key} style={{ display:'flex', alignItems:'center', gap:8, background:'#fff', border:'1px solid #e2ece6', fontSize:12, fontWeight:600, padding:'7px 11px', borderRadius:6 }}>
                       <span style={{ width:7, height:7, borderRadius:'50%', background:dotColor, flexShrink:0 }} />
@@ -1207,11 +1303,12 @@ const ClientePerfil = () => {
                   const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
                   const status = best?.status ?? 'missing';
                   const isUploading = uploadingSlot === slot.key;
-                  const canUpload = status === 'expired' || status === 'missing' || status === 'rejected' || (!slot.required && !best);
-                  const isINE = slot.key === 'ine_frente' || slot.key === 'ine_reverso';
+                  const hasFile = !!best?.url;
+                  const isCamera = slot.key === 'ine_frente' || slot.key === 'ine_reverso' || slot.key === 'pasaporte';
                   const dotColor = status === 'verified' ? green : status === 'review' ? '#f59e0b' : status === 'rejected' ? '#ef4444' : '#d1d5db';
                   const badge = status === 'verified' ? { c:'#3f8f5c', bg:'#eaf6ef' } : status === 'review' ? { c:'#92400e', bg:'#fef3c7' } : status === 'rejected' ? { c:'#c0392b', bg:'#fef2f2' } : { c:'#6b7280', bg:'#f3f4f6' };
-                  const badgeLabel = status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : slot.required ? 'Pendiente' : 'Opcional';
+                  // Sin archivo → siempre "Pendiente" (ya no hay "Opcional").
+                  const badgeLabel = status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : 'Pendiente';
                   return (
                     <div key={slot.key} style={{ border:'1px solid #eef0f1', borderRadius:6, padding:'13px 15px', display:'flex', alignItems:'center', gap:13 }}>
                       <span style={{ width:26, height:26, borderRadius:'50%', background:'#f5f6f7', border:'1px solid #ededf0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:textMuted, flexShrink:0 }}>{i+1}</span>
@@ -1219,31 +1316,36 @@ const ClientePerfil = () => {
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:14, fontWeight:700, color:textPrimary }}>{slot.label}</div>
                         {best?.date && <div style={{ fontSize:11.5, color:textMuted, marginTop:2 }}>Subido el {best.date}</div>}
-                        {!slot.required && !best && <div style={{ fontSize:11, color:textMuted, marginTop:2, fontStyle:'italic' }}>Opcional</div>}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
                         <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 8px', borderRadius:6, background:badge.bg, color:badge.c, whiteSpace:'nowrap' }}>{badgeLabel}</span>
-                        {canUpload && !isINE ? (
-                          <>
-                            <input
-                              ref={(el) => { fileInputRefs.current[slot.key] = el; }}
-                              type="file"
-                              accept={PDF_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
-                              className="hidden"
-                              onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId); e.target.value = ''; }}
-                            />
-                            <button onClick={() => fileInputRefs.current[slot.key]?.click()} disabled={isUploading} style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                              {isUploading ? <Loader2 style={{ width:15, height:15, color:textSecondary }} className="animate-spin" /> : <Upload style={{ width:15, height:15, color:textSecondary }} />}
-                            </button>
-                          </>
-                        ) : null}
+                        <input
+                          ref={(el) => { fileInputRefs.current[slot.key] = el; }}
+                          type="file"
+                          accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
+                          className="hidden"
+                          onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId); e.target.value = ''; }}
+                        />
+                        {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo.
+                            Con archivo → ícono editar (reemplazar), por si se subió uno mal. */}
                         <button
-                          onClick={best?.url ? () => setPreviewDoc({ title:slot.label, url:best.url! }) : undefined}
-                          disabled={!best?.url}
-                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:best?.url ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', opacity:best?.url ? 1 : 0.35 }}
+                          onClick={() => { if (isCamera) { setCameraMode(slot.key === 'pasaporte' ? 'pasaporte' : 'ine'); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
+                          disabled={isUploading}
+                          title={isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
+                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:isUploading ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
                         >
-                          <Eye style={{ width:15, height:15, color:textSecondary }} />
+                          {isUploading ? <Loader2 style={{ width:15, height:15, color:textSecondary }} className="animate-spin" /> : isCamera ? <Camera style={{ width:15, height:15, color:textSecondary }} /> : hasFile ? <Pencil style={{ width:15, height:15, color:textSecondary }} /> : <Upload style={{ width:15, height:15, color:textSecondary }} />}
                         </button>
+                        {/* Ojo: solo se muestra si ya hay archivo */}
+                        {hasFile && (
+                          <button
+                            onClick={() => setPreviewDoc({ title:slot.label, url:best!.url! })}
+                            title="Ver documento"
+                            style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+                          >
+                            <Eye style={{ width:15, height:15, color:textSecondary }} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1886,6 +1988,24 @@ const ClientePerfil = () => {
             </SheetContent>
           </Sheet>
         )}
+
+        <ConfirmDataModal
+          data={confirmDoc}
+          saving={savingConfirm}
+          onCancel={() => setConfirmDoc(null)}
+          onConfirm={handleConfirmDoc}
+        />
+
+        {effectivePersonaId && (
+          <ClienteINECameraCapture
+            open={ineCaptureOpen}
+            onOpenChange={setIneCaptureOpen}
+            personaId={effectivePersonaId}
+            isDesktop={isDesktop}
+            mode={cameraMode}
+            onCompleted={() => queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] })}
+          />
+        )}
       </div>
     </div>
   );
@@ -1893,6 +2013,70 @@ const ClientePerfil = () => {
 /* ─────────────────────────────────────────── */
 /*  Sub-components                             */
 /* ─────────────────────────────────────────── */
+
+/* Modal de confirmación de datos extraídos (CURP / CSF) — editable antes de guardar */
+const ConfirmDataModal = ({
+  data, saving, onCancel, onConfirm,
+}: {
+  data: null | {
+    tipo: "curp" | "csf" | "acta";
+    fields: { key: string; label: string; value: string; personaCol: string | null }[];
+  };
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: (values: Record<string, string>) => void;
+}) => {
+  const [values, setValues] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (data) {
+      const init: Record<string, string> = {};
+      data.fields.forEach((f) => { init[f.key] = f.value; });
+      setValues(init);
+    }
+  }, [data]);
+
+  if (!data) return null;
+  const titulo =
+    data.tipo === "curp" ? "Confirma los datos de tu CURP"
+    : data.tipo === "acta" ? "Confirma los datos de tu acta"
+    : "Confirma tus datos fiscales";
+
+  return (
+    <Dialog open={!!data} onOpenChange={(v) => { if (!v && !saving) onCancel(); }}>
+      <DialogContent className="p-0 max-w-md flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+        <div style={{ padding: "20px 22px 12px" }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>{titulo}</h3>
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+            Extrajimos estos datos de tu documento. Verifica que sean correctos; se guardarán en tu perfil automáticamente.
+          </p>
+        </div>
+        <div style={{ padding: "0 22px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+          {data.fields.map((f) => (
+            <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{f.label}</span>
+              <input
+                className={INPUT_CLS}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              />
+            </label>
+          ))}
+        </div>
+        <div style={{ padding: "16px 22px 20px", display: "flex", gap: 10 }}>
+          <button onClick={onCancel} disabled={saving}
+            style={{ flex: 1, height: 42, borderRadius: 8, border: "1px solid #e0e3e6", background: "#fff", color: "#111827", fontWeight: 700, fontSize: 13.5, cursor: saving ? "not-allowed" : "pointer" }}>
+            Cancelar
+          </button>
+          <button onClick={() => onConfirm(values)} disabled={saving}
+            style={{ flex: 1, height: 42, borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: saving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: saving ? 0.7 : 1 }}>
+            {saving ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" /> : <Check style={{ width: 15, height: 15 }} />}
+            Sí, es correcta
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 const InfoCard = ({
   title, icon: Icon, children, action,
 }: {
