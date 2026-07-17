@@ -253,12 +253,23 @@ export function useProjectPhotos(projectId: number | undefined) {
   return useQuery({
     queryKey: ["project-photos", projectId],
     queryFn: async (): Promise<ConstructionPhoto[]> => {
-      const { data, error } = await supabase
+      // "General" photos only (resolve id by name - ids differ dev/prod)
+      const { data: categoriasData, error: ec } = await supabase
+        .from("categorias_multimedia_proyecto")
+        .select("id, nombre")
+        .eq("activo", true);
+      if (ec) throw ec;
+      const cats = (categoriasData ?? []) as { id: number; nombre: string }[];
+      const generalId = cats.find((c) => c.nombre === "General")?.id ?? null;
+
+      let query = supabase
         .from("multimedias_proyecto")
-        .select("id, url")
+        .select("id, url, id_categoria")
         .eq("id_proyecto", projectId!)
         .eq("activo", true)
-        .eq("es_imagen", true)
+        .eq("es_imagen", true);
+      if (generalId != null) query = query.eq("id_categoria", generalId);
+      const { data, error } = await query
         .order("id", { ascending: false })
         .limit(8);
       if (error) throw error;
