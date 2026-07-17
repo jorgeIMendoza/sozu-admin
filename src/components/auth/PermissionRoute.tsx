@@ -13,7 +13,7 @@ interface PermissionRouteProps {
 }
 
 export function PermissionRoute({ children }: PermissionRouteProps) {
-  const { isPathAllowed, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
+  const { isPathAllowed, isLoading, isSuperAdmin, allowedPaths, disabledPaths } = useAllowedMenus();
   const { menuItems, isLoading: isMenuLoading } = useDynamicMenus();
   const { profile } = useAuth();
   const hasEmbajadorRole = useHasEmbajadorRole();
@@ -102,6 +102,12 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
         </div>
       </div>
     );
+  }
+
+  // Vistas explícitamente apagadas en BD (submenus.activo=false o su menú
+  // padre inactivo) no son accesibles para nadie — incluido Super Admin.
+  if (disabledPaths.has(location.pathname)) {
+    return <Navigate to="/admin/access-denied" replace />;
   }
 
   // Super Admin has access to everything
@@ -205,6 +211,21 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoCrm
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Socio Bancario: mismo patrón coarse — basta tener permiso sobre
+  // cualquier submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-socio-bancario')) {
+    let tieneAccesoSocioBancario = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-socio-bancario')) {
+        tieneAccesoSocioBancario = true;
+        break;
+      }
+    }
+    return tieneAccesoSocioBancario
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }

@@ -273,6 +273,14 @@ const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-dir
 const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
 const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
 
+// Portal Socio Bancario (copias independientes de Alta Dirección / Legal Flow + Avance de Obra)
+const SocioBancarioHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioHistoricoComercialPage"));
+const SocioBancarioAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioAnalisisCobranzaPage"));
+const SocioBancarioIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioIngresosEgresosPage"));
+const SocioBancarioForecastIngresos = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioForecastIngresosPage"));
+const SocioBancarioExpedientes = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioExpedientesPage"));
+const SocioBancarioAvanceObra = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioAvanceObraPage"));
+
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
 const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
@@ -1060,6 +1068,14 @@ const App = () => (
                   <Route path="portal-alta-direccion/mediciones/portales" element={<MedicionesPortales />} />
                   <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
                   <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
+
+                  {/* Portal Socio Bancario */}
+                  <Route path="portal-socio-bancario/historico-comercial" element={<SocioBancarioHistoricoComercial />} />
+                  <Route path="portal-socio-bancario/analisis-cobranza" element={<SocioBancarioAnalisisCobranza />} />
+                  <Route path="portal-socio-bancario/ingresos-egresos" element={<SocioBancarioIngresosEgresos />} />
+                  <Route path="portal-socio-bancario/forecast-ingresos" element={<SocioBancarioForecastIngresos />} />
+                  <Route path="portal-socio-bancario/expedientes" element={<SocioBancarioExpedientes />} />
+                  <Route path="portal-socio-bancario/avance-obra" element={<SocioBancarioAvanceObra />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
