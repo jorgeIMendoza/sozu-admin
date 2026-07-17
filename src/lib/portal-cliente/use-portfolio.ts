@@ -69,7 +69,7 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
     case 7: activeIdx = 2; break;  // Escrituración
     case 8: activeIdx = 4; break;  // Entregado → post_entrega
     case 5:                        // Vendida
-    case 11:                       // En demanda (legal) — no bloquear el flujo de pago
+    case 11:                       // En demanda (legal) - no bloquear el flujo de pago
     default:                       // Cualquier otro estatus: derivar del saldo, no asumir preventa
       activeIdx = byPaymentProgress();
       break;
@@ -139,7 +139,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     ...new Set((compradorRowsRes.data ?? []).map((r) => r.id_cuenta_cobranza as number).filter(Boolean)),
   ];
 
-  // cuentaIds del path lead (via id_oferta) — aprobadas y activas
+  // cuentaIds del path lead (via id_oferta) - aprobadas y activas
   const { data: leadCuentasIdRows } = leadOfferIds.length
     ? await supabase
         .from("cuentas_cobranza")
@@ -199,7 +199,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
-  // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
+  // Fetch tipo_financiamiento per cuenta (graceful - column added via DDL 20260610_08)
   const tipoFinMap: Record<number, 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null> = {};
   try {
     const { data: tfRows } = await (supabase as any)
@@ -544,12 +544,12 @@ function buildFromData(
     return {
       property: {
         id: String(cc.id),
-        projectName: String(proyecto?.nombre ?? "—"),
-        unitNumber: String(prop?.numero_propiedad ?? "—"),
+        projectName: String(proyecto?.nombre ?? "-"),
+        unitNumber: String(prop?.numero_propiedad ?? "-"),
         location: String(proyecto?.direccion ?? ""),
         type: String(tipo?.nombre ?? "Propiedad"),
-        area: m2 > 0 ? `${m2.toFixed(1)} m²` : "—",
-        floor: String(prop?.numero_piso ?? "—"),
+        area: m2 > 0 ? `${m2.toFixed(1)} m²` : "-",
+        floor: String(prop?.numero_piso ?? "-"),
         bedrooms: Number(modelo?.numero_recamaras ?? 0),
         bathrooms:
           Number(modelo?.numero_completo_banos ?? 0) +

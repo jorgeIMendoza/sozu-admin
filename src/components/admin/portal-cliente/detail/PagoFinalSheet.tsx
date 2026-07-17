@@ -192,7 +192,7 @@ const PagoFinalSheet = ({
   const isFullyPaid = financials.pendingBalance <= 0;
 
   // Hydrate persisted mortgage process when sheet opens.
-  // Prioridad: (1) store en memoria; (2) solicitud persistida en BD — sobrevive
+  // Prioridad: (1) store en memoria; (2) solicitud persistida en BD - sobrevive
   // logout/login y recarga, y BLOQUEA re-selección de banco (la selección es
   // definitiva mientras el banco responde); (3) crédito elegido sin solicitud
   // aún enviada → permitir elegir banco; (4) método sin definir.

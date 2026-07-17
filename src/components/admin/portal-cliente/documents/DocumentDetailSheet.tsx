@@ -33,7 +33,7 @@ interface DetailSheetProps {
 }
 
 function formatDate(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("es-MX", {
     day: "numeric",
     month: "long",
@@ -357,7 +357,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
         </>
       )}
 
-      {/* File preview — mobile only, after details */}
+      {/* File preview - mobile only, after details */}
       {!inDialog && hasRealUrl && (
         <div className="rounded-md overflow-hidden bg-muted mt-4 border border-border">
           {isImage ? (

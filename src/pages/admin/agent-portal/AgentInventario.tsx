@@ -307,7 +307,7 @@ const ProjectCard = memo(function ProjectCard({
 
         {/* Body */}
         <div className="px-4 py-4">
-          <h3 className="truncate text-[16px] font-extrabold text-[#171A1D]">{proyecto.nombre}</h3>
+          <h3 className="truncate text-[16px] font-bold text-[#171A1D]">{proyecto.nombre}</h3>
           {proyecto.ubicacion && (
             <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#9AA3AD]">
               <MapPin className="h-3 w-3 shrink-0" />

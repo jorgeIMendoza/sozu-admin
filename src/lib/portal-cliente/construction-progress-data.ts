@@ -188,7 +188,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
       const p = proyecto as ProyectoRow | null;
       if (!p) return null;
 
-      // "Avances de obra" photos only (resolve id by name — ids differ dev/prod)
+      // "Avances de obra" photos only (resolve id by name - ids differ dev/prod)
       const cats = (categoriasData ?? []) as { id: number; nombre: string }[];
       const avancesId = cats.find((c) => c.nombre === "Avances de obra")?.id ?? null;
 
@@ -232,7 +232,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         projectName: p.nombre,
         projectStatus: p.estatus_proyecto?.nombre ?? undefined,
         globalProgress,
-        lastUpdated: latest ? fmtDateFromTs(latest.fecha_creacion) : "—",
+        lastUpdated: latest ? fmtDateFromTs(latest.fecha_creacion) : "-",
         estimatedDelivery: p.fecha_entrega ?? "",
         milestones,
         featuredVideoUrl,

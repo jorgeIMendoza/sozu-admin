@@ -38,7 +38,7 @@ async function fetchDocuments(personaId: number): Promise<DocumentRecord[]> {
     .not("id_cuenta_cobranza", "is", null)
     .not("id_tipo_documento", "in", "(21,22)");
 
-  // Exclude tipos 21 (Factura XML) and 22 (Factura PDF) — shown in FacturasSection instead
+  // Exclude tipos 21 (Factura XML) and 22 (Factura PDF) - shown in FacturasSection instead
   const filtered = (docs ?? []).filter(d => ![21, 22].includes(Number(d.id_tipo_documento)));
   if (!filtered.length) return [];
 

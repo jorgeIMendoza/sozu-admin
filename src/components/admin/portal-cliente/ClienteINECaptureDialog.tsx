@@ -222,9 +222,9 @@ Si está vencido indícalo. Si NO es un documento válido o es fotocopia/pantall
       prompt += `\n\nSegunda imagen: selfie en tiempo real del titular del documento.
 
 REGLAS PARA COMPARACIÓN FACIAL:
-- La foto del INE es pequeña (≈2cm×2cm) y puede tener años de antigüedad — calidad inferior es normal.
+- La foto del INE es pequeña (≈2cm×2cm) y puede tener años de antigüedad - calidad inferior es normal.
 - IGNORAR completamente: bigote, barba, gorra, sombrero, lentes, maquillaje, cabello diferente (largo, corto, teñido), ropa, accesorios, expresión facial, iluminación distinta, ángulo diferente.
-- COMPARAR SOLO: estructura ósea del rostro — forma de la mandíbula, pómulos, distancia entre ojos, forma de la nariz, proporciones generales del cráneo.
+- COMPARAR SOLO: estructura ósea del rostro - forma de la mandíbula, pómulos, distancia entre ojos, forma de la nariz, proporciones generales del cráneo.
 - Si la estructura ósea es compatible aunque la persona se vea diferente por cualquiera de los factores anteriores → face_match=true.
 - Rechaza (face_match=false) SOLO si hay diferencia anatómica INEQUÍVOCA: diferente sexo biológico, diferente etnia evidente, diferencia de edad de décadas, o son claramente dos personas distintas.
 - Ante cualquier duda razonable: face_match=true.`;
@@ -243,7 +243,7 @@ REGLAS PARA COMPARACIÓN FACIAL:
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
-        system: "Eres experto verificador de documentos de identidad mexicanos (INE/Pasaporte). Extrae datos con precisión. Para verificación facial: compara estructura ósea facial, NO apariencia superficial (cabello, ropa, maquillaje). Aprueba si la estructura facial es compatible — la persona puede verse diferente por iluminación, peinado o expresión. Usa siempre la herramienta verify_identity_document.",
+        system: "Eres experto verificador de documentos de identidad mexicanos (INE/Pasaporte). Extrae datos con precisión. Para verificación facial: compara estructura ósea facial, NO apariencia superficial (cabello, ropa, maquillaje). Aprueba si la estructura facial es compatible - la persona puede verse diferente por iluminación, peinado o expresión. Usa siempre la herramienta verify_identity_document.",
         tools: [{
           name: "verify_identity_document",
           description: "Retorna resultados de verificación del documento",
@@ -297,7 +297,7 @@ REGLAS PARA COMPARACIÓN FACIAL:
       result.face_match = null;
       result.face_match_reason = result.face_match_reason ?? "No fue posible evaluar coincidencia facial.";
     }
-    // face_match is informational — does NOT affect is_valid_document
+    // face_match is informational - does NOT affect is_valid_document
     return result;
   };
 
@@ -387,7 +387,7 @@ REGLAS PARA COMPARACIÓN FACIAL:
         if (!blob) { autoCaptureLockRef.current = false; return; }
 
         if (cameraStep === "front") {
-          // Store blob in memory — no upload yet
+          // Store blob in memory - no upload yet
           blobRefs.current.front = blob;
           toast.success("INE frente capturado - ahora el reverso", { duration: 3000 });
           // Briefly disable then re-enable camera so stability detection restarts with
@@ -400,7 +400,7 @@ REGLAS PARA COMPARACIÓN FACIAL:
           }, 150);
 
         } else if (cameraStep === "back") {
-          // Store blob in memory — no upload yet
+          // Store blob in memory - no upload yet
           blobRefs.current.back = blob;
           toast.success("Reverso capturado - ahora la selfie", { duration: 3000 });
           stopCamera();
@@ -433,16 +433,16 @@ REGLAS PARA COMPARACIÓN FACIAL:
             return;
           }
 
-          // AI verification — validates document authenticity only (face match is informational)
+          // AI verification - validates document authenticity only (face match is informational)
           const aiResult = await verifyDocument(frontRes.url, "ine_frente", selfieRes.url);
 
           if (!aiResult || !aiResult.is_valid_document) {
-            // Always delete storage files — no DB record was inserted
+            // Always delete storage files - no DB record was inserted
             await supabase.storage.from("documentos").remove([frontRes.path, backRes.path, selfieRes.path]);
             autoCaptureLockRef.current = false;
 
             if (!aiResult) {
-              // Edge function internal error — retry selfie
+              // Edge function internal error - retry selfie
               toast.error("Servicio no disponible. Intenta de nuevo en unos minutos.", { duration: 12000 });
               setTimeout(() => startCamera("selfie"), 500);
               return;
@@ -457,7 +457,7 @@ REGLAS PARA COMPARACIÓN FACIAL:
             return;
           }
 
-          // AI passed — insert DB records with estatus=2 (verified), old ones become expired
+          // AI passed - insert DB records with estatus=2 (verified), old ones become expired
           const [frontId, backId, selfieId] = await Promise.all([
             insertDocRecord(frontRes.url, 2),
             insertDocRecord(backRes.url, 3),
