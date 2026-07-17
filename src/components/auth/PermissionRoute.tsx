@@ -209,6 +209,21 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Portal Socio Bancario: mismo patrón coarse — basta tener permiso sobre
+  // cualquier submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-socio-bancario')) {
+    let tieneAccesoSocioBancario = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-socio-bancario')) {
+        tieneAccesoSocioBancario = true;
+        break;
+      }
+    }
+    return tieneAccesoSocioBancario
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Portal Bancos: mismo patrón coarse — basta tener permiso sobre cualquier
   // submenu del portal para habilitar todas sus rutas. Además permitimos al rol
   // "Banco" entrar directamente (fallback por si los submenús aún no están
