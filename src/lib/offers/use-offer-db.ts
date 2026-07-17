@@ -785,6 +785,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // 2 pasos (sin embed PostgREST) para no depender del schema-cache en dev.
   let developerName: string | undefined;
   let developerLogoUrl: string | undefined;
+  let developerWebsite: string | undefined;
   const { data: devRel } = await supabase
     .from("entidades_relacionadas")
     .select("id_persona")
@@ -796,12 +797,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   if ((devRel as any)?.id_persona) {
     const { data: devPer } = await supabase
       .from("personas")
-      .select("nombre_comercial, nombre_legal, url_logo")
+      .select("nombre_comercial, nombre_legal, url_logo, url_sitio_web")
       .eq("id", (devRel as any).id_persona)
       .maybeSingle();
     if (devPer) {
       developerName = ((devPer as any).nombre_comercial ?? (devPer as any).nombre_legal) || undefined;
       developerLogoUrl = (devPer as any).url_logo ? toOptimizedUrl((devPer as any).url_logo, 240, 85) : undefined;
+      developerWebsite = (devPer as any).url_sitio_web || undefined;
     }
   }
 
@@ -874,8 +876,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       legalName:      (proyecto as any).nombre,
       developerName,
       developerLogoUrl,
-      // Sin columna de web para la desarrolladora en BD → fallback al sitio del proyecto.
-      developerWebsite: (proyectoMkt as any)?.url_sitio_web ?? undefined,
+      // Si la desarrolladora no tiene web, el footer usa SOZU como fallback del link.
+      developerWebsite,
       socials: ((proyectoMkt as any)?.instagram_handle ||
                 (proyectoMkt as any)?.facebook_handle  ||
                 (proyectoMkt as any)?.youtube_handle)

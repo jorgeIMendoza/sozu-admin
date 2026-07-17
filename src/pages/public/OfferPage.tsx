@@ -583,12 +583,12 @@ const OfferPage = () => {
             <div className="flex items-center justify-center gap-6 md:gap-10">
               {offer.development?.developerName && (
                 <>
-                  {/* Desarrolladora (constructora del proyecto) - clic → sitio oficial */}
+                  {/* Desarrolladora - clic → su sitio oficial; si no tiene, fallback SOZU */}
                   <a
-                    href={offer.development.developerWebsite ?? undefined}
-                    target={offer.development.developerWebsite ? "_blank" : undefined}
+                    href={offer.development.developerWebsite ?? "https://www.sozu.com/"}
+                    target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex flex-col items-center gap-2 ${offer.development.developerWebsite ? "hover:opacity-80 transition-opacity" : "pointer-events-none"}`}
+                    className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
                   >
                     <div className="h-6 md:h-7 flex items-center justify-center">
                       {offer.development.developerLogoUrl ? (
