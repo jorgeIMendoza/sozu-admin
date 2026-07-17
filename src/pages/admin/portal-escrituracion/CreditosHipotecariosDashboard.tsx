@@ -36,6 +36,7 @@ interface MortgageRow {
   escrituraValue: number;
   paidAmount: number;
   mortgageCreditAmount: number;
+  requiredMortgageAmount: number;
   conciliatedAmount: number;
   difference: number;
   reconciliationStatus: ReconciliationStatus;
@@ -393,7 +394,8 @@ function DetailPanel({
           <div className="bg-slate-50 rounded-2xl p-3 space-y-2">
             <DetailRow label="Valor escritura">{fmtMxn(row.escrituraValue)}</DetailRow>
             <DetailRow label="Pagado por cliente">{fmtMxn(row.paidAmount)}</DetailRow>
-            <DetailRow label="Crédito banco">{fmtMxn(row.mortgageCreditAmount)}</DetailRow>
+            <DetailRow label="Crédito requerido">{fmtMxn(row.requiredMortgageAmount)}</DetailRow>
+            <DetailRow label="Crédito registrado">{fmtMxn(row.mortgageCreditAmount)}</DetailRow>
             <div className="border-t border-slate-200 pt-2 mt-1">
               <DetailRow label="Total conciliado">
                 <span className="font-bold text-slate-900">{fmtMxn(row.conciliatedAmount)}</span>
@@ -750,15 +752,29 @@ export function CreditosHipotecariosDashboard() {
         (bancosData || []).forEach((b: any) => { bancoMap[b.id] = b.nombre; });
       }
 
-      // Paso 5: pagos totales por cuenta
-      const { data: pagosData } = await supabase
-        .from('pagos')
-        .select('id_cuenta_cobranza, monto, clave_rastreo')
-        .in('id_cuenta_cobranza', allEscriturableIds)
-        .eq('activo', true);
+      // Paso 5: pagos totales por cuenta (solo propiedades con crédito hipotecario)
+      const propIdsConCredito = new Set(
+        (creditos as any[])
+          .map((cr: any) => principalIdToPropId[Number(cr.id_cuenta_cobranza)])
+          .filter((id): id is number => id !== undefined),
+      );
+      const relevantEscriturableIds = Object.entries(escriturablesByProp)
+        .filter(([propId]) => propIdsConCredito.has(Number(propId)))
+        .flatMap(([, cuentas]) => (cuentas as any[]).map((c: any) => Number(c.id)));
+
+      let pagosData: any[] = [];
+      if (relevantEscriturableIds.length) {
+        const { data: pagosResult, error: pagosError } = await supabase
+          .from('pagos')
+          .select('id_cuenta_cobranza, monto, clave_rastreo')
+          .in('id_cuenta_cobranza', relevantEscriturableIds)
+          .eq('activo', true);
+        if (pagosError) throw pagosError;
+        pagosData = pagosResult ?? [];
+      }
 
       const pagosByCuenta: Record<number, { total: number; hasSinCR: boolean }> = {};
-      (pagosData || []).forEach((p: any) => {
+      pagosData.forEach((p: any) => {
         if (!pagosByCuenta[p.id_cuenta_cobranza]) {
           pagosByCuenta[p.id_cuenta_cobranza] = { total: 0, hasSinCR: false };
         }
@@ -805,12 +821,13 @@ export function CreditosHipotecariosDashboard() {
         );
         const hasSinCR = cuentasEscriturables.some((c: any) => pagosByCuenta[c.id]?.hasSinCR ?? false);
 
-        const mortgageCreditAmount = cr.monto_credito ?? 0;
+        const registeredMortgageAmount = Number(cr.monto_credito ?? 0);
+        const requiredMortgageAmount = Math.max(escrituraValue - paidAmount, 0);
         const sobrepago = escrituraValue > 0 && paidAmount > escrituraValue * 1.01;
         const escrituraBloqueada = hasSinCR || sobrepago;
 
         const { conciliatedAmount, difference, status: reconciliationStatus } = deriveReconciliation(
-          paidAmount, mortgageCreditAmount, escrituraValue,
+          paidAmount, registeredMortgageAmount, escrituraValue,
         );
 
         return {
@@ -825,7 +842,8 @@ export function CreditosHipotecariosDashboard() {
           bancoNombre: cr.id_banco ? (bancoMap[cr.id_banco] ?? '—') : '—',
           escrituraValue,
           paidAmount,
-          mortgageCreditAmount,
+          mortgageCreditAmount: registeredMortgageAmount,
+          requiredMortgageAmount,
           conciliatedAmount,
           difference,
           reconciliationStatus,
@@ -987,7 +1005,7 @@ export function CreditosHipotecariosDashboard() {
           <button
             onClick={() => downloadCsv(
               `creditos_hipotecarios_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
-              ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito hipotecario','Escritura','Diferencia','Fecha firma'],
+              ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito requerido','Crédito registrado','Escritura','Diferencia','Fecha firma'],
               filtered.map(r => [
                 r.cuentaLabel,
                 r.proyectoNombre,
@@ -997,6 +1015,7 @@ export function CreditosHipotecariosDashboard() {
                 VOBO_META[r.voboStatus]?.label ?? r.voboStatus,
                 BANK_PAYMENT_META[r.bankPaymentStatus]?.label ?? r.bankPaymentStatus,
                 RECONCILIATION_META[r.reconciliationStatus]?.label ?? r.reconciliationStatus,
+                fmtMxn(r.requiredMortgageAmount),
                 fmtMxn(r.mortgageCreditAmount),
                 fmtMxn(r.escrituraValue),
                 fmtMxn(r.difference),
@@ -1174,7 +1193,7 @@ export function CreditosHipotecariosDashboard() {
                   <tr>
                     {[
                       'ID Cuenta', 'Unidad — Cliente', 'Banco',
-                      'Escritura', 'Pagado', 'Crédito banco',
+                      'Escritura', 'Pagado', 'Crédito requerido',
                       'Conciliación', 'VoBo banco', 'Pago banco dev.',
                       'Cita firma',
                     ].map(h => (
@@ -1215,7 +1234,7 @@ export function CreditosHipotecariosDashboard() {
                           {fmtMxn(row.paidAmount)}
                         </td>
                         <td className="px-3 py-3 text-xs tabular-nums text-slate-700">
-                          {fmtMxn(row.mortgageCreditAmount)}
+                          {fmtMxn(row.requiredMortgageAmount)}
                         </td>
                         <td className="px-3 py-3">
                           <ReconciliationBadge status={row.reconciliationStatus} difference={row.difference} />
