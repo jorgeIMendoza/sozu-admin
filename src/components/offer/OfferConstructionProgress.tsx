@@ -37,9 +37,20 @@ const OfferConstructionProgress = ({
     return () => document.removeEventListener("keydown", handler);
   }, [lightboxIndex]);
 
+  // Avance PROPIO de cada etapa (0-100 dentro de su banda), coherente con el % global.
+  // El pct del milestone es el umbral global acumulado al terminar esa etapa.
+  const stageRows = milestones.map((m, i) => {
+    const prev = i === 0 ? 0 : milestones[i - 1].pct;
+    const band = m.pct - prev;
+    const ownPct = band <= 0
+      ? (progress >= m.pct ? 100 : 0)
+      : Math.round(Math.min(100, Math.max(0, ((progress - prev) / band) * 100)));
+    return { ...m, ownPct, done: ownPct >= 100 };
+  });
+
   const currentStage =
-    milestones.find((m) => !m.done)?.phase ??
-    [...milestones].reverse().find((m) => m.done)?.phase ??
+    stageRows.find((m) => m.ownPct < 100)?.phase ??
+    [...stageRows].reverse().find((m) => m.done)?.phase ??
     "-";
 
   return (
@@ -111,19 +122,30 @@ const OfferConstructionProgress = ({
         <div className="rounded-md border border-border bg-card p-5 space-y-3">
           <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">Etapas de obra</p>
           <ul className="space-y-2.5">
-            {milestones.map((m, i) => (
-              <li key={i} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  {m.done ? (
-                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                  ) : (
-                    <Circle className="w-4 h-4 text-muted-foreground shrink-0" />
-                  )}
-                  <span className={`truncate ${m.done ? "text-foreground" : "text-muted-foreground"}`}>{m.phase}</span>
-                </div>
-                <span className="text-xs text-muted-foreground tabular-nums shrink-0">{m.pct}%</span>
-              </li>
-            ))}
+            {stageRows.map((m, i) => {
+              const isCurrent = !m.done && m.phase === currentStage;
+              return (
+                <li key={i} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {m.done ? (
+                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                    ) : isCurrent ? (
+                      <span className="w-4 h-4 shrink-0 flex items-center justify-center">
+                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      </span>
+                    ) : (
+                      <Circle className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                    )}
+                    <span className={`truncate ${m.done ? "text-foreground" : isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
+                      {m.phase}
+                    </span>
+                  </div>
+                  <span className={`text-xs tabular-nums shrink-0 ${m.done ? "text-success font-medium" : isCurrent ? "text-primary font-semibold" : "text-muted-foreground/60"}`}>
+                    {m.ownPct}%
+                  </span>
+                </li>
+              );
+            })}
           </ul>
 
           <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-3 border-t border-border/60">
