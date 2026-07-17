@@ -29,11 +29,14 @@ export function usePortalNav(
   const { data } = useQuery({
     queryKey: ["portal-nav", menuId],
     queryFn: async () => {
+      // menus!inner: un menú padre apagado (menus.activo=false) apaga
+      // también todos sus submenús aunque estos sigan activo=true.
       const { data, error } = await (supabase as any)
         .from("submenus")
-        .select("nombre, vista_front_end, orden")
+        .select("nombre, vista_front_end, orden, menus!inner(activo)")
         .eq("menu_id", menuId)
         .eq("activo", true)
+        .eq("menus.activo", true)
         .not("vista_front_end", "is", null)
         .order("orden");
       if (error || !data) return [];

@@ -10,6 +10,7 @@ interface AllowedMenu {
 export function useAllowedMenus() {
   const { profile, isLoading: isAuthLoading, user, permissionVersion } = useAuth();
   const [allowedPaths, setAllowedPaths] = useState<Set<string>>(new Set());
+  const [disabledPaths, setDisabledPaths] = useState<Set<string>>(new Set());
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -21,6 +22,30 @@ export function useAllowedMenus() {
   
   // Profile is still loading if we have a user but no profile yet
   const isProfileStillLoading = !!user && !profile && !isAuthLoading;
+
+  // Rutas cuyo submenú está apagado (submenus.activo=false) o cuyo menú padre
+  // está apagado (menus.activo=false). Un submenú apagado NO debe mostrarse a
+  // ningún rol — incluido Super Admin, cuyo wildcard antes lo ignoraba.
+  const fetchDisabledPaths = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('submenus')
+        .select('vista_front_end, activo, menus!inner(activo)')
+        .range(0, 4999);
+      const set = new Set<string>();
+      (data ?? []).forEach((s: any) => {
+        if (!s.vista_front_end) return;
+        const menuActivo = s.menus?.activo !== false;
+        if (s.activo === false || !menuActivo) {
+          set.add(s.vista_front_end);
+        }
+      });
+      setDisabledPaths(set);
+    } catch (err) {
+      // Fail-open: si no se pudo cargar, no ocultar nada extra.
+      console.error('Error fetching disabled submenu paths:', err);
+    }
+  }, []);
 
   const fetchAllowedMenus = useCallback(async () => {
     if (!profile?.rol_id) return;
@@ -67,11 +92,14 @@ export function useAllowedMenus() {
         return;
       }
 
+      // Solo submenús activos cuyo menú padre también está activo: un menú
+      // apagado apaga todas sus vistas aunque el submenú siga activo=true.
       const { data: submenusData, error: submenusError } = await supabase
         .from('submenus')
-        .select('vista_front_end')
+        .select('vista_front_end, menus!inner(activo)')
         .in('id', submenuIds)
-        .eq('activo', true);
+        .eq('activo', true)
+        .eq('menus.activo', true);
 
       if (submenusError) {
         console.error('Error fetching submenus:', submenusError);
@@ -112,11 +140,13 @@ export function useAllowedMenus() {
       return;
     }
 
-    // If Super Admin, skip fetching permissions
+    // If Super Admin, skip fetching permissions — but still load the disabled
+    // paths so toggled-off submenus/menus stay hidden for everyone.
     if (isSuperAdmin) {
       setAllowedPaths(new Set(['*']));
       setIsLoadingPermissions(false);
       setError(null);
+      fetchDisabledPaths();
       return;
     }
 
@@ -127,11 +157,13 @@ export function useAllowedMenus() {
     }
 
     fetchAllowedMenus();
-  }, [profile?.rol_id, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus]);
+    fetchDisabledPaths();
+  }, [profile?.rol_id, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus, fetchDisabledPaths]);
 
   const isPathAllowed = (path: string): boolean => {
     if (isSuperAdmin || allowedPaths.has('*')) {
-      return true;
+      // Wildcard no aplica a vistas explícitamente apagadas en BD.
+      return !disabledPaths.has(path);
     }
     
     // Caso especial: /admin/reportes/ver requiere acceso a cualquier submenu de reportes
@@ -153,6 +185,7 @@ export function useAllowedMenus() {
   return {
     isPathAllowed,
     allowedPaths,
+    disabledPaths,
     isLoading,
     isSuperAdmin,
     error,

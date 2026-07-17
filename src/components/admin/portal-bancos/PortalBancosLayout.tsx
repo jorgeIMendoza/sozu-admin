@@ -7,6 +7,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
@@ -49,6 +50,7 @@ export const PortalBancosLayout = () => {
     .toLowerCase()
     .startsWith("supervisor banco");
   const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { disabledPaths } = useAllowedMenus();
 
   // Equipo: visible para Super Admin y para el Admin del banco (Supervisor).
   // Bancos: solo Super Admin (alta/baja de convenios).
@@ -65,10 +67,11 @@ export const PortalBancosLayout = () => {
       (a.path === EQUIPO_PATH && canSeeEquipo) ||
       (a.path === BANCOS_PATH && canSeeBancos),
   );
+  // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
   const NAV = [
     ...visibles,
     ...guaranteed.filter((a) => !visibles.some((v) => v.path === a.path)),
-  ];
+  ].filter((i) => !disabledPaths.has(i.path));
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";

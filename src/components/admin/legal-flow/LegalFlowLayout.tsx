@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import {
   LayoutDashboard, Inbox, FileText, Bell, Archive, Stamp,
@@ -8,6 +8,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
@@ -74,6 +75,19 @@ export function LegalFlowLayout() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { disabledPaths } = useAllowedMenus();
+
+  // Ocultar items cuyo submenú está apagado en BD (activo=false o menú padre inactivo).
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => !disabledPaths.has(item.path)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [disabledPaths]
+  );
 
   const unreadCount = mockNotifications.filter((n) => !n.read).length;
   const isSuperAdmin = profile?.rol_id === 1;
@@ -104,7 +118,7 @@ export function LegalFlowLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}
