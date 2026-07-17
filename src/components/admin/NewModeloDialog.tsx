@@ -41,7 +41,6 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
   const [planoUrl, setPlanoUrl] = useState<string | null>(null);
   const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string>("");
   const [tour360Url, setTour360Url] = useState<string>("");
-  const [highlightsText, setHighlightsText] = useState<string>("");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -79,7 +78,6 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
         plano_arquitectonico: planoUrl,
         url_imagen_portada: imagenPortadaUrl || null,
         url_tour_360: tour360Url || null,
-        highlights: highlightsText.trim() ? highlightsText.split('\n').map(s => s.trim()).filter(Boolean) : null,
       };
 
       const { data: newModelo, error } = await (supabase as any)
@@ -256,17 +254,6 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
                 value={tour360Url}
                 onChange={(e) => setTour360Url(e.target.value)}
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Lights / Highlights</label>
-              <Textarea
-                placeholder={"Alberca\nGimnasio\nRooftop"}
-                value={highlightsText}
-                onChange={(e) => setHighlightsText(e.target.value)}
-                rows={4}
-              />
-              <p className="text-xs text-muted-foreground">Un highlight por línea</p>
             </div>
 
             <PlanoArquitectonicoUpload

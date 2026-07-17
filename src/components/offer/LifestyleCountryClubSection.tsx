@@ -73,7 +73,7 @@ const LifestyleCountryClubSection = ({ zoneName }: Props) => {
         </div>
       </div>
 
-      {/* Cards — horizontal scroll on mobile, 4-col on desktop */}
+      {/* Cards - horizontal scroll on mobile, 4-col on desktop */}
       <div className="p-4">
         <div className="flex gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible scrollbar-none">
           {LIFESTYLE_CATEGORIES.map((cat) => {

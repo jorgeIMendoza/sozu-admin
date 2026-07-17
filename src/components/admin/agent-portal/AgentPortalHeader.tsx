@@ -39,7 +39,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
         </div>
       )}
 
-      <div className="sticky top-0 lg:top-16 z-10 bg-[hsl(var(--agent-bg))] px-4 pt-3 pb-2.5 space-y-2">
+      <div className="sticky top-0 lg:top-16 z-10 bg-[hsl(var(--agent-bg))]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {showAgentName && (

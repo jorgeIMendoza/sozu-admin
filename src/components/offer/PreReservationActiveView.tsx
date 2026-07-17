@@ -1,5 +1,5 @@
 /**
- * @deprecated F.3.C — Pre-apartado del 18.7.A reemplazado por el modelo del hold del 18.9.F
+ * @deprecated F.3.C - Pre-apartado del 18.7.A reemplazado por el modelo del hold del 18.9.F
  * (FormalReservation + ApartadoProvisionalDashboard). Archivo en cuarentena: se conserva
  * para servir a clientes con PRE-XXX activos al rollout. Ningún cliente nuevo entra acá
  * (CTA removido en F.3.A; ruta de entrada removida en F.3.C). No usar para nuevas

@@ -36,6 +36,7 @@ interface MortgageRow {
   escrituraValue: number;
   paidAmount: number;
   mortgageCreditAmount: number;
+  requiredMortgageAmount: number;
   conciliatedAmount: number;
   difference: number;
   reconciliationStatus: ReconciliationStatus;
@@ -393,7 +394,8 @@ function DetailPanel({
           <div className="bg-slate-50 rounded-2xl p-3 space-y-2">
             <DetailRow label="Valor escritura">{fmtMxn(row.escrituraValue)}</DetailRow>
             <DetailRow label="Pagado por cliente">{fmtMxn(row.paidAmount)}</DetailRow>
-            <DetailRow label="Crédito banco">{fmtMxn(row.mortgageCreditAmount)}</DetailRow>
+            <DetailRow label="Crédito requerido">{fmtMxn(row.requiredMortgageAmount)}</DetailRow>
+            <DetailRow label="Crédito registrado">{fmtMxn(row.mortgageCreditAmount)}</DetailRow>
             <div className="border-t border-slate-200 pt-2 mt-1">
               <DetailRow label="Total conciliado">
                 <span className="font-bold text-slate-900">{fmtMxn(row.conciliatedAmount)}</span>
@@ -672,26 +674,65 @@ export function CreditosHipotecariosDashboard() {
 
       const propIds = props.map((p: any) => p.id);
 
-      // Paso 2: cuentas de cobranza
+      // Paso 2: cuentas de cobranza — todas las cuentas activas de las propiedades
       const { data: cuentasList } = await supabase
         .from('cuentas_cobranza')
-        .select('id, id_propiedad, precio_final, fecha_actualizacion')
+        .select('id, id_propiedad, precio_final, id_oferta, fecha_actualizacion')
         .eq('activo', true)
         .in('id_propiedad', propIds);
+      if (!cuentasList?.length) return [];
 
-      const cuentaByProp: Record<number, { id: number; precio_final: number; fecha_actualizacion: string }> = {};
-      (cuentasList || []).forEach((c: any) => {
-        const ex = cuentaByProp[c.id_propiedad];
-        if (!ex || c.fecha_actualizacion > ex.fecha_actualizacion) cuentaByProp[c.id_propiedad] = c;
+      // Paso 2b: clasificar principal vs escriturable via bodegas + estacionamientos
+      const ofertaIdsAll = [...new Set((cuentasList as any[]).map(c => c.id_oferta).filter(Boolean))];
+      const ofertaMap: Record<number, { id_producto: number | null }> = {};
+      if (ofertaIdsAll.length) {
+        const { data: ofertasList } = await supabase
+          .from('ofertas').select('id, id_producto').in('id', ofertaIdsAll);
+        (ofertasList || []).forEach((o: any) => { ofertaMap[o.id] = { id_producto: o.id_producto ?? null }; });
+      }
+
+      // Paso 2c: productos escriturables por propiedad (solo los que aparecen en bodegas o estacionamientos)
+      const [{ data: bodegasAll }, { data: estacAll }] = await Promise.all([
+        supabase.from('bodegas').select('id_propiedad, id_producto').in('id_propiedad', propIds).eq('activo', true),
+        supabase.from('estacionamientos').select('id_propiedad, id_producto').in('id_propiedad', propIds).eq('activo', true),
+      ]);
+      const escriturableProds: Record<number, Set<number>> = {};
+      [...(bodegasAll || []), ...(estacAll || [])].forEach((x: any) => {
+        if (!escriturableProds[x.id_propiedad]) escriturableProds[x.id_propiedad] = new Set();
+        if (x.id_producto) escriturableProds[x.id_propiedad].add(x.id_producto);
       });
-      const cuentaIds = Object.values(cuentaByProp).map(c => c.id);
-      if (!cuentaIds.length) return [];
+
+      // Clasificar cada cuenta: principal (depto), escriturable (bodega/estac con oferta propia), o comercial
+      // Excluye: condensadoras, paquetes amueblados y cualquier producto no registrado en bodegas/estacionamientos
+      const principalByProp: Record<number, any> = {};
+      const escriturablesByProp: Record<number, any[]> = {};
+      (cuentasList as any[]).forEach(c => {
+        const idProd = ofertaMap[c.id_oferta]?.id_producto ?? null;
+        const isPrincipal = !idProd;
+        const isEscriturable = isPrincipal ||
+          (idProd !== null && (escriturableProds[c.id_propiedad]?.has(idProd) ?? false));
+        if (isPrincipal && !principalByProp[c.id_propiedad]) principalByProp[c.id_propiedad] = c;
+        if (isEscriturable) {
+          if (!escriturablesByProp[c.id_propiedad]) escriturablesByProp[c.id_propiedad] = [];
+          escriturablesByProp[c.id_propiedad].push(c);
+        }
+      });
+
+      const principalIds = Object.values(principalByProp).map((c: any) => c.id);
+      const allEscriturableIds = Object.values(escriturablesByProp).flat().map((c: any) => c.id);
+      if (!principalIds.length) return [];
+
+      // Mapa inverso: cuentaId principal → propId (para búsqueda O(1) en construcción de filas)
+      const principalIdToPropId: Record<number, number> = {};
+      Object.entries(principalByProp).forEach(([propId, c]) => {
+        principalIdToPropId[(c as any).id] = Number(propId);
+      });
 
       // Paso 3: creditos_hipotecarios (tabla nueva — puede no existir aún)
       const { data: creditos, error: creditosError } = await (supabase as any)
         .from('creditos_hipotecarios')
         .select('id, id_cuenta_cobranza, id_banco, monto_credito, vobo_banco, pago_banco_estatus, fecha_cita_firma, fecha_actualizacion')
-        .in('id_cuenta_cobranza', cuentaIds)
+        .in('id_cuenta_cobranza', principalIds)
         .eq('activo', true);
 
       if (creditosError) {
@@ -711,15 +752,29 @@ export function CreditosHipotecariosDashboard() {
         (bancosData || []).forEach((b: any) => { bancoMap[b.id] = b.nombre; });
       }
 
-      // Paso 5: pagos totales por cuenta
-      const { data: pagosData } = await supabase
-        .from('pagos')
-        .select('id_cuenta_cobranza, monto, clave_rastreo')
-        .in('id_cuenta_cobranza', cuentaIds)
-        .eq('activo', true);
+      // Paso 5: pagos totales por cuenta (solo propiedades con crédito hipotecario)
+      const propIdsConCredito = new Set(
+        (creditos as any[])
+          .map((cr: any) => principalIdToPropId[Number(cr.id_cuenta_cobranza)])
+          .filter((id): id is number => id !== undefined),
+      );
+      const relevantEscriturableIds = Object.entries(escriturablesByProp)
+        .filter(([propId]) => propIdsConCredito.has(Number(propId)))
+        .flatMap(([, cuentas]) => (cuentas as any[]).map((c: any) => Number(c.id)));
+
+      let pagosData: any[] = [];
+      if (relevantEscriturableIds.length) {
+        const { data: pagosResult, error: pagosError } = await supabase
+          .from('pagos')
+          .select('id_cuenta_cobranza, monto, clave_rastreo')
+          .in('id_cuenta_cobranza', relevantEscriturableIds)
+          .eq('activo', true);
+        if (pagosError) throw pagosError;
+        pagosData = pagosResult ?? [];
+      }
 
       const pagosByCuenta: Record<number, { total: number; hasSinCR: boolean }> = {};
-      (pagosData || []).forEach((p: any) => {
+      pagosData.forEach((p: any) => {
         if (!pagosByCuenta[p.id_cuenta_cobranza]) {
           pagosByCuenta[p.id_cuenta_cobranza] = { total: 0, hasSinCR: false };
         }
@@ -729,7 +784,7 @@ export function CreditosHipotecariosDashboard() {
 
       // Paso 6: compradores + personas
       const { data: comprsList } = await supabase
-        .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+        .from('compradores').select('id_cuenta_cobranza, id_persona').in('id_cuenta_cobranza', principalIds).eq('activo', true);
       const personaIds = [...new Set((comprsList || []).map((c: any) => c.id_persona))];
       const personaMap: Record<number, string> = {};
       if (personaIds.length) {
@@ -747,23 +802,32 @@ export function CreditosHipotecariosDashboard() {
 
       // Paso 8: construir filas
       return (creditos as any[]).map(cr => {
-        const cuenta = Object.values(cuentaByProp).find(c => c.id === cr.id_cuenta_cobranza);
+        const propIdNum = principalIdToPropId[cr.id_cuenta_cobranza] ?? 0;
+        const cuenta = principalByProp[propIdNum];
         if (!cuenta) return null;
 
-        const prop = Object.entries(cuentaByProp).find(([, c]) => c.id === cr.id_cuenta_cobranza);
-        const propIdNum = prop ? Number(prop[0]) : 0;
         const unidad = propMap[propIdNum] ?? '—';
 
-        const paidInfo = pagosByCuenta[cuenta.id] ?? { total: 0, hasSinCR: false };
-        const paidAmount = paidInfo.total;
-        const hasSinCR = paidInfo.hasSinCR;
-        const escrituraValue = cuenta.precio_final ?? 0;
-        const mortgageCreditAmount = cr.monto_credito ?? 0;
+        // Escritura = suma de cuentas escriturables (depto + bodega + estac escriturable)
+        // Excluye condensadoras, paquetes amueblados y cualquier producto comercial no escriturable
+        const cuentasEscriturables = escriturablesByProp[propIdNum] ?? [cuenta];
+        const escrituraValue = cuentasEscriturables.reduce(
+          (s: number, c: any) => s + Number(c.precio_final ?? 0), 0,
+        );
+
+        // Pagado = suma de pagos de cuentas escriturables únicamente
+        const paidAmount = cuentasEscriturables.reduce(
+          (s: number, c: any) => s + (pagosByCuenta[c.id]?.total ?? 0), 0,
+        );
+        const hasSinCR = cuentasEscriturables.some((c: any) => pagosByCuenta[c.id]?.hasSinCR ?? false);
+
+        const registeredMortgageAmount = Number(cr.monto_credito ?? 0);
+        const requiredMortgageAmount = Math.max(escrituraValue - paidAmount, 0);
         const sobrepago = escrituraValue > 0 && paidAmount > escrituraValue * 1.01;
         const escrituraBloqueada = hasSinCR || sobrepago;
 
         const { conciliatedAmount, difference, status: reconciliationStatus } = deriveReconciliation(
-          paidAmount, mortgageCreditAmount, escrituraValue,
+          paidAmount, registeredMortgageAmount, escrituraValue,
         );
 
         return {
@@ -778,7 +842,8 @@ export function CreditosHipotecariosDashboard() {
           bancoNombre: cr.id_banco ? (bancoMap[cr.id_banco] ?? '—') : '—',
           escrituraValue,
           paidAmount,
-          mortgageCreditAmount,
+          mortgageCreditAmount: registeredMortgageAmount,
+          requiredMortgageAmount,
           conciliatedAmount,
           difference,
           reconciliationStatus,
@@ -940,7 +1005,7 @@ export function CreditosHipotecariosDashboard() {
           <button
             onClick={() => downloadCsv(
               `creditos_hipotecarios_${proyectoId ?? 'todos'}_${new Date().toISOString().slice(0, 10)}.csv`,
-              ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito hipotecario','Escritura','Diferencia','Fecha firma'],
+              ['Cuenta','Proyecto','Unidad','Cliente','Banco','VoBo','Pago banco','Conciliación','Crédito requerido','Crédito registrado','Escritura','Diferencia','Fecha firma'],
               filtered.map(r => [
                 r.cuentaLabel,
                 r.proyectoNombre,
@@ -950,6 +1015,7 @@ export function CreditosHipotecariosDashboard() {
                 VOBO_META[r.voboStatus]?.label ?? r.voboStatus,
                 BANK_PAYMENT_META[r.bankPaymentStatus]?.label ?? r.bankPaymentStatus,
                 RECONCILIATION_META[r.reconciliationStatus]?.label ?? r.reconciliationStatus,
+                fmtMxn(r.requiredMortgageAmount),
                 fmtMxn(r.mortgageCreditAmount),
                 fmtMxn(r.escrituraValue),
                 fmtMxn(r.difference),
@@ -1127,7 +1193,7 @@ export function CreditosHipotecariosDashboard() {
                   <tr>
                     {[
                       'ID Cuenta', 'Unidad — Cliente', 'Banco',
-                      'Escritura', 'Pagado', 'Crédito banco',
+                      'Escritura', 'Pagado', 'Crédito requerido',
                       'Conciliación', 'VoBo banco', 'Pago banco dev.',
                       'Cita firma',
                     ].map(h => (
@@ -1168,7 +1234,7 @@ export function CreditosHipotecariosDashboard() {
                           {fmtMxn(row.paidAmount)}
                         </td>
                         <td className="px-3 py-3 text-xs tabular-nums text-slate-700">
-                          {fmtMxn(row.mortgageCreditAmount)}
+                          {fmtMxn(row.requiredMortgageAmount)}
                         </td>
                         <td className="px-3 py-3">
                           <ReconciliationBadge status={row.reconciliationStatus} difference={row.difference} />

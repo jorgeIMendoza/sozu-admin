@@ -23,6 +23,17 @@ function buildWhatsapp(clave: string | null | undefined, telefono: string): stri
   return `${toDialCode(clave)}${telefono.replace(/\D/g, "")}`;
 }
 
+/**
+ * Equipo al que pertenece el asesor, derivado del dominio del correo.
+ * ej. luz@sozu.mx → "SOZU" · pablo@investimento.com → "Investimento".
+ */
+function teamFromEmail(email?: string | null): string {
+  const domain = email?.split("@")[1]?.split(".")[0]?.trim().toLowerCase();
+  if (!domain) return "SOZU";
+  if (domain === "sozu") return "SOZU";
+  return domain.charAt(0).toUpperCase() + domain.slice(1);
+}
+
 // ── Helpers (idénticos a construction-progress-data.ts del portal-cliente) ───
 
 function toEmbedUrl(url: string): string {
@@ -285,7 +296,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     modeloId
       ? supabase
           .from("modelos")
-          .select("url_tour_360, highlights")
+          .select("url_tour_360")
           .eq("id", modeloId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -409,8 +420,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // (resolver id por nombre; los ids difieren dev/prod)
   const catRows = (categoriasMultimedia ?? []) as { id: number; nombre: string }[];
   const avancesId = catRows.find((c) => c.nombre === "Avances de obra")?.id ?? null;
+  // Galería principal: SOLO fotos con categoría "General". Fallback (si no existe
+  // esa categoría en el catálogo): todo lo que no sea "Avances de obra".
+  const generalId = catRows.find((c) => /general/i.test(c.nombre))?.id ?? null;
   const avanceFotos  = fotoRows.filter((f: any) => avancesId != null && f.id_categoria === avancesId);
-  const galleryFotos = fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
+  const galleryFotos = generalId != null
+    ? fotoRows.filter((f: any) => f.id_categoria === generalId)
+    : fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
 
   const globalProgress = calcProgressFromDates(
     (proyecto as any).fecha_lanzamiento,
@@ -764,6 +780,33 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido).
   const clabeStp = leadRfcValido ? (propiedad as any).clabe_stp_tmp_apartado || undefined : undefined;
 
+  // ── Desarrolladora que lleva el proyecto: entidad relacionada tipo 4
+  // (Dueño Vendedor — es donde vive el dato real, ej. Tallwood en Daiku).
+  // 2 pasos (sin embed PostgREST) para no depender del schema-cache en dev.
+  let developerName: string | undefined;
+  let developerLogoUrl: string | undefined;
+  let developerWebsite: string | undefined;
+  const { data: devRel } = await supabase
+    .from("entidades_relacionadas")
+    .select("id_persona")
+    .eq("id_proyecto", proyectoId)
+    .eq("id_tipo_entidad", 4)
+    .eq("activo", true)
+    .limit(1)
+    .maybeSingle();
+  if ((devRel as any)?.id_persona) {
+    const { data: devPer } = await supabase
+      .from("personas")
+      .select("nombre_comercial, nombre_legal, url_logo, url_sitio_web")
+      .eq("id", (devRel as any).id_persona)
+      .maybeSingle();
+    if (devPer) {
+      developerName = ((devPer as any).nombre_comercial ?? (devPer as any).nombre_legal) || undefined;
+      developerLogoUrl = (devPer as any).url_logo ? toOptimizedUrl((devPer as any).url_logo, 240, 85) : undefined;
+      developerWebsite = (devPer as any).url_sitio_web || undefined;
+    }
+  }
+
   const offer = {
     id: String(numId),
     shortLink: `/oferta/${numId}`,
@@ -794,10 +837,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
         : undefined,
     },
     estimatedDelivery:       entregaFecha ? new Date(entregaFecha).toISOString() : undefined,
-    // highlights: del modelo (JSONB text[]) — fallback [] si columna aún no existe
-    highlights:              Array.isArray((modeloExtra as any)?.highlights)
-                               ? (modeloExtra as any).highlights
-                               : [],
+    // highlights: eliminado de la oferta digital (las amenidades ya comunican lo destacado).
+    // La columna modelos.highlights se elimina vía DDL (Ejecuciones_manuales).
+    highlights:              [],
     gallery:                 galleryUrls,
     galleryCaptions:         galleryUrls.map(() => ""),
     videoUrl:                undefined,
@@ -832,6 +874,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       logoUrl:        (proyecto as any).url_logo ?? undefined,
       logoUrlInverse: undefined,
       legalName:      (proyecto as any).nombre,
+      developerName,
+      developerLogoUrl,
+      // Si la desarrolladora no tiene web, el footer usa SOZU como fallback del link.
+      developerWebsite,
       socials: ((proyectoMkt as any)?.instagram_handle ||
                 (proyectoMkt as any)?.facebook_handle  ||
                 (proyectoMkt as any)?.youtube_handle)
@@ -900,17 +946,18 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   ).trim();
   const fotoUrl = finAgente?.foto_perfil_url ?? (agentUser as any)?.foto_perfil_url;
 
+  const agentEmail = finAgente?.email ?? agentPersona?.email ?? oferta.email_creador ?? "";
   const agent: Agent = {
     id: agentId,
-    fullName: nombre || "Asesor SOZU",
-    firstName: nombre ? nombre.split(" ")[0] : "equipo SOZU",
-    title: "Asesor SOZU",
+    fullName: nombre || "Tu asesor",
+    firstName: nombre ? nombre.split(" ")[0] : "tu asesor",
+    title: "",
     photoUrl: fotoUrl ? normalizeAvatarUrl(fotoUrl) : "",
     bio: finAgente?.frase_perfil ?? (agentUser as any)?.frase_perfil ?? DEFAULT_BIO,
     phone,
-    email: finAgente?.email ?? agentPersona?.email ?? oferta.email_creador ?? "",
+    email: agentEmail,
     whatsapp,
-    brokerage: "SOZU",
+    brokerage: teamFromEmail(agentEmail),
     isAllied: false,
   } as Agent;
 
@@ -942,14 +989,14 @@ async function fetchAgentFromDB(agentId: string): Promise<Agent | null> {
 
   return {
     id: agentId,
-    fullName: persona.nombre_legal ?? "",
-    firstName,
-    title: "Asesor SOZU",
+    fullName: persona.nombre_legal ?? "Tu asesor",
+    firstName: firstName || "tu asesor",
+    title: "",
     photoUrl: "",
     phone,
     email: persona.email ?? "",
     whatsapp,
-    brokerage: "SOZU",
+    brokerage: teamFromEmail(persona.email),
     isAllied: false,
   } as Agent;
 }

@@ -64,7 +64,7 @@ export function CrmImpersonationSelector() {
 
       const { data: usuarios, error: usuariosErr } = await supabase
         .from("usuarios")
-        .select("id, email, nombre, rol_id, roles(nombre)")
+        .select("auth_user_id, email, nombre, rol_id, roles(nombre)")
         .in("rol_id", rolIds)
         .eq("activo", true)
         .order("email");
@@ -72,7 +72,7 @@ export function CrmImpersonationSelector() {
 
       return (usuarios || [])
         .map((u: any) => ({
-          id: u.id,
+          id: u.auth_user_id,
           email: u.email,
           nombre: u.nombre || u.email,
           rolId: u.rol_id,

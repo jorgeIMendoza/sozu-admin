@@ -114,6 +114,10 @@ export interface DevelopmentInfo {
   logoUrl?: string;
   logoUrlInverse?: string;
   legalName?: string;
+  // ── Desarrolladora (constructora que lleva el proyecto; entidad tipo 3) ──
+  developerName?: string;
+  developerLogoUrl?: string;
+  developerWebsite?: string;
   showroom?: ShowroomInfo;
   // ── 18.11.B: diferenciación y confianza ──
   developer?: Developer;

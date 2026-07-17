@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Play, ChevronLeft, ChevronRight, X } from "lucide-react";
-import DevelopmentLogo from "./DevelopmentLogo";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { DevelopmentInfo } from "@/lib/offers/offer-data";
 
 interface Props {
@@ -16,11 +15,12 @@ interface Props {
   tour360Id?: string;
 }
 
-const OfferGallery = ({ images, captions, videoUrl, development, developmentName, tour360Id }: Props) => {
+const OfferGallery = ({ images, captions, videoUrl, tour360Id }: Props) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
   const [brokenIndices, setBrokenIndices] = useState<Set<number>>(new Set());
+  const touchStartX = useRef<number | null>(null);
 
   // Derived visible images (original indices kept for onError mapping)
   const visibleItems = images
@@ -62,9 +62,20 @@ const OfferGallery = ({ images, captions, videoUrl, development, developmentName
     return () => document.removeEventListener("keydown", handler);
   }, [videoOpen]);
 
+  const stepLightbox = (dir: 1 | -1) =>
+    setActiveIdx((i) => (i + dir + visibleItems.length) % visibleItems.length);
+
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 50 && visibleItems.length > 1) stepLightbox(dx < 0 ? 1 : -1);
+    touchStartX.current = null;
+  };
+
   if (visibleItems.length === 0) {
     return (
-      <div className="w-full aspect-[16/10] md:aspect-[16/9] rounded-2xl bg-muted flex items-center justify-center">
+      <div className="w-full aspect-[16/10] md:aspect-[16/9] rounded-md bg-muted flex items-center justify-center">
         <span className="text-xs text-muted-foreground">Sin imágenes disponibles</span>
       </div>
     );
@@ -72,7 +83,7 @@ const OfferGallery = ({ images, captions, videoUrl, development, developmentName
 
   return (
     <>
-      <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-muted">
+      <div className="relative w-full aspect-video rounded-md overflow-hidden bg-muted">
         <img
           key={currentItem?.url}
           src={currentItem?.url}
@@ -83,35 +94,8 @@ const OfferGallery = ({ images, captions, videoUrl, development, developmentName
           onError={() => currentItem && markBroken(currentItem.orig)}
           loading="eager"
           decoding="async"
-          className="w-full h-full object-contain cursor-zoom-in"
+          className="w-full h-full object-contain cursor-zoom-in animate-in fade-in duration-500"
         />
-        {development && (
-          <div className="absolute top-4 left-4 z-10 pointer-events-none">
-            <DevelopmentLogo
-              development={development}
-              developmentName={developmentName ?? "Desarrollo"}
-              variant="overlay"
-            />
-          </div>
-        )}
-        {(tour360Id || videoUrl) && (
-          <button
-            onClick={() => {
-              if (tour360Id) {
-                const section = document.getElementById(tour360Id);
-                if (section) {
-                  section.scrollIntoView({ behavior: "smooth", block: "start" });
-                  return;
-                }
-              }
-              if (videoUrl) setVideoOpen(true);
-            }}
-            className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-foreground/60 backdrop-blur-md text-background text-xs font-semibold hover:bg-foreground/80 transition-colors"
-          >
-            <Play className="w-3.5 h-3.5" />
-            Ver recorrido
-          </button>
-        )}
         <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-medium">
           <span className="font-semibold tabular-nums">{clampedIdx + 1}/{visibleItems.length}</span>
           {currentCaption && (
@@ -167,44 +151,80 @@ const OfferGallery = ({ images, captions, videoUrl, development, developmentName
       {lightboxOpen && currentItem && createPortal(
         <div
           role="dialog" aria-modal="true" aria-label="Galería de imágenes"
-          className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
           onClick={() => setLightboxOpen(false)}
         >
-          <button
-            onClick={() => setLightboxOpen(false)}
-            className="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          {visibleItems.length > 1 && (
+          {/* Top bar */}
+          <div className="flex items-center justify-between gap-4 px-4 md:px-6 pt-4" onClick={(e) => e.stopPropagation()}>
+            <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-white text-xs font-semibold tabular-nums">
+              {clampedIdx + 1} / {visibleItems.length}
+            </span>
             <button
-              onClick={(e) => { e.stopPropagation(); setActiveIdx((i) => (i - 1 + visibleItems.length) % visibleItems.length); }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20"
-              aria-label="Anterior"
+              onClick={() => setLightboxOpen(false)}
+              className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+              aria-label="Cerrar"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <X className="w-5 h-5" />
             </button>
-          )}
-          <img
-            src={currentItem.url}
-            alt={captions?.[currentItem.orig] ?? `Imagen ${clampedIdx + 1} de ${visibleItems.length}`}
-            onError={() => markBroken(currentItem.orig)}
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          {visibleItems.length > 1 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setActiveIdx((i) => (i + 1) % visibleItems.length); }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20"
-              aria-label="Siguiente"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          )}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-white text-xs font-semibold tabular-nums">
-            {clampedIdx + 1} / {visibleItems.length}
           </div>
+
+          {/* Imagen principal */}
+          <div
+            className="relative flex-1 min-h-0 flex items-center justify-center px-4 md:px-16 py-4"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+          >
+            {visibleItems.length > 1 && (
+              <button
+                onClick={() => stepLightbox(-1)}
+                className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
+            <img
+              key={currentItem.url}
+              src={currentItem.url}
+              alt={captions?.[currentItem.orig] ?? `Imagen ${clampedIdx + 1} de ${visibleItems.length}`}
+              onError={() => markBroken(currentItem.orig)}
+              className="max-w-full max-h-full object-contain rounded-lg animate-in fade-in-50 duration-300"
+            />
+            {visibleItems.length > 1 && (
+              <button
+                onClick={() => stepLightbox(1)}
+                className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+                aria-label="Siguiente"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Caption */}
+          {currentCaption && (
+            <div className="px-4 md:px-8 text-center" onClick={(e) => e.stopPropagation()}>
+              <p className="text-white/70 text-xs md:text-sm">{currentCaption}</p>
+            </div>
+          )}
+
+          {/* Tira de miniaturas */}
+          {visibleItems.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 md:px-8 py-4 justify-start md:justify-center" onClick={(e) => e.stopPropagation()}>
+              {visibleItems.map(({ url, orig }, i) => (
+                <button
+                  key={orig}
+                  onClick={() => setActiveIdx(i)}
+                  className={`flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                    clampedIdx === i ? "border-white" : "border-transparent opacity-50 hover:opacity-80"
+                  }`}
+                >
+                  <img src={url} alt={`Miniatura ${i + 1}`} loading="lazy" className="w-full h-full object-cover" onError={() => markBroken(orig)} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>,
         document.body
       )}

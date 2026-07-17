@@ -17,6 +17,7 @@ import {
   CalendarPlus, UserPlus, AlertCircle, Loader2,
   ChevronRight, Calendar, Clock, MapPin, X, Ban, CalendarClock, EyeOff
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
@@ -45,7 +46,8 @@ const AgentInicio = () => {
   const [selectedCita, setSelectedCita] = useState<any>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
-  const nombre = isImpersonating ? (impersonatedAgentName?.split(" ")[0] || "Agente") : (profile?.nombre?.split(" ")[0] || "Agente");
+  const fullName = isImpersonating ? (impersonatedAgentName || "Agente") : (profile?.nombre || "Agente");
+  const rolLabel = profile?.rol_nombre || "Agente";
 
   // Log page view
   useEffect(() => {
@@ -53,9 +55,18 @@ const AgentInicio = () => {
     track({ page: 'agent_inicio', elementId: 'page_view', elementType: 'page' });
   }, []);
 
-  // Get current hour for greeting
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+  // Último acceso (sesión actual de Supabase auth)
+  const lastAccessLabel = (() => {
+    const raw = (user as any)?.last_sign_in_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const time = d.toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit", hour12: true });
+    return d.toDateString() === now.toDateString()
+      ? `Hoy ${time}`
+      : `${d.toLocaleDateString("es-MX", { day: "numeric", month: "short" })} ${time}`;
+  })();
 
   // Fetch agent metrics
   const { data: metrics, isLoading: metricsLoading } = useQuery({
@@ -228,8 +239,16 @@ const AgentInicio = () => {
   }, [personaId, queryClient]);
 
   const today = new Date().toISOString().split('T')[0];
-  const citasProximas = citas.filter((c: any) => c.fecha >= today);
-  const citasHistorial = citas.filter((c: any) => c.fecha < today).slice(0, 5);
+  const citasProximas = citas.filter((c: any) => c.fecha >= today);                  // asc (más próxima primero)
+  const citasPasadas = citas.filter((c: any) => c.fecha < today).reverse();          // más reciente primero
+  const citasToShow = [...citasProximas, ...citasPasadas].slice(0, 3);               // solo 3
+
+  // Color del ícono por estatus: asistió=verde marca, no asistió=gris, pendiente=naranja tenue
+  const citaIconClasses = (cita: any) => {
+    if (cita.estatus === 'asistio') return 'bg-primary/10 text-primary';
+    if (cita.estatus === 'no_asistio') return 'bg-[#F3F4F6] text-[#9AA3AD]';
+    return 'bg-[#FEF3C7] text-[#B5601C]';
+  };
 
   const getCitaStatusBadge = (cita: any) => {
     const isPast = cita.fecha < today;
@@ -295,11 +314,16 @@ const AgentInicio = () => {
   return (
     <div className="pb-24">
       <AgentPortalHeader>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">{greeting}, {nombre}</p>
-          <h1 className="mt-1 text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Inicio</h1>
+        <div className="mx-auto w-full max-w-[1160px]">
+          <h1 className="text-[20px] font-bold tracking-[-0.3px] text-[#1A1D21] lg:text-[22px]">{fullName}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px]">
+            <span className="font-semibold text-[hsl(var(--agent-primary))]">{rolLabel}</span>
+            <span className="text-[#D6DADE]">·</span>
+            <span className="text-[#8A929B]">{mask(String(metrics?.ventasActivas ?? 0))} propiedades activas</span>
+            {lastAccessLabel && <><span className="text-[#D6DADE]">·</span><span className="text-[#8A929B]">Último acceso: {lastAccessLabel}</span></>}
+          </div>
           {attentionItems.length > 0 && (
-            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[#B5601C]">
+            <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#B5601C]">
               <AlertCircle className="h-3.5 w-3.5" />
               {attentionItems.length} {attentionItems.length === 1 ? 'acción pendiente' : 'acciones pendientes'}
             </p>
@@ -307,11 +331,11 @@ const AgentInicio = () => {
         </div>
       </AgentPortalHeader>
 
-      <div className="mx-auto max-w-[920px] p-4 pt-2 space-y-5">
+      <div className="mx-auto max-w-[1160px] pt-4 pb-4 lg:pt-6 space-y-4 lg:space-y-5">
 
       {/* Onboarding Progress Banner - only for Agente Inmobiliario */}
       {isAgentRole && percentage < 100 && (
-        <div className="w-full rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-4 space-y-2.5">
+        <div className="w-full rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-4 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-[hsl(var(--agent-text))]">
               Activa tu perfil profesional
@@ -325,9 +349,9 @@ const AgentInicio = () => {
               ? 'Completa tu identidad para incluir datos bancarios en ofertas.'
               : 'Completa tu perfil para recibir comisiones.'}
           </p>
-          <div className="h-2 bg-amber-100 rounded-full overflow-hidden">
+          <div className="h-2 bg-amber-100 rounded-md overflow-hidden">
             <div 
-              className="h-full bg-[hsl(var(--agent-amber))] rounded-full transition-all duration-700"
+              className="h-full bg-[hsl(var(--agent-amber))] rounded-md transition-all duration-700"
               style={{ width: `${percentage}%` }}
             />
           </div>
@@ -357,9 +381,9 @@ const AgentInicio = () => {
                 onClick={() => {
                   track({ page: 'agent_inicio', elementId: 'btn_atencion_item', elementLabel: 'Item atención', metadata: { oferta_id: item.id } });
                 }}
-                className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3"
+                className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3"
               >
-                <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                <div className="h-9 w-9 rounded-md bg-amber-50 flex items-center justify-center shrink-0">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -379,50 +403,38 @@ const AgentInicio = () => {
 
       {/* Quick Actions - solo si tiene permiso de crear */}
       {inicioPerms.canCreate && (
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <button
-            data-cta="agentes.inicio.nuevo-prospecto"
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <QuickAction
+            dataCta="agentes.inicio.nuevo-prospecto"
+            icon={UserPlus}
+            title="Nuevo prospecto"
+            subtitle="Captura un comprador potencial"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_nuevo_prospecto', elementLabel: 'Nuevo prospecto' });
               setAddProspectoOpen(true);
             }}
-            className="flex items-center gap-3.5 rounded-2xl border border-[#ECEEF0] bg-white p-[18px] text-left shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.10)]"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF6F0] text-[#0E7A45]">
-              <UserPlus className="h-[22px] w-[22px]" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[15px] font-bold text-[#171A1D]">Nuevo prospecto</span>
-              <span className="mt-0.5 block text-[11.5px] font-medium text-[#9AA3AD]">Captura un comprador potencial</span>
-            </span>
-          </button>
-          <button
-            data-cta="agentes.inicio.agendar-cita"
+          />
+          <QuickAction
+            dataCta="agentes.inicio.agendar-cita"
+            icon={CalendarPlus}
+            title="Agendar cita"
+            subtitle="Coordina una visita al desarrollo"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita' });
               setAgendarCitaOpen(true);
             }}
-            className="flex items-center gap-3.5 rounded-2xl border border-[#ECEEF0] bg-white p-[18px] text-left shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.10)]"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF6F0] text-[#0E7A45]">
-              <CalendarPlus className="h-[22px] w-[22px]" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[15px] font-bold text-[#171A1D]">Agendar cita</span>
-              <span className="mt-0.5 block text-[11.5px] font-medium text-[#9AA3AD]">Coordina una visita al desarrollo</span>
-            </span>
-          </button>
+          />
         </div>
       )}
 
       {/* Metrics */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8A929B]">
             Tus números
           </h2>
           {presentationMode && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#EBC089] bg-[#FBE3CE] px-2.5 py-1 text-[10.5px] font-bold text-[#B5601C]">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-2.5 py-1 text-[10.5px] font-bold text-[#B5601C]">
               <EyeOff className="h-3 w-3" />
               Ocultos · desactiva Modo presentación
             </span>
@@ -433,29 +445,36 @@ const AgentInicio = () => {
             <Loader2 className="h-5 w-5 animate-spin text-[#9AA3AD]" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard
               label="Comisión pagada"
+              labelClass="text-[#0E7A45]"
+              valueClass="text-[#0E7A45]"
               value={mask(formatCurrency(metrics?.comisionPagada || 0))}
-              variant="highlight"
+              sublabel="cobrado"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Comisión pendiente"
+              labelClass="text-[#B5601C]"
               value={mask(formatCurrency(metrics?.comisionPendiente || 0))}
-              variant="default"
+              sublabel="por cobrar"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Ventas activas"
+              labelClass="text-[#16A45E]"
+              valueClass="text-[#16A45E]"
+              variant="count"
               value={mask(String(metrics?.ventasActivas || 0))}
-              variant="default"
+              sublabel="en proceso"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
             <MetricCard
               label="Ventas cerradas"
+              variant="count"
               value={mask(String(metrics?.ventasCerradas || 0))}
-              variant="default"
+              sublabel="completadas"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
           </div>
@@ -463,101 +482,47 @@ const AgentInicio = () => {
       </div>
 
       {/* Citas agendadas */}
-      {(citasProximas.length > 0 || citasHistorial.length > 0) && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-[hsl(var(--agent-text))] px-1 flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
-            Citas
-          </h2>
-
-          {citasProximas.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-[hsl(var(--agent-text-secondary))] px-1">Próximas</p>
-              {citasProximas.map((cita: any) => {
-                const time = formatTime(cita);
-                return (
-                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform">
-                  <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                    <Calendar className="h-4 w-4 text-blue-600" />
+      {citasToShow.length > 0 && (
+        <div className="space-y-2.5">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8A929B]">Citas</h2>
+          <div className="space-y-2">
+            {citasToShow.map((cita: any) => {
+              const time = formatTime(cita);
+              const badge = getCitaStatusBadge(cita);
+              return (
+                <div
+                  key={cita.id}
+                  onClick={() => setSelectedCita(cita)}
+                  className="group flex items-center gap-3 rounded-md border border-[#E7E9EC] bg-white p-3 cursor-pointer transition-colors hover:border-[#CBD2D9]"
+                >
+                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", citaIconClasses(cita))}>
+                    <Calendar className="h-4 w-4" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-semibold text-[#1A1D21]">
                         {cita.configuracion_citas_usuarios?.nombre || [cita.tipos_cita?.nombre, cita.proyectos?.nombre].filter(Boolean).join(' ') || 'Cita'}
                       </p>
-                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                      <span className="shrink-0 whitespace-nowrap rounded-md bg-[hsl(var(--agent-primary))]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(var(--agent-primary))]">
                         {cita.tipos_cita?.nombre || 'Cita'}
                       </span>
                     </div>
                     {cita.personas?.nombre_legal && (
-                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
-                        {cita.personas.nombre_legal}
-                      </p>
+                      <p className="truncate text-xs font-medium text-[#4B5563]">{cita.personas.nombre_legal}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}{time ? ` · ${time}` : ''}
-                      </span>
-                      {cita.ubicacion && <span className="text-xs text-[hsl(var(--agent-text-secondary))]">· {cita.ubicacion}</span>}
-                    </div>
-                  </div>
-                  {(() => {
-                    const badge = getCitaStatusBadge(cita);
-                    return (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                    );
-                  })()}
-                </div>
-                );
-              })}
-            </div>
-          )}
-
-          {citasHistorial.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-[hsl(var(--agent-text-secondary))] px-1">Historial</p>
-              {citasHistorial.map((cita: any) => {
-                const time = formatTime(cita);
-                return (
-                <div key={cita.id} onClick={() => setSelectedCita(cita)} className="rounded-2xl bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3 opacity-70 cursor-pointer active:scale-[0.98] transition-transform">
-                  <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                  </div>
-                    <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
-                        {cita.configuracion_citas_usuarios?.nombre || [cita.tipos_cita?.nombre, cita.proyectos?.nombre].filter(Boolean).join(' ') || 'Cita'}
-                      </p>
-                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
-                        {cita.tipos_cita?.nombre || 'Cita'}
-                      </span>
-                    </div>
-                    {cita.personas?.nombre_legal && (
-                      <p className="text-xs text-[hsl(var(--agent-text))] truncate font-medium">
-                        {cita.personas.nombre_legal}
-                      </p>
-                    )}
-                    <span className="text-xs text-[hsl(var(--agent-text-secondary))] flex items-center gap-1">
+                    <div className="mt-0.5 flex items-center gap-1 text-xs text-[#8A929B]">
                       <Clock className="h-3 w-3" />
                       {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}{time ? ` · ${time}` : ''}
-                    </span>
+                      {cita.ubicacion && <span className="truncate">· {cita.ubicacion}</span>}
+                    </div>
                   </div>
-                  {(() => {
-                    const badge = getCitaStatusBadge(cita);
-                    return (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                    );
-                  })()}
+                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+                    {badge.label}
+                  </span>
                 </div>
-                );
-              })}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       )}
       {inicioPerms.canCreate && (
@@ -599,7 +564,7 @@ const AgentInicio = () => {
               <div className="space-y-4">
                 {/* Status */}
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.className}`}>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${badge.className}`}>
                     {badge.label}
                   </span>
                   {selectedCita.estatus_cita?.nombre && (
@@ -608,7 +573,7 @@ const AgentInicio = () => {
                 </div>
 
                 {/* Details */}
-                <div className="space-y-3 bg-gray-50 rounded-lg p-3">
+                <div className="space-y-3 bg-gray-50 rounded-md p-3">
                   {selectedCita.personas?.nombre_legal && (
                     <div className="flex items-start gap-2.5">
                       <UserPlus className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
@@ -656,7 +621,7 @@ const AgentInicio = () => {
                 {/* Actions */}
                 {canModify && (
                   cancelConfirmOpen ? (
-                    <div className="space-y-2 bg-red-50 rounded-lg p-3">
+                    <div className="space-y-2 bg-red-50 rounded-md p-3">
                       <p className="text-sm font-medium text-red-800">¿Estás seguro de cancelar esta cita?</p>
                       <p className="text-xs text-red-600">Esta acción no se puede deshacer.</p>
                       <div className="flex gap-2 pt-1">
@@ -725,34 +690,56 @@ const AgentInicio = () => {
   );
 };
 
-function MetricCard({ label, value, sub, variant = 'default', onClick }: {
+function QuickAction({ icon: Icon, title, subtitle, onClick, dataCta }: {
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+  dataCta: string;
+}) {
+  return (
+    <button
+      data-cta={dataCta}
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-md border border-[#E7E9EC] bg-white p-3.5 text-left transition-colors duration-150 hover:border-[#CBD2D9] hover:bg-[#FAFBFC]"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Icon className="h-[18px] w-[18px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-semibold text-[#1A1D21]">{title}</span>
+        <span className="block text-[11.5px] text-[#8A929B]">{subtitle}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#C4CBD3] transition-colors duration-150 group-hover:text-[#8A929B]" />
+    </button>
+  );
+}
+
+function MetricCard({ label, value, sublabel, variant = 'money', labelClass, valueClass, onClick }: {
   label: string;
   value: string;
-  sub?: string;
-  variant?: 'highlight' | 'default';
+  sublabel?: string;
+  variant?: 'money' | 'count';
+  labelClass?: string;
+  valueClass?: string;
   onClick?: () => void;
 }) {
-  const isHighlight = variant === 'highlight';
   return (
-    <div
+    <button
       onClick={onClick}
-      className={cn(
-        "cursor-pointer rounded-2xl border p-[18px] shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-transform active:scale-[0.98]",
-        isHighlight ? "border-transparent bg-[#16A45E]" : "border-[#ECEEF0] bg-white"
-      )}
+      className="group rounded-md border border-[#E7E9EC] bg-white p-4 text-left transition-shadow duration-150 hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
     >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className={cn("text-[10px] font-semibold uppercase tracking-[0.08em]", labelClass || "text-[#8A929B]")}>{label}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#C7CDD4] transition-colors group-hover:text-[#16A45E]" strokeWidth={1.75} />
+      </div>
       <p className={cn(
-        "text-[10.5px] font-bold uppercase tracking-[0.5px]",
-        isHighlight ? "text-white/80" : "text-[#9AA3AD]"
-      )}>{label}</p>
-      <p className={cn(
-        "mt-2 text-[24px] font-extrabold tabular-nums",
-        isHighlight ? "text-white" : "text-[#171A1D]"
+        "font-bold leading-none tabular-nums",
+        variant === 'count' ? "text-[28px]" : "text-[19px] whitespace-nowrap tracking-[-0.3px]",
+        valueClass || "text-[#1A1D21]"
       )}>{value}</p>
-      {sub && (
-        <p className={cn("mt-1 text-[10px] font-semibold", isHighlight ? "text-white/70" : "text-[#9AA3AD]")}>{sub}</p>
-      )}
-    </div>
+      {sublabel && <p className="mt-1.5 text-[11px] leading-snug text-[#9AA3AD]">{sublabel}</p>}
+    </button>
   );
 }
 
