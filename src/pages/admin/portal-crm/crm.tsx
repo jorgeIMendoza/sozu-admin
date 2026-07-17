@@ -1018,24 +1018,29 @@ export function CrmContactDetail() {
     },
   });
 
-  // Negocios asociados al contacto (crm_negocios vía crm_negocios_contactos).
+  // Negocios del contacto (un negocio pertenece a un solo contacto).
   const { data: contactDeals } = useQuery({
     queryKey: ["contact-deals", contactId],
     enabled: !!contactId,
     queryFn: async () => {
-      const { data: assoc, error } = await (supabase as any).from("crm_negocios_contactos")
-        .select("id_negocio").eq("id_entidad_relacionada", Number(contactId)).eq("activo", true);
-      if (error || !assoc?.length) return [];
-      const dealIds = Array.from(new Set(assoc.map((a: any) => a.id_negocio)));
-      const { data: negocios } = await (supabase as any).from("crm_negocios")
-        .select("id, nombre, valor, moneda, id_pipeline, id_etapa")
-        .in("id", dealIds).eq("activo", true).order("fecha_creacion", { ascending: false });
-      if (!negocios?.length) return [];
-      const etapaIds = Array.from(new Set(negocios.map((n: any) => n.id_etapa)));
-      const { data: etapas } = await (supabase as any).from("crm_pipeline_etapas")
-        .select("id, nombre").in("id", etapaIds);
-      const etapaMap = Object.fromEntries((etapas ?? []).map((e: any) => [e.id, e.nombre]));
-      return negocios.map((n: any) => ({ ...n, etapa_nombre: etapaMap[n.id_etapa] ?? "—" }));
+      const { data: negocios, error } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, prioridad")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_creacion", { ascending: false });
+      if (error || !negocios?.length) return [];
+      const etapaIds = Array.from(new Set(negocios.map((n: any) => n.id_etapa).filter(Boolean)));
+      const pipeIds = Array.from(new Set(negocios.map((n: any) => n.id_pipeline).filter(Boolean)));
+      const [etRes, pRes] = await Promise.all([
+        etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre").in("id", etapaIds) : Promise.resolve({ data: [] }),
+        pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
+      ]);
+      const etapaMap = Object.fromEntries((etRes.data ?? []).map((e: any) => [e.id, e.nombre]));
+      const pipeMap = Object.fromEntries((pRes.data ?? []).map((p: any) => [p.id, p.nombre]));
+      return negocios.map((n: any) => ({
+        ...n,
+        etapa_nombre: etapaMap[n.id_etapa] ?? "—",
+        pipeline_nombre: n.id_pipeline ? (pipeMap[n.id_pipeline] ?? null) : null,
+      }));
     },
   });
 
@@ -2007,6 +2012,17 @@ function fmtMoneda(v: number, moneda?: string): string {
   }
 }
 
+// Catálogos fijos del negocio (según el form de HubSpot).
+const TIPO_NEGOCIO_OPTS: { value: string; label: string }[] = [
+  { value: "cliente_nuevo", label: "Cliente nuevo" },
+  { value: "cliente_existente", label: "Cliente existente" },
+];
+const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
+  baja: { label: "Baja", dot: "bg-emerald-500" },
+  media: { label: "Media", dot: "bg-amber-500" },
+  alta: { label: "Alta", dot: "bg-red-500" },
+};
+
 // Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
 function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
   const list = deals ?? [];
@@ -2031,9 +2047,15 @@ function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: an
             <div className="space-y-1.5">
               {list.map((d: any) => (
                 <div key={d.id} className="rounded-md border border-border p-2.5 bg-card">
-                  <div className="text-sm font-medium truncate">{d.nombre}</div>
+                  <div className="flex items-center gap-1.5">
+                    {d.prioridad && PRIORIDAD_META[d.prioridad] && (
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[d.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[d.prioridad].label}`} />
+                    )}
+                    <div className="text-sm font-medium truncate">{d.nombre}</div>
+                  </div>
+                  {d.pipeline_nombre && <div className="text-[11px] text-muted-foreground truncate">{d.pipeline_nombre}</div>}
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    <Badge variant="outline" className="text-[10px] truncate max-w-[150px]">{d.etapa_nombre}</Badge>
+                    <Badge variant="outline" className="text-[10px] truncate max-w-[130px]">{d.etapa_nombre}</Badge>
                     <span className="text-xs font-medium tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</span>
                   </div>
                 </div>
@@ -2083,7 +2105,7 @@ function CreateDealDialog({ contactId, onSaved, trigger }: { contactId: string; 
 
 // Pestaña "Crear nuevo": Nombre*, Pipeline*, Etapa* (dependiente del pipeline), Valor, Moneda.
 function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: string; userId?: string; onDone: (close: boolean) => void; onCancel: () => void }) {
-  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN" };
+  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: userId ?? "", tipo_negocio: "", prioridad: "" };
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
 
@@ -2095,7 +2117,7 @@ function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: strin
       return (data ?? []) as { id: number; nombre: string }[];
     },
   });
-  // Etapas dependientes del pipeline elegido (se recargan al cambiarlo).
+  // Etapas dependientes del pipeline elegido (cada pipeline tiene su propio embudo).
   const { data: etapas } = useQuery({
     queryKey: ["crm-etapas", form.id_pipeline],
     enabled: !!form.id_pipeline,
@@ -2105,26 +2127,33 @@ function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: strin
       return (data ?? []) as { id: number; nombre: string }[];
     },
   });
+  // Propietarios posibles: Super Admin (1) y Agente Interno (9).
+  const { data: owners } = useQuery({
+    queryKey: ["agentes-list"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("usuarios").select("auth_user_id, nombre, email").eq("activo", true).in("rol_id", [1, 9]);
+      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
+    },
+  });
 
   const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
 
   const save = async (close: boolean) => {
     if (!canSave) return;
     setSaving(true);
-    const { data: neg, error } = await (supabase as any).from("crm_negocios").insert({
+    const { error } = await (supabase as any).from("crm_negocios").insert({
       nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
       valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
-      id_usuario_propietario: userId ?? null,
-    }).select("id").single();
-    if (error) { setSaving(false); toast.error(error.message); return; }
-    const { error: aErr } = await (supabase as any).from("crm_negocios_contactos").insert({
-      id_negocio: neg.id, id_entidad_relacionada: Number(contactId), es_principal: true,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || userId || null,
+      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
+      id_entidad_relacionada: Number(contactId),
     });
     setSaving(false);
-    if (aErr) { toast.error(aErr.message); return; }
+    if (error) { toast.error(error.message); return; }
     toast.success("Negocio creado");
-    // "Crear y agregar otro": limpia nombre/valor pero conserva pipeline+etapa para encadenar.
-    setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa });
+    // "Crear y agregar otro": limpia datos pero conserva pipeline/etapa/propietario para encadenar.
+    setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario });
     onDone(close);
   };
 
@@ -2159,6 +2188,35 @@ function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: strin
           </Select>
         </DField>
       </div>
+      <DField label="Fecha de cierre">
+        <Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} />
+      </DField>
+      <DField label="Propietario del negocio">
+        <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+          <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
+          <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+        </Select>
+      </DField>
+      <div className="grid grid-cols-2 gap-3">
+        <DField label="Tipo de negocio">
+          <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </DField>
+        <DField label="Prioridad">
+          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                <SelectItem key={value} value={value}>
+                  <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </DField>
+      </div>
       <DialogFooter className="gap-2 sm:gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
         <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
@@ -2184,14 +2242,11 @@ function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; 
   });
   const associate = async (dealId: number) => {
     setAssocId(dealId);
-    const { error } = await (supabase as any).from("crm_negocios_contactos").insert({
-      id_negocio: dealId, id_entidad_relacionada: Number(contactId),
-    });
+    // Un negocio pertenece a un solo contacto: asociar = fijar su contacto.
+    const { error } = await (supabase as any).from("crm_negocios")
+      .update({ id_entidad_relacionada: Number(contactId) }).eq("id", dealId);
     setAssocId(null);
-    if (error) {
-      toast.error(error.code === "23505" ? "Ese negocio ya está asociado a este contacto" : error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     toast.success("Negocio asociado"); onDone();
   };
   return (
