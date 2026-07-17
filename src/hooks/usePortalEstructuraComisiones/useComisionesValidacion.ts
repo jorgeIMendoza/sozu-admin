@@ -2,32 +2,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Propuesta + validación de la Estructura de Comisiones por proyecto + escenario.
+ * Propuesta + validación de la Estructura de Comisiones por proyecto.
  *
- * El Motor de Comisiones del Portal Estructura de comisiones vive en localStorage;
- * al "Enviar a validar" se persiste un snapshot autocontenido en
- * `comisiones_propuestas` (upsert por proyecto+escenario). El Portal Alta Dirección
- * lo visualiza en solo lectura y registra Validar/Rechazar en
+ * El Motor de Comisiones del Portal Estructura de comisiones vive en localStorage
+ * (y en Supabase para lo compartido: canales, matriz canal×puesto, config del
+ * motor); al "Enviar a validar" se persiste un snapshot autocontenido en
+ * `comisiones_propuestas` (upsert por proyecto — una única propuesta vigente
+ * por proyecto, sin dimensión de escenario). El Portal Alta Dirección lo
+ * visualiza en solo lectura y registra Validar/Rechazar en
  * `comisiones_validaciones` (historial con snapshot).
  *
  * Probe graceful: si las tablas aún no existen (DDL pendiente, ver
- * `Ejecuciones_manuales/estructura_comisiones_validacion.md`), las consultas
- * devuelven `[]` para no romper la UI.
+ * `Ejecuciones_manuales/motor_comisiones_canales_escenarios.md`), las
+ * consultas devuelven `[]` para no romper la UI.
  */
 
-export type CommissionMode = "on_sale_value" | "on_internal_remainder";
 export type EstadoPropuesta = "propuesta" | "validada" | "rechazada";
 export type EstadoValidacion = "validada" | "rechazada";
 
+/** Siempre Modo A (sobre venta) — el Motor de Comisiones real no permite elegir modo. */
 export interface MotorSnapshot {
-  scenario: {
-    id: string;
-    name: string;
-    commissionMode: CommissionMode | string;
-    totalCommissionPct: number;
-    channelMix: Record<string, number>;
-    channelExternalPcts: Record<string, number>;
-  };
+  totalCommissionPct: number;
   channels: Array<{ id: string; name: string; externalCommissionPct: number; active: boolean }>;
   roles: Array<{ id: string; name: string; belongsTo: string }>;
   roleAssignments: Array<{ roleId: string; baseSalary: number }>;
@@ -38,9 +33,6 @@ export interface ComisionPropuesta {
   id: number;
   id_proyecto: number;
   proyecto_nombre: string;
-  escenario_id: string;
-  escenario_nombre: string | null;
-  modo: string | null;
   snapshot: MotorSnapshot;
   estado: EstadoPropuesta;
   propuesta_por: string | null;
@@ -51,9 +43,6 @@ export interface ComisionPropuesta {
 export interface ComisionValidacion {
   id: number;
   id_proyecto: number;
-  escenario_id: string;
-  escenario_nombre: string | null;
-  modo: string | null;
   snapshot: MotorSnapshot | null;
   estado: EstadoValidacion;
   notas: string | null;
@@ -73,7 +62,7 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
       let q = (supabase as any)
         .from("comisiones_propuestas")
         .select(
-          "id, id_proyecto, escenario_id, escenario_nombre, modo, snapshot, estado, propuesta_por, fecha_propuesta, fecha_actualizacion, proyectos!comisiones_propuestas_id_proyecto_fkey(nombre)",
+          "id, id_proyecto, snapshot, estado, propuesta_por, fecha_propuesta, fecha_actualizacion, proyectos!comisiones_propuestas_id_proyecto_fkey(nombre)",
         )
         .eq("activo", true)
         .order("fecha_actualizacion", { ascending: false });
@@ -84,9 +73,6 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
         id: r.id,
         id_proyecto: r.id_proyecto,
         proyecto_nombre: r.proyectos?.nombre ?? `Proyecto ${r.id_proyecto}`,
-        escenario_id: r.escenario_id,
-        escenario_nombre: r.escenario_nombre ?? null,
-        modo: r.modo ?? null,
         snapshot: r.snapshot as MotorSnapshot,
         estado: (r.estado ?? "propuesta") as EstadoPropuesta,
         propuesta_por: r.propuesta_por ?? null,
@@ -99,14 +85,11 @@ export function useComisionesPropuestas(idProyecto?: number | null) {
 
 export interface EnviarPropuestaInput {
   id_proyecto: number;
-  escenario_id: string;
-  escenario_nombre: string;
-  modo: string;
   snapshot: MotorSnapshot;
   propuesta_por: string | null;
 }
 
-/** Upsert de la propuesta por (proyecto, escenario) — usado por Estructura de comisiones. */
+/** Upsert de la propuesta por proyecto — usado por Estructura de comisiones. */
 export function useEnviarPropuesta() {
   const qc = useQueryClient();
   return useMutation({
@@ -116,16 +99,13 @@ export function useEnviarPropuesta() {
         .upsert(
           {
             id_proyecto: input.id_proyecto,
-            escenario_id: input.escenario_id,
-            escenario_nombre: input.escenario_nombre,
-            modo: input.modo,
             snapshot: input.snapshot,
             estado: "propuesta",
             propuesta_por: input.propuesta_por,
             fecha_actualizacion: new Date().toISOString(),
             activo: true,
           },
-          { onConflict: "id_proyecto,escenario_id" },
+          { onConflict: "id_proyecto" },
         );
       if (error) throw error;
     },
@@ -136,9 +116,6 @@ export function useEnviarPropuesta() {
 export interface ValidarPropuestaInput {
   propuestaId: number;
   id_proyecto: number;
-  escenario_id: string;
-  escenario_nombre: string | null;
-  modo: string | null;
   snapshot: MotorSnapshot;
   estado: EstadoValidacion;
   notas: string | null;
@@ -152,9 +129,6 @@ export function useValidarPropuesta() {
     mutationFn: async (input: ValidarPropuestaInput) => {
       const { error: insErr } = await (supabase as any).from("comisiones_validaciones").insert({
         id_proyecto: input.id_proyecto,
-        escenario_id: input.escenario_id,
-        escenario_nombre: input.escenario_nombre,
-        modo: input.modo,
         snapshot: input.snapshot,
         estado: input.estado,
         notas: input.notas,
@@ -174,21 +148,19 @@ export function useValidarPropuesta() {
   });
 }
 
-/** Historial de validaciones de un proyecto (opcionalmente por escenario). */
-export function useValidacionesHistorial(idProyecto?: number | null, escenarioId?: string | null) {
+/** Historial de validaciones de un proyecto. */
+export function useValidacionesHistorial(idProyecto?: number | null) {
   return useQuery({
-    queryKey: [VALIDACIONES_KEY, idProyecto ?? "all", escenarioId ?? "all"],
+    queryKey: [VALIDACIONES_KEY, idProyecto ?? "all"],
     enabled: idProyecto != null,
     staleTime: 30_000,
     queryFn: async (): Promise<ComisionValidacion[]> => {
       if (idProyecto == null) return [];
-      let q = (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("comisiones_validaciones")
-        .select("id, id_proyecto, escenario_id, escenario_nombre, modo, snapshot, estado, notas, validado_por, fecha_validacion")
+        .select("id, id_proyecto, snapshot, estado, notas, validado_por, fecha_validacion")
         .eq("id_proyecto", idProyecto)
         .order("fecha_validacion", { ascending: false });
-      if (escenarioId) q = q.eq("escenario_id", escenarioId);
-      const { data, error } = await q;
       if (error || !data) return [];
       return data as ComisionValidacion[];
     },

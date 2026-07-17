@@ -13,7 +13,6 @@ import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { usePortalNav, type PortalNavItem } from "@/hooks/usePortalNav";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 
 const BANCOS_MENU_ID = 32;
 
@@ -25,19 +24,15 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-bancos/bancos":   Landmark,
 };
 
-// Rutas de administración: solo visibles para Super Admin (rol_id=1).
-const ADMIN_ONLY_PATHS = new Set([
-  "/admin/portal-bancos/equipo",
-  "/admin/portal-bancos/bancos",
-]);
-
-// Ítems de administración garantizados para Super Admin, aunque su submenu aún
-// no exista en BD (la navegación del portal se lee de `submenus`). Así el
-// Administrador funciona sin depender del INSERT del menú.
+// Ítems de administración garantizados aunque el submenu aún no exista en BD
+// (la navegación del portal se lee de `submenus`).
 const ADMIN_ITEMS: PortalNavItem[] = [
   { path: "/admin/portal-bancos/equipo", label: "Equipo", icon: Users },
   { path: "/admin/portal-bancos/bancos", label: "Bancos", icon: Landmark },
 ];
+
+const EQUIPO_PATH = "/admin/portal-bancos/equipo";
+const BANCOS_PATH = "/admin/portal-bancos/bancos";
 
 export const PortalBancosLayout = () => {
   const location = useLocation();
@@ -47,19 +42,33 @@ export const PortalBancosLayout = () => {
 
   const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
   const isSuperAdmin = profile?.rol_id === 1;
-  const { isPathAllowed } = useAllowedMenus();
+  // Admin de banco (Supervisor Banco) — detección por nombre (ids varían por
+  // ambiente). Puede administrar el Equipo, pero SOLO de su propio banco.
+  const isSupervisorBanco = (profile?.rol_nombre ?? "")
+    .trim()
+    .toLowerCase()
+    .startsWith("supervisor banco");
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  // Las rutas operativas se muestran siempre; las de administración
-  // (Equipo / Bancos) se muestran según los permisos reales del rol
-  // (submenus_permisos · 'leer'), no solo para Super Admin. Así un rol con
-  // permiso explícito (ej. Supervisor Bancos con Equipo) sí ve el menú.
-  const visibles = navAll.filter(
-    (i) => !ADMIN_ONLY_PATHS.has(i.path) || isPathAllowed(i.path),
+
+  // Equipo: visible para Super Admin y para el Admin del banco (Supervisor).
+  // Bancos: solo Super Admin (alta/baja de convenios).
+  const canSeeEquipo = isSuperAdmin || isSupervisorBanco;
+  const canSeeBancos = isSuperAdmin;
+  const visibles = navAll.filter((i) => {
+    if (i.path === EQUIPO_PATH) return canSeeEquipo;
+    if (i.path === BANCOS_PATH) return canSeeBancos;
+    return true;
+  });
+  // Garantizar los ítems aunque el submenu no exista en BD, según acceso.
+  const guaranteed = ADMIN_ITEMS.filter(
+    (a) =>
+      (a.path === EQUIPO_PATH && canSeeEquipo) ||
+      (a.path === BANCOS_PATH && canSeeBancos),
   );
-  // Super Admin: garantizar Equipo y Bancos aunque el submenu no exista en BD.
-  const NAV = isSuperAdmin
-    ? [...visibles, ...ADMIN_ITEMS.filter((a) => !visibles.some((v) => v.path === a.path))]
-    : visibles;
+  const NAV = [
+    ...visibles,
+    ...guaranteed.filter((a) => !visibles.some((v) => v.path === a.path)),
+  ];
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";

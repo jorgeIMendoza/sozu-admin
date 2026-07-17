@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig, CommissionRule } from '../types/simulator';
+import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig, CommissionRule, MotorConfig } from '../types/simulator';
 import {
   defaultProjects, defaultRoles, defaultChannels, defaultScenarios,
   defaultRoleAssignments, defaultCommercialPolicies,
@@ -9,7 +9,10 @@ import {
   fetchCanalesReales, seedCanalesReales, insertCanalRemoto, updateCanalRemoto, deleteCanalRemoto,
   fetchReglasComisionReales, insertReglaComisionRemota, insertReglasComisionRemotas,
   updateReglaComisionRemota, deleteReglaComisionRemota,
+  fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
+
+const DEFAULT_MOTOR_CONFIG: MotorConfig = { totalCommissionPct: 6 };
 
 const STORAGE_KEY = 'sozu-ec-simulator-state';
 
@@ -34,12 +37,17 @@ interface SimulatorContextType extends AppState {
   duplicateScenario: (id: string) => void;
   updateCommercialPolicies: (cp: CommercialPoliciesConfig) => void;
   resetToDefaults: () => void;
-  /** Matriz de comisión canal × puesto — única y compartida, independiente de escenario. */
+  /** Proyecto (desarrollo real) para el que el Motor de Comisiones está configurando la matriz y el Modo/Total. `null` = ninguno seleccionado todavía. */
+  motorProjectId: number | null;
+  setMotorProjectId: (id: number | null) => void;
+  /** Matriz de comisión canal × puesto del proyecto seleccionado (`motorProjectId`). */
   addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => Promise<void>;
   updateCommissionRule: (rule: CommissionRule) => void;
   deleteCommissionRule: (id: string) => void;
-  /** Crea las combinaciones canal×puesto que falten para los roles que participan en comisión. */
+  /** Crea las combinaciones canal×puesto que falten para los roles que participan en comisión, en el proyecto seleccionado. */
   syncMissingCommissionRules: () => Promise<number>;
+  /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) del proyecto seleccionado. */
+  updateMotorConfig: (config: MotorConfig) => void;
 }
 
 const SimulatorContext = createContext<SimulatorContextType | null>(null);
@@ -72,6 +80,7 @@ function loadState(): AppState {
         parsed.projects = [...parsed.projects, ...missingDefaults];
       }
       if (!parsed.commissionRules) parsed.commissionRules = [];
+      if (!parsed.motorConfig) parsed.motorConfig = DEFAULT_MOTOR_CONFIG;
       return parsed;
     }
   } catch { /* ignore */ }
@@ -79,32 +88,62 @@ function loadState(): AppState {
     projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,
     scenarios: defaultScenarios, roleAssignments: defaultRoleAssignments,
     commercialPolicies: defaultCommercialPolicies, commissionRules: [],
+    motorConfig: DEFAULT_MOTOR_CONFIG,
   };
 }
 
+const MOTOR_PROJECT_KEY = 'sozu-ec-motor-project-id';
+
 export function SimulatorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
+  const [motorProjectId, setMotorProjectIdState] = useState<number | null>(() => {
+    const stored = localStorage.getItem(MOTOR_PROJECT_KEY);
+    return stored ? Number(stored) : null;
+  });
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
 
-  // Canales y la matriz de Comisiones (canal × puesto) son compartidos vía
-  // Supabase — al montar, la BD manda sobre el localStorage local. Si las
-  // tablas aún no existen (DDL pendiente) o hay un error de red, no pasa
-  // nada: sigue funcionando 100% local, igual que antes. Los Escenarios
-  // (simulación) siguen siendo 100% locales — no se persisten en BD.
+  const setMotorProjectId = useCallback((id: number | null) => {
+    setMotorProjectIdState(id);
+    if (id == null) localStorage.removeItem(MOTOR_PROJECT_KEY);
+    else localStorage.setItem(MOTOR_PROJECT_KEY, String(id));
+  }, []);
+
+  // Canales (catálogo global) son compartidos vía Supabase — al montar, la
+  // BD manda sobre el localStorage local. Si la tabla aún no existe (DDL
+  // pendiente) o hay un error de red, sigue funcionando 100% local.
   useEffect(() => {
     (async () => {
-      const [remoteChannels, remoteRules] = await Promise.all([fetchCanalesReales(), fetchReglasComisionReales()]);
+      const remoteChannels = await fetchCanalesReales();
       if (remoteChannels !== null && remoteChannels.length === 0) {
         await seedCanalesReales(state.channels);
       }
       setState(prev => ({
         ...prev,
         channels: remoteChannels && remoteChannels.length > 0 ? remoteChannels : prev.channels,
-        commissionRules: remoteRules ?? prev.commissionRules,
       }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // La matriz de Comisiones (canal × puesto) y la config del motor (Modo/Total)
+  // son por proyecto — se recargan cada vez que cambia `motorProjectId`. Sin
+  // proyecto seleccionado, quedan vacías/en default (nada que editar todavía).
+  useEffect(() => {
+    if (motorProjectId == null) {
+      setState(prev => ({ ...prev, commissionRules: [], motorConfig: DEFAULT_MOTOR_CONFIG }));
+      return;
+    }
+    (async () => {
+      const [remoteRules, remoteMotorConfig] = await Promise.all([
+        fetchReglasComisionReales(motorProjectId), fetchMotorConfigReal(motorProjectId),
+      ]);
+      setState(prev => ({
+        ...prev,
+        commissionRules: remoteRules ?? [],
+        motorConfig: remoteMotorConfig ?? DEFAULT_MOTOR_CONFIG,
+      }));
+    })();
+  }, [motorProjectId]);
 
   const update = useCallback((fn: (s: AppState) => AppState) => setState(prev => fn(prev)), []);
 
@@ -131,6 +170,8 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   const ctx: SimulatorContextType = {
     ...state,
     scenarios: scenariosWithRules,
+    motorProjectId,
+    setMotorProjectId,
     addProject: (p) => update(s => ({ ...s, projects: [...s.projects, p] })),
     updateProject: (p) => update(s => ({ ...s, projects: s.projects.map(x => x.id === p.id ? p : x) })),
     deleteProject: (id) => update(s => ({ ...s, projects: s.projects.filter(x => x.id !== id) })),
@@ -201,8 +242,9 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     },
     updateCommercialPolicies: (cp) => update(s => ({ ...s, commercialPolicies: cp })),
     addCommissionRule: async (channelId, roleId, pool) => {
+      if (motorProjectId == null) return;
       const draft: CommissionRule = { id: '', scenarioId: '', channelId, roleId, percentage: 0, pool };
-      const { rule: created, tableMissing } = await insertReglaComisionRemota(draft);
+      const { rule: created, tableMissing } = await insertReglaComisionRemota(draft, motorProjectId);
       if (!created) {
         if (!tableMissing) toast.error('No se pudo guardar la regla de comisión en el servidor.');
         update(s => ({ ...s, commissionRules: [...s.commissionRules, { ...draft, id: `local-${crypto.randomUUID()}` }] }));
@@ -223,6 +265,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       });
     },
     syncMissingCommissionRules: async () => {
+      if (motorProjectId == null) return 0;
       const commRoles = state.roles.filter(r => r.participatesInCommission);
       const missing: CommissionRule[] = [];
       state.channels.forEach(ch => {
@@ -237,7 +280,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         });
       });
       if (missing.length === 0) return 0;
-      const { rules: created, tableMissing } = await insertReglasComisionRemotas(missing);
+      const { rules: created, tableMissing } = await insertReglasComisionRemotas(missing, motorProjectId);
       if (created.length === 0 && !tableMissing) {
         toast.error('No se pudieron sincronizar las reglas de comisión en el servidor.');
       }
@@ -245,10 +288,18 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       update(s => ({ ...s, commissionRules: [...s.commissionRules, ...toAdd] }));
       return toAdd.length;
     },
+    updateMotorConfig: (config) => {
+      if (motorProjectId == null) return;
+      update(s => ({ ...s, motorConfig: config }));
+      updateMotorConfigRemoto(config, motorProjectId).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error('No se pudo guardar la configuración del motor en el servidor.');
+      });
+    },
     resetToDefaults: () => setState({
       projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,
       scenarios: defaultScenarios, roleAssignments: defaultRoleAssignments,
       commercialPolicies: defaultCommercialPolicies, commissionRules: [],
+      motorConfig: DEFAULT_MOTOR_CONFIG,
     }),
   };
 

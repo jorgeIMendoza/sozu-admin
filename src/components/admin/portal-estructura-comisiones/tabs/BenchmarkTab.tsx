@@ -26,7 +26,7 @@ export default function BenchmarkTab() {
 
   const chartData = channels.map(ch => {
     const range = getRangeForChannel(ch);
-    const sozu = mainScenario?.channelExternalPcts[ch.id] ?? ch.externalCommissionPct;
+    const sozu = ch.externalCommissionPct;
     return {
       name: ch.name.replace('Canal ', '').substring(0, 12),
       min: range.min,
@@ -108,7 +108,7 @@ export default function BenchmarkTab() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {channels.map(ch => {
           const range = getRangeForChannel(ch);
-          const sozu = mainScenario?.channelExternalPcts[ch.id] ?? ch.externalCommissionPct;
+          const sozu = ch.externalCommissionPct;
           const pos = getPositioning(sozu, range.min, range.max);
 
           return (
