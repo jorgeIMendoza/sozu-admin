@@ -37,8 +37,20 @@ export interface ChecklistItem {
   observacion: string | null;
   responsable: string | null;
   id_responsable_er: number | null;
+  id_supervisor_er: number | null;
+  id_tecnico_er: number | null;
   fecha_revision: string | null;
   fecha_compromiso: string | null;
+}
+
+export interface ResponsableEntregas {
+  id: number;
+  id_entidad_er: number;
+  nombre: string;
+  es_supervisor: boolean;
+  es_tecnico: boolean;
+  especialidades: string[];
+  activo: boolean;
 }
 
 export interface ChecklistCategoria {

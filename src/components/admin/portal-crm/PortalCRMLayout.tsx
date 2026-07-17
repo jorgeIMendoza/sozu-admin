@@ -69,6 +69,7 @@ import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ const PATH_ICONS: Record<string, LucideIcon> = {
   "/admin/portal-crm/direccion/cola-decisiones":              Activity,
   "/admin/portal-crm/direccion/resumen-semanal":              Sparkles,
   "/admin/portal-crm/ventas/contactos":                       Users,
+  "/admin/portal-crm/ventas/empresas":                        Building2,
   "/admin/portal-crm/ventas/negocios":                        Briefcase,
   "/admin/portal-crm/ventas/tareas":                          ListTodo,
   "/admin/portal-crm/ventas/citas":                           Calendar,
@@ -192,8 +194,29 @@ export const PortalCRMLayout = () => {
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const { isPathAllowed, allowedPaths, isSuperAdmin, isLoading: isLoadingPerms, error: permsError, refetch } = useAllowedMenus();
   const canImpersonate = profile?.puede_impersonar === true;
+  const { isImpersonating, impersonatedCrmUserRolId } = useCrmImpersonation();
   const { canReturnToAdmin } = useCanReturnToAdmin();
   const { data: crmSubmenus, isLoading: isLoadingSubmenus } = useCrmSubmenus();
+
+  // Al impersonar: rutas CRM que el ROL impersonado puede LEER, para filtrar el
+  // sidebar como lo vería ese usuario (sin el bypass de super admin del usuario real).
+  const { data: impersonatedPaths } = useQuery({
+    queryKey: ["crm-impersonated-paths", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data: leer } = await supabase.from("permisos").select("id").eq("nombre", "leer").maybeSingle();
+      const leerId = (leer as any)?.id;
+      const { data: perms } = await supabase.from("submenus_permisos")
+        .select("submenu_id").eq("rol_id", impersonatedCrmUserRolId as number).eq("activo", true).eq("permiso_id", leerId);
+      const ids = (perms ?? []).map((p: any) => p.submenu_id);
+      const set = new Set<string>();
+      if (ids.length) {
+        const { data: subs } = await supabase.from("submenus").select("vista_front_end").in("id", ids);
+        (subs ?? []).forEach((s: any) => { if (s.vista_front_end) set.add(s.vista_front_end); });
+      }
+      return set;
+    },
+  });
 
   const { data: myPersonaData } = useQuery({
     queryKey: ["crm-my-persona", profile?.id_persona],
@@ -226,11 +249,14 @@ export const PortalCRMLayout = () => {
   const visibleGroups = useMemo<NavGroup[]>(() => {
     if (isLoadingPerms || isLoadingSubmenus || !crmSubmenus) return [];
 
+    // Impersonando: filtra por lo que el rol impersonado puede LEER (no por el usuario real).
+    const useImp = isImpersonating && impersonatedPaths != null;
     const grouped = new Map<string, NavItem[]>();
     for (const s of crmSubmenus) {
       const icon = PATH_ICONS[s.vista_front_end];
       if (!icon) continue;
-      if (!isPathAllowed(s.vista_front_end)) continue;
+      const allowed = useImp ? impersonatedPaths!.has(s.vista_front_end) : isPathAllowed(s.vista_front_end);
+      if (!allowed) continue;
       const groupLabel = getGroupLabel(s.vista_front_end);
       if (!grouped.has(groupLabel)) grouped.set(groupLabel, []);
       grouped.get(groupLabel)!.push({ label: s.nombre, path: s.vista_front_end, icon });
@@ -239,7 +265,7 @@ export const PortalCRMLayout = () => {
     return GROUP_ORDER
       .filter((g) => grouped.has(g))
       .map((g) => ({ label: g, items: grouped.get(g)! }));
-  }, [crmSubmenus, isLoadingPerms, isLoadingSubmenus, allowedPaths, isSuperAdmin]);
+  }, [crmSubmenus, isLoadingPerms, isLoadingSubmenus, allowedPaths, isSuperAdmin, isImpersonating, impersonatedPaths]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
