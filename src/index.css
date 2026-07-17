@@ -423,7 +423,7 @@ All colors MUST be HSL.
 
 .agent-portal {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --agent-primary: 147 33% 29%;       /* #2D5A3D */
+  --agent-primary: 158 64% 38%;       /* = --primary (verde de los menús) */
   --agent-primary-foreground: 0 0% 100%;
   --agent-amber: 38 92% 50%;          /* #F59E0B */
   --agent-amber-light: 48 96% 89%;    /* #FEF3C7 */

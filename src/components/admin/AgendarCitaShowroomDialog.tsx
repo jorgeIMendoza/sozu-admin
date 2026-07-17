@@ -432,7 +432,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
   const isRescheduling = !!existingCitaForProject;
 
   const labelCls = "mb-1.5 block text-[11px] font-semibold text-[#4B5563]";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[#16A45E] focus:ring-2 focus:ring-[#16A45E]/15 focus:ring-offset-0";
+  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
   const readonlyBoxCls = "flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-[#F6F7F8] px-3 py-2.5 text-[13px] font-medium text-[#171A1D]";
 
   return (
@@ -443,7 +443,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
           <DialogHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EAF6F0] text-[#0E7A45]">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EAF6F0] text-[hsl(158_64%_38%)]">
               <CalendarDays className="h-[18px] w-[18px]" />
             </span>
             <DialogTitle className="text-[18px] font-extrabold text-[#171A1D]">
@@ -454,7 +454,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           <div className="flex max-h-[calc(90vh-9rem)] flex-col gap-4 overflow-y-auto px-[22px] py-[22px]">
             {/* Prospecto */}
             <div>
-              <div className={labelCls}>Prospecto <span className="text-[#16A45E]">*</span></div>
+              <div className={labelCls}>Prospecto <span className="text-[hsl(158_64%_38%)]">*</span></div>
               {rescheduleData ? (
                 <div className={readonlyBoxCls}>
                   {rescheduleData.prospectoName || 'Prospecto'}
@@ -487,7 +487,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                   <button
                     type="button"
                     onClick={() => setAddProspectoOpen(true)}
-                    className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-[#16A45E] hover:underline"
+                    className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-[hsl(158_64%_38%)] hover:underline"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Crear prospecto
@@ -521,7 +521,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             {/* Project selector (dropdown) */}
             {selectedProspecto && (rescheduleData || (selectedProspectoData && selectedProspectoData.proyectos.length > 0)) && (
               <div>
-                <div className={labelCls}>Desarrollo para la cita <span className="text-[#16A45E]">*</span></div>
+                <div className={labelCls}>Desarrollo para la cita <span className="text-[hsl(158_64%_38%)]">*</span></div>
                 {rescheduleData ? (
                   <div className={readonlyBoxCls}>
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -661,8 +661,8 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                               className={cn(
                                 "px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors",
                                 selectedHour === String(slot.hour) && selectedConfigId === configId
-                                  ? "bg-[#16A45E] text-white border-[#16A45E]"
-                                  : "bg-white text-[#171A1D] border-[#E4E7EA] hover:border-[#16A45E] hover:text-[#16A45E]"
+                                  ? "bg-[hsl(158_64%_38%)] text-white border-[hsl(158_64%_38%)]"
+                                  : "bg-white text-[#171A1D] border-[#E4E7EA] hover:border-[hsl(158_64%_38%)] hover:text-[hsl(158_64%_38%)]"
                               )}
                             >
                               {String(slot.hour).padStart(2, "0")}:00
@@ -684,7 +684,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                 value={notas}
                 onChange={(e) => { setNotas(e.target.value); trackFieldFill(); }}
                 rows={2}
-                className="rounded-md border-[#ECEEF0] text-[13px] focus-visible:border-[#16A45E] focus-visible:ring-2 focus-visible:ring-[#16A45E]/15 focus-visible:ring-offset-0"
+                className="rounded-md border-[#ECEEF0] text-[13px] focus-visible:border-[hsl(158_64%_38%)] focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)]/15 focus-visible:ring-offset-0"
               />
             </div>
           </div>
@@ -702,7 +702,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
               type="button"
               onClick={() => { track({ page: "modal_cita", elementId: "modal_cita_guardar" }); createMutation.mutate(); }}
               disabled={createMutation.isPending || !selectedProspecto || !selectedProyectoId || !selectedDate || !selectedHour || !selectedConfigId}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#16A45E] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#128A4F] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(158_64%_38%)] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[hsl(158_64%_31%)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando…</> : isRescheduling ? "Reagendar Cita" : "Agendar Cita"}
             </button>
