@@ -245,7 +245,7 @@ const AgentPipeline = () => {
   const nonExpiredOfertas = useMemo(() => ofertas.filter((o: any) => o.stage !== 'expiradas'), [ofertas]);
 
   const displayOfertas = useMemo(() => {
-    let result = activeStage === 'all' ? nonExpiredOfertas : (grouped[activeStage] || []);
+    let result = activeStage === 'all' ? ofertas : (grouped[activeStage] || []);
     if (searchProspecto.trim()) {
       const q = searchProspecto.trim().toLowerCase();
       result = result.filter((o: any) => (o.lead_nombre || "").toLowerCase().includes(q));
@@ -286,7 +286,7 @@ const AgentPipeline = () => {
                 track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
                 navigate('/admin/agent/inventario/unidades?openFilters=true');
               }}
-              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+              className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
             >
               <Plus className="h-4 w-4" /> Nueva oferta
             </Button>
@@ -294,46 +294,44 @@ const AgentPipeline = () => {
         )}
       </div>
 
-      {/* Stage Filters */}
-      <ScrollArea className="mx-auto w-full max-w-[1040px] pb-3">
-        <div className="flex gap-2 py-1">
-          {STAGES.map(stage => {
-            const count = stage.key === 'all' ? nonExpiredOfertas.length : (grouped[stage.key]?.length || 0);
-            const isActive = activeStage === stage.key;
-            if (stage.key !== 'all' && count === 0) return null;
-            return (
-              <button
-                key={stage.key}
-                onClick={() => {
-                  track({ page: 'agent_pipeline', elementId: 'btn_filtro_etapa', elementLabel: stage.label, metadata: { etapa: stage.key } });
-                  setActiveStage(stage.key);
-                }}
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-md border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
-                  isActive
-                    ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
-                    : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
-                )}
-              >
-                {stage.label} {count > 0 && `(${count})`}
-              </button>
-            );
-          })}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
-
-      {/* Prospect search */}
-      <div className="mx-auto max-w-[1040px] pb-2">
-        <div className="relative flex items-center">
+      {/* Búsqueda (izquierda) + filtros de etapa (derecha) en una fila */}
+      <div className="mx-auto flex max-w-[1040px] items-center gap-3 pb-3">
+        <div className="relative flex w-full max-w-[240px] shrink-0 items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
           <Input
             placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="h-11 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
+            className="h-10 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
           />
         </div>
+        <ScrollArea className="min-w-0 flex-1">
+          <div className="flex w-max gap-1 rounded-lg bg-[#F1F3F5] p-1">
+            {STAGES.map(stage => {
+              const count = stage.key === 'all' ? ofertas.length : (grouped[stage.key]?.length || 0);
+              const isActive = activeStage === stage.key;
+              if (stage.key !== 'all' && count === 0) return null;
+              return (
+                <button
+                  key={stage.key}
+                  onClick={() => {
+                    track({ page: 'agent_pipeline', elementId: 'btn_filtro_etapa', elementLabel: stage.label, metadata: { etapa: stage.key } });
+                    setActiveStage(stage.key);
+                  }}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors tabular-nums",
+                    isActive
+                      ? "bg-white text-[hsl(158_64%_38%)] shadow-sm"
+                      : "text-[#6B7280] hover:text-[#374151]"
+                  )}
+                >
+                  {stage.label} {count > 0 && `(${count})`}
+                </button>
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </div>
 
       {/* Banner modo presentación */}
@@ -349,7 +347,7 @@ const AgentPipeline = () => {
       )}
 
       {/* Offer Cards */}
-      <div className="mx-auto max-w-[1040px] space-y-2.5 px-4">
+      <div className="mx-auto max-w-[1040px] space-y-2.5">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />

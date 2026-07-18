@@ -299,10 +299,10 @@ const AgentComisiones = () => {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3.5">
-        <div className="rounded-md bg-primary p-[18px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-white/65">Total cobrado</p>
-          <p className="mt-2 text-[24px] font-bold tabular-nums text-white">{mask(formatCurrency(totalCobrado))}</p>
-          <p className="mt-1 text-[10px] font-semibold text-white/55">MXN · acumulado</p>
+        <div className="rounded-md border border-[hsl(158_64%_38%)] bg-white p-[18px]">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[hsl(158_64%_38%)]/70">Total cobrado</p>
+          <p className="mt-2 text-[24px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{mask(formatCurrency(totalCobrado))}</p>
+          <p className="mt-1 text-[10px] font-semibold text-[hsl(158_64%_38%)]/60">MXN · acumulado</p>
         </div>
         <div className="rounded-md border border-[#ECEEF0] bg-white p-[18px]">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
@@ -311,10 +311,10 @@ const AgentComisiones = () => {
         </div>
       </div>
 
-      {/* Status tabs */}
+      {/* Status tabs (estilo segmentado) */}
       <div>
         <ScrollArea className="w-full whitespace-nowrap">
-          <div className="flex gap-2 pb-2">
+          <div className="flex w-max gap-1 rounded-lg bg-[#F1F3F5] p-1">
             {visibleTabs.map(tab => {
               const count = tab.key === 'todas'
                 ? comisiones.length
@@ -327,10 +327,10 @@ const AgentComisiones = () => {
                     setActiveTab(tab.key);
                   }}
                   className={cn(
-                    "whitespace-nowrap rounded-md border px-3.5 py-2 text-[12.5px] font-semibold transition-all tabular-nums",
+                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors tabular-nums",
                     activeTab === tab.key
-                      ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] text-white"
-                      : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
+                      ? "bg-white text-[hsl(158_64%_38%)] shadow-sm"
+                      : "text-[#6B7280] hover:text-[#374151]"
                   )}
                 >
                   {tab.label}{count > 0 ? ` (${count})` : ''}
@@ -519,7 +519,7 @@ function AgentFacturaUploadButton({
           track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
           fileRef.current?.click();
         }}
-        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-md bg-primary text-white text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
+        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-md border border-primary bg-white text-primary text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
       >
         {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {uploading ? 'Subiendo...' : 'Subir factura'}

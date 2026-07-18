@@ -296,11 +296,14 @@ const AgentProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("amenidades_proyectos")
-        .select("amenidades(id, nombre, url)")
+        .select("url_imagen, amenidades(id, nombre)")
         .eq("id_proyecto", projectId)
         .eq("activo", true);
       if (error) throw error;
-      return (data || []).map((a: any) => a.amenidades).filter(Boolean);
+      // foto = url_imagen (foto real de la amenidad en el proyecto). El icono (amenidades.url) NO se usa.
+      return (data || [])
+        .map((a: any) => (a.amenidades ? { ...a.amenidades, foto: a.url_imagen } : null))
+        .filter(Boolean);
     },
     enabled: projectId > 0,
   });
@@ -392,7 +395,8 @@ const AgentProyectoDetalle = () => {
         .select("id, url")
         .eq("id_proyecto", projectId)
         .eq("activo", true)
-        .eq("es_imagen", true);
+        .eq("es_imagen", true)
+        .eq("id_categoria", 1); // solo categoría General
       if (error) throw error;
       return data || [];
     },
@@ -575,7 +579,7 @@ const AgentProyectoDetalle = () => {
     );
   }
 
-  const list = showAllAmenidades ? amenidades : amenidades.slice(0, 3);
+  const list = showAllAmenidades ? amenidades : amenidades.slice(0, 8);
   const avanceBadge = avanceObra >= 100 ? "Finalizado" : `${avanceObra}% avance de obra`;
   const fmtLargo = (ts: string) => new Date(ts).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
   const avanceLastUpdated = latestVideo?.fecha_creacion
@@ -628,6 +632,31 @@ const AgentProyectoDetalle = () => {
       )}
 
       <div className="mt-5 space-y-7">
+        {/* CTA — botones en una sola fila */}
+        <section className="rounded-md p-5">
+          <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <button
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
+              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
+            >
+              <Building2 className="h-4 w-4" /> Ver inventario
+            </button>
+            <button
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
+              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+            >
+              <CalendarPlus className="h-4 w-4" /> Agendar cita
+            </button>
+            <button
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
+              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+            >
+              <Share2 className="h-4 w-4" /> Compartir
+            </button>
+          </div>
+        </section>
+
         {/* Concepto */}
         {project.descripcion && (
           <SectionCard icon={FileText} title="Concepto" bodyClassName="p-4 md:p-5 space-y-3">
@@ -707,7 +736,7 @@ const AgentProyectoDetalle = () => {
                         {m.availableCount > 0 && (
                           <button
                             onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-md bg-primary py-2.5 text-sm font-semibold text-white hover:brightness-110 transition"
+                            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-md border border-primary bg-white py-2.5 text-sm font-semibold text-primary hover:bg-primary/[0.06] transition-colors"
                           >
                             Ver inventario <ChevronRight className="h-4 w-4" />
                           </button>
@@ -730,19 +759,21 @@ const AgentProyectoDetalle = () => {
         {/* Amenidades — texto (+ imagen si existe) */}
         {amenidades.length > 0 && (
           <SectionCard icon={Sparkles} title="Amenidades" bodyClassName="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {list.map((a: any) => (
-                <div key={a.id} className="flex items-center gap-2.5 bg-white rounded-md border border-gray-100 p-2.5">
-                  {a.url ? (
-                    <OptImg src={a.url} w={72} h={72} resize="cover" alt={a.nombre} className="h-9 w-9 rounded-md object-cover shrink-0" />
+                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-white">
+                  {a.foto ? (
+                    <>
+                      <OptImg src={a.foto} w={320} h={240} resize="cover" alt={a.nombre} className="h-full w-full object-cover object-center" />
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 py-2 text-[12px] font-bold text-white leading-tight">{a.nombre}</span>
+                    </>
                   ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                    <span className="flex h-full w-full items-center justify-center px-2 text-center text-[13px] font-medium text-foreground leading-tight">{a.nombre}</span>
                   )}
-                  <span className="text-[12px] font-medium text-foreground leading-tight">{a.nombre}</span>
                 </div>
               ))}
             </div>
-            {amenidades.length > 3 && (
+            {amenidades.length > 8 && (
               <button
                 onClick={() => setShowAllAmenidades(!showAllAmenidades)}
                 className="mt-2.5 flex items-center gap-1 text-xs font-semibold text-primary"
@@ -841,7 +872,7 @@ const AgentProyectoDetalle = () => {
                     <div className="space-y-3 px-4 py-3.5">
                       {project.direccion && <p className="text-sm font-medium leading-snug text-foreground">{project.direccion}</p>}
                       {mapsUrl && (
-                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90">
+                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-primary bg-white px-4 text-xs font-semibold text-primary transition-colors hover:bg-primary/[0.06]">
                           <MapPin className="h-3.5 w-3.5" /> Cómo llegar
                         </a>
                       )}
@@ -866,7 +897,7 @@ const AgentProyectoDetalle = () => {
                       <div className="space-y-3 px-4 py-3.5">
                         <p className="text-sm font-medium leading-snug text-foreground">{showroomAddr}</p>
                         {showroomMapsUrl && (
-                          <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90">
+                          <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-primary bg-white px-4 text-xs font-semibold text-primary transition-colors hover:bg-primary/[0.06]">
                             <MapPin className="h-3.5 w-3.5" /> Cómo llegar
                           </a>
                         )}
@@ -945,30 +976,6 @@ const AgentProyectoDetalle = () => {
           </SectionCard>
         )}
 
-        {/* CTA — botones en una sola fila */}
-        <section className="rounded-md p-5">
-          <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
-            >
-              <Building2 className="h-4 w-4" /> Ver inventario
-            </button>
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <CalendarPlus className="h-4 w-4" /> Agendar cita
-            </button>
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <Share2 className="h-4 w-4" /> Compartir
-            </button>
-          </div>
-        </section>
       </div>
 
       {/* Agendar cita dialog */}
@@ -982,7 +989,7 @@ const AgentProyectoDetalle = () => {
           </DialogHeader>
           <button
             onClick={() => handleShareMethod("web")}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[hsl(158_64%_31%)]"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
           >
             <Globe className="h-4 w-4" /> Ver página web
           </button>

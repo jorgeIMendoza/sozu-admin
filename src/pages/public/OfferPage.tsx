@@ -279,6 +279,10 @@ const OfferPage = () => {
                   images={offer.gallery}
                   captions={offer.galleryCaptions}
                   videoUrl={offer.videoUrl}
+                  floorPlanUrl={offer.planoUbicacionUrl}
+                  floorPlanRegiones={offer.planoUbicacionRegiones}
+                  floorPlanUnit={offer.unitDepto}
+                  floorPlanFullNumber={offer.property.unitNumber}
                 />
 
                 {/* Detalles */}

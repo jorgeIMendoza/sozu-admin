@@ -443,20 +443,27 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const lastUpdatedRaw = latestVideo?.fecha_creacion ?? (proyecto as any).fecha_actualizacion;
   const lastUpdated = lastUpdatedRaw ? fmtDate(lastUpdatedRaw) : undefined;
 
-  // 7. Galería principal — SOLO portada del proyecto + multimedia "General".
-  // Principal = portada del proyecto (ej. portada de Bottura); luego todas las
-  // fotos de multimedia con categoría "General". Sin imágenes de modelo/propiedad.
+  // 7. Galería principal — orden fijo:
+  //    1) portada del proyecto  2) plano(s) del proyecto (arquitectónico + ubicación)
+  //    3) imágenes del modelo de la oferta  4) multimedia "General" al final (si hay).
   const portadaProyecto: string | undefined = (proyecto as any).url_imagen_portada || undefined;
+  const modeloPortada: string | undefined = (modelo as any)?.url_imagen_portada || undefined;
 
   const generalGalleryUrls: string[] = galleryFotos
     .map((m: any) => m.url as string | null | undefined)
-    .filter((u): u is string => Boolean(u) && u !== portadaProyecto)
+    .filter((u): u is string => Boolean(u))
     .map((u) => toOptimizedUrl(u, 1200, 80));
 
+  // Dedup preservando orden: portada → planos → modelo → general.
+  const seenGallery = new Set<string>();
   const galleryUrls: string[] = [
     ...(portadaProyecto ? [toOptimizedUrl(portadaProyecto, 1200, 80)] : []),
+    ...(floorPlanUrl ? [floorPlanUrl] : []),
+    ...(planoUbicacionUrl ? [planoUbicacionUrl] : []),
+    ...(modeloPortada ? [toOptimizedUrl(modeloPortada, 1200, 80)] : []),
+    ...modeloPropertyImages,
     ...generalGalleryUrls,
-  ].filter(Boolean);
+  ].filter((u): u is string => Boolean(u) && !seenGallery.has(u) && (seenGallery.add(u), true));
 
   // 8. Amenidades
   const amenidadesNames: string[] = (amenidadesProyecto ?? [])

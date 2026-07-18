@@ -142,7 +142,7 @@ const AgentProspectos = () => {
           {perms.canCreate && (
             <Button
               onClick={() => { track({ page: 'agent_prospectos', elementId: 'btn_nuevo_prospecto' }); setEditPersonaId(null); setAddProspectoOpen(true); }}
-              className="h-10 shrink-0 gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+              className="h-10 shrink-0 gap-1.5 text-xs rounded-md border border-primary bg-white text-primary hover:bg-primary/[0.06]"
             >
               <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Nuevo prospecto</span><span className="sm:hidden">Nuevo</span>
             </Button>
