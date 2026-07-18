@@ -604,7 +604,7 @@ const OfferPage = () => {
                       )}
                     </div>
                     <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                      Desarrolla · {offer.development.developerName}
+                      Desarrollador
                     </span>
                   </a>
                   <div className="flex flex-col items-center gap-1">
@@ -625,7 +625,7 @@ const OfferPage = () => {
                   <img src={sozuLogo} alt="SOZU" className="h-5 md:h-6 w-auto object-contain brightness-0 invert" />
                 </div>
                 <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                  Comercializa · SOZU
+                  Comercializador
                 </span>
               </a>
             </div>

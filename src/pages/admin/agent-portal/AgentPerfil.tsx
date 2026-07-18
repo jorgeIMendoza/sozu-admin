@@ -917,7 +917,7 @@ const AgentPerfil = () => {
       <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
       {profileView === 'overview' && (<>
       {/* Profile Card */}
-      <div className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-start gap-5">
+      <div className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-center gap-5">
         {/* Avatar */}
         <button
           type="button"
@@ -931,10 +931,10 @@ const AgentPerfil = () => {
             <img
               src={normalizeAvatarUrl(perfilExtra.foto_perfil_url)}
               alt={displayName || "Avatar"}
-              className="h-[72px] w-[72px] rounded-full object-cover"
+              className="h-[104px] w-[104px] rounded-full object-cover"
             />
           ) : (
-            <div className="h-[72px] w-[72px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-bold text-2xl">
+            <div className="h-[104px] w-[104px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-bold text-4xl">
               {(displayName || "A")[0]?.toUpperCase()}
             </div>
           )}
@@ -972,7 +972,7 @@ const AgentPerfil = () => {
           {/* Desarrollos asignados - bajo la agencia (máx 3 visibles + "+N") */}
           {misDesarrollos.length > 0 && (
             <div className="mt-2.5">
-              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.6px] text-[#9AA3AD]">Desarrollos asignados</div>
+              <div className="mb-1.5 text-[10px] font-bold tracking-[0.6px] text-[#9AA3AD]">Desarrollos asignados</div>
               <div className="flex flex-wrap gap-1.5">
                 {(showAllDesarrollos ? misDesarrollos : misDesarrollos.slice(0, 3)).map((d) => (
                   <span key={d} className="rounded-full border border-[#E4E7EA] bg-white px-2.5 py-[3px] text-[10.5px] font-semibold text-[#4B5563]">

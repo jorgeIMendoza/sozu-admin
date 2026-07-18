@@ -105,9 +105,12 @@ function buildPlan(
     if (idConcepto === 3) concepto = "Pago a escrituración";
     if (idConcepto === 5) { parcialidadCount++; concepto = `Parcialidad ${parcialidadCount}`; }
 
-    const isoDate = String(row.fecha_pago).slice(0, 10);
-    const due = new Date(isoDate + "T12:00:00").getTime();
-    const daysUntilDue = Math.ceil((due - today) / 86_400_000);
+    // fecha_pago puede ser null (acuerdos pendientes sin pago aún) → no forzar "null"
+    const rawDate = row.fecha_pago ? String(row.fecha_pago).slice(0, 10) : "";
+    const isoDate = rawDate;
+    const hasDate = isoDate.length >= 8;
+    const due = hasDate ? new Date(isoDate + "T12:00:00").getTime() : NaN;
+    const daysUntilDue = hasDate ? Math.ceil((due - today) / 86_400_000) : 0;
     const isPaid = row.pago_completado;
     const applications = (appsByAcuerdo[row.id] ?? []).sort((a, b) => a.date.localeCompare(b.date));
     const appliedAmount = applications.reduce((s, a) => s + a.amount, 0);
@@ -118,9 +121,11 @@ function buildPlan(
       amount: Number(row.monto),
       appliedAmount,
       dueDate: isoDate,
-      dueDateDisplay: new Date(isoDate + "T12:00:00").toLocaleDateString("es-MX", {
-        day: "numeric", month: "short", year: "numeric",
-      }),
+      dueDateDisplay: hasDate
+        ? new Date(isoDate + "T12:00:00").toLocaleDateString("es-MX", {
+            day: "numeric", month: "short", year: "numeric",
+          })
+        : "",
       daysUntilDue,
       status: computeStatus(isPaid, isoDate),
       concepto,
