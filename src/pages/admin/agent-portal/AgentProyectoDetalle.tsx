@@ -22,7 +22,7 @@ import { Globe, Play, X, ChevronLeft, CheckCircle2, Circle } from "lucide-react"
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
 import { OptImg } from "@/components/ui/OptImg";
 import { cn } from "@/lib/utils";
-import { calcProgressFromDates, applyProgressToMilestones } from "@/utils/avanceObra";
+import { calcProgressFromDates, deriveStages, currentStageOf } from "@/utils/avanceObra";
 
 /** Monta children solo al entrar (o acercarse) al viewport — para diferir mapas/iframes pesados. */
 const LazyVisible = ({ children, minHeight = 200, rootMargin = "250px" }: { children: ReactNode; minHeight?: number; rootMargin?: string }) => {
@@ -287,10 +287,8 @@ const AgentProyectoDetalle = () => {
     project?.fecha_lanzamiento,
     project?.fecha_entrega_proyecto ?? project?.fecha_entrega,
   );
-  const milestones = applyProgressToMilestones(avanceObra);
-  const currentStage = milestones.find((m) => !m.done)?.phase
-    ?? [...milestones].reverse().find((m) => m.done)?.phase
-    ?? "—";
+  const milestones = deriveStages(avanceObra);
+  const currentStage = currentStageOf(milestones);
 
   // Fetch amenidades
   const { data: amenidades = [] } = useQuery({
@@ -784,15 +782,26 @@ const AgentProyectoDetalle = () => {
                   <div className={cn("rounded-md border border-gray-100 p-4", !latestVideoEmbed && "md:col-span-2")}>
                     <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-[#8A929B]">Etapas de obra</h3>
                     <ul className="space-y-2.5">
-                      {milestones.map((m) => (
-                        <li key={m.phase} className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2">
-                            {m.done ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Circle className="h-4 w-4 text-muted-foreground/40" />}
-                            <span className={m.done ? "text-foreground" : "text-muted-foreground"}>{m.phase}</span>
-                          </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">{m.pct}%</span>
-                        </li>
-                      ))}
+                      {milestones.map((m) => {
+                        const isCurrent = !m.done && m.phase === currentStage;
+                        return (
+                          <li key={m.phase} className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2">
+                              {m.done ? (
+                                <CheckCircle2 className="h-4 w-4 text-primary" />
+                              ) : isCurrent ? (
+                                <span className="flex h-4 w-4 items-center justify-center">
+                                  <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                                </span>
+                              ) : (
+                                <Circle className="h-4 w-4 text-muted-foreground/40" />
+                              )}
+                              <span className={m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}>{m.phase}</span>
+                            </span>
+                            <span className={cn("text-xs tabular-nums", m.done ? "font-medium text-primary" : isCurrent ? "font-semibold text-primary" : "text-muted-foreground/60")}>{m.ownPct}%</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                     {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
                       <p className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-muted-foreground flex items-center gap-1.5">
