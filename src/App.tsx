@@ -320,6 +320,7 @@ const CondominioAuditoria     = lazyRetry(() => import("./pages/admin/portal-con
 const CondominioConfiguracion = lazyRetry(() => import("./pages/admin/portal-condominio/Configuracion"));
 const CondominioTitularidad       = lazyRetry(() => import("./features/titularidad/BandejaTitularidad"));
 const CondominioTitularidadDetalle = lazyRetry(() => import("./features/titularidad/DetalleTitularidad"));
+const CondominioPresupuesto        = lazyRetry(() => import("./features/presupuesto/PresupuestoPage"));
 
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
@@ -1114,6 +1115,7 @@ const App = () => (
                  <Route path="portal-condominio/titularidad"      element={<CondominioTitularidad />} />
                  <Route path="portal-condominio/titularidad/:id"  element={<CondominioTitularidadDetalle />} />
                  <Route path="portal-condominio/tesoreria"        element={<CondominioTesoreria />} />
+                 <Route path="portal-condominio/presupuesto"      element={<CondominioPresupuesto />} />
                  <Route path="portal-condominio/amenidades"       element={<CondominioAmenidades />} />
                  <Route path="portal-condominio/auditoria"        element={<CondominioAuditoria />} />
                  <Route path="portal-condominio/configuracion"    element={<CondominioConfiguracion />} />

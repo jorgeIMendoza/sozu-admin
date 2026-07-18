@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   FileCheck,
   Settings2,
+  Wallet,
   ArrowLeft,
   LogOut,
   Menu,
@@ -35,6 +36,9 @@ const CONDOMINIO_MENU_ID = 30;
 // BD (una vez aplicados los INSERT de Ejecuciones_manuales), no se duplica.
 const TITULARIDAD_PATH = "/admin/portal-condominio/titularidad";
 const COBRANZA_PATH = "/admin/portal-condominio/cobranza";
+// Módulo Presupuesto: UI + mock en esta fase, se inyecta tras "Tesorería".
+const PRESUPUESTO_PATH = "/admin/portal-condominio/presupuesto";
+const TESORERIA_PATH = "/admin/portal-condominio/tesoreria";
 
 const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-condominio/dashboard":     LayoutDashboard,
@@ -44,6 +48,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-condominio/cobranza":      CircleDollarSign,
   "/admin/portal-condominio/titularidad":   FileCheck,
   "/admin/portal-condominio/tesoreria":     Banknote,
+  "/admin/portal-condominio/presupuesto":   Wallet,
   "/admin/portal-condominio/amenidades":    CalendarDays,
   "/admin/portal-condominio/auditoria":     ShieldCheck,
   "/admin/portal-condominio/configuracion": Settings2,
@@ -76,17 +81,23 @@ const PortalCondominioLayoutInner = () => {
   const navFromDb = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
   const { disabledPaths } = useAllowedMenus();
   const navItems = (() => {
-    const composed = (() => {
-      if (navFromDb.some((i) => i.path === TITULARIDAD_PATH)) return navFromDb;
+    let items = navFromDb.slice();
+    // Titularidad tras Cobranza (si no viene de BD).
+    if (!items.some((i) => i.path === TITULARIDAD_PATH)) {
       const item = { path: TITULARIDAD_PATH, label: "Titularidad", icon: FileCheck };
-      const idx = navFromDb.findIndex((i) => i.path === COBRANZA_PATH);
-      if (idx === -1) return [...navFromDb, item];
-      const copy = [...navFromDb];
-      copy.splice(idx + 1, 0, item);
-      return copy;
-    })();
-    // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo)
-    return composed.filter((i) => !disabledPaths.has(i.path));
+      const idx = items.findIndex((i) => i.path === COBRANZA_PATH);
+      if (idx === -1) items = [...items, item];
+      else items.splice(idx + 1, 0, item);
+    }
+    // Presupuesto tras Tesorería (si no viene de BD).
+    if (!items.some((i) => i.path === PRESUPUESTO_PATH)) {
+      const item = { path: PRESUPUESTO_PATH, label: "Presupuesto", icon: Wallet };
+      const idx = items.findIndex((i) => i.path === TESORERIA_PATH);
+      if (idx === -1) items = [...items, item];
+      else items.splice(idx + 1, 0, item);
+    }
+    // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo).
+    return items.filter((i) => !disabledPaths.has(i.path));
   })();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
