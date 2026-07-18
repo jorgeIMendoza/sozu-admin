@@ -443,26 +443,19 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const lastUpdatedRaw = latestVideo?.fecha_creacion ?? (proyecto as any).fecha_actualizacion;
   const lastUpdated = lastUpdatedRaw ? fmtDate(lastUpdatedRaw) : undefined;
 
-  // 7. Galería principal — portada primero, luego modelo, luego proyecto
-  const portadaRaw: string | undefined =
-    (propiedad as any).url_imagen_portada || (modelo as any)?.url_imagen_portada || undefined;
+  // 7. Galería principal — SOLO portada del proyecto + multimedia "General".
+  // Principal = portada del proyecto (ej. portada de Bottura); luego todas las
+  // fotos de multimedia con categoría "General". Sin imágenes de modelo/propiedad.
+  const portadaProyecto: string | undefined = (proyecto as any).url_imagen_portada || undefined;
 
-  const proyectoGalleryUrls: string[] = galleryFotos
-    .map((m: any) => toOptimizedUrl(m.url, 1200, 80))
-    .filter(Boolean);
-  if (proyectoGalleryUrls.length === 0 && (proyecto as any).url_imagen_portada) {
-    proyectoGalleryUrls.push(toOptimizedUrl((proyecto as any).url_imagen_portada, 1200, 80));
-  }
-
-  // Model property images excluding portada to avoid duplicate
-  const modeloGalleryImages: string[] = modeloMediaRows
-    .filter((m) => m.ver_como_imagen_de_propiedad && m.url && m.url !== portadaRaw)
-    .map((m) => toOptimizedUrl(m.url, 1200, 80));
+  const generalGalleryUrls: string[] = galleryFotos
+    .map((m: any) => m.url as string | null | undefined)
+    .filter((u): u is string => Boolean(u) && u !== portadaProyecto)
+    .map((u) => toOptimizedUrl(u, 1200, 80));
 
   const galleryUrls: string[] = [
-    ...(portadaRaw ? [toOptimizedUrl(portadaRaw, 1200, 80)] : []),
-    ...modeloGalleryImages,
-    ...proyectoGalleryUrls,
+    ...(portadaProyecto ? [toOptimizedUrl(portadaProyecto, 1200, 80)] : []),
+    ...generalGalleryUrls,
   ].filter(Boolean);
 
   // 8. Amenidades
