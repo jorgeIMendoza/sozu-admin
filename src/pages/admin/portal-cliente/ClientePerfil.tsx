@@ -589,6 +589,11 @@ const ClientePerfil = () => {
     documentos.some((d) => (s.tipoIds as readonly number[]).includes(d.tipoId) && d.status === "verified"),
   );
 
+  /* ── CSF (tipo 6) verificada = fuente de los datos fiscales. Si se extrajo y quedó
+     validada (estatus 2), la sección fiscal se da por válida directamente, aunque el
+     régimen no haya mapeado al catálogo. ── */
+  const csfVerified = documentos.some((d) => d.tipoId === 6 && d.status === "verified");
+
   /* ── Profile completion ── */
   const uploadedTypeIds = new Set(documentos.map((d) => d.tipoId));
   const hasId = uploadedTypeIds.has(2) || uploadedTypeIds.has(3) || uploadedTypeIds.has(4);
@@ -1351,7 +1356,7 @@ const ClientePerfil = () => {
                 <ProfileSectionRow
                   title="Información fiscal"
                   description="Régimen, CFDI y dirección"
-                  badge={sectionPill(persona?.regimen ? 'complete' : 'pending')}
+                  badge={sectionPill((csfVerified || persona?.regimen) ? 'complete' : 'pending')}
                   onClick={() => setView('fiscal')}
                 />
                 <ProfileSectionRow
