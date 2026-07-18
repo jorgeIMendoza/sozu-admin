@@ -2,7 +2,7 @@ import {
   User, Mail, FileText, LogOut, Shield, ArrowLeft,
   CheckCircle2, Building2, CreditCard, Lock, Eye, EyeOff,
   BadgeCheck, AlertCircle, Clock, Loader2, Check, X,
-  Download, Pencil, Upload, ChevronRight, Camera,
+  Download, Pencil, Upload, Camera, Trash2,
 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -36,19 +36,29 @@ import { toast } from "sonner";
 import { validateCURPPdf, validateCSFPdf, validateActaNacimientoPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields, extractActaNacimientoFields } from "@/utils/pdfDocumentExtractors";
 import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
 
 /* ─── helpers ─── */
 const INPUT_CLS =
-  "flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-shadow";
+  "flex h-11 w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2 text-sm text-[#171A1D] placeholder:text-[#9AA3AD] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30 transition-shadow";
 const SELECT_CLS = `${INPUT_CLS} appearance-none cursor-pointer`;
 
+// Badge de estatus reutilizable (paleta del portal agente).
+const sectionPill = (status: "complete" | "partial" | "pending") =>
+  status === "complete"
+    ? { label: "Completado", color: "text-[hsl(158_64%_38%)]", bg: "bg-[#E8F5EE]" }
+    : status === "partial"
+    ? { label: "En proceso", color: "text-[#B5730A]", bg: "bg-[#FBEFD9]" }
+    : { label: "Pendiente", color: "text-[#6B7280]", bg: "bg-[#F2F4F5]" };
+
 const EmptyVal = () => (
-  <span className="text-muted-foreground/40 text-xs font-normal italic">Sin dato</span>
+  <span className="text-[#9AA3AD] text-xs font-normal italic">Sin dato</span>
 );
 
 const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
-    <label className="text-sm font-semibold text-foreground block">{label}</label>
+    <label className="text-[13px] font-semibold text-[#171A1D] block">{label}</label>
     {children}
   </div>
 );
@@ -78,7 +88,7 @@ const SearchSelect = ({
         autoComplete="off"
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-52 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[#ECEEF0] rounded-md shadow-lg max-h-52 overflow-y-auto">
           {filtered.map((o) => {
             const v = getValue(o);
             return (
@@ -87,10 +97,10 @@ const SearchSelect = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onChange(v); setOpen(false); setQ(""); }}
-                className={`w-full text-left px-3 py-2.5 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
                   v === value
-                    ? "bg-emerald-pale text-emerald font-semibold"
-                    : "hover:bg-muted/50 text-foreground"
+                    ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)] font-semibold"
+                    : "hover:bg-[#F6F7F8] text-[#171A1D]"
                 }`}
               >
                 {getLabel(o)}
@@ -134,9 +144,9 @@ const PwField = ({
 const PwCheck = ({ label, ok }: { label: string; ok: boolean }) => (
   <div className="flex items-center gap-1.5 text-[11px]">
     {ok
-      ? <Check className="w-3 h-3 text-emerald shrink-0" />
-      : <X className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
-    <span className={ok ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+      ? <Check className="w-3 h-3 text-[hsl(158_64%_38%)] shrink-0" />
+      : <X className="w-3 h-3 text-[#9AA3AD] shrink-0" />}
+    <span className={ok ? "text-[#171A1D]" : "text-[#6B7280]"}>{label}</span>
   </div>
 );
 
@@ -152,7 +162,7 @@ const PrimaryBtn = ({
   <button
     onClick={onClick}
     disabled={disabled || loading}
-    className="w-full h-11 rounded-md text-sm font-semibold flex items-center justify-center gap-2 bg-emerald text-white hover:opacity-90 transition-opacity active:scale-[0.98] disabled:opacity-60"
+    className="w-full h-11 rounded-md text-sm font-semibold flex items-center justify-center gap-2 bg-[hsl(158_64%_38%)] text-white hover:opacity-90 transition-opacity active:scale-[0.98] disabled:opacity-60"
   >
     {loading && <Loader2 className="w-4 h-4 animate-spin" />}
     {loading ? "Guardando..." : label}
@@ -182,17 +192,17 @@ const ModalHeader = ({
 }: {
   icon: React.ElementType; title: string; subtitle: string; onClose: () => void;
 }) => (
-  <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border shrink-0">
-    <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
-      <Icon className="w-4 h-4 text-muted-foreground" />
+  <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-[#ECEEF0] shrink-0">
+    <div className="w-9 h-9 rounded-md bg-[#E8F5EE] flex items-center justify-center shrink-0">
+      <Icon className="w-4 h-4 text-[hsl(158_64%_38%)]" />
     </div>
     <div className="flex-1 min-w-0">
-      <h3 className="font-bold text-foreground text-sm leading-tight">{title}</h3>
-      <p className="text-xs text-muted-foreground">{subtitle}</p>
+      <h3 className="font-bold text-[#171A1D] text-sm leading-tight">{title}</h3>
+      <p className="text-xs text-[#9AA3AD]">{subtitle}</p>
     </div>
     <button
       onClick={onClose}
-      className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+      className="w-7 h-7 rounded-md hover:bg-[#F6F7F8] flex items-center justify-center transition-colors text-[#9AA3AD] hover:text-[#171A1D]"
     >
       <X className="w-4 h-4" />
     </button>
@@ -201,11 +211,11 @@ const ModalHeader = ({
 
 type DocViewerDoc = { title: string; url: string };
 const DocViewerHeader = ({ doc }: { doc: DocViewerDoc }) => (
-  <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-    <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+  <div className="flex items-center gap-3 px-4 py-3 border-b border-[#ECEEF0] shrink-0">
+    <FileText className="w-5 h-5 text-[#9AA3AD] shrink-0" />
     <div className="min-w-0 flex-1">
-      <p className="text-sm font-semibold text-foreground truncate">{doc.title}</p>
-      <p className="text-xs text-muted-foreground">Vista previa</p>
+      <p className="text-sm font-semibold text-[#171A1D] truncate">{doc.title}</p>
+      <p className="text-xs text-[#9AA3AD]">Vista previa</p>
     </div>
   </div>
 );
@@ -248,61 +258,18 @@ const DocViewerBody = ({ doc }: { doc: DocViewerDoc }) => (
   </div>
 );
 
-type SectionCTA = { label: string; onClick: () => void; secondary: boolean };
-
-const BackBtn = ({ onClick }: { onClick: () => void }) => (
-  <button
-    onClick={onClick}
-    style={{ background:'none', border:'none', color:'#575757', fontWeight:600, fontSize:13, cursor:'pointer', padding:'4px 0', display:'inline-flex', alignItems:'center', gap:6, marginBottom:12 }}
-  >
-    <ArrowLeft style={{ width:14, height:14 }} /> Volver al Perfil
-  </button>
-);
-
-const SectionCard = ({
-  title, subtitle, icon, semLabel, semDot, semColor, rows, ctas,
-}: {
-  title: string; subtitle: string; icon: React.ReactNode;
-  semLabel: string; semDot: string; semColor: string;
-  rows: { label: string; value: string | null | undefined }[];
-  ctas: SectionCTA[];
-}) => (
-  <section style={{ background:'#fff', border:'1px solid #ededf0', borderRadius:8, padding:'18px 20px', display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
-    <div style={{ display:'flex', alignItems:'flex-start', gap:11 }}>
-      <div style={{ width:36, height:36, borderRadius:6, background:'#eaf6ef', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-        {icon}
-      </div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:15, fontWeight:700, color:'#000' }}>{title}</div>
-        <div style={{ fontSize:12, color:'#9aa0a6', marginTop:2 }}>{subtitle}</div>
-      </div>
-      <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:semColor, flexShrink:0, marginTop:2 }}>
-        <span style={{ width:7, height:7, borderRadius:'50%', background:semDot }} /> {semLabel}
-      </div>
-    </div>
-    <div style={{ marginTop:13, flex:1 }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderBottom: i < rows.length-1 ? '1px solid #f0f1f3' : 'none' }}>
-          <span style={{ fontSize:12, color:'#575757', fontWeight:500, flexShrink:0 }}>{r.label}</span>
-          <span style={{ fontSize:12, fontWeight:600, color:r.value ? '#000' : '#9aa0a6', fontStyle:r.value ? 'normal' : 'italic', textAlign:'right', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-            {r.value || 'Sin dato'}
-          </span>
-        </div>
-      ))}
-    </div>
-    <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:7 }}>
-      {ctas.map((cta, i) => (
-        <button key={i} onClick={cta.onClick} style={{
-          width:'100%', border: cta.secondary ? '1px solid #e0e3e6' : 'none',
-          background: cta.secondary ? '#fff' : '#57ae75',
-          color: cta.secondary ? '#000' : '#fff',
-          fontWeight:700, fontSize:13.5, padding:'10px', borderRadius:6, cursor:'pointer',
-        }}>
-          {cta.label}
-        </button>
-      ))}
-    </div>
-  </section>
+// Header de sub-vista interna: flecha atrás en caja + título (sin descripción).
+const SubHeader = ({ title, onBack }: { title: string; onBack: () => void }) => (
+  <div className="mb-3 flex items-center gap-2.5">
+    <button
+      onClick={onBack}
+      aria-label="Volver al perfil"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+    >
+      <ArrowLeft className="h-4 w-4" />
+    </button>
+    <h1 className="text-[19px] font-bold text-[#171A1D]">{title}</h1>
+  </div>
 );
 
 /* ═══════════════════════════════════════════ */
@@ -330,6 +297,11 @@ const ClientePerfil = () => {
   });
 
   const effectivePersonaId: number | null = _directPersonaId ?? _personaIdByEmail ?? null;
+
+  // Puede editar si: es el cliente real (no impersonando) O es un admin/visor con
+  // permiso de impersonar (super admin incluido). `profile.puede_impersonar` refleja
+  // al usuario logueado real aunque esté viendo el portal como el cliente.
+  const canEditProfile = !isImpersonating || !!(profile as any)?.puede_impersonar;
 
   /* View navigation */
   const [view, setView] = useState<"overview" | "expediente" | "personal" | "fiscal" | "cuentas">("overview");
@@ -376,20 +348,14 @@ const ClientePerfil = () => {
   });
   const [savingFiscal, setSavingFiscal] = useState(false);
 
-  /* Add cuenta bancaria modal */
+  /* Alta cuenta bancaria (formulario completo, se abre desde Documentos) */
+  const EMPTY_CUENTA = { id_banco: '', numero_cuenta: '', cuenta_clabe: '', cuenta_swift: '', titular: '' };
   const [showAddCuenta, setShowAddCuenta] = useState(false);
-  const [addCuenta, setAddCuenta] = useState({ id_banco: '', cuenta_clabe: '', titular: '' });
+  const [addCuenta, setAddCuenta] = useState(EMPTY_CUENTA);
+  const [addEvidencia, setAddEvidencia] = useState<File | null>(null);
   const [savingCuenta, setSavingCuenta] = useState(false);
   const [showBancoList, setShowBancoList] = useState(false);
   const [bancoSearch, setBancoSearch] = useState('');
-
-  /* Edit cuenta bancaria modal */
-  const [showEditCuenta, setShowEditCuenta] = useState(false);
-  const [editCuentaId, setEditCuentaId] = useState<number | null>(null);
-  const [editCuenta, setEditCuenta] = useState({ id_banco: '', cuenta_clabe: '', titular: '' });
-  const [savingEditCuenta, setSavingEditCuenta] = useState(false);
-  const [showEditBancoList, setShowEditBancoList] = useState(false);
-  const [editBancoSearch, setEditBancoSearch] = useState('');
 
   /* PW auth gate */
   const PW_AUTH_GRACE = 90_000;
@@ -403,6 +369,14 @@ const ClientePerfil = () => {
   /* Upload */
   const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  /* Foto de perfil (usuarios.foto_perfil_url) */
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   /* Confirmación de datos extraídos (CURP / CSF) antes de capturar en `personas` */
   const [confirmDoc, setConfirmDoc] = useState<{
@@ -507,7 +481,7 @@ const ClientePerfil = () => {
       if (!effectivePersonaId) return [];
       const { data } = await supabase
         .from("cuentas_bancarias")
-        .select("id, id_banco, numero_cuenta, cuenta_clabe, titular, bancos:fk_cuentas_bancarias_banco(nombre)")
+        .select("id, id_banco, numero_cuenta, cuenta_clabe, cuenta_swift, titular, url_evidencia, id_estatus_verificacion, bancos:fk_cuentas_bancarias_banco(nombre)")
         .eq("id_persona", effectivePersonaId)
         .eq("activo", true);
       return (data || []).map((c: any) => ({
@@ -516,9 +490,28 @@ const ClientePerfil = () => {
         banco: (c.bancos as any)?.nombre || "Banco",
         numeroCuenta: (c.cuenta_clabe || c.numero_cuenta) as string,
         titular: c.titular as string | null,
+        swift: c.cuenta_swift as string | null,
+        evidencia: (c.url_evidencia as string | null) || null,
+        estatus: (c.id_estatus_verificacion as number) ?? 1,
       }));
     },
     enabled: !!effectivePersonaId,
+  });
+
+  /* Foto de perfil del cliente (fila en `usuarios` por email) */
+  const { data: clienteUsuario } = useQuery({
+    queryKey: ["cliente-perfil-usuario", clienteEmail],
+    queryFn: async () => {
+      if (!clienteEmail) return null;
+      const { data } = await (supabase as any)
+        .from("usuarios")
+        .select("foto_perfil_url")
+        .eq("email", clienteEmail)
+        .maybeSingle();
+      return data as { foto_perfil_url: string | null } | null;
+    },
+    enabled: !!clienteEmail,
+    staleTime: 60_000,
   });
 
   /* Catalogs - lazy */
@@ -529,6 +522,17 @@ const ClientePerfil = () => {
       return (data || []) as { id: string; nombre: string }[];
     },
     enabled: showEditFiscal,
+    staleTime: 600_000,
+  });
+
+  // Catálogo de régimen siempre disponible: resuelve el régimen extraído del CSF
+  // (texto) al id/código SAT que guarda persona.regimen, para auto-rellenar fiscal.
+  const { data: regimenCatalog = [] } = useQuery({
+    queryKey: ["regimen-catalog-all"],
+    queryFn: async () => {
+      const { data } = await supabase.from("regimen").select("id, nombre").eq("activo", true).order("id");
+      return (data || []) as { id: string; nombre: string }[];
+    },
     staleTime: 600_000,
   });
 
@@ -548,20 +552,25 @@ const ClientePerfil = () => {
       const { data } = await supabase.from("bancos").select("id, nombre").eq("activo", true).order("nombre");
       return (data || []) as { id: number; nombre: string }[];
     },
-    enabled: showAddCuenta || showEditCuenta,
+    enabled: showAddCuenta,
     staleTime: 600_000,
   });
 
-  /* ── Expediente slots ── */
+  /* ── Expediente slots (cat: agrupación en el expediente) ── */
   const SLOTS = [
-    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],       primaryTipoId: 2,  required: true  },
-    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],       primaryTipoId: 3,  required: true  },
-    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],       primaryTipoId: 4,  required: false },
-    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],       primaryTipoId: 1,  required: false },
-    { key: "curp",            label: "CURP",                           tipoIds: [5],       primaryTipoId: 5,  required: true  },
-    { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],       primaryTipoId: 6,  required: true  },
-    { key: "domicilio",       label: "Comprobante de domicilio",       tipoIds: [8],       primaryTipoId: 8,  required: true  },
-    { key: "matrimonio",      label: "Acta de matrimonio",             tipoIds: [11],      primaryTipoId: 11, required: false },
+    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],       primaryTipoId: 2,  required: true,  cat: "personal"   },
+    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],       primaryTipoId: 3,  required: true,  cat: "personal"   },
+    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],       primaryTipoId: 4,  required: false, cat: "personal"   },
+    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],       primaryTipoId: 1,  required: false, cat: "personal"   },
+    { key: "curp",            label: "CURP",                           tipoIds: [5],       primaryTipoId: 5,  required: true,  cat: "personal"   },
+    { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],       primaryTipoId: 6,  required: true,  cat: "financiero" },
+    { key: "domicilio",       label: "Comprobante de domicilio",       tipoIds: [8],       primaryTipoId: 8,  required: true,  cat: "personal"   },
+    { key: "matrimonio",      label: "Acta de matrimonio",             tipoIds: [11],      primaryTipoId: 11, required: false, cat: "personal"   },
+  ] as const;
+  // Grupos del expediente: orden de categorías + orden alfabético dentro de cada una.
+  const DOC_GROUPS = [
+    { key: "personal",   label: "Personales" },
+    { key: "financiero", label: "Fiscal y financiero" },
   ] as const;
 
   /* ── Derived display ── */
@@ -573,6 +582,12 @@ const ClientePerfil = () => {
   const usoCfdiDisplay = persona?.uso_cfdi
     ? usoCfdiData?.nombre ? `${persona.uso_cfdi} - ${usoCfdiData.nombre}` : persona.uso_cfdi
     : null;
+
+  /* ── Documentos: todos los requeridos verificados → sección "Documentos" completa ── */
+  const requiredSlots = SLOTS.filter((s) => s.required);
+  const docsAllVerified = requiredSlots.length > 0 && requiredSlots.every((s) =>
+    documentos.some((d) => (s.tipoIds as readonly number[]).includes(d.tipoId) && d.status === "verified"),
+  );
 
   /* ── Profile completion ── */
   const uploadedTypeIds = new Set(documentos.map((d) => d.tipoId));
@@ -609,6 +624,108 @@ const ClientePerfil = () => {
 
   /* ── Handlers ── */
   const isPwAuthed = () => pwAuthTimestamp !== null && Date.now() - pwAuthTimestamp < PW_AUTH_GRACE;
+
+  /* ── Foto de perfil (bucket `avatar` + usuarios.foto_perfil_url) ── */
+  const handlePhotoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  // Extrae el path de storage desde la URL pública (self-hosted y Supabase cloud).
+  const getAvatarStoragePath = (publicUrl: string): string | null => {
+    const marker = '/storage/v1/object/public/avatar/';
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.substring(idx + marker.length).split('?')[0];
+  };
+
+  const closePhotoModal = () => {
+    setShowPhotoModal(false);
+    setPendingFile(null);
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+  };
+
+  const handlePhotoConfirm = async () => {
+    if (!pendingFile || !clienteEmail) return;
+    setUploadingPhoto(true);
+    try {
+      const ext = (pendingFile.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `avatars/${clienteEmail}/avatar.${ext}`;
+
+      // Elimina el archivo previo si cambió la extensión (evita huérfanos).
+      if (clienteUsuario?.foto_perfil_url) {
+        const oldPath = getAvatarStoragePath(clienteUsuario.foto_perfil_url);
+        if (oldPath && oldPath !== path) {
+          await supabase.storage.from('avatar').remove([oldPath]);
+        }
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatar')
+        .upload(path, pendingFile, { upsert: true, cacheControl: '3600' });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('avatar').getPublicUrl(path);
+      const cleanUrl = urlData.publicUrl.split('?')[0];
+
+      const { data: updated, error: updErr } = await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: cleanUrl })
+        .eq('email', clienteEmail)
+        .select('email');
+      if (updErr) throw updErr;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se pudo guardar la foto: no tienes permiso para editar este perfil.');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['cliente-perfil-usuario', clienteEmail] });
+      queryClient.refetchQueries({ queryKey: ['cliente-perfil-usuario', clienteEmail] });
+      toast.success('Foto de perfil actualizada');
+      closePhotoModal();
+    } catch (err: any) {
+      console.error('Error subiendo foto:', err);
+      toast.error(err?.message || 'No se pudo subir la foto. Intenta de nuevo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!clienteEmail) return;
+    setDeletingPhoto(true);
+    try {
+      if (clienteUsuario?.foto_perfil_url) {
+        const storagePath = getAvatarStoragePath(clienteUsuario.foto_perfil_url);
+        if (storagePath) {
+          await supabase.storage.from('avatar').remove([storagePath]);
+        } else {
+          const { data: files } = await supabase.storage.from('avatar').list(`avatars/${clienteEmail}`);
+          if (files?.length) {
+            await supabase.storage.from('avatar').remove(files.map((f) => `avatars/${clienteEmail}/${f.name}`));
+          }
+        }
+      }
+      const { error: updErr } = await (supabase as any)
+        .from('usuarios')
+        .update({ foto_perfil_url: null })
+        .eq('email', clienteEmail)
+        .select('email');
+      if (updErr) throw updErr;
+      queryClient.invalidateQueries({ queryKey: ['cliente-perfil-usuario', clienteEmail] });
+      queryClient.refetchQueries({ queryKey: ['cliente-perfil-usuario', clienteEmail] });
+      toast.success('Foto de perfil eliminada');
+      setShowPhotoModal(false);
+    } catch (err: any) {
+      console.error('Error eliminando foto:', err);
+      toast.error(err?.message || 'No se pudo eliminar la foto.');
+    } finally {
+      setDeletingPhoto(false);
+    }
+  };
 
   const notificarCambioCliente = async (actividad: string, detalles: string) => {
     try {
@@ -716,68 +833,55 @@ const ClientePerfil = () => {
   const handleAddCuenta = async () => {
     if (!effectivePersonaId) { toast.error('No se encontró el perfil'); return; }
     if (!addCuenta.id_banco) { toast.error('Selecciona un banco'); return; }
-    if (!addCuenta.cuenta_clabe.trim()) { toast.error('Ingresa la CLABE'); return; }
+    const numero = addCuenta.numero_cuenta.trim();
+    if (numero.length < 8 || numero.length > 34) { toast.error('El número de cuenta debe tener entre 8 y 34 caracteres'); return; }
     if (!addCuenta.titular.trim()) { toast.error('Ingresa el nombre del titular'); return; }
+    const clabe = addCuenta.cuenta_clabe.trim();
+    if (clabe && clabe.length !== 18) { toast.error('La CLABE debe tener 18 dígitos'); return; }
+    if (!addEvidencia) { toast.error('Sube la carátula de tu estado de cuenta'); return; }
     setSavingCuenta(true);
     try {
-      const clabe = addCuenta.cuenta_clabe.trim();
+      // Evidencia (obligatoria): carátula del estado de cuenta. Sube a storage y la
+      // registra como documento tipo 60 "Datos bancarios".
+      let evidenciaUrl: string | null = null;
+      if (addEvidencia) {
+        const ext = addEvidencia.name.split('.').pop()?.toLowerCase() || 'pdf';
+        const path = `personas/${effectivePersonaId}/60_${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('documentos').upload(path, addEvidencia, { upsert: false });
+        if (upErr) { toast.error('Error al subir evidencia: ' + upErr.message); return; }
+        evidenciaUrl = supabase.storage.from('documentos').getPublicUrl(path).data.publicUrl;
+        await (supabase as any).from('documentos').insert({
+          id_persona: effectivePersonaId,
+          id_tipo_documento: 60,
+          url: evidenciaUrl,
+          activo: true,
+          es_draft: false,
+          id_estatus_verificacion: 1,
+        });
+      }
+      const swift = addCuenta.cuenta_swift.trim();
       const { error } = await (supabase as any).from('cuentas_bancarias').insert({
         id_persona: effectivePersonaId,
         id_banco: Number(addCuenta.id_banco),
-        cuenta_clabe: clabe,
-        numero_cuenta: clabe,
+        numero_cuenta: numero,
+        cuenta_clabe: clabe || null,
+        cuenta_swift: swift || null,
         titular: addCuenta.titular.trim(),
+        url_evidencia: evidenciaUrl,
         activo: true,
+        id_estatus_verificacion: 1,
       });
       if (error) { toast.error(`Error: ${error.message}`); return; }
       toast.success('Cuenta bancaria registrada');
       const bancoNombre = bancosOptions.find(b => String(b.id) === addCuenta.id_banco)?.nombre || addCuenta.id_banco;
-      notificarCambioCliente('Alta de cuenta bancaria', `Banco: ${bancoNombre}, CLABE: ${clabe}, Titular: ${addCuenta.titular.trim()}`);
+      notificarCambioCliente('Alta de cuenta bancaria', `Banco: ${bancoNombre}, Cuenta: ${numero}, Titular: ${addCuenta.titular.trim()}`);
       setShowAddCuenta(false);
-      setAddCuenta({ id_banco: '', cuenta_clabe: '', titular: '' });
+      setAddCuenta(EMPTY_CUENTA);
+      setAddEvidencia(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-perfil-bancos', effectivePersonaId] });
+      queryClient.refetchQueries({ queryKey: ['cliente-perfil-docs', effectivePersonaId] });
     } finally {
       setSavingCuenta(false);
-    }
-  };
-
-  const openEditCuenta = (c: { id: number; banco: string; numeroCuenta: string | null; titular: string | null; idBanco: number }) => {
-    setEditCuentaId(c.id);
-    setEditCuenta({ id_banco: String(c.idBanco), cuenta_clabe: c.numeroCuenta || '', titular: c.titular || '' });
-    setEditBancoSearch('');
-    setShowEditBancoList(false);
-    setShowEditCuenta(true);
-  };
-
-  const handleSaveEditCuenta = async () => {
-    if (!editCuentaId) return;
-    if (!editCuenta.id_banco) { toast.error('Selecciona un banco'); return; }
-    if (!editCuenta.cuenta_clabe.trim()) { toast.error('Ingresa la CLABE'); return; }
-    if (!editCuenta.titular.trim()) { toast.error('Ingresa el nombre del titular'); return; }
-    if (!isPwAuthed() && !justAuthedRef.current) {
-      pendingAfterPwRef.current = () => handleSaveEditCuenta();
-      setPwAuthInput('');
-      setShowPwAuth(true);
-      return;
-    }
-    justAuthedRef.current = false;
-    setSavingEditCuenta(true);
-    try {
-      const clabe = editCuenta.cuenta_clabe.trim();
-      const { error } = await (supabase as any).from('cuentas_bancarias').update({
-        id_banco: Number(editCuenta.id_banco),
-        cuenta_clabe: clabe,
-        numero_cuenta: clabe,
-        titular: editCuenta.titular.trim(),
-      }).eq('id', editCuentaId);
-      if (error) { toast.error(`Error: ${error.message}`); return; }
-      toast.success('Cuenta bancaria actualizada');
-      const bancoNombre = bancosOptions.find(b => String(b.id) === editCuenta.id_banco)?.nombre || editCuenta.id_banco;
-      notificarCambioCliente('Edición de cuenta bancaria', `Banco: ${bancoNombre}, CLABE: ${clabe}, Titular: ${editCuenta.titular.trim()}`);
-      setShowEditCuenta(false);
-      queryClient.invalidateQueries({ queryKey: ['cliente-perfil-bancos', effectivePersonaId] });
-    } finally {
-      setSavingEditCuenta(false);
     }
   };
 
@@ -1014,6 +1118,21 @@ const ClientePerfil = () => {
         const val = (editedValues[f.key] ?? f.value).trim();
         if (f.personaCol && val) personaUpdates[f.personaCol] = val;
       }
+      // Régimen del CSF: viene como texto → resolver al id/código SAT del catálogo
+      // (por código de 3 dígitos si aparece, o por nombre). persona.regimen guarda ese id.
+      if (confirmDoc.tipo === 'csf' && regimenCatalog.length) {
+        const regField = confirmDoc.fields.find(f => f.key === 'regimen');
+        const regText = (editedValues['regimen'] ?? regField?.value ?? '').trim();
+        if (regText) {
+          const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+          const nText = norm(regText); /* norm: NFD + strip diacritics + alnum */
+          const codeMatch = regText.match(/\b(\d{3})\b/)?.[1];
+          const found =
+            (codeMatch && regimenCatalog.find(r => String(r.id) === codeMatch)) ||
+            regimenCatalog.find(r => { const n = norm(r.nombre); return n.length > 3 && (nText.includes(n) || n.includes(nText)); });
+          if (found) personaUpdates['regimen'] = String(found.id);
+        }
+      }
       const ok = await commitDoc(confirmDoc.file, confirmDoc.primaryTipoId, 2, personaUpdates);
       if (ok) {
         toast.success("Documento verificado y datos guardados en tu perfil");
@@ -1063,229 +1182,195 @@ const ClientePerfil = () => {
   /* ═══════════════════════════════════════════ */
 
   /* ── shared style tokens ── */
-  const card: React.CSSProperties = { background: '#fff', border: '1px solid #ededf0', borderRadius: 8 };
-  const green = '#57ae75';
-  const textPrimary = '#000';
-  const textSecondary = '#575757';
-  const textMuted = '#9aa0a6';
+  // Los modales (Dialog/Sheet) se renderizan en un portal fuera del div raíz, así
+  // que no heredan la fuente del portal cliente. Se les aplica system-ui explícito.
+  const SYS_FONT: React.CSSProperties = { fontFamily: 'system-ui,-apple-system,sans-serif' };
 
   return (
-    <div style={{ background: '#f5f6f7', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif', overflowX: 'hidden' }}>
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '24px 20px 80px', boxSizing: 'border-box', width: '100%' }}>
+    <div className="min-h-screen bg-[#F5F6F7] overflow-x-hidden" style={SYS_FONT}>
+      <div className="mx-auto max-w-[1040px] px-4 sm:px-5 pt-4 pb-20 space-y-4">
 
-        {/* ── Identity card (always visible) ── */}
-        <section style={{ ...card, padding: '20px 22px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: isDesktop ? 'center' : 'flex-start', gap: 14, flexDirection: isDesktop ? 'row' : 'column' }}>
-            {/* Avatar + name row (always horizontal) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 22, flexShrink: 0 }}>
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{ margin: 0, fontSize: isDesktop ? 20 : 16, fontWeight: 700, color: textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+        {/* ── Identity card (solo en overview / principal) ── */}
+        {view === 'overview' && (
+        <section className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px]">
+          <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center">
+            {/* Avatar + name row */}
+            <div className="flex flex-1 min-w-0 items-center gap-3.5">
+              <button
+                type="button"
+                onClick={() => canEditProfile && setShowPhotoModal(true)}
+                disabled={!canEditProfile}
+                title={canEditProfile ? "Cambiar foto de perfil" : undefined}
+                aria-label={canEditProfile ? "Cambiar foto de perfil" : "Foto de perfil"}
+                className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)] focus-visible:ring-offset-2 disabled:cursor-default"
+              >
+                {clienteUsuario?.foto_perfil_url ? (
+                  <img
+                    src={normalizeAvatarUrl(clienteUsuario.foto_perfil_url)}
+                    alt={displayName}
+                    className="h-[52px] w-[52px] rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[hsl(158_64%_38%)] text-[22px] font-bold text-white">
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                {canEditProfile && (
+                  <span className="absolute -right-1 -bottom-1 flex h-[22px] w-[22px] items-center justify-center rounded-full border border-[#E4E7EA] bg-white text-[#4B5563] shadow-[0_1px_4px_rgba(0,0,0,0.12)]">
+                    <Camera className="h-3 w-3" />
+                  </span>
+                )}
+              </button>
+              <div className="flex-1 min-w-0">
+                <h1 className="truncate text-[16px] sm:text-[19px] font-bold tracking-[-0.3px] text-[#171A1D]">{displayName}</h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   {verStatus === 'verified' && (
-                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eaf6ef', color:'#3f8f5c', border:'1px solid #cfe9d9', fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999 }}>
-                      <CheckCircle2 style={{ width:12, height:12 }} /> Perfil verificado
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E8F5EE] px-2.5 py-[3px] text-[10.5px] font-bold text-[hsl(158_64%_38%)]">
+                      <CheckCircle2 className="h-3 w-3" /> Perfil verificado
                     </span>
                   )}
                   {verStatus === 'review' && (
-                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#fef3c7', color:'#92400e', border:'1px solid #e5c97a', fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999 }}>
-                      <Clock style={{ width:12, height:12 }} /> En revisión
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FBEFD9] px-2.5 py-[3px] text-[10.5px] font-bold text-[#B5730A]">
+                      <Clock className="h-3 w-3" /> En revisión
                     </span>
                   )}
                   {verStatus === 'incomplete' && (
-                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#fef2f2', color:'#c0392b', border:'1px solid #f5c6c6', fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999 }}>
-                      <AlertCircle style={{ width:12, height:12 }} /> Información incompleta
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FBE9E7] px-2.5 py-[3px] text-[10.5px] font-bold text-[#B84A3C]">
+                      <AlertCircle className="h-3 w-3" /> Información incompleta
                     </span>
                   )}
-                  <span style={{ color: textSecondary, fontSize: 12, fontWeight: 500 }}>
+                  <span className="text-[12px] font-semibold text-[#6B7280]">
                     {getTipoPersonaLabel(persona?.tipo_persona)}
                   </span>
                 </div>
               </div>
             </div>
-            {/* Progress bar */}
-            <div style={{ flex: '0 0 auto', width: isDesktop ? 220 : '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: textSecondary, marginBottom: 5 }}>
-                <span>Perfil completado</span>
-                <span style={{ color: textPrimary, fontWeight: 700 }}>{profileCompletion}%</span>
+            {/* Panel de activación (perfil completado) */}
+            <div className="w-full shrink-0 sm:w-[220px] sm:border-l sm:border-[#F2F4F5] sm:pl-5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Perfil completado</span>
+                <span className="text-[18px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{profileCompletion}%</span>
               </div>
-              <div style={{ height: 7, borderRadius: 999, background: '#e8eaec', overflow: 'hidden' }}>
-                <div style={{ height:'100%', borderRadius:999, background: green, width:`${profileCompletion}%`, transition:'width 0.5s ease' }} />
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#EEF0F2]">
+                <div className="h-full rounded-full bg-[hsl(158_64%_38%)] transition-all duration-700" style={{ width: `${profileCompletion}%` }} />
               </div>
             </div>
           </div>
           {profileCompletion < 85 && (
-            <div style={{ marginTop:14, display:'flex', alignItems:'flex-start', gap:10, background:'#fef6e7', border:'1px solid #f4e3bf', borderRadius:6, padding:'10px 13px' }}>
-              <AlertCircle style={{ width:14, height:14, color:'#c08a14', flexShrink:0, marginTop:1 }} />
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700, fontSize:13, color:'#8a6410' }}>
+            <div className="mt-3.5 flex items-start gap-2.5 rounded-md border border-[#EBCBA6] bg-[#FBE3CE] px-3.5 py-3">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B5601C]" />
+              <div className="flex-1">
+                <div className="text-[13px] font-bold text-[#B5601C]">
                   {profileCompletion < 50 ? 'Completa tu perfil para continuar' : 'Perfil casi completo'}
                 </div>
-                <div style={{ fontSize:12, color:'#8a6410', marginTop:2, opacity:0.85 }}>
+                <div className="mt-0.5 text-[12px] font-medium text-[#B5601C]/85">
                   Sube tus documentos y llena tus datos personales y fiscales.
                 </div>
               </div>
               <button
                 onClick={() => setView('expediente')}
-                style={{ flexShrink:0, border:'1px solid #e6c98a', background:'#fff', color:'#8a6410', fontWeight:700, fontSize:11.5, padding:'5px 11px', borderRadius:8, cursor:'pointer', whiteSpace:'nowrap' }}
+                className="shrink-0 whitespace-nowrap rounded-md border border-[#E6C98A] bg-white px-3 py-1.5 text-[11.5px] font-bold text-[#B5601C] hover:bg-[#FFF8ED]"
               >
                 Completar
               </button>
             </div>
           )}
         </section>
+        )}
 
         {/* ═══════════════════════ OVERVIEW ═══════════════════════ */}
         {view === 'overview' && (
           <>
-            {/* Motor hero */}
-            <section style={{ marginBottom:16, background:'#eef7f1', border:'1px solid #d8ecdf', borderRadius:8, padding:'22px 24px', display:'flex', gap:24, alignItems:'flex-start', flexWrap:'wrap' }}>
-              <div style={{ flex:1, minWidth:220 }}>
-                <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#d4eadb', color:'#3f8f5c', fontSize:10.5, fontWeight:700, letterSpacing:'0.06em', padding:'4px 10px', borderRadius:999, textTransform:'uppercase' }}>
-                  Tu expediente · el motor de tu perfil
-                </div>
-                <h2 style={{ margin:'12px 0 6px', fontSize:19, fontWeight:700, lineHeight:1.25, color:textPrimary }}>
-                  {uploadedTypeIds.size === 0 ? 'Comienza con tu Constancia fiscal' : profileCompletion >= 85 ? '¡Expediente completo!' : 'Sigue completando tu expediente'}
-                </h2>
-                <p style={{ margin:0, fontSize:13.5, lineHeight:1.5, color:textSecondary }}>
-                  {uploadedTypeIds.size === 0
-                    ? 'Con ese documento poblamos la mayoría de tu información.'
-                    : 'Cada documento que subas nos permite verificar tu identidad.'}
-                </p>
-                <div style={{ display:'flex', alignItems:'center', gap:14, marginTop:16, flexWrap:'wrap' }}>
-                  <button
-                    onClick={() => setView('expediente')}
-                    style={{ background:green, color:'#fff', border:'none', fontWeight:700, fontSize:13.5, padding:'10px 18px', borderRadius:6, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}
-                  >
-                    <Upload style={{ width:15, height:15 }} />
-                    {uploadedTypeIds.size === 0 ? 'Subir documentos' : 'Ver expediente'}
-                  </button>
-                  <span style={{ fontSize:13, color:textSecondary, fontWeight:600 }}>
-                    {documentos.filter(d => d.status === 'verified').length} de {SLOTS.filter(s => s.required).length} requeridos
-                  </span>
-                </div>
-              </div>
-              <div style={{ flex:'0 0 auto', display:'flex', flexDirection:'column', gap:7, minWidth:190, maxWidth:280 }}>
-                {[...SLOTS].sort((a,b) => a.label.localeCompare(b.label,'es')).slice(0,4).map(s => {
-                  const slotDocs = documentos.filter(d => (s.tipoIds as readonly number[]).includes(d.tipoId));
-                  const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
-                  const st = best?.status ?? 'missing';
-                  const dotColor = st === 'verified' ? green : st === 'review' ? '#f59e0b' : st === 'rejected' ? '#ef4444' : '#d1d5db';
-                  const badge = st === 'verified' ? { c:'#3f8f5c', bg:'#d4eadb' } : st === 'review' ? { c:'#92400e', bg:'#fef3c7' } : st === 'rejected' ? { c:'#c0392b', bg:'#fef2f2' } : { c:'#6b7280', bg:'#f3f4f6' };
-                  const badgeLabel = st === 'verified' ? 'Aprobado' : st === 'review' ? 'En revisión' : st === 'rejected' ? 'Rechazado' : st === 'expired' ? 'Expirado' : 'Pendiente';
-                  return (
-                    <div key={s.key} style={{ display:'flex', alignItems:'center', gap:8, background:'#fff', border:'1px solid #e2ece6', fontSize:12, fontWeight:600, padding:'7px 11px', borderRadius:6 }}>
-                      <span style={{ width:7, height:7, borderRadius:'50%', background:dotColor, flexShrink:0 }} />
-                      <span style={{ flex:1, color:textPrimary, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span>
-                      <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 6px', borderRadius:5, flexShrink:0, color:badge.c, background:badge.bg }}>{badgeLabel}</span>
+            {/* Motor hero (estilo agente: expediente + estado de secciones) */}
+            {(() => {
+              const docReq = SLOTS.filter(s => s.required);
+              const docAllVerified = docReq.length > 0 && docReq.every(s => documentos.some(d => (s.tipoIds as readonly number[]).includes(d.tipoId) && d.status === 'verified'));
+              const secciones = [
+                { state: docAllVerified ? 'val' : documentos.length > 0 ? 'proc' : 'pend' },
+                { state: persona?.nombre_legal ? 'val' : 'pend' },
+                { state: persona?.regimen ? 'val' : 'pend' },
+                { state: (cuentasBancarias.length === 0 || !cuentasBancarias.every(c => c.evidencia)) ? 'pend' : cuentasBancarias.every(c => c.estatus === 2) ? 'val' : 'proc' },
+              ];
+              const val = secciones.filter(s => s.state === 'val').length;
+              const proc = secciones.filter(s => s.state === 'proc').length;
+              const pend = secciones.filter(s => s.state === 'pend').length;
+              const tally = [
+                { n: val, label: 'validadas',  cls: 'bg-[#E8F5EE] text-[hsl(158_64%_38%)]' },
+                { n: proc, label: 'en proceso', cls: 'bg-[#FBEFD9] text-[#B5730A]' },
+                { n: pend, label: 'pendientes', cls: 'bg-[#EEF0F2] text-[#6B7280]' },
+              ];
+              return (
+                <section className="flex flex-wrap gap-[22px] rounded-md border border-[#CFE9DA] bg-gradient-to-br from-[#F0FAF4] to-[#FBFEFC] p-[22px]">
+                  <div className="min-w-[240px] flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-[hsl(158_64%_38%)]">Tu expediente · el motor de tu activación</div>
+                    <h2 className="mt-2 text-[21px] font-bold leading-[1.25] tracking-[-0.4px] text-[#16331F]">Tu información se construye desde tus documentos.</h2>
+                    <p className="mt-2 text-[13px] font-medium leading-relaxed text-[#3F5A4A]">Cada documento que subes alimenta tu información personal y fiscal. Solo validas lo que ya dijeron.</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-3.5">
+                      <button
+                        onClick={() => setView('expediente')}
+                        className="inline-flex items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                      >
+                        <FileText className="h-4 w-4" /> Gestionar documentos
+                      </button>
+                      <span className="text-[12px] font-semibold tabular-nums text-[#3F5A4A]">{val} de {secciones.length} secciones completadas</span>
                     </div>
-                  );
-                })}
-                <button
-                  onClick={() => setView('expediente')}
-                  style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, background:'none', border:'1px solid #c8e6d0', color:'#3f8f5c', fontWeight:700, fontSize:12, padding:'6px 12px', borderRadius:6, cursor:'pointer', marginTop:2 }}
-                >
-                  Ver todos los documentos <ChevronRight style={{ width:13, height:13 }} />
-                </button>
+                  </div>
+                  <div className="w-[210px] shrink-0 rounded-md border border-[#DCEEE3] bg-white p-[15px]">
+                    <div className="mb-3 text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Estado de secciones</div>
+                    <div className="flex flex-col gap-[11px]">
+                      {tally.map((t) => (
+                        <div key={t.label} className="flex items-center gap-2.5">
+                          <span className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${t.cls}`}>{t.n}</span>
+                          <span className="text-[12px] font-semibold text-[#4B5563]">{t.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              );
+            })()}
+
+            {/* Secciones de tu perfil */}
+            <div>
+              <div className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">
+                Secciones de tu perfil
               </div>
-            </section>
+              <div className="flex flex-col gap-2.5">
+                <ProfileSectionRow
+                  title="Documentos"
+                  description="Sube y consulta tus documentos"
+                  badge={sectionPill(docsAllVerified ? 'complete' : 'pending')}
+                  onClick={() => setView('expediente')}
+                />
+                <ProfileSectionRow
+                  title="Información personal"
+                  description="Identificación y contacto"
+                  badge={sectionPill(persona?.nombre_legal ? 'complete' : 'pending')}
+                  onClick={() => setView('personal')}
+                />
+                <ProfileSectionRow
+                  title="Información fiscal"
+                  description="Régimen, CFDI y dirección"
+                  badge={sectionPill(persona?.regimen ? 'complete' : 'pending')}
+                  onClick={() => setView('fiscal')}
+                />
+                <ProfileSectionRow
+                  title="Cuentas bancarias"
+                  description="Cuentas de dispersión"
+                  badge={sectionPill(cuentasBancarias.length > 0 ? 'complete' : 'pending')}
+                  onClick={() => setView('cuentas')}
+                />
 
-            {/* 2×2 section cards */}
-            <div style={{ display:'grid', gridTemplateColumns: isDesktop ? 'repeat(2,1fr)' : '1fr', gap:14, marginBottom:14 }}>
+                {/* Seguridad - fila; al dar clic abre la modal de cambio de contraseña */}
+                {!isImpersonating && (
+                  <ProfileSectionRow
+                    title="Seguridad"
+                    description="Acceso y contraseña"
+                    onClick={() => setShowChangePw(true)}
+                  />
+                )}
 
-              <SectionCard
-                title="Información personal"
-                subtitle="Identificación y contacto"
-                icon={<User style={{ width:17, height:17, color:green }} />}
-                semLabel={persona?.nombre_legal ? 'Completo' : 'Pendiente'}
-                semDot={persona?.nombre_legal ? green : '#d1d5db'}
-                semColor={persona?.nombre_legal ? '#3f8f5c' : textMuted}
-                rows={[
-                  { label:'Nombre', value:persona?.nombre_legal },
-                  { label:'RFC', value:persona?.rfc },
-                  { label:'CURP', value:persona?.curp },
-                ]}
-                ctas={[
-                  ...(!isImpersonating ? [{ label:'Editar', onClick:openEditPersonal, secondary:true }] : []),
-                  { label:'Ver todo', onClick:() => setView('personal'), secondary:false },
-                ]}
-              />
-
-              <SectionCard
-                title="Información fiscal"
-                subtitle="Régimen, CFDI y dirección"
-                icon={<Building2 style={{ width:17, height:17, color:green }} />}
-                semLabel={persona?.regimen ? 'Completo' : 'Pendiente'}
-                semDot={persona?.regimen ? green : '#d1d5db'}
-                semColor={persona?.regimen ? '#3f8f5c' : textMuted}
-                rows={[
-                  { label:'Régimen', value:regimenDisplay },
-                  { label:'Uso CFDI', value:usoCfdiDisplay },
-                  { label:'CP', value:persona?.direccion_fiscal_codigo_postal?.trim() },
-                ]}
-                ctas={[
-                  ...(!isImpersonating ? [{ label:'Editar', onClick:openEditFiscal, secondary:true }] : []),
-                  { label:'Ver todo', onClick:() => setView('fiscal'), secondary:false },
-                ]}
-              />
-
-              <SectionCard
-                title="Cuentas bancarias"
-                subtitle="Cuentas de dispersión"
-                icon={<CreditCard style={{ width:17, height:17, color:green }} />}
-                semLabel={cuentasBancarias.length > 0 ? `${cuentasBancarias.length} cuenta${cuentasBancarias.length>1?'s':''}` : 'Sin cuentas'}
-                semDot={cuentasBancarias.length > 0 ? green : '#d1d5db'}
-                semColor={cuentasBancarias.length > 0 ? '#3f8f5c' : textMuted}
-                rows={cuentasBancarias.slice(0,3).map(c => ({ label:c.banco, value:c.numeroCuenta ? `****${c.numeroCuenta.slice(-4)}` : null }))}
-                ctas={[
-                  ...(!isImpersonating ? [{ label:'Agregar cuenta', onClick:() => { setAddCuenta({ id_banco:'', cuenta_clabe:'', titular:'' }); setShowAddCuenta(true); }, secondary:true }] : []),
-                  { label:'Ver cuentas', onClick:() => setView('cuentas'), secondary:false },
-                ]}
-              />
-
-              {/* Seguridad card - inline (needs red logout button) */}
-              <section style={{ background:'#fff', border:'1px solid #ededf0', borderRadius:8, padding:'18px 20px', display:'flex', flexDirection:'column' }}>
-                <div style={{ display:'flex', alignItems:'flex-start', gap:11 }}>
-                  <div style={{ width:36, height:36, borderRadius:6, background:'#eaf6ef', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <Shield style={{ width:17, height:17, color:green }} />
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#000' }}>Seguridad</div>
-                    <div style={{ fontSize:12, color:'#9aa0a6', marginTop:2 }}>Contraseña y sesión</div>
-                  </div>
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:'#3f8f5c', flexShrink:0, marginTop:2 }}>
-                    <span style={{ width:7, height:7, borderRadius:'50%', background:green }} /> Activo
-                  </div>
-                </div>
-                <div style={{ marginTop:13, flex:1 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #f0f1f3' }}>
-                    <span style={{ fontSize:12, color:'#575757', fontWeight:500 }}>Contraseña</span>
-                    <span style={{ fontSize:12, fontWeight:600, color:'#000', fontFamily:'monospace', letterSpacing:2 }}>••••••••</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0' }}>
-                    <span style={{ fontSize:12, color:'#575757', fontWeight:500 }}>Sesión</span>
-                    <span style={{ fontSize:12, fontWeight:600, color:green }}>Activa</span>
-                  </div>
-                </div>
-                <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:7 }}>
-                  <button
-                    onClick={isImpersonating ? undefined : () => setShowChangePw(true)}
-                    disabled={isImpersonating}
-                    style={{ width:'100%', border:'1px solid #e0e3e6', background:'#fff', color:'#000', fontWeight:700, fontSize:13.5, padding:'10px', borderRadius:6, cursor:isImpersonating ? 'not-allowed' : 'pointer', opacity:isImpersonating ? 0.4 : 1 }}
-                  >
-                    Cambiar contraseña
-                  </button>
-                  <button
-                    onClick={signOut}
-                    style={{ width:'100%', border:'1px solid #fcdada', background:'#fff9f9', color:'#c0392b', fontWeight:700, fontSize:13.5, padding:'10px', borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}
-                  >
-                    <LogOut style={{ width:14, height:14 }} /> Cerrar sesión
-                  </button>
-                </div>
-              </section>
-
+              </div>
             </div>
           </>
         )}
@@ -1293,64 +1378,125 @@ const ClientePerfil = () => {
         {/* ═══════════════════════ EXPEDIENTE DETAIL ═══════════════════════ */}
         {view === 'expediente' && (
           <section>
-            <BackBtn onClick={() => setView('overview')} />
-            <div style={{ ...card, padding:22 }}>
-              <h2 style={{ margin:'0 0 4px', fontSize:18, fontWeight:700, color:textPrimary }}>Expediente</h2>
-              <p style={{ margin:'0 0 18px', fontSize:13.5, color:textSecondary }}>Sube cada documento; validamos los datos por ti.</p>
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {SLOTS.map((slot, i) => {
-                  const slotDocs = documentos.filter(d => (slot.tipoIds as readonly number[]).includes(d.tipoId));
-                  const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
-                  const status = best?.status ?? 'missing';
-                  const isUploading = uploadingSlot === slot.key;
-                  const hasFile = !!best?.url;
-                  const isCamera = slot.key === 'ine_frente' || slot.key === 'ine_reverso' || slot.key === 'pasaporte';
-                  const dotColor = status === 'verified' ? green : status === 'review' ? '#f59e0b' : status === 'rejected' ? '#ef4444' : '#d1d5db';
-                  const badge = status === 'verified' ? { c:'#3f8f5c', bg:'#eaf6ef' } : status === 'review' ? { c:'#92400e', bg:'#fef3c7' } : status === 'rejected' ? { c:'#c0392b', bg:'#fef2f2' } : { c:'#6b7280', bg:'#f3f4f6' };
-                  // Sin archivo → siempre "Pendiente" (ya no hay "Opcional").
-                  const badgeLabel = status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : 'Pendiente';
-                  return (
-                    <div key={slot.key} style={{ border:'1px solid #eef0f1', borderRadius:6, padding:'13px 15px', display:'flex', alignItems:'center', gap:13 }}>
-                      <span style={{ width:26, height:26, borderRadius:'50%', background:'#f5f6f7', border:'1px solid #ededf0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:textMuted, flexShrink:0 }}>{i+1}</span>
-                      <span style={{ width:7, height:7, borderRadius:'50%', background:dotColor, flexShrink:0 }} />
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:14, fontWeight:700, color:textPrimary }}>{slot.label}</div>
-                        {best?.date && <div style={{ fontSize:11.5, color:textMuted, marginTop:2 }}>Subido el {best.date}</div>}
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-                        <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 8px', borderRadius:6, background:badge.bg, color:badge.c, whiteSpace:'nowrap' }}>{badgeLabel}</span>
-                        <input
-                          ref={(el) => { fileInputRefs.current[slot.key] = el; }}
-                          type="file"
-                          accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
-                          className="hidden"
-                          onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId); e.target.value = ''; }}
-                        />
-                        {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo.
-                            Con archivo → ícono editar (reemplazar), por si se subió uno mal. */}
-                        <button
-                          onClick={() => { if (isCamera) { setCameraMode(slot.key === 'pasaporte' ? 'pasaporte' : 'ine'); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
-                          disabled={isUploading}
-                          title={isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
-                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:isUploading ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-                        >
-                          {isUploading ? <Loader2 style={{ width:15, height:15, color:textSecondary }} className="animate-spin" /> : isCamera ? <Camera style={{ width:15, height:15, color:textSecondary }} /> : hasFile ? <Pencil style={{ width:15, height:15, color:textSecondary }} /> : <Upload style={{ width:15, height:15, color:textSecondary }} />}
-                        </button>
-                        {/* Ojo: solo se muestra si ya hay archivo */}
-                        {hasFile && (
-                          <button
-                            onClick={() => setPreviewDoc({ title:slot.label, url:best!.url! })}
-                            title="Ver documento"
-                            style={{ width:32, height:32, borderRadius:8, border:'1px solid #e6e8eb', background:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-                          >
-                            <Eye style={{ width:15, height:15, color:textSecondary }} />
-                          </button>
-                        )}
-                      </div>
+            <SubHeader title="Documentos" onBack={() => setView('overview')} />
+            <div className="rounded-md border border-[#ECEEF0] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px]">
+              {DOC_GROUPS.map((group) => {
+                const groupSlots = SLOTS
+                  .filter((s) => s.cat === group.key)
+                  .slice()
+                  .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+                return (
+                  <div key={group.key} className="mb-[18px] last:mb-0">
+                    <div className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">{group.label}</div>
+                    <div className="flex flex-col gap-2.5">
+                      {groupSlots.map((slot) => {
+                        const slotDocs = documentos.filter(d => (slot.tipoIds as readonly number[]).includes(d.tipoId));
+                        const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
+                        const status = best?.status ?? 'missing';
+                        const isUploading = uploadingSlot === slot.key;
+                        const hasFile = !!best?.url;
+                        const isCamera = slot.key === 'ine_frente' || slot.key === 'ine_reverso' || slot.key === 'pasaporte';
+                        const badge = status === 'verified' ? { c:'text-[hsl(158_64%_38%)]', bg:'bg-[#E8F5EE]' } : status === 'review' ? { c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' } : status === 'rejected' ? { c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' } : { c:'text-[#6B7280]', bg:'bg-[#F2F4F5]' };
+                        const badgeLabel = status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : 'Pendiente';
+                        return (
+                          <div key={slot.key} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
+                              <FileText className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2.5">
+                                <span className="text-[13px] font-bold text-[#171A1D]">{slot.label}</span>
+                                <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${badge.bg} ${badge.c}`}>{badgeLabel}</span>
+                              </div>
+                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{best?.date ? `Subido el ${best.date}` : 'Sin cargar'}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <input
+                                ref={(el) => { fileInputRefs.current[slot.key] = el; }}
+                                type="file"
+                                accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
+                                className="hidden"
+                                onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId); e.target.value = ''; }}
+                              />
+                              {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo. */}
+                              <button
+                                onClick={() => { if (isCamera) { setCameraMode(slot.key === 'pasaporte' ? 'pasaporte' : 'ine'); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
+                                disabled={isUploading}
+                                title={isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
+                                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCamera ? <Camera className="h-4 w-4" /> : hasFile ? <Pencil className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                              </button>
+                              {hasFile && (
+                                <button
+                                  onClick={() => setPreviewDoc({ title:slot.label, url:best!.url! })}
+                                  title="Ver documento"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Cuenta bancaria - formulario estructurado, va bajo "Fiscal y financiero" */}
+                      {group.key === 'financiero' && (() => {
+                        const bankHasEvidencia = cuentasBancarias.some(c => c.evidencia);
+                        const bankAllEvidencia = cuentasBancarias.length > 0 && cuentasBancarias.every(c => c.evidencia);
+                        const bankAllValid = cuentasBancarias.length > 0 && cuentasBancarias.every(c => c.estatus === 2);
+                        // Sin evidencia no puede ir a revisión (falta la carátula) → Incompleto.
+                        const bankBadge = cuentasBancarias.length === 0
+                          ? { label:'Pendiente', c:'text-[#6B7280]', bg:'bg-[#F2F4F5]' }
+                          : !bankAllEvidencia
+                            ? { label:'Incompleto', c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' }
+                            : bankAllValid
+                              ? { label:'Validada', c:'text-[hsl(158_64%_38%)]', bg:'bg-[#E8F5EE]' }
+                              : { label:'En revisión', c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' };
+                        return (
+                          <div className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
+                              <CreditCard className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2.5">
+                                <span className="text-[13px] font-bold text-[#171A1D]">Cuenta bancaria</span>
+                                <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${bankBadge.bg} ${bankBadge.c}`}>{bankBadge.label}</span>
+                              </div>
+                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">
+                                {cuentasBancarias.length > 0
+                                  ? `${cuentasBancarias.length} cuenta${cuentasBancarias.length > 1 ? 's' : ''} registrada${cuentasBancarias.length > 1 ? 's' : ''}`
+                                  : 'Banco, número de cuenta, CLABE y titular'}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {canEditProfile && (
+                                <button
+                                  onClick={() => { setAddCuenta(EMPTY_CUENTA); setAddEvidencia(null); setBancoSearch(''); setShowBancoList(false); setShowAddCuenta(true); }}
+                                  title="Agregar cuenta bancaria"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </button>
+                              )}
+                              {bankHasEvidencia && (
+                                <button
+                                  onClick={() => setView('cuentas')}
+                                  title="Ver cuentas"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1358,38 +1504,36 @@ const ClientePerfil = () => {
         {/* ═══════════════════════ PERSONAL DETAIL ═══════════════════════ */}
         {view === 'personal' && (
           <section>
-            <BackBtn onClick={() => setView('overview')} />
-            <div style={{ ...card, padding:22 }}>
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
-                <div>
-                  <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:textPrimary }}>Información personal</h2>
-                  <p style={{ margin:'4px 0 0', fontSize:13.5, color:textSecondary }}>Identificación y datos de contacto</p>
-                </div>
-                {!isImpersonating && (
-                  <button onClick={openEditPersonal} style={{ border:'1px solid #e0e3e6', background:'#fff', color:textPrimary, fontWeight:700, fontSize:13, padding:'8px 14px', borderRadius:6, cursor:'pointer' }}>
-                    Editar
+            <SubHeader title="Información personal" onBack={() => setView('overview')} />
+            <div className="rounded-md border border-[#ECEEF0] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px]">
+              {canEditProfile && (
+                <div className="mb-[18px] flex justify-end">
+                  <button onClick={openEditPersonal} className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[12px] font-bold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]">
+                    <Pencil className="h-3.5 w-3.5" /> Editar
                   </button>
-                )}
-              </div>
-              {[
-                { label:'Tipo de persona', value:getTipoPersonaLabel(persona?.tipo_persona) },
-                { label:'Nombre completo', value:persona?.nombre_legal },
-                { label:'RFC con homoclave', value:persona?.rfc, mono:true },
-                { label:'CURP', value:persona?.curp, mono:true },
-                { label:'Teléfono', value:persona?.telefono ? `${persona.clave_pais_telefono || '+52'} ${persona.telefono}` : null },
-                { label:'Correo electrónico', value:persona?.email || profile?.email, note:'No editable' },
-              ].map((f, idx, arr) => (
-                <div key={f.label} style={{ display:'flex', alignItems:'flex-start', gap:14, padding:'12px 0', borderBottom: idx < arr.length-1 ? '1px solid #f0f1f3' : 'none' }}>
-                  <div style={{ flex:'0 0 150px', fontSize:13, fontWeight:600, color:textPrimary }}>{f.label}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    {f.value
-                      ? <span style={{ fontSize:13.5, color:textPrimary, fontFamily:(f as any).mono ? 'monospace' : 'inherit' }}>{f.value}</span>
-                      : <span style={{ fontSize:12, color:textMuted, fontStyle:'italic' }}>Sin dato</span>
-                    }
-                    {f.note && <div style={{ fontSize:11, color:textMuted, marginTop:2 }}>{f.note}</div>}
-                  </div>
                 </div>
-              ))}
+              )}
+              <div className="divide-y divide-[#F2F4F5]">
+                {[
+                  { label:'Tipo de persona', value:getTipoPersonaLabel(persona?.tipo_persona) },
+                  { label:'Nombre completo', value:persona?.nombre_legal },
+                  { label:'RFC con homoclave', value:persona?.rfc, mono:true },
+                  { label:'CURP', value:persona?.curp, mono:true },
+                  { label:'Teléfono', value:persona?.telefono ? `${persona.clave_pais_telefono || '+52'} ${persona.telefono}` : null },
+                  { label:'Correo electrónico', value:persona?.email || profile?.email, note:'No editable' },
+                ].map((f) => (
+                  <div key={f.label} className="flex items-start justify-between gap-4 py-3">
+                    <span className="shrink-0 text-[12px] font-medium text-[#9AA3AD]">{f.label}</span>
+                    <div className="min-w-0 text-right">
+                      {f.value
+                        ? <span className={`text-[12.5px] font-semibold text-[#171A1D] ${(f as any).mono ? 'font-mono tracking-wide' : ''}`}>{f.value}</span>
+                        : <span className="text-[12px] italic text-[#9AA3AD]">Sin registro</span>
+                      }
+                      {f.note && <div className="mt-0.5 text-[10.5px] text-[#9AA3AD]">{f.note}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -1397,41 +1541,36 @@ const ClientePerfil = () => {
         {/* ═══════════════════════ FISCAL DETAIL ═══════════════════════ */}
         {view === 'fiscal' && (
           <section>
-            <BackBtn onClick={() => setView('overview')} />
-            <div style={{ ...card, padding:22 }}>
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
-                <div>
-                  <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:textPrimary }}>Información fiscal</h2>
-                  <p style={{ margin:'4px 0 0', fontSize:13.5, color:textSecondary }}>Régimen, CFDI y dirección fiscal</p>
-                </div>
-                {!isImpersonating && (
-                  <button onClick={openEditFiscal} style={{ border:'1px solid #e0e3e6', background:'#fff', color:textPrimary, fontWeight:700, fontSize:13, padding:'8px 14px', borderRadius:6, cursor:'pointer' }}>
-                    Editar
+            <SubHeader title="Información fiscal" onBack={() => setView('overview')} />
+            <div className="rounded-md border border-[#ECEEF0] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px]">
+              {canEditProfile && (
+                <div className="mb-[18px] flex justify-end">
+                  <button onClick={openEditFiscal} className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[12px] font-bold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]">
+                    <Pencil className="h-3.5 w-3.5" /> Editar
                   </button>
-                )}
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, background:'#fef6e7', border:'1px solid #f4e3bf', color:'#8a6410', fontSize:12.5, fontWeight:500, padding:'9px 13px', borderRadius:6, marginBottom:18 }}>
-                <AlertCircle style={{ width:14, height:14, color:'#c08a14', flexShrink:0 }} /> Tus datos serán validados por el área correspondiente.
-              </div>
-              {[
-                { label:'Régimen fiscal', value:regimenDisplay },
-                { label:'Uso CFDI', value:usoCfdiDisplay },
-                { label:'Código postal', value:persona?.direccion_fiscal_codigo_postal?.trim(), mono:true },
-                { label:'Calle', value:persona?.direccion_fiscal_calle?.trim() },
-                { label:'Núm. exterior', value:persona?.direccion_fiscal_num_ext },
-                { label:'Núm. interior', value:persona?.direccion_fiscal_num_int },
-                { label:'Colonia', value:persona?.direccion_fiscal_colonia },
-              ].map((f, idx, arr) => (
-                <div key={f.label} style={{ display:'flex', alignItems:'flex-start', gap:14, padding:'12px 0', borderBottom: idx < arr.length-1 ? '1px solid #f0f1f3' : 'none' }}>
-                  <div style={{ flex:'0 0 150px', fontSize:13, fontWeight:600, color:textPrimary }}>{f.label}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    {f.value
-                      ? <span style={{ fontSize:13.5, color:textPrimary, fontFamily:(f as any).mono ? 'monospace' : 'inherit' }}>{f.value}</span>
-                      : <span style={{ fontSize:12, color:textMuted, fontStyle:'italic' }}>Sin dato</span>
-                    }
-                  </div>
                 </div>
-              ))}
+              )}
+              <div className="divide-y divide-[#F2F4F5]">
+                {[
+                  { label:'Régimen fiscal', value:regimenDisplay },
+                  { label:'Uso CFDI', value:usoCfdiDisplay },
+                  { label:'Código postal', value:persona?.direccion_fiscal_codigo_postal?.trim(), mono:true },
+                  { label:'Calle', value:persona?.direccion_fiscal_calle?.trim() },
+                  { label:'Núm. exterior', value:persona?.direccion_fiscal_num_ext },
+                  { label:'Núm. interior', value:persona?.direccion_fiscal_num_int },
+                  { label:'Colonia', value:persona?.direccion_fiscal_colonia },
+                ].map((f) => (
+                  <div key={f.label} className="flex items-start justify-between gap-4 py-3">
+                    <span className="shrink-0 text-[12px] font-medium text-[#9AA3AD]">{f.label}</span>
+                    <div className="min-w-0 text-right">
+                      {f.value
+                        ? <span className={`text-[12.5px] font-semibold text-[#171A1D] ${(f as any).mono ? 'font-mono tracking-wide' : ''}`}>{f.value}</span>
+                        : <span className="text-[12px] italic text-[#9AA3AD]">Sin registro</span>
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -1439,43 +1578,46 @@ const ClientePerfil = () => {
         {/* ═══════════════════════ CUENTAS DETAIL ═══════════════════════ */}
         {view === 'cuentas' && (
           <section>
-            <BackBtn onClick={() => setView('overview')} />
-            <div style={{ ...card, padding:22 }}>
-              <div style={{ marginBottom:18 }}>
-                <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:textPrimary }}>Cuentas bancarias</h2>
-                <p style={{ margin:'4px 0 0', fontSize:13.5, color:textSecondary }}>SOZU deposita directamente a estas cuentas.</p>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, background:'#eef4fb', border:'1px solid #cfe0f3', color:'#2c5d8a', fontSize:12.5, fontWeight:500, padding:'9px 13px', borderRadius:6, marginBottom:18 }}>
-                <Shield style={{ width:14, height:14, flexShrink:0 }} /> Por tu seguridad, toda alta o cambio de cuenta se notifica de inmediato.
+            <SubHeader title="Cuentas bancarias" onBack={() => setView('overview')} />
+            <div className="rounded-md border border-[#ECEEF0] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px]">
+              <div className="mb-[18px] flex items-start gap-3 rounded-md border border-[#C9DCF2] bg-[#EAF2FB] px-4 py-3 text-[12px] font-medium text-[#2A557F]">
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Por tu seguridad, toda alta o cambio de cuenta se notifica de inmediato.
               </div>
               {cuentasBancarias.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'28px 16px', background:'#f7f8f9', borderRadius:6, border:'1px dashed #dfe2e4', marginBottom:14 }}>
-                  <div style={{ fontSize:15, fontWeight:700, color:textPrimary }}>Sin cuentas registradas.</div>
-                  <div style={{ fontSize:13, color:textMuted, marginTop:5 }}>Agrega tu primera cuenta bancaria.</div>
+                <div className="mb-3.5 rounded-md border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center">
+                  <div className="text-[13px] font-bold text-[#171A1D]">Sin cuentas registradas.</div>
+                  <div className="mt-1 text-[12.5px] font-medium text-[#9AA3AD]">Regístrala en Documentos → Cuenta bancaria.</div>
                 </div>
               ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:14 }}>
+                <div className="mb-3.5 flex flex-col gap-2.5">
                   {cuentasBancarias.map(c => (
-                    <div key={c.id} style={{ border:'1px solid #eef0f1', borderRadius:6, padding:'15px', display:'flex', alignItems:'center', gap:13 }}>
-                      <div style={{ flexShrink:0, width:40, height:40, borderRadius:6, background:'#eef4fb', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                        <CreditCard style={{ width:19, height:19, color:'#2c5d8a' }} />
+                    <div key={c.id} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white p-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#EAF2FB] text-[#2A6FDB]">
+                        <CreditCard className="h-5 w-5" />
                       </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:15, fontWeight:700, color:textPrimary }}>{c.banco}</div>
-                        {c.numeroCuenta && <div style={{ fontSize:13, color:textSecondary, marginTop:3, fontFamily:'monospace' }}>****{c.numeroCuenta.slice(-4)}</div>}
-                        {c.titular && <div style={{ fontSize:12, color:textMuted, marginTop:2 }}>{c.titular}</div>}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] font-bold text-[#171A1D]">{c.banco}</div>
+                        {c.numeroCuenta && <div className="mt-1 font-mono text-[13px] font-semibold tracking-[1px] text-[#4B5563]">****{c.numeroCuenta.slice(-4)}</div>}
+                        {c.titular && <div className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">Titular: {c.titular}</div>}
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eaf6ef', color:'#3f8f5c', fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999 }}>
-                          <span style={{ width:6, height:6, borderRadius:'50%', background:green }} /> Activa
-                        </span>
-                        {!isImpersonating && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        {(() => {
+                          // Sin evidencia (carátula) → Incompleto; no puede ir a revisión.
+                          const b = !c.evidencia ? { l:'Incompleto', c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' }
+                                  : c.estatus === 2 ? { l:'Validada', c:'text-[hsl(158_64%_38%)]', bg:'bg-[#E8F5EE]' }
+                                  : c.estatus === 3 ? { l:'Rechazada', c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' }
+                                  : { l:'En revisión', c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' };
+                          return (
+                            <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${b.bg} ${b.c}`}>{b.l}</span>
+                          );
+                        })()}
+                        {c.evidencia && (
                           <button
-                            onClick={() => openEditCuenta(c)}
-                            style={{ flexShrink:0, width:32, height:32, borderRadius:6, border:'1px solid #e0e3e6', background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}
-                            title="Editar cuenta"
+                            onClick={() => setPreviewDoc({ title:`Evidencia · ${c.banco}`, url:c.evidencia! })}
+                            title="Ver evidencia"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                           >
-                            <Pencil style={{ width:14, height:14, color:'#575757' }} />
+                            <Eye className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -1483,14 +1625,9 @@ const ClientePerfil = () => {
                   ))}
                 </div>
               )}
-              {!isImpersonating && (
-                <button
-                  onClick={() => { setAddCuenta({ id_banco:'', cuenta_clabe:'', titular:'' }); setShowAddCuenta(true); }}
-                  style={{ width:'100%', background:'#57ae75', color:'#fff', border:'none', fontWeight:700, fontSize:13.5, padding:'11px', borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}
-                >
-                  Agregar cuenta bancaria
-                </button>
-              )}
+              <div className="pt-1 text-center text-[12px] font-medium text-[#9AA3AD]">
+                Para registrar una cuenta, ve a <button onClick={() => setView('expediente')} className="font-bold text-[hsl(158_64%_38%)]">Documentos → Cuenta bancaria</button>.
+              </div>
             </div>
           </section>
         )}
@@ -1515,7 +1652,7 @@ const ClientePerfil = () => {
                 </FormField>
                 <FormField label="RFC con homoclave">
                   <input
-                    className={`${INPUT_CLS} font-mono tracking-wider`}
+                    className={`${INPUT_CLS} tracking-wider`}
                     value={editPersonal.rfc}
                     onChange={(e) => setEditPersonal(f => ({ ...f, rfc: e.target.value.toUpperCase() }))}
                     placeholder="AAAA######AAA"
@@ -1524,7 +1661,7 @@ const ClientePerfil = () => {
                 </FormField>
                 <FormField label="CURP">
                   <input
-                    className={`${INPUT_CLS} font-mono tracking-wider`}
+                    className={`${INPUT_CLS} tracking-wider`}
                     value={editPersonal.curp}
                     onChange={(e) => setEditPersonal(f => ({ ...f, curp: e.target.value.toUpperCase() }))}
                     placeholder="18 caracteres"
@@ -1532,11 +1669,11 @@ const ClientePerfil = () => {
                   />
                 </FormField>
                 <FormField label="Teléfono">
-                  <div className="flex h-11 rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-ring transition-shadow">
+                  <div className="flex h-11 rounded-md border border-[#ECEEF0] bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[hsl(158_64%_38%)]/30 transition-shadow">
                     <select
                       value={editPersonal.clave_pais_telefono}
                       onChange={(e) => setEditPersonal(f => ({ ...f, clave_pais_telefono: e.target.value }))}
-                      className="bg-transparent border-r border-input px-3 text-sm font-mono text-foreground focus:outline-none appearance-none cursor-pointer shrink-0"
+                      className="bg-transparent border-r border-[#ECEEF0] px-3 text-sm text-[#171A1D] focus:outline-none appearance-none cursor-pointer shrink-0"
                     >
                       <option value="+52">🇲🇽 +52</option>
                       <option value="+1">🇺🇸 +1</option>
@@ -1569,13 +1706,13 @@ const ClientePerfil = () => {
           );
           return isDesktop ? (
             <Dialog open={showEditPersonal} onOpenChange={(v) => !v && onClose()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+              <DialogContent style={SYS_FONT} className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
                 {content}
               </DialogContent>
             </Dialog>
           ) : (
             <Sheet open={showEditPersonal} onOpenChange={(v) => !v && onClose()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>
@@ -1613,7 +1750,7 @@ const ClientePerfil = () => {
                 </FormField>
                 <FormField label="Código postal">
                   <input
-                    className={`${INPUT_CLS} font-mono`}
+                    className={`${INPUT_CLS}`}
                     value={editFiscal.direccion_fiscal_codigo_postal}
                     onChange={(e) => setEditFiscal(f => ({ ...f, direccion_fiscal_codigo_postal: e.target.value }))}
                     placeholder="00000"
@@ -1664,13 +1801,13 @@ const ClientePerfil = () => {
           );
           return isDesktop ? (
             <Dialog open={showEditFiscal} onOpenChange={(v) => !v && onClose()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+              <DialogContent style={SYS_FONT} className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
                 {content}
               </DialogContent>
             </Dialog>
           ) : (
             <Sheet open={showEditFiscal} onOpenChange={(v) => !v && onClose()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>
@@ -1713,13 +1850,13 @@ const ClientePerfil = () => {
           );
           return isDesktop ? (
             <Dialog open={showChangePw} onOpenChange={(v) => !v && closePw()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+              <DialogContent style={SYS_FONT} className="p-0 max-w-md flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
                 {content}
               </DialogContent>
             </Dialog>
           ) : (
             <Sheet open={showChangePw} onOpenChange={(v) => !v && closePw()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>
@@ -1764,13 +1901,13 @@ const ClientePerfil = () => {
           );
           return isDesktop ? (
             <Dialog open={showPwAuth} onOpenChange={(v) => !v && onClose()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+              <DialogContent style={SYS_FONT} className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
                 {content}
               </DialogContent>
             </Dialog>
           ) : (
             <Sheet open={showPwAuth} onOpenChange={(v) => !v && onClose()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>
@@ -1781,13 +1918,15 @@ const ClientePerfil = () => {
             MODAL - Agregar cuenta bancaria
         ══════════════════════════════════════════════ */}
         {(() => {
-          const onClose = () => { setShowAddCuenta(false); setAddCuenta({ id_banco:'', cuenta_clabe:'', titular:'' }); };
+          const onClose = () => { setShowAddCuenta(false); setAddCuenta(EMPTY_CUENTA); setAddEvidencia(null); };
+          const personaNombre = persona?.nombre_legal || '';
+          const titularIsSame = !!personaNombre && addCuenta.titular.trim() === personaNombre.trim();
           const content = (
             <>
-              <ModalHeader icon={CreditCard} title="Agregar cuenta bancaria" subtitle="SOZU usará esta cuenta para depósitos" onClose={onClose} />
+              <ModalHeader icon={CreditCard} title="Nueva cuenta bancaria" subtitle="SOZU usará esta cuenta para depósitos" onClose={onClose} />
               <div className="px-5 pt-4 pb-2 space-y-4 overflow-y-auto flex-1">
                 <FormField label="Banco *">
-                  <div style={{ position:'relative' }}>
+                  <div className="relative">
                     <input
                       className={INPUT_CLS}
                       value={addCuenta.id_banco
@@ -1799,15 +1938,13 @@ const ClientePerfil = () => {
                       onBlur={() => setTimeout(() => setShowBancoList(false), 150)}
                     />
                     {showBancoList && (
-                      <div style={{ border:'1px solid #e0e3e6', borderRadius:6, marginTop:4, maxHeight:240, overflowY:'auto', background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
+                      <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-[#ECEEF0] bg-white shadow-lg">
                         {bancosOptions
                           .filter(b => !bancoSearch || b.nombre.toLowerCase().includes(bancoSearch.toLowerCase()))
                           .map(b => (
                             <button key={b.id} type="button"
                               onMouseDown={() => { setAddCuenta(f => ({ ...f, id_banco: String(b.id) })); setBancoSearch(''); setShowBancoList(false); }}
-                              style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 12px', fontSize:14, fontWeight:500,
-                                background: String(b.id) === addCuenta.id_banco ? '#eaf6ef' : 'transparent',
-                                color:'#000', border:'none', cursor:'pointer' }}
+                              className={`block w-full px-3 py-2.5 text-left text-sm transition-colors ${String(b.id) === addCuenta.id_banco ? 'bg-[#E8F5EE] text-[hsl(158_64%_38%)] font-semibold' : 'text-[#171A1D] hover:bg-[#F6F7F8]'}`}
                             >
                               {b.nombre}
                             </button>
@@ -1816,17 +1953,47 @@ const ClientePerfil = () => {
                     )}
                   </div>
                 </FormField>
-                <FormField label="CLABE interbancaria *">
+                <FormField label="Número de cuenta *">
                   <input
-                    className={`${INPUT_CLS} font-mono tracking-wider`}
-                    value={addCuenta.cuenta_clabe}
-                    onChange={(e) => setAddCuenta(f => ({ ...f, cuenta_clabe: e.target.value.replace(/\D/g,'') }))}
-                    placeholder="18 dígitos"
-                    maxLength={18}
-                    inputMode="numeric"
+                    className={`${INPUT_CLS} tracking-wider`}
+                    value={addCuenta.numero_cuenta}
+                    onChange={(e) => setAddCuenta(f => ({ ...f, numero_cuenta: e.target.value.replace(/[^0-9A-Za-z]/g,'') }))}
+                    placeholder="Entre 8 y 34 caracteres"
+                    maxLength={34}
                   />
                 </FormField>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField label="CLABE">
+                    <input
+                      className={`${INPUT_CLS} tracking-wider`}
+                      value={addCuenta.cuenta_clabe}
+                      onChange={(e) => setAddCuenta(f => ({ ...f, cuenta_clabe: e.target.value.replace(/\D/g,'') }))}
+                      placeholder="18 dígitos (opcional)"
+                      maxLength={18}
+                      inputMode="numeric"
+                    />
+                  </FormField>
+                  <FormField label="Código SWIFT">
+                    <input
+                      className={`${INPUT_CLS} tracking-wider uppercase`}
+                      value={addCuenta.cuenta_swift}
+                      onChange={(e) => setAddCuenta(f => ({ ...f, cuenta_swift: e.target.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase() }))}
+                      placeholder="8 u 11 caracteres (opcional)"
+                      maxLength={11}
+                    />
+                  </FormField>
+                </div>
                 <FormField label="Titular de la cuenta *">
+                  {personaNombre && (
+                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-[#6B7280]">
+                      <input
+                        type="checkbox"
+                        checked={titularIsSame}
+                        onChange={(e) => setAddCuenta(f => ({ ...f, titular: e.target.checked ? personaNombre : '' }))}
+                      />
+                      El titular es {personaNombre}
+                    </label>
+                  )}
                   <input
                     className={INPUT_CLS}
                     value={addCuenta.titular}
@@ -1834,9 +2001,23 @@ const ClientePerfil = () => {
                     placeholder="Nombre completo del titular"
                   />
                 </FormField>
+                <FormField label="Evidencia *">
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-[#D6DBDF] px-3 py-[18px] text-center transition-colors hover:border-[hsl(158_64%_38%)]">
+                    <Upload className="h-[18px] w-[18px] text-[#9AA3AD]" />
+                    <span className={`text-[12.5px] ${addEvidencia ? 'font-semibold text-[#171A1D]' : 'font-medium text-[#9AA3AD]'}`}>
+                      {addEvidencia ? addEvidencia.name : 'Sube la carátula de tu estado de cuenta'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) setAddEvidencia(f); e.target.value = ''; }}
+                    />
+                  </label>
+                </FormField>
               </div>
-              <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-border/50 shrink-0">
-                {(addCuenta.id_banco && addCuenta.cuenta_clabe.length === 18 && addCuenta.titular)
+              <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-[#ECEEF0] shrink-0">
+                {(addCuenta.id_banco && addCuenta.numero_cuenta.trim().length >= 8 && addCuenta.titular.trim() && addEvidencia)
                   ? <PrimaryBtn onClick={handleAddCuenta} loading={savingCuenta} label="Guardar cuenta" />
                   : <GrayBtn label="Guardar cuenta" />}
                 <CancelBtn onClick={onClose} />
@@ -1845,94 +2026,13 @@ const ClientePerfil = () => {
           );
           return isDesktop ? (
             <Dialog open={showAddCuenta} onOpenChange={(v) => !v && onClose()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+              <DialogContent style={SYS_FONT} className="p-0 max-w-xl flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
                 {content}
               </DialogContent>
             </Dialog>
           ) : (
             <Sheet open={showAddCuenta} onOpenChange={(v) => !v && onClose()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
-                {content}
-              </SheetContent>
-            </Sheet>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════
-            MODAL - Editar cuenta bancaria
-        ══════════════════════════════════════════════ */}
-        {(() => {
-          const onClose = () => { setShowEditCuenta(false); setEditCuentaId(null); };
-          const content = (
-            <>
-              <ModalHeader icon={CreditCard} title="Editar cuenta bancaria" subtitle="Corrige los datos de tu cuenta" onClose={onClose} />
-              <div className="px-5 pt-4 pb-2 space-y-4 overflow-y-auto flex-1">
-                <FormField label="Banco *">
-                  <div style={{ position:'relative' }}>
-                    <input
-                      className={INPUT_CLS}
-                      value={editCuenta.id_banco
-                        ? (bancosOptions.find(b => String(b.id) === editCuenta.id_banco)?.nombre || '')
-                        : editBancoSearch}
-                      placeholder="Buscar banco..."
-                      onFocus={() => setShowEditBancoList(true)}
-                      onChange={(e) => { setEditBancoSearch(e.target.value); setEditCuenta(f => ({ ...f, id_banco: '' })); setShowEditBancoList(true); }}
-                      onBlur={() => setTimeout(() => setShowEditBancoList(false), 150)}
-                    />
-                    {showEditBancoList && (
-                      <div style={{ border:'1px solid #e0e3e6', borderRadius:6, marginTop:4, maxHeight:240, overflowY:'auto', background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}>
-                        {bancosOptions
-                          .filter(b => !editBancoSearch || b.nombre.toLowerCase().includes(editBancoSearch.toLowerCase()))
-                          .map(b => (
-                            <button key={b.id} type="button"
-                              onMouseDown={() => { setEditCuenta(f => ({ ...f, id_banco: String(b.id) })); setEditBancoSearch(''); setShowEditBancoList(false); }}
-                              style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 12px', fontSize:14, fontWeight:500,
-                                background: String(b.id) === editCuenta.id_banco ? '#eaf6ef' : 'transparent',
-                                color:'#000', border:'none', cursor:'pointer' }}
-                            >
-                              {b.nombre}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                </FormField>
-                <FormField label="CLABE interbancaria *">
-                  <input
-                    className={`${INPUT_CLS} font-mono tracking-wider`}
-                    value={editCuenta.cuenta_clabe}
-                    onChange={(e) => setEditCuenta(f => ({ ...f, cuenta_clabe: e.target.value.replace(/\D/g,'') }))}
-                    placeholder="18 dígitos"
-                    maxLength={18}
-                    inputMode="numeric"
-                  />
-                </FormField>
-                <FormField label="Titular de la cuenta *">
-                  <input
-                    className={INPUT_CLS}
-                    value={editCuenta.titular}
-                    onChange={(e) => setEditCuenta(f => ({ ...f, titular: e.target.value }))}
-                    placeholder="Nombre completo del titular"
-                  />
-                </FormField>
-              </div>
-              <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-border/50 shrink-0">
-                {(editCuenta.id_banco && editCuenta.cuenta_clabe.length === 18 && editCuenta.titular)
-                  ? <PrimaryBtn onClick={handleSaveEditCuenta} loading={savingEditCuenta} label="Guardar cambios" />
-                  : <GrayBtn label="Guardar cambios" />}
-                <CancelBtn onClick={onClose} />
-              </div>
-            </>
-          );
-          return isDesktop ? (
-            <Dialog open={showEditCuenta} onOpenChange={(v) => !v && onClose()}>
-              <DialogContent className="p-0 max-w-sm flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
-                {content}
-              </DialogContent>
-            </Dialog>
-          ) : (
-            <Sheet open={showEditCuenta} onOpenChange={(v) => !v && onClose()}>
-              <SheetContent side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>
@@ -1945,14 +2045,14 @@ const ClientePerfil = () => {
 
         {isDesktop ? (
           <Dialog open={!!previewDoc} onOpenChange={(v) => { if (!v) setPreviewDoc(null); }}>
-            <DialogContent className="p-0 max-w-3xl h-[85vh] flex flex-col [&>button:last-child]:hidden">
+            <DialogContent style={SYS_FONT} className="p-0 max-w-3xl h-[85vh] flex flex-col [&>button:last-child]:hidden">
               {previewDoc && (
                 <>
                   <DocViewerHeader doc={previewDoc} />
                   <DocViewerBody doc={previewDoc} />
                   <div className="px-4 pb-5 pt-3 border-t border-border/50 flex gap-2 shrink-0">
                     <button onClick={() => downloadDocFile(previewDoc.url, previewDoc.title)}
-                      className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-emerald bg-emerald-pale hover:opacity-80 rounded-md transition-opacity">
+                      className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-[hsl(158_64%_38%)] bg-[#E8F5EE] hover:opacity-80 rounded-md transition-opacity">
                       <Download className="w-4 h-4" />
                       Descargar
                     </button>
@@ -1967,14 +2067,14 @@ const ClientePerfil = () => {
           </Dialog>
         ) : (
           <Sheet open={!!previewDoc} onOpenChange={(v) => { if (!v) setPreviewDoc(null); }}>
-            <SheetContent side="bottom" className="max-h-[78dvh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden">
+            <SheetContent style={SYS_FONT} side="bottom" className="max-h-[78dvh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden">
               {previewDoc && (
                 <>
                   <DocViewerHeader doc={previewDoc} />
                   <DocViewerBody doc={previewDoc} />
                   <div className="px-4 pb-8 pt-3 border-t border-border/50 flex gap-2 shrink-0">
                     <button onClick={() => downloadDocFile(previewDoc.url, previewDoc.title)}
-                      className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-emerald bg-emerald-pale hover:opacity-80 rounded-md transition-opacity">
+                      className="flex-1 h-10 flex items-center justify-center gap-2 text-sm font-semibold text-[hsl(158_64%_38%)] bg-[#E8F5EE] hover:opacity-80 rounded-md transition-opacity">
                       <Download className="w-4 h-4" />
                       Descargar
                     </button>
@@ -1988,6 +2088,124 @@ const ClientePerfil = () => {
             </SheetContent>
           </Sheet>
         )}
+
+        {/* ══════════════════════════════════════════════
+            MODAL - Foto de perfil (bucket `avatar`)
+        ══════════════════════════════════════════════ */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoFileSelect}
+        />
+        {(() => {
+          const content = !pendingFile ? (
+            /* ── Fase 1: Opciones ── */
+            <>
+              <div className="flex flex-col items-center gap-2 bg-[hsl(158_64%_38%)] px-5 pt-5 pb-6 sm:pt-7 sm:pb-8">
+                <p className="text-center text-[14px] sm:text-[15px] font-semibold uppercase tracking-wide text-white/80">Foto de perfil</p>
+                <div className="relative mt-2 sm:mt-3">
+                  {clienteUsuario?.foto_perfil_url ? (
+                    <img
+                      src={normalizeAvatarUrl(clienteUsuario.foto_perfil_url)}
+                      alt={displayName}
+                      className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl"
+                    />
+                  ) : (
+                    <div className="flex h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 items-center justify-center rounded-full bg-white/20 text-2xl sm:text-3xl font-bold text-white ring-[3px] ring-white/40 shadow-xl">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[13px] sm:text-sm font-medium leading-none text-white/90">{displayName}</p>
+              </div>
+              <div className="flex flex-col gap-1 px-3 sm:px-4 py-3 sm:py-4">
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className="flex w-full items-center gap-3 rounded-md bg-[hsl(158_64%_38%)]/10 px-3 sm:px-4 min-h-[52px] text-left transition-colors hover:bg-[hsl(158_64%_38%)]/[0.15]"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(158_64%_38%)]/15">
+                    <Upload className="h-4 w-4 text-[hsl(158_64%_38%)]" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[hsl(158_64%_38%)]">{clienteUsuario?.foto_perfil_url ? 'Cambiar foto' : 'Cargar foto'}</p>
+                    <p className="mt-0.5 text-[11px] text-[hsl(158_64%_38%)]/60">JPG, PNG o WebP</p>
+                  </div>
+                </button>
+                {clienteUsuario?.foto_perfil_url && (
+                  <button
+                    onClick={handlePhotoDelete}
+                    disabled={deletingPhoto}
+                    className="flex w-full items-center gap-3 rounded-md bg-red-50 px-3 sm:px-4 min-h-[52px] text-left transition-colors hover:bg-red-100 disabled:opacity-50"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100">
+                      {deletingPhoto ? <Loader2 className="h-4 w-4 animate-spin text-red-500" /> : <Trash2 className="h-4 w-4 text-red-500" />}
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-red-700">Eliminar foto</p>
+                      <p className="mt-0.5 text-[11px] text-red-400">Vuelves a mostrar tu inicial</p>
+                    </div>
+                  </button>
+                )}
+                <button
+                  onClick={closePhotoModal}
+                  className="mt-0.5 min-h-[44px] w-full rounded-md px-4 text-center text-sm text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            /* ── Fase 2: Vista previa y confirmar ── */
+            <>
+              <div className="flex flex-col items-center gap-2 bg-[hsl(158_64%_38%)] px-5 pt-5 pb-6 sm:pt-7 sm:pb-8">
+                <p className="text-center text-[14px] sm:text-[15px] font-semibold uppercase tracking-wide text-white/80">Vista previa</p>
+                <div className="relative mt-2 sm:mt-3">
+                  <img
+                    src={previewUrl!}
+                    alt="Vista previa"
+                    className="relative z-10 h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl"
+                  />
+                </div>
+                <p className="text-center text-[12px] sm:text-[13px] leading-snug text-white/70">Así se verá tu foto de perfil</p>
+              </div>
+              <div className="flex flex-col gap-2 px-3 sm:px-4 pt-3 sm:pt-4 pb-4 sm:pb-5">
+                <button
+                  onClick={handlePhotoConfirm}
+                  disabled={uploadingPhoto}
+                  className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {uploadingPhoto ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</>
+                  ) : (
+                    <><Check className="h-4 w-4" strokeWidth={2.5} /> Guardar foto</>
+                  )}
+                </button>
+                <button
+                  onClick={() => { setPendingFile(null); if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); } }}
+                  disabled={uploadingPhoto}
+                  className="min-h-[44px] w-full rounded-md text-sm text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50"
+                >
+                  Volver
+                </button>
+              </div>
+            </>
+          );
+          return isDesktop ? (
+            <Dialog open={showPhotoModal} onOpenChange={(v) => { if (!v) closePhotoModal(); }}>
+              <DialogContent style={SYS_FONT} className="w-[calc(100vw-2rem)] sm:max-w-[360px] p-0 overflow-hidden rounded-md [&>button:last-child]:hidden">
+                {content}
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <Sheet open={showPhotoModal} onOpenChange={(v) => { if (!v) closePhotoModal(); }}>
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 overflow-hidden rounded-t-2xl [&>button:last-child]:hidden">
+                {content}
+              </SheetContent>
+            </Sheet>
+          );
+        })()}
 
         <ConfirmDataModal
           data={confirmDoc}
@@ -2043,7 +2261,7 @@ const ConfirmDataModal = ({
 
   return (
     <Dialog open={!!data} onOpenChange={(v) => { if (!v && !saving) onCancel(); }}>
-      <DialogContent className="p-0 max-w-md flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+      <DialogContent style={{ fontFamily: 'system-ui,-apple-system,sans-serif' }} className="p-0 max-w-md flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
         <div style={{ padding: "20px 22px 12px" }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>{titulo}</h3>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
