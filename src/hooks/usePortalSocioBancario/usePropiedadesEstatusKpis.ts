@@ -37,6 +37,9 @@ export function usePropiedadesEstatusKpis(
 }
 
 async function fetchKpis(idProyecto: number | null): Promise<PropiedadesEstatusKpis> {
+  // TODO RLS: la frontera real (un socio bancario solo lee su(s) desarrollo(s)
+  // asignado(s)) la debe hacer cumplir el RLS de Jorge por id_proyecto activo.
+  // Hoy el scope vive en la app (idProyecto viene de useSocioProyecto).
   let edificioModeloIds: number[] | null = null;
 
   if (idProyecto !== null) {
