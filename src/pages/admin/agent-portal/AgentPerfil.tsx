@@ -14,9 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import {
   FileText, Receipt, Landmark, GraduationCap,
-  Check, AlertTriangle, ChevronRight, Loader2,
-  Camera, Trash2, Upload, ArrowLeft, Eye, Pencil, Plus, UploadCloud, RotateCcw, Lock
+  Check, AlertTriangle, Loader2,
+  Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, RotateCcw
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -24,6 +25,26 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
+import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { validateCSFPdf } from "@/utils/pdfDocumentValidators";
+import { extractCSFFields } from "@/utils/pdfDocumentExtractors";
+
+GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+
+/** Extrae el texto de un PDF (constancia SAT) en el navegador con pdf.js. */
+async function extractPdfText(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const pdf = await getDocument({ data: buffer }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((it: any) => ("str" in it ? it.str : "")).join(" "));
+  }
+  return pages.join("\n").trim();
+}
 
 const ACTIVATION_BLOCKS = [
   { 
@@ -302,13 +323,13 @@ function SimpleCameraCaptureDialog({ open, onOpenChange, personaId, titulo, step
                   <RotateCcw className="h-4 w-4" /> Repetir
                 </button>
                 <button onClick={cont} disabled={uploading}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50">
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" strokeWidth={2.5} />} Continuar
                 </button>
               </>
             ) : (
               <button onClick={capture} disabled={!ready}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-[13px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50">
                 <Camera className="h-4 w-4" /> Capturar
               </button>
             )}
@@ -318,32 +339,6 @@ function SimpleCameraCaptureDialog({ open, onOpenChange, personaId, titulo, step
     </Dialog>
   );
 }
-// Fila compartida de "Secciones de tu perfil" (Documentos + etapas). Un solo estilo.
-function ProfileSectionRow({ title, description, badge, onClick }: {
-  title: string;
-  description: string;
-  badge?: { label: string; color: string; bg: string } | null;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px] text-left hover:border-[#CBD2D9]"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-[13.5px] font-bold text-[#171A1D]">{title}</span>
-          {badge && (
-            <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>{badge.label}</span>
-          )}
-        </div>
-        <p className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">{description}</p>
-      </div>
-      <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#9AA3AD]" strokeWidth={2} />
-    </button>
-  );
-}
-
 const AgentPerfil = () => {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
@@ -533,25 +528,6 @@ const AgentPerfil = () => {
   });
 
   // Fetch agency name for this agent
-  const { data: agencyName } = useQuery({
-    queryKey: ['agent-agency', personaId],
-    queryFn: async () => {
-      if (!personaId) return null;
-      const { data } = await supabase
-        .from('entidades_relacionadas')
-        .select('personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_legal)')
-        .eq('id_persona', personaId)
-        .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .not('id_persona_duena_lead', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      return (data?.personas as any)?.nombre_legal || null;
-    },
-    enabled: !!personaId,
-    staleTime: Infinity,
-  });
-
   // Datos asignados por SOZU (solo lectura): comisión, tipo de relación, líder, alta.
   const { data: sozuInfo } = useQuery({
     queryKey: ['agent-sozu-info', personaId],
@@ -582,11 +558,31 @@ const AgentPerfil = () => {
   const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training'>('overview');
   const [docDetail, setDocDetail] = useState<typeof EXPEDIENTE_DOCS[number] | null>(null);
   const [viewer, setViewer] = useState<{ url: string; nombre: string } | null>(null);
+  // CSF: datos extraídos para confirmar/editar antes de guardar
+  const [csfConfirm, setCsfConfirm] = useState<{ file: File; fields: { key: string; label: string; value: string; personaCol: string | null }[] } | null>(null);
+  const [csfEdit, setCsfEdit] = useState<Record<string, string>>({});
+  const [savingCsf, setSavingCsf] = useState(false);
+  useEffect(() => {
+    if (csfConfirm) {
+      const init: Record<string, string> = {};
+      csfConfirm.fields.forEach((f) => { init[f.key] = f.value; });
+      setCsfEdit(init);
+    }
+  }, [csfConfirm]);
+  // Catálogo de régimen fiscal (para mapear el texto de la CSF → id que guarda personas.regimen)
+  const { data: regimenCatalog = [] } = useQuery({
+    queryKey: ["agent-regimen-catalog"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("regimen").select("id, nombre").eq("activo", true).order("id");
+      return (data || []) as { id: number; nombre: string }[];
+    },
+  });
   const [securityOpen, setSecurityOpen] = useState(false);
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
   const [savingPw, setSavingPw] = useState(false);
+  const [pwShow, setPwShow] = useState<{ current: boolean; nueva: boolean; confirm: boolean }>({ current: false, nueva: false, confirm: false });
 
   const changePassword = async () => {
     if (pwNew.length < 6) { toast.error('La nueva contraseña debe tener al menos 6 caracteres.'); return; }
@@ -668,11 +664,6 @@ const AgentPerfil = () => {
     }
   };
 
-  const darDeBajaCuenta = async (id: number) => {
-    await (supabase as any).from('cuentas_bancarias').update({ activo: false }).eq('id', id);
-    queryClient.invalidateQueries({ queryKey: ['agent-perfil-bancos', personaId] });
-  };
-
   // Subida directa de PDF (constancia fiscal) → documentos, pendiente de validación.
   const [cameraDoc, setCameraDoc] = useState<{ titulo: string; steps: { tipo: number; label: string }[] } | null>(null);
   // INE = frente(2)+reverso(3) en un solo flujo. Pasaporte(4) independiente.
@@ -685,8 +676,9 @@ const AgentPerfil = () => {
     }
   };
   const [uploadingDoc, setUploadingDoc] = useState(false);
-  const uploadDocPdf = async (file: File, tipo: number) => {
+  const uploadDocPdf = async (file: File, tipo: number, opts?: { estatus?: number; personaUpdates?: Record<string, string> }) => {
     if (!personaId) { toast.error('Tu usuario no tiene un perfil de persona asociado.'); return; }
+    const estatus = opts?.estatus ?? 1;
     setUploadingDoc(true);
     try {
       const path = `expediente/${personaId}/${tipo}_${Date.now()}_${file.name}`;
@@ -696,16 +688,85 @@ const AgentPerfil = () => {
       await (supabase as any).from('documentos').update({ activo: false })
         .eq('id_persona', personaId).eq('id_tipo_documento', tipo).eq('activo', true);
       const { error: insErr } = await (supabase as any).from('documentos').insert({
-        url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: 1,
+        url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: estatus,
       });
       if (insErr) throw insErr;
+      // Captura de datos confirmados (CSF) en el perfil.
+      if (opts?.personaUpdates && Object.keys(opts.personaUpdates).length > 0) {
+        const { error: pErr } = await (supabase as any).from('personas').update(opts.personaUpdates).eq('id', personaId);
+        if (pErr) console.error('[uploadDocPdf] persona update:', pErr);
+      }
       queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
-      toast.success('Documento subido. Queda pendiente de validación.');
+      toast.success(estatus === 2 ? 'Documento validado y datos guardados en tu perfil.' : 'Documento subido. Queda pendiente de validación.');
       setDocDetail(null);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo subir el documento.');
     } finally {
       setUploadingDoc(false);
+    }
+  };
+
+  // Manejo de archivo del expediente. La CSF (tipo 6) se procesa: extrae datos → modal de
+  // confirmación editable → guarda documento (validado) + datos fiscales en el perfil.
+  const handleDocFile = async (file: File, doc: typeof EXPEDIENTE_DOCS[number]) => {
+    const tipo = doc.tipos[0];
+    if (!doc.tipos.includes(6)) { uploadDocPdf(file, tipo); return; }
+    setUploadingDoc(true);
+    try {
+      let text = "";
+      try { text = await extractPdfText(file); } catch { toast.error("No se pudo leer el PDF. Intenta de nuevo."); return; }
+      if (!text || text.trim().length < 20) {
+        toast.error("Debe ser el PDF original de la Constancia (no escaneo ni imagen).", { duration: 7000 });
+        return;
+      }
+      const v = validateCSFPdf(text);
+      if (!v.ok) { toast.error(v.reason, { duration: 8000 }); return; }
+      const f = extractCSFFields(text);
+      setDocDetail(null);
+      setCsfConfirm({
+        file,
+        fields: [
+          { key: "rfc",          label: "RFC",                  value: f.rfc ?? "",          personaCol: "rfc" },
+          { key: "curp",         label: "CURP",                 value: f.curp ?? "",         personaCol: "curp" },
+          { key: "nombre",       label: "Nombre / Razón social", value: f.nombre ?? "",      personaCol: "nombre_legal" },
+          { key: "regimen",      label: "Régimen fiscal",       value: f.regimen ?? "",      personaCol: null },
+          { key: "codigoPostal", label: "Código postal",        value: f.codigoPostal ?? "", personaCol: "direccion_fiscal_codigo_postal" },
+          { key: "calle",        label: "Calle",                value: f.calle ?? "",        personaCol: "direccion_fiscal_calle" },
+          { key: "numExt",       label: "Núm. exterior",        value: f.numExt ?? "",       personaCol: "direccion_fiscal_num_ext" },
+          { key: "numInt",       label: "Núm. interior",        value: f.numInt ?? "",       personaCol: "direccion_fiscal_num_int" },
+          { key: "colonia",      label: "Colonia",              value: f.colonia ?? "",      personaCol: "direccion_fiscal_colonia" },
+        ],
+      });
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleConfirmCsf = async () => {
+    if (!csfConfirm) return;
+    setSavingCsf(true);
+    try {
+      const personaUpdates: Record<string, string> = {};
+      for (const fld of csfConfirm.fields) {
+        const val = (csfEdit[fld.key] ?? fld.value).trim();
+        if (fld.personaCol && val) personaUpdates[fld.personaCol] = val;
+      }
+      // Régimen: texto de la CSF → id/código SAT del catálogo (por código de 3 dígitos o por nombre).
+      const regText = (csfEdit["regimen"] ?? "").trim();
+      if (regText && regimenCatalog.length) {
+        const nrm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+        const nText = nrm(regText);
+        const codeMatch = regText.match(/\b(\d{3})\b/)?.[1];
+        const found =
+          (codeMatch ? regimenCatalog.find((r) => String(r.id) === codeMatch) : undefined) ||
+          regimenCatalog.find((r) => { const n = nrm(r.nombre); return n.length > 3 && (nText.includes(n) || n.includes(nText)); });
+        if (found) personaUpdates["regimen"] = String(found.id);
+      }
+      await uploadDocPdf(csfConfirm.file, 6, { estatus: 2, personaUpdates });
+      await queryClient.refetchQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
+      setCsfConfirm(null);
+    } finally {
+      setSavingCsf(false);
     }
   };
 
@@ -894,7 +955,7 @@ const AgentPerfil = () => {
             {profileView === 'training' && perfilPerms.canUpdate && (
               <button
                 onClick={() => setActiveStep('training')}
-                className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
+                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
                 <span className="hidden sm:inline">Agendar capacitación</span>
@@ -904,7 +965,7 @@ const AgentPerfil = () => {
             {profileView === 'bank' && perfilPerms.canUpdate && (
               <button
                 onClick={() => setActiveStep('bank-accounts')}
-                className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90"
+                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
                 <span className="hidden sm:inline">Agregar cuenta</span>
@@ -914,7 +975,7 @@ const AgentPerfil = () => {
           </div>
         )}
       </AgentPortalHeader>
-      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
+      <div className={cn("mx-auto max-w-[1040px] space-y-4", profileView === 'overview' ? "pt-1" : "pt-5")}>
       {profileView === 'overview' && (<>
       {/* Profile Card */}
       <div className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-center gap-5">
@@ -943,12 +1004,6 @@ const AgentPerfil = () => {
               <Camera className="h-3.5 w-3.5" />
             </span>
           )}
-          {/* Indicador de estatus activo - puntito sobre el borde del avatar */}
-          <span
-            title="Activo"
-            aria-label="Activo"
-            className="absolute right-1 top-1 h-3 w-3 rounded-full bg-[hsl(158_64%_38%)] ring-[2.5px] ring-white shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
-          />
         </button>
 
         {/* Info + presentación */}
@@ -958,18 +1013,7 @@ const AgentPerfil = () => {
               {displayName || "Agente"}
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap mt-1">
-            <span className="text-[12px] font-semibold text-[#6B7280]">
-              {(perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || "Agente Inmobiliario"}
-            </span>
-          </div>
-          {agencyName && (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <span className="inline-block h-[7px] w-[7px] rounded-full bg-[hsl(158_64%_38%)] shrink-0" />
-              <span className="text-[11px] font-semibold text-[hsl(158_64%_38%)]">{agencyName}</span>
-            </div>
-          )}
-          {/* Desarrollos asignados - bajo la agencia (máx 3 visibles + "+N") */}
+          {/* Desarrollos asignados (rol/equipo viven en "Datos de tu cuenta SOZU") */}
           {misDesarrollos.length > 0 && (
             <div className="mt-2.5">
               <div className="mb-1.5 text-[10px] font-bold tracking-[0.6px] text-[#9AA3AD]">Desarrollos asignados</div>
@@ -1103,14 +1147,11 @@ const AgentPerfil = () => {
           { label: 'Fecha de alta', render: fmtAlta(sozuInfo.fechaAlta) },
         ];
         return (
-          <div className="rounded-md border border-[#ECEEF0] bg-white p-5 sm:p-[22px]">
-            <div className="mb-3 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-[#9AA3AD]" />
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
-                Asignado por SOZU · solo lectura
-              </span>
+          <div>
+            <div className="mb-2 px-0.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
+              Datos de tu cuenta
             </div>
-            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 rounded-md border border-[#ECEEF0] bg-white p-5 sm:grid-cols-2 sm:p-[22px]">
               {rows.map((r) => (
                 <div key={r.label} className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-2.5 last:border-b-0 sm:[&:nth-last-child(2)]:border-b-0">
                   <span className="text-[12px] font-medium text-[#9AA3AD]">{r.label}</span>
@@ -1288,7 +1329,7 @@ const AgentPerfil = () => {
           <div className="mt-4 flex flex-wrap items-center gap-3.5">
             <button
               onClick={() => setProfileView('expediente')}
-              className="inline-flex items-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-[18px] py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
             >
               <FileText className="h-4 w-4" />
               Gestionar documentos
@@ -1363,11 +1404,8 @@ const AgentPerfil = () => {
       {/* ===== VISTA: EXPEDIENTE ===== */}
       {profileView === 'expediente' && (
         <div>
-          <p className="max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6B7280]">
-            Sube cada documento; leemos los datos por ti y solo los validas. El orden sugerido está marcado con número.
-          </p>
-          <div className="mt-[18px] flex flex-col gap-2.5">
-            {EXPEDIENTE_DOCS.map((doc, i) => {
+          <div className="flex flex-col gap-2.5">
+            {[...EXPEDIENTE_DOCS].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((doc, i) => {
               const rows = expedienteDocs.filter((d: any) => doc.tipos.includes(d.id_tipo_documento));
               const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
               const exists = rows.length > 0;
@@ -1484,7 +1522,6 @@ const AgentPerfil = () => {
           { label: 'Régimen fiscal', valor: personaDatos?.regimen },
           { label: 'Domicilio fiscal', valor: domFiscal || null },
         ];
-        const fiscalDocs = EXPEDIENTE_DOCS.filter((d) => d.step === 'fiscal');
         return (
           <div>
             {/* Uso CFDI */}
@@ -1534,60 +1571,6 @@ const AgentPerfil = () => {
                 ))}
               </div>
             </div>
-
-            {/* Documentos fiscales */}
-            <div className="rounded-md border border-[#ECEEF0] bg-white p-5">
-              <div className="mb-3 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Documentos fiscales</div>
-              <div className="flex flex-col gap-2.5">
-                {fiscalDocs.map((doc) => {
-                  const rows = expedienteDocs.filter((d: any) => doc.tipos.includes(d.id_tipo_documento));
-                  const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
-                  const exists = rows.length > 0;
-                  const url = rows.find((d: any) => d.url)?.url || null;
-                  const badge = approved
-                    ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
-                    : exists
-                    ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-                    : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
-                  return (
-                    <div key={doc.nombre} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <span className="text-[13px] font-bold text-[#171A1D]">{doc.nombre}</span>
-                          <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>{badge.label}</span>
-                        </div>
-                        <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{doc.emisor} · {exists ? 'Cargado' : 'Sin cargar'}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {perfilPerms.canUpdate && (
-                          <button
-                            title={exists ? 'Reemplazar' : 'Subir'}
-                            onClick={() => setActiveStep(doc.step)}
-                            className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-                          >
-                            <Upload className="h-4 w-4" />
-                          </button>
-                        )}
-                        <button
-                          title={url ? 'Ver documento' : 'Sin documento'}
-                          disabled={!url}
-                          onClick={() => { if (url) setViewer({ url, nombre: doc.nombre }); }}
-                          className={cn(
-                            "flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] transition-colors",
-                            url ? "bg-white text-[#4B5563] hover:bg-[#F6F7F8]" : "bg-white text-[#C4CACF] cursor-not-allowed"
-                          )}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         );
       })()}
@@ -1632,16 +1615,6 @@ const AgentPerfil = () => {
                       )}
                     </div>
                   </div>
-                  {perfilPerms.canUpdate && (
-                    <div className="mt-3 flex gap-2.5 border-t border-[#F2F4F5] pt-3">
-                      <button
-                        onClick={() => { if (window.confirm('¿Dar de baja esta cuenta?')) darDeBajaCuenta(c.id); }}
-                        className="rounded-md border border-[#F0C9C4] bg-white px-3 py-2 text-[11.5px] font-bold text-[#B84A3C] transition-colors hover:bg-[#FBE6E6]"
-                      >
-                        Dar de baja
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -1701,29 +1674,86 @@ const AgentPerfil = () => {
         );
       })()}
 
+      {/* Modal confirmar datos de la Constancia (CSF) */}
+      <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
+        <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+          <DialogHeader className="space-y-1 border-b border-[#F0F2F4] px-5 py-4 text-left">
+            <DialogTitle className="text-[16px] font-bold tracking-[-0.2px] text-[#171A1D]">Confirma tus datos fiscales</DialogTitle>
+            <p className="text-[12px] font-medium leading-relaxed text-[#9AA3AD]">
+              Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado.
+            </p>
+          </DialogHeader>
+          <div className="max-h-[52vh] space-y-3 overflow-y-auto px-5 py-4">
+            {csfConfirm?.fields.map((f) => (
+              <div key={f.key}>
+                <div className="mb-1 text-[11.5px] font-semibold text-[#4B5563]">{f.label}</div>
+                <input
+                  value={csfEdit[f.key] ?? f.value}
+                  onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))}
+                  className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2.5 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
+            <button
+              onClick={() => setCsfConfirm(null)}
+              disabled={savingCsf}
+              className="flex-1 rounded-md border border-[#E4E7EA] bg-white py-2.5 text-[13px] font-bold text-[#4B5563] disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmCsf}
+              disabled={savingCsf}
+              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
+            >
+              {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Sí, es correcta
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal cambiar contraseña */}
-      <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); } }}>
+      <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow({ current: false, nueva: false, confirm: false }); } }}>
         <DialogContent className="max-w-[400px] bg-white p-[26px]">
           <DialogTitle className="text-[17px] font-bold text-[#171A1D]">Cambiar contraseña</DialogTitle>
           <p className="-mt-1 text-[12px] font-medium leading-relaxed text-[#6B7280]">
             Tu nueva contraseña debe tener al menos 6 caracteres.
           </p>
           <div className="mt-2 space-y-3">
-            {[
-              { label: 'Contraseña actual', val: pwCurrent, set: setPwCurrent },
-              { label: 'Nueva contraseña', val: pwNew, set: setPwNew },
-              { label: 'Confirmar nueva contraseña', val: pwConfirm, set: setPwConfirm },
-            ].map((f) => (
+            {([
+              { key: 'current', label: 'Contraseña actual', val: pwCurrent, set: setPwCurrent },
+              { key: 'nueva', label: 'Nueva contraseña', val: pwNew, set: setPwNew },
+              { key: 'confirm', label: 'Confirmar nueva contraseña', val: pwConfirm, set: setPwConfirm },
+            ] as const).map((f) => (
               <div key={f.label}>
                 <div className="mb-1.5 text-[11.5px] font-medium text-[#9AA3AD]">{f.label}</div>
-                <input
-                  type="password"
-                  value={f.val}
-                  onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
-                />
+                <div className="relative">
+                  <input
+                    type={pwShow[f.key] ? 'text' : 'password'}
+                    value={f.val}
+                    onChange={(e) => f.set(e.target.value)}
+                    className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 pr-10 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwShow((s) => ({ ...s, [f.key]: !s[f.key] }))}
+                    title={pwShow[f.key] ? 'Ocultar' : 'Mostrar'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-[#9AA3AD] hover:bg-[#F2F4F5] hover:text-[#4B5563]"
+                  >
+                    {pwShow[f.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             ))}
+            <Link
+              to="/auth/forgot-password"
+              onClick={() => setSecurityOpen(false)}
+              className="inline-block text-[11.5px] font-semibold text-[hsl(158_64%_38%)] hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
           </div>
           <div className="mt-[18px] flex gap-2.5">
             <button
@@ -1735,7 +1765,7 @@ const AgentPerfil = () => {
             <button
               onClick={changePassword}
               disabled={savingPw || !pwCurrent || !pwNew || !pwConfirm}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
             >
               {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar contraseña
@@ -1875,7 +1905,7 @@ const AgentPerfil = () => {
                 {/* Subida por dropzone (solo docs PDF llegan a este modal) */}
                 {perfilPerms.canUpdate && (
                   <div className="mt-[18px] border-t border-[#ECEEF0] pt-4">
-                    <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => uploadDocPdf(f, docDetail.tipos[0])} />
+                    <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => handleDocFile(f, docDetail)} />
                   </div>
                 )}
 

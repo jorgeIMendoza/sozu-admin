@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
@@ -15,8 +14,10 @@ import SectionCard from "@/components/offer/SectionCard";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, Plus, FileText, MessageSquare } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
+import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, FileText, MessageSquare, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface TimelineItem {
@@ -26,6 +27,9 @@ interface TimelineItem {
   detail: string;
   date: Date;
   by?: string;
+  notaId?: number;
+  html?: string;
+  long?: boolean;
 }
 
 const AgentProspectoDetalle = () => {
@@ -35,7 +39,6 @@ const AgentProspectoDetalle = () => {
   const { profile, user } = useAuth();
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const agentPersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
-  const { accessibleProjectIds } = useProjectAccess();
   const { mask } = useAgentPresentation();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -44,6 +47,9 @@ const AgentProspectoDetalle = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [citaOpen, setCitaOpen] = useState(false);
   const [nota, setNota] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
+  // Nota abierta en modal: ver detalle o editar.
+  const [notaModal, setNotaModal] = useState<{ id: number; contenido: string; mode: "view" | "edit" } | null>(null);
 
   useEffect(() => {
     registrarVista(`/admin/agent/prospectos/${personaId}`, { persona_id: personaId });
@@ -81,38 +87,22 @@ const AgentProspectoDetalle = () => {
   });
 
   const entidadIds = useMemo(() => entidades.map((e) => e.id), [entidades]);
-  const assignedProjectIds = useMemo(() => new Set(entidades.map((e) => e.id_proyecto).filter(Boolean)), [entidades]);
 
-  // Proyectos disponibles (para agregar interés) - SOLO los asignados al agente,
-  // nunca el catálogo completo (ni super admin / super admin fake).
-  const { data: proyectos = [] } = useQuery({
-    queryKey: ["prospecto-proyectos-disp", accessibleProjectIds],
-    queryFn: async () => {
-      if (accessibleProjectIds.length === 0) return [];
-      const { data } = await supabase
-        .from("proyectos")
-        .select("id, nombre")
-        .eq("activo", true)
-        .in("id", accessibleProjectIds)
-        .order("nombre");
-      return (data || []) as { id: number; nombre: string }[];
-    },
-  });
-
-  // Notas (crm_notas) por entidad
+  // Notas (crm_notas) por entidad. Nota interna: solo las ve el agente que las creó.
   const { data: notas = [] } = useQuery({
-    queryKey: ["prospecto-notas", entidadIds],
+    queryKey: ["prospecto-notas", entidadIds, user?.id],
     queryFn: async () => {
-      if (entidadIds.length === 0) return [];
+      if (entidadIds.length === 0 || !user?.id) return [];
       const { data } = await (supabase as any)
         .from("crm_notas")
         .select("id, contenido, fecha_creacion, id_usuario")
         .in("id_entidad_relacionada", entidadIds)
         .eq("activo", true)
+        .eq("id_usuario", user.id)
         .order("fecha_creacion", { ascending: false });
       return (data || []) as any[];
     },
-    enabled: entidadIds.length > 0,
+    enabled: entidadIds.length > 0 && !!user?.id,
   });
 
   // Citas (visitas)
@@ -160,10 +150,15 @@ const AgentProspectoDetalle = () => {
 
   const timeline = useMemo<TimelineItem[]>(() => {
     const items: TimelineItem[] = [];
-    notas.forEach((n) => items.push({
-      key: `n${n.id}`, kind: "nota", title: "Nota", detail: n.contenido || "",
-      date: new Date(n.fecha_creacion), by: autores.get(n.id_usuario) || undefined,
-    }));
+    notas.forEach((n) => {
+      const html = n.contenido || "";
+      const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      items.push({
+        key: `n${n.id}`, kind: "nota", title: "Nota", detail: plain,
+        html, notaId: n.id, long: plain.length > 140 || /<img/i.test(html),
+        date: new Date(n.fecha_creacion), by: autores.get(n.id_usuario) || undefined,
+      });
+    });
     citas.forEach((c) => {
       const t = c.hora_inicio ? ` · ${c.hora_inicio.slice(0, 5)}` : "";
       items.push({
@@ -194,30 +189,29 @@ const AgentProspectoDetalle = () => {
     },
     onSuccess: () => {
       setNota("");
+      setComposerOpen(false);
       queryClient.invalidateQueries({ queryKey: ["prospecto-notas"] });
       toast.success("Nota guardada");
     },
     onError: (e: any) => toast.error(e.message || "No se pudo guardar la nota"),
   });
 
-  const addProyecto = useMutation({
-    mutationFn: async (proyectoId: number) => {
-      const { error } = await supabase.rpc("agent_claim_or_reactivate_prospect_project", {
-        _persona_id: personaId, _proyecto_id: proyectoId, _owner_persona_id: agentPersonaId ?? undefined,
-      } as any);
+  const updateNota = useMutation({
+    mutationFn: async ({ id, contenido }: { id: number; contenido: string }) => {
+      const { error } = await (supabase as any).from("crm_notas").update({ contenido }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["prospecto-entidades"] }); toast.success("Desarrollo agregado"); },
-    onError: (e: any) => toast.error(e.message || "No se pudo agregar"),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["prospecto-notas"] }); toast.success("Nota actualizada"); setNotaModal(null); },
+    onError: (e: any) => toast.error(e.message || "No se pudo actualizar"),
   });
 
-  const removeProyecto = useMutation({
-    mutationFn: async (entidadId: number) => {
-      const { error } = await supabase.from("entidades_relacionadas").update({ activo: false }).eq("id", entidadId);
+  const deleteNota = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["prospecto-entidades"] }); toast.success("Desarrollo removido"); },
-    onError: (e: any) => toast.error(e.message || "No se pudo remover"),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["prospecto-notas"] }); toast.success("Nota eliminada"); setNotaModal(null); },
+    onError: (e: any) => toast.error(e.message || "No se pudo eliminar"),
   });
 
   if (loadingPersona) {
@@ -228,13 +222,13 @@ const AgentProspectoDetalle = () => {
   }
 
   const initials = (persona.nombre_legal || persona.email || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join("") || "?";
-  const tel = persona.telefono ? `${persona.clave_pais_telefono === "MX" ? "+52 " : ""}${persona.telefono}` : "-";
+  const tel = persona.telefono ? `${persona.clave_pais_telefono === "MX" ? "+52 " : ""}${persona.telefono}` : "Sin datos";
   const tipoLabel = persona.tipo_persona === "pm" ? "Persona Moral" : "Persona Física";
   const infoRows: [string, string][] = [
-    ["Email", persona.email || "-"],
+    ["Email", persona.email || "Sin datos"],
     ["Teléfono", tel],
-    ["RFC", persona.rfc || "-"],
-    ["CURP", persona.curp || "-"],
+    ["RFC", persona.rfc || "Sin datos"],
+    ["CURP", persona.curp || "Sin datos"],
   ];
 
   return (
@@ -268,7 +262,10 @@ const AgentProspectoDetalle = () => {
                 {infoRows.map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-1.5">
                     <span className="text-[11.5px] font-medium text-[#9AA3AD]">{label}</span>
-                    <span className="truncate text-right text-[12px] font-bold tabular-nums text-[#171A1D]">{mask(value)}</span>
+                    <span className={cn(
+                      "truncate text-right text-[12px] tabular-nums",
+                      value === "Sin datos" ? "font-medium text-[#B7BEC5]" : "font-bold text-[#171A1D]"
+                    )}>{value === "Sin datos" ? value : mask(value)}</span>
                   </div>
                 ))}
               </div>
@@ -276,51 +273,36 @@ const AgentProspectoDetalle = () => {
           </div>
 
           {/* Acciones */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditOpen(true)}>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditOpen(true)}>
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCitaOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setCitaOpen(true)}>
               <CalendarPlus className="h-3.5 w-3.5" /> Agendar visita
             </Button>
             <Button
               size="sm"
-              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+              className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
               onClick={() => navigate("/admin/agent/inventario")}
             >
               <FileText className="h-3.5 w-3.5" /> Generar oferta
             </Button>
           </div>
 
-          {/* Desarrollos de interés */}
+          {/* Desarrollos de interés — solo lectura. Se editan desde el botón "Editar". */}
           <div className="mt-4 border-t border-[#F2F4F5] pt-4">
             <p className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Desarrollos de interés</p>
             <div className="flex flex-wrap gap-2">
               {entidades.map((e) => (
-                <button
+                <span
                   key={e.id}
-                  type="button"
-                  onClick={() => removeProyecto.mutate(e.id)}
-                  disabled={removeProyecto.isPending}
-                  title="Quitar desarrollo"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)] px-3 py-[7px] text-[12px] font-semibold text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(158_64%_38%)] bg-white px-3 py-[6px] text-[11px] font-semibold text-[hsl(158_64%_38%)]"
                 >
                   <Check className="h-3.5 w-3.5" /> {e.proyectos?.nombre || `Proyecto ${e.id_proyecto}`}
-                </button>
+                </span>
               ))}
-              {proyectos.filter((p) => !assignedProjectIds.has(p.id)).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => addProyecto.mutate(p.id)}
-                  disabled={addProyecto.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#E4E7EA] bg-white px-3 py-[7px] text-[12px] font-semibold text-[#4B5563] hover:border-[hsl(158_64%_38%)] hover:text-[hsl(158_64%_38%)]"
-                >
-                  <Plus className="h-3.5 w-3.5" /> {p.nombre}
-                </button>
-              ))}
-              {entidades.length === 0 && proyectos.length === 0 && (
-                <span className="text-[11px] text-[#9AA3AD]">Sin desarrollos disponibles</span>
+              {entidades.length === 0 && (
+                <span className="text-[11px] text-[#9AA3AD]">Sin desarrollos · edítalos desde “Editar”.</span>
               )}
             </div>
           </div>
@@ -328,32 +310,38 @@ const AgentProspectoDetalle = () => {
 
         {/* Actividad */}
         <SectionCard icon={MessageSquare} title="Actividad" bodyClassName="p-5 md:p-6">
-          {/* Composer */}
-          <div className="mb-5 flex gap-3">
-            <Avatar className="h-9 w-9 shrink-0">
-              <AvatarFallback className="bg-primary text-[11px] font-bold text-primary-foreground">
-                {(profile?.nombre || "Yo").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "Y"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <Textarea
-                value={nota}
-                onChange={(e) => setNota(e.target.value)}
-                placeholder="Agregar nota o comentario…"
-                rows={2}
-                className="resize-none rounded-md border-gray-200 text-[12.5px] focus-visible:ring-primary/25"
-              />
-              <div className="mt-2 flex justify-end">
-                <Button
-                  size="sm"
-                  disabled={!nota.trim() || addNota.isPending || entidadIds.length === 0}
-                  onClick={() => addNota.mutate(nota.trim())}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {addNota.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null} Guardar nota
-                </Button>
+          {/* Composer — solo se muestra al crear una nota */}
+          <div className="mb-5">
+            {!composerOpen ? (
+              <button
+                type="button"
+                onClick={() => setComposerOpen(true)}
+                disabled={entidadIds.length === 0}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-left text-[12.5px] text-[#9AA3AD] transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Agregar nota o comentario…
+              </button>
+            ) : (
+              <div>
+                <NoteEditor value={nota} onChange={setNota} storagePrefix={`crm-notas/${personaId}`} autoFocus />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-[10.5px] text-[#B7BEC5]">Nota interna · solo visible para ti.</p>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setComposerOpen(false); setNota(""); }}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={addNota.isPending || entidadIds.length === 0 || (!nota.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(nota))}
+                      onClick={() => addNota.mutate(nota)}
+                      className="text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
+                    >
+                      {addNota.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null} Guardar nota
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Timeline - máx ~6 filas, luego scroll */}
@@ -368,17 +356,57 @@ const AgentProspectoDetalle = () => {
                   return (
                     <div key={it.key} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <span className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring}`} />
+                        {it.kind === "nota" && it.notaId ? (
+                          <button
+                            type="button"
+                            onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "edit" })}
+                            title="Editar nota"
+                            className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring} transition hover:ring-2 hover:ring-[#C79A2E]/40`}
+                          />
+                        ) : (
+                          <span className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring}`} />
+                        )}
                         {!last && <span className="min-h-3 w-0.5 flex-1 bg-[#F2F4F5]" />}
                       </div>
                       <div className="min-w-0 flex-1 pb-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[12.5px] font-bold text-[#171A1D]">{it.title}</span>
-                          <span className="text-[10.5px] tabular-nums text-[#9AA3AD]">
-                            {it.date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })} · {it.date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="text-[12.5px] font-bold text-[#171A1D]">{it.title}</span>
+                            <span className="text-[10.5px] tabular-nums text-[#9AA3AD]">
+                              {it.date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })} · {it.date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          {it.kind === "nota" && it.notaId && (
+                            <div className="flex shrink-0 items-center gap-3.5">
+                              {it.long && (
+                                <button
+                                  type="button"
+                                  onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "view" })}
+                                  className="text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:underline"
+                                >
+                                  Ver detalle
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "edit" })}
+                                className="text-[12.5px] font-semibold text-[#C79A2E] transition-colors hover:underline"
+                              >
+                                Editar
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {it.detail && <p className="mt-0.5 text-[12px] leading-snug text-[#4B5563]">{it.detail}</p>}
+                        {it.kind === "nota" ? (
+                          it.html && (
+                            <div
+                              className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-[#4B5563] [&_img]:mt-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-20 [&_img]:w-auto [&_img]:max-w-[120px] [&_img]:rounded [&_img]:border [&_img]:border-gray-100 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4"
+                              dangerouslySetInnerHTML={{ __html: it.html }}
+                            />
+                          )
+                        ) : (
+                          it.detail && <p className="mt-0.5 text-[12px] leading-snug text-[#4B5563]">{it.detail}</p>
+                        )}
                         {it.by && <p className="mt-1 text-[10.5px] text-[#B7BEC5]">{it.by}</p>}
                       </div>
                     </div>
@@ -402,6 +430,66 @@ const AgentProspectoDetalle = () => {
         preSelectedPersonaId={personaId}
       />
       <AgendarCitaShowroomDialog open={citaOpen} onOpenChange={setCitaOpen} />
+
+      {/* Nota interna: ver detalle / editar / eliminar */}
+      <Dialog open={!!notaModal} onOpenChange={(o) => !o && setNotaModal(null)}>
+        <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+          <DialogHeader className="space-y-0.5 border-b border-[#F0F2F4] px-5 py-4 text-left">
+            <DialogTitle className="text-[15px] font-bold tracking-[-0.2px] text-[#171A1D]">
+              {notaModal?.mode === "edit" ? "Editar nota" : "Nota interna"}
+            </DialogTitle>
+            <p className="flex items-center gap-1.5 text-[11px] font-medium text-[#9AA3AD]">
+              <MessageSquare className="h-3 w-3" /> Solo visible para ti
+            </p>
+          </DialogHeader>
+
+          <div className="px-5 py-4">
+            {notaModal?.mode === "edit" ? (
+              <NoteEditor
+                value={notaModal.contenido}
+                onChange={(html) => setNotaModal((m) => (m ? { ...m, contenido: html } : m))}
+                storagePrefix={`crm-notas/${personaId}`}
+                autoFocus
+              />
+            ) : (
+              <div
+                className="prose prose-sm max-h-[58vh] max-w-none overflow-y-auto rounded-md border border-[#F0F2F4] bg-[#FCFCFD] p-4 text-[13px] leading-relaxed text-[#3F464E] [&_img]:mx-auto [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-h-72 [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-gray-100 [&_ul]:list-disc [&_ul]:pl-5"
+                dangerouslySetInnerHTML={{ __html: notaModal?.contenido || "" }}
+              />
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={deleteNota.isPending}
+              onClick={() => notaModal && deleteNota.mutate(notaModal.id)}
+            >
+              {deleteNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Eliminar
+            </Button>
+            {notaModal?.mode === "view" ? (
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs border border-[#E6C34D] bg-white text-[#B5730A] hover:bg-[#FBF3DC]"
+                onClick={() => setNotaModal((m) => (m ? { ...m, mode: "edit" } : m))}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Editar
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
+                disabled={updateNota.isPending || !notaModal || (!notaModal.contenido.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(notaModal.contenido))}
+                onClick={() => notaModal && updateNota.mutate({ id: notaModal.id, contenido: notaModal.contenido })}
+              >
+                {updateNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Guardar
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -499,7 +499,7 @@ const AgentUnidadesProyecto = () => {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[hsl(var(--agent-bg))] px-4 pt-4 pb-3 space-y-3">
+      <div className="sticky top-0 z-10 bg-[hsl(var(--agent-bg))] pt-4 pb-3 space-y-3">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate("/admin/agent/inventario")} className="h-10 w-10 shrink-0 rounded-md bg-white border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
             <ArrowLeft className="h-4 w-4" />
@@ -561,7 +561,7 @@ const AgentUnidadesProyecto = () => {
             </button>
             <button
               onClick={() => setFiltersDrawerOpen(false)}
-              className="h-9 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+              className="h-9 rounded-md border border-primary bg-white px-4 text-[13px] font-medium text-primary hover:bg-primary/[0.06]"
             >
               Ver resultados
             </button>
@@ -570,7 +570,7 @@ const AgentUnidadesProyecto = () => {
       </Sheet>
 
       {/* Properties Grid */}
-      <div className="px-4 mt-2">
+      <div className="mt-2">
         {isLoading || !paramsResolved ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -773,7 +773,7 @@ const AgentUnidadesProyecto = () => {
                       forceLight={true}
                       enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md bg-[hsl(158_64%_38%)] text-white font-semibold text-sm shadow-lg shadow-[hsl(158_64%_38%)]/20 hover:brightness-110 active:scale-[0.98] transition-all">
+                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-semibold text-sm hover:bg-[hsl(158_64%_38%)]/[0.06] active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
                           <span>
                             Configurar Oferta
