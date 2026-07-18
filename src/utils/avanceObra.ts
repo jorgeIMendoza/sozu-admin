@@ -29,3 +29,31 @@ export function calcProgressFromDates(inicio?: string | null, entrega?: string |
 export function applyProgressToMilestones(pct: number): Milestone[] {
   return DEFAULT_MILESTONES.map((m) => ({ ...m, done: pct >= m.pct }));
 }
+
+export interface StageRow extends Milestone {
+  /** Avance PROPIO de la etapa (0-100 dentro de su banda), coherente con el % global. */
+  ownPct: number;
+}
+
+/**
+ * Reescala cada etapa a su propio 0-100 dentro de su banda del % global.
+ * El `pct` del milestone es el umbral global acumulado al terminar esa etapa.
+ * Fuente de verdad compartida entre la oferta digital y el portal agente.
+ */
+export function deriveStages(progress: number): StageRow[] {
+  return DEFAULT_MILESTONES.map((m, i) => {
+    const prev = i === 0 ? 0 : DEFAULT_MILESTONES[i - 1].pct;
+    const band = m.pct - prev;
+    const ownPct = band <= 0
+      ? (progress >= m.pct ? 100 : 0)
+      : Math.round(Math.min(100, Math.max(0, ((progress - prev) / band) * 100)));
+    return { ...m, ownPct, done: ownPct >= 100 };
+  });
+}
+
+/** Etapa actual = primera etapa aún no terminada (o la última terminada). */
+export function currentStageOf(stages: StageRow[]): string {
+  return stages.find((m) => m.ownPct < 100)?.phase
+    ?? [...stages].reverse().find((m) => m.done)?.phase
+    ?? "—";
+}

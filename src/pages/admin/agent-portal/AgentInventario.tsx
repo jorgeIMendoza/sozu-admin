@@ -68,7 +68,8 @@ const AgentInventario = () => {
         .from('proyectos')
         .select('id, nombre, direccion, url_imagen_portada, id_estatus_proyecto')
         .eq('activo', true)
-        .eq('publicar', true);
+        .eq('publicar', true)
+        .order('nombre', { ascending: true });
 
       if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
         query = query.in('id', accessibleProjectIds);

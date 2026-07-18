@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, HardHat, Calendar, X, ImageIcon } from "lucide-react";
 import SectionCard from "./SectionCard";
+import { deriveStages, currentStageOf } from "@/utils/avanceObra";
 
 interface ConstructionPhoto {
   src: string;
@@ -20,7 +21,6 @@ interface Props {
 
 const OfferConstructionProgress = ({
   progress,
-  milestones,
   estimatedDelivery,
   lastUpdated,
   videoUrl,
@@ -37,21 +37,9 @@ const OfferConstructionProgress = ({
     return () => document.removeEventListener("keydown", handler);
   }, [lightboxIndex]);
 
-  // Avance PROPIO de cada etapa (0-100 dentro de su banda), coherente con el % global.
-  // El pct del milestone es el umbral global acumulado al terminar esa etapa.
-  const stageRows = milestones.map((m, i) => {
-    const prev = i === 0 ? 0 : milestones[i - 1].pct;
-    const band = m.pct - prev;
-    const ownPct = band <= 0
-      ? (progress >= m.pct ? 100 : 0)
-      : Math.round(Math.min(100, Math.max(0, ((progress - prev) / band) * 100)));
-    return { ...m, ownPct, done: ownPct >= 100 };
-  });
-
-  const currentStage =
-    stageRows.find((m) => m.ownPct < 100)?.phase ??
-    [...stageRows].reverse().find((m) => m.done)?.phase ??
-    "-";
+  // Lógica compartida (fuente de verdad): avance propio por etapa + etapa actual.
+  const stageRows = deriveStages(progress);
+  const currentStage = currentStageOf(stageRows);
 
   return (
     <SectionCard icon={HardHat} title="Avance de obra" bodyClassName="p-5 md:p-6 space-y-5">
