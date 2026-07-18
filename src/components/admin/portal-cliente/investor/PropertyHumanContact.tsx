@@ -12,6 +12,11 @@ const PropertyHumanContact = ({ investment, role }: Props) => {
   const tipo = role === "agent" ? "comercial" : "seguimiento";
   const { data: contact } = useAgentForCuenta(property.id, tipo);
 
+  // Tras culminar los pagos ya no hay asesor de seguimiento (se atiende con SOZU) → no mostrar card.
+  if (role === "administrator" && investment.financials.pendingBalance <= 0.01) {
+    return null;
+  }
+
   const sectionTitle =
     role === "agent" ? "Tu agente comercial" : "Tu asesor de seguimiento";
 
@@ -42,11 +47,27 @@ const PropertyHumanContact = ({ investment, role }: Props) => {
       ? `Hola ${contact.firstName}, tengo una pregunta sobre mi propiedad ${subjectLabel}.`
       : `Hola ${contact.firstName}, tengo una pregunta sobre la administración de mi propiedad ${subjectLabel}.`;
 
+  // Datos que pueden faltar en BD (ej. asesor sin teléfono/persona vinculada).
+  // Sin ellos, no renderizamos el botón para no dejar enlaces rotos (wa.me/ vacío, tel: vacío).
+  const hasWhatsapp = !!contact.whatsapp;
+  const hasPhone = !!contact.phone;
+
   const waLink = `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMsg)}`;
   const phoneLink = `tel:${contact.phone.replace(/\s/g, "")}`;
   const emailLink = `mailto:${contact.email}?subject=${encodeURIComponent(
     `Sobre ${subjectLabel}`,
   )}`;
+
+  const actionsCount = (hasWhatsapp ? 1 : 0) + (hasPhone ? 1 : 0) + 1; // +1 = email (siempre)
+  const gridColsClass = actionsCount === 3 ? "grid-cols-3" : actionsCount === 2 ? "grid-cols-2" : "grid-cols-1";
+  const contactLine = [contact.phone, contact.email].filter(Boolean).join(" · ");
+
+  // Iniciales (nombre + apellido) como fallback cuando no hay foto.
+  const nameParts = contact.fullName.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    nameParts.length > 0
+      ? (nameParts[0][0] + (nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "")).toUpperCase()
+      : "?";
 
   return (
     <section className="rounded-2xl bg-card border border-border p-5 md:p-6">
@@ -58,15 +79,18 @@ const PropertyHumanContact = ({ investment, role }: Props) => {
       </div>
 
       <div className="flex gap-4">
-        <div className="w-16 h-16 rounded-full overflow-hidden bg-muted flex-shrink-0">
-          <img
-            src={contact.photoUrl}
-            alt={contact.fullName}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
+        <div className="relative w-16 h-16 rounded-full overflow-hidden bg-primary/10 flex-shrink-0 flex items-center justify-center">
+          <span className="text-[17px] font-semibold text-primary select-none">{initials}</span>
+          {contact.photoUrl && (
+            <img
+              src={contact.photoUrl}
+              alt={contact.fullName}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[15px] font-semibold font-display text-foreground leading-tight">
@@ -82,23 +106,27 @@ const PropertyHumanContact = ({ investment, role }: Props) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mt-5">
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="h-10 rounded-lg bg-success text-success-foreground text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-success/90 transition-colors"
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-          WhatsApp
-        </a>
-        <a
-          href={phoneLink}
-          className="h-10 rounded-lg border border-border bg-background text-foreground text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-muted transition-colors"
-        >
-          <Phone className="w-3.5 h-3.5" />
-          Llamar
-        </a>
+      <div className={`grid ${gridColsClass} gap-2 mt-5`}>
+        {hasWhatsapp && (
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-10 rounded-lg bg-success text-success-foreground text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-success/90 transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            WhatsApp
+          </a>
+        )}
+        {hasPhone && (
+          <a
+            href={phoneLink}
+            className="h-10 rounded-lg border border-border bg-background text-foreground text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-muted transition-colors"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            Llamar
+          </a>
+        )}
         <a
           href={emailLink}
           className="h-10 rounded-lg border border-border bg-background text-foreground text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-muted transition-colors"
@@ -109,7 +137,7 @@ const PropertyHumanContact = ({ investment, role }: Props) => {
       </div>
 
       <p className="mt-3 text-[11px] text-muted-foreground text-center">
-        {contact.phone} · {contact.email}
+        {contactLine}
       </p>
     </section>
   );
