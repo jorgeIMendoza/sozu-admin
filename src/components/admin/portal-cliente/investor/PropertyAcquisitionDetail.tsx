@@ -765,7 +765,14 @@ const TechCell = ({ label, value }: { label: string; value: string }) => (
 
 const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
   const { property } = investment;
-  const { data: contact } = useAgentForCuenta(property.id, "comercial");
+  // En la fase de adquisición (aún se manejan pagos) el contacto relevante es el
+  // asesor de seguimiento (Luz). Si además hay un agente comercial asignado a la
+  // cuenta, ese tiene prioridad. Ambos hooks se llaman siempre (reglas de hooks).
+  const { data: comercial } = useAgentForCuenta(property.id, "comercial");
+  const { data: seguimiento } = useAgentForCuenta(property.id, "seguimiento");
+
+  const isComercial = !!comercial;
+  const contact = comercial ?? seguimiento;
 
   if (!contact) {
     return (
@@ -779,27 +786,42 @@ const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
     );
   }
 
+  const title = isComercial ? "Tu agente comercial" : "Tu asesor de seguimiento";
   const subjectLabel = `${property.projectName} U-${property.unitNumber}`;
   const waMsg = `Hola ${contact.firstName}, tengo una pregunta sobre mi propiedad ${subjectLabel}.`;
   const waLink = `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMsg)}`;
+
+  const hasWhatsapp = !!contact.whatsapp;
+  const hasPhone = !!contact.phone;
+  const actionsCount = (hasWhatsapp ? 1 : 0) + (hasPhone ? 1 : 0) + 1;
+  const gridColsClass = actionsCount === 3 ? "grid-cols-3" : actionsCount === 2 ? "grid-cols-2" : "grid-cols-1";
+
+  const nameParts = contact.fullName.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    nameParts.length > 0
+      ? (nameParts[0][0] + (nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "")).toUpperCase()
+      : "?";
 
   return (
     <div className="rounded-2xl bg-card border border-border p-5">
       <div className="flex items-center gap-2 mb-4">
         <User className="w-3.5 h-3.5 text-muted-foreground" />
         <h2 className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-          Tu agente comercial
+          {title}
         </h2>
       </div>
 
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-full overflow-hidden bg-muted flex-shrink-0">
-          <img
-            src={contact.photoUrl}
-            alt={contact.fullName}
-            className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
+        <div className="relative w-11 h-11 rounded-full overflow-hidden bg-primary/10 flex-shrink-0 flex items-center justify-center">
+          <span className="text-[13px] font-semibold text-primary select-none">{initials}</span>
+          {contact.photoUrl && (
+            <img
+              src={contact.photoUrl}
+              alt={contact.fullName}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
         </div>
         <div className="min-w-0">
           <p className="text-[13px] font-semibold font-display text-foreground leading-tight truncate">{contact.fullName}</p>
@@ -810,15 +832,19 @@ const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <a href={waLink} target="_blank" rel="noopener noreferrer"
-          className="h-9 rounded-lg bg-success text-success-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-success/90 transition-colors">
-          <MessageCircle className="w-3.5 h-3.5" /> WA
-        </a>
-        <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
-          className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
-          <Phone className="w-3.5 h-3.5" /> Tel
-        </a>
+      <div className={`grid ${gridColsClass} gap-2`}>
+        {hasWhatsapp && (
+          <a href={waLink} target="_blank" rel="noopener noreferrer"
+            className="h-9 rounded-lg bg-success text-success-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-success/90 transition-colors">
+            <MessageCircle className="w-3.5 h-3.5" /> WA
+          </a>
+        )}
+        {hasPhone && (
+          <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
+            className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
+            <Phone className="w-3.5 h-3.5" /> Tel
+          </a>
+        )}
         <a href={`mailto:${contact.email}?subject=${encodeURIComponent(`Sobre ${subjectLabel}`)}`}
           className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
           <Mail className="w-3.5 h-3.5" /> Email
