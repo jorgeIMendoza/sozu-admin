@@ -12,6 +12,7 @@ import {
   CreditCard,
   BarChart2,
   Package,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ export interface PortalNavItem {
 
 const ROUTE_ICON: Record<string, LucideIcon> = {
   "/admin/portal-cliente/inicio":          Home,
+  "/admin/portal-cliente/propiedades":     Building2,
   "/admin/portal-cliente/en-adquisicion":  ShoppingBag,
   "/admin/portal-cliente/patrimonio":      Wallet,
   "/admin/portal-cliente/documentos":      FileText,

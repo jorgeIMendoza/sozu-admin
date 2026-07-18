@@ -490,15 +490,19 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
         const planned = inst.amount;
         const isPaid = inst.status === "pagado";
         const status: ScheduleStatus = isPaid ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
+        const apps = inst.applications ?? [];
+        // Fecha mostrada: la más reciente de los pagos aplicados (dispersiones);
+        // si no hay pagos, la fecha programada del acuerdo (próximo pago).
+        const latestAppDate = apps.reduce<string>((max, a) => (a.date > max ? a.date : max), "");
         return {
           id: inst.id,
           label: inst.concepto,
           planned,
           applied,
           pending: Math.max(0, planned - applied),
-          date: inst.dueDate,
+          date: latestAppDate || inst.dueDate,
           status,
-          applications: inst.applications ?? [],
+          applications: apps,
         };
       })
     : investment.payments.map((p, i) => {
