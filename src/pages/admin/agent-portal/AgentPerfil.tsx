@@ -15,7 +15,7 @@ import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/ho
 import {
   FileText, Receipt, Landmark, GraduationCap,
   Check, AlertTriangle, ChevronRight, Loader2,
-  Camera, Trash2, Upload, ArrowLeft, Eye, Pencil, Plus, UploadCloud, RotateCcw
+  Camera, Trash2, Upload, ArrowLeft, Eye, Pencil, Plus, UploadCloud, RotateCcw, Lock
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -552,6 +552,32 @@ const AgentPerfil = () => {
     staleTime: Infinity,
   });
 
+  // Datos asignados por SOZU (solo lectura): comisión, tipo de relación, líder, alta.
+  const { data: sozuInfo } = useQuery({
+    queryKey: ['agent-sozu-info', personaId],
+    queryFn: async () => {
+      if (!personaId) return null;
+      const { data } = await (supabase as any)
+        .from('entidades_relacionadas')
+        .select('porcentaje_comision, activo, fecha_creacion, tipos_entidad:id_tipo_entidad(nombre), lider:personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_legal)')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .order('activo', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return null;
+      return {
+        comision: data.porcentaje_comision != null ? Number(data.porcentaje_comision) : null,
+        activo: data.activo as boolean,
+        fechaAlta: data.fecha_creacion as string | null,
+        tipoRelacion: (data.tipos_entidad as any)?.nombre || null,
+        lider: (data.lider as any)?.nombre_legal || null,
+      };
+    },
+    enabled: !!personaId,
+    staleTime: 60_000,
+  });
+
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
   const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training'>('overview');
   const [docDetail, setDocDetail] = useState<typeof EXPEDIENTE_DOCS[number] | null>(null);
@@ -1051,6 +1077,51 @@ const AgentPerfil = () => {
         </div>
       </div>
 
+      {/* Asignado por SOZU · solo lectura */}
+      {sozuInfo && (() => {
+        const fmtAlta = (f?: string | null) => {
+          if (!f) return '—';
+          const d = new Date(f);
+          return isNaN(d.getTime())
+            ? '—'
+            : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
+        };
+        const rows: { label: string; render: React.ReactNode }[] = [
+          { label: 'Rol / Puesto', render: (perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || 'Agente Inmobiliario' },
+          { label: 'Tipo de relación', render: sozuInfo.tipoRelacion || '—' },
+          { label: 'Esquema de comisión', render: sozuInfo.comision != null ? `${sozuInfo.comision}% sobre precio de lista` : '—' },
+          {
+            label: 'Estatus',
+            render: (
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn('h-[7px] w-[7px] rounded-full', sozuInfo.activo ? 'bg-[hsl(158_64%_38%)]' : 'bg-[#C4CBD2]')} />
+                {sozuInfo.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            ),
+          },
+          { label: 'Equipo / Líder', render: sozuInfo.lider || 'Sin asignar' },
+          { label: 'Fecha de alta', render: fmtAlta(sozuInfo.fechaAlta) },
+        ];
+        return (
+          <div className="rounded-md border border-[#ECEEF0] bg-white p-5 sm:p-[22px]">
+            <div className="mb-3 flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 text-[#9AA3AD]" />
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
+                Asignado por SOZU · solo lectura
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 sm:grid-cols-2">
+              {rows.map((r) => (
+                <div key={r.label} className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-2.5 last:border-b-0 sm:[&:nth-last-child(2)]:border-b-0">
+                  <span className="text-[12px] font-medium text-[#9AA3AD]">{r.label}</span>
+                  <span className="text-right text-[13px] font-semibold text-[#171A1D]">{r.render}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
 
       {/* Hidden file input (outside any button) */}
       <input
@@ -1362,7 +1433,7 @@ const AgentPerfil = () => {
           const [y, m, d] = f.slice(0, 10).split('-');
           return d && m && y ? `${d}/${m}/${y}` : f;
         };
-        const sexoLabel = personaDatos?.sexo === 'H' ? 'Hombre' : personaDatos?.sexo === 'M' ? 'Mujer' : (personaDatos?.sexo || null);
+        const sexoLabel = personaDatos?.sexo === 'M' ? 'Hombre' : personaDatos?.sexo === 'F' ? 'Mujer' : personaDatos?.sexo === 'O' ? 'Otro' : (personaDatos?.sexo || null);
         const domParticular = [personaDatos?.direccion_calle, personaDatos?.direccion_num_ext, personaDatos?.direccion_colonia, personaDatos?.direccion_codigo_postal].filter(Boolean).join(', ');
         const campos = [
           { label: 'Email · solo lectura', value: personaDatos?.email || agentEmail },
@@ -1726,8 +1797,9 @@ const AgentPerfil = () => {
                       <label className={lbl}>Sexo</label>
                       <select value={identForm.sexo || ''} onChange={(e) => setIdent('sexo', e.target.value)} className={inp}>
                         <option value="">Sin especificar</option>
-                        <option value="H">Hombre</option>
-                        <option value="M">Mujer</option>
+                        <option value="M">Hombre</option>
+                        <option value="F">Mujer</option>
+                        <option value="O">Otro</option>
                       </select>
                     </div>
                   </div>

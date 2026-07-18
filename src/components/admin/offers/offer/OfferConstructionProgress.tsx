@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, Circle, HardHat, Calendar, X, ImageIcon } from "lucide-react";
+import { deriveStages, currentStageOf } from "@/utils/avanceObra";
 
 interface ConstructionPhoto {
   src: string;
@@ -19,7 +20,6 @@ interface Props {
 
 const OfferConstructionProgress = ({
   progress,
-  milestones,
   estimatedDelivery,
   lastUpdated,
   videoUrl,
@@ -28,10 +28,9 @@ const OfferConstructionProgress = ({
   description,
 }: Props) => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const currentStage =
-    milestones.find((m) => !m.done)?.phase ??
-    [...milestones].reverse().find((m) => m.done)?.phase ??
-    "—";
+  // Lógica compartida (fuente de verdad): avance propio por etapa + etapa actual.
+  const stageRows = deriveStages(progress);
+  const currentStage = currentStageOf(stageRows);
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 md:p-6 space-y-5">
@@ -66,21 +65,28 @@ const OfferConstructionProgress = ({
 
       {/* Milestones checklist */}
       <ul className="space-y-2">
-        {milestones.map((m, i) => (
-          <li key={i} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              {m.done ? (
-                <CheckCircle2 className="w-4 h-4 text-success" />
-              ) : (
-                <Circle className="w-4 h-4 text-muted-foreground" />
-              )}
-              <span className={m.done ? "text-foreground" : "text-muted-foreground"}>
-                {m.phase}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground tabular-nums">{m.pct}%</span>
-          </li>
-        ))}
+        {stageRows.map((m, i) => {
+          const isCurrent = !m.done && m.phase === currentStage;
+          return (
+            <li key={i} className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                {m.done ? (
+                  <CheckCircle2 className="w-4 h-4 text-success" />
+                ) : isCurrent ? (
+                  <span className="w-4 h-4 flex items-center justify-center">
+                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  </span>
+                ) : (
+                  <Circle className="w-4 h-4 text-muted-foreground" />
+                )}
+                <span className={m.done ? "text-foreground" : isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                  {m.phase}
+                </span>
+              </div>
+              <span className={`text-xs tabular-nums ${m.done ? "text-success font-medium" : isCurrent ? "text-primary font-semibold" : "text-muted-foreground"}`}>{m.ownPct}%</span>
+            </li>
+          );
+        })}
       </ul>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border">
