@@ -1,130 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Wallet, CheckCircle2, AlertCircle, Calendar, ChevronRight, TrendingUp, Search } from "lucide-react";
+import { Wallet, Search } from "lucide-react";
 import { filterPortfolioByCategory } from "@/lib/portal-cliente/mock-data";
-import type { InvestmentProperty } from "@/lib/portal-cliente/types";
 import { fmtMXN as fmt } from "@/lib/utils";
-import { getPropertyImage } from "@/lib/portal-cliente/property-images";
 import { usePortfolioCliente } from "@/lib/portal-cliente/use-portfolio";
-
-function PatrimonyCard({
-  inv,
-  onClick,
-}: {
-  inv: InvestmentProperty;
-  onClick: () => void;
-}) {
-  const { property, financials, maintenance } = inv;
-  const heroImage = property.image || getPropertyImage(property.id, property.projectName);
-  const valueMXN = financials.currentEstimatedValue;
-  const plusvaliaPct = financials.estimatedAppreciation;
-  const plusvaliaAmount = financials.currentEstimatedValue - financials.initialPrice;
-  const maintStatus = maintenance?.status === "pendiente" ? "due_soon" : "current";
-  const maintConfig =
-    maintStatus === "current"
-      ? { label: "Al día", Icon: CheckCircle2, cls: "bg-success/15 text-success" }
-      : { label: "Pago próximo", Icon: Calendar, cls: "bg-warning/15 text-warning" };
-  const Mi = maintConfig.Icon;
-
-  return (
-    <div
-      data-cta="cliente.patrimonio.ver-propiedad"
-      onClick={onClick}
-      className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
-    >
-      <div className="flex gap-4 p-4">
-        <div className="flex-shrink-0 relative">
-          <div
-            className={`w-[120px] h-[100px] rounded-xl overflow-hidden ${
-              heroImage ? "" : `bg-gradient-to-br ${property.imageGradient}`
-            }`}
-          >
-            {heroImage && (
-              <img
-                src={heroImage}
-                alt={property.projectName}
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-          <span className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-success text-success-foreground flex items-center justify-center shadow">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-          </span>
-        </div>
-
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[14px] text-foreground leading-tight">
-                <span className="font-semibold font-display">{property.projectName}</span>
-                <span className="text-muted-foreground font-normal"> · U-{property.unitNumber}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {property.location}
-              </p>
-            </div>
-            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
-              Tuya desde {property.deliveryDate}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 divide-x divide-border-subtle border-y border-border-subtle py-2 mt-1">
-            <div className="px-2 first:pl-0">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Valor actual
-              </p>
-              <p className="text-[14px] font-semibold text-foreground tabular-nums mt-0.5">
-                {fmt(valueMXN)}
-              </p>
-            </div>
-            <div className="px-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Plusvalía
-              </p>
-              <p
-                className={`text-[14px] font-semibold tabular-nums mt-0.5 inline-flex items-center gap-1 ${
-                  plusvaliaPct >= 0 ? "text-success" : "text-destructive"
-                }`}
-              >
-                <TrendingUp className="w-3 h-3" />
-                {plusvaliaPct >= 0 ? "+" : ""}
-                {plusvaliaPct}%
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 py-3 border-t border-border-subtle flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap text-[11px]">
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${maintConfig.cls}`}>
-            <Mi className="w-3 h-3" />
-            {maintConfig.label}
-          </span>
-          {maintenance && (
-            <span className="text-muted-foreground">
-              Próx. {fmt(maintenance.monthlyFee)} · {maintenance.nextDueDate}
-            </span>
-          )}
-          <span className="text-muted-foreground">· Uso propio</span>
-        </div>
-        <span className="text-[12px] font-medium text-primary group-hover:underline inline-flex items-center gap-0.5">
-          Ver detalle
-          <ChevronRight className="w-3.5 h-3.5" />
-        </span>
-      </div>
-
-      {maintStatus !== "current" && maintenance && (
-        <div className="px-4 py-2 bg-warning/10 border-t border-warning/30 flex items-center justify-between text-[12px]">
-          <span className="font-medium text-warning">
-            Mantenimiento pendiente · {fmt(maintenance.monthlyFee)}
-          </span>
-          <span className="text-warning font-semibold">Pagar →</span>
-        </div>
-      )}
-    </div>
-  );
-}
+import { PatrimonyCard } from "@/components/admin/portal-cliente/investor/PropertyListCards";
 
 const KpiCell = ({ label, value, tone }: { label: string; value: string; tone: "default" | "success" }) => (
   <div className="rounded-2xl bg-card border border-border p-4">
@@ -255,19 +135,19 @@ const ClientePatrimonio = () => {
                 {filtered.length === 0 ? (
                   <p className="px-4 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>
                 ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {filtered.map((inv) => (
-                  <PatrimonyCard
-                    key={inv.property.id}
-                    inv={inv}
-                    onClick={() =>
-                      navigate(`/admin/portal-cliente/patrimonio/propiedad/${inv.property.id}`, {
-                        state: { from: "patrimonio" },
-                      })
-                    }
-                  />
-                ))}
-              </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filtered.map((inv) => (
+                      <PatrimonyCard
+                        key={inv.property.id}
+                        inv={inv}
+                        onClick={() =>
+                          navigate(`/admin/portal-cliente/patrimonio/propiedad/${inv.property.id}`, {
+                            state: { from: "patrimonio" },
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
                 )}
               </>
             )}
@@ -279,4 +159,3 @@ const ClientePatrimonio = () => {
 };
 
 export default ClientePatrimonio;
-void AlertCircle;

@@ -213,7 +213,7 @@ const ActivitySection = ({ portfolio, onPayNow }: ActivitySectionProps) => {
           {/* "Ver todo" button when there are more than 3 */}
           {hasMore && (
             <button
-              onClick={() => navigate("/admin/portal-cliente/en-adquisicion")}
+              onClick={() => navigate("/admin/portal-cliente/propiedades")}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium text-primary hover:bg-primary/5 transition-colors border border-dashed border-primary/30"
             >
               Ver {allItems.length - MAX_VISIBLE} más
