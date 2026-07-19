@@ -1,3 +1,6 @@
+// @deprecated — removido de Portal Socio Bancario V1. El banco NO impersona
+// (ni "Ver como Administrador de Proyecto" ni "Vista por defecto"). Ya no se
+// renderiza en PortalSocioBancarioLayout. Se conserva para reversibilidad.
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {

@@ -29,6 +29,10 @@ export interface AvanceObraVideo {
 export interface AvanceObraFoto {
   src: string;
   alt: string;
+  /** Fecha real de la foto (multimedias_proyecto.fecha_creacion), o null. */
+  fecha: string | null;
+  // SWAP POINT: descripción por foto — `multimedias_proyecto` no tiene columna
+  // de descripción hoy. Cuando exista, exponerla aquí (no fabricar texto).
 }
 
 export interface AvanceObraData {
@@ -95,22 +99,31 @@ export function useProyectosAvanceObra() {
 }
 
 export function useAvanceObraProyecto(proyectoId: number | null) {
+  // TODO RLS: acotar server-side por desarrollo asignado al socio (Jorge).
   return useQuery({
     queryKey: ["socio-bancario-avance-obra", proyectoId],
     enabled: proyectoId !== null,
     staleTime: 60_000,
     queryFn: async (): Promise<AvanceObraData> => {
       // 1) Fechas del proyecto → % de avance global.
+      // NOTA: este "% real" es una ESTIMACIÓN por tiempo transcurrido (no un
+      // avance físico medido). No existe tabla de programa/baseline de obra en
+      // la base → el "programado" y la curva programada se dejan como estado
+      // vacío honesto en la UI. // SWAP POINT: tabla de programa de obra.
       const { data: proj, error: projErr } = await (supabase as any)
         .from("proyectos")
-        .select("id, fecha_lanzamiento, fecha_entrega_proyecto, fecha_entrega, fecha_actualizacion")
+        .select(
+          "id, fecha_inicio_construccion, fecha_lanzamiento, fecha_entrega_proyecto, fecha_entrega, fecha_actualizacion",
+        )
         .eq("id", proyectoId)
         .maybeSingle();
       if (projErr) throw projErr;
 
+      const inicio: string | null =
+        proj?.fecha_inicio_construccion ?? proj?.fecha_lanzamiento ?? null;
       const entrega: string | null =
         proj?.fecha_entrega_proyecto ?? proj?.fecha_entrega ?? null;
-      const progress = calcProgressFromDates(proj?.fecha_lanzamiento ?? null, entrega);
+      const progress = calcProgressFromDates(inicio, entrega);
       const milestones = AVANCE_OBRA_MILESTONES.map((m) => ({
         ...m,
         done: progress >= m.pct,
@@ -148,19 +161,21 @@ export function useAvanceObraProyecto(proyectoId: number | null) {
       if (avanceCatId != null) {
         const { data: fotoRows, error: fotoErr } = await (supabase as any)
           .from("multimedias_proyecto")
-          .select("id, url, id_categoria")
+          .select("id, url, id_categoria, fecha_creacion")
           .eq("id_proyecto", proyectoId)
           .eq("id_categoria", avanceCatId)
           .eq("es_imagen", true)
           .eq("activo", true)
-          .order("id", { ascending: false })
+          .order("fecha_creacion", { ascending: false, nullsFirst: false })
           .limit(50);
         if (fotoErr) throw fotoErr;
         fotos = ((fotoRows || []) as Array<any>)
           .filter((f) => f.url)
-          .map((f, i) => ({
+          .map((f) => ({
             src: f.url as string,
-            alt: `Avance de obra ${i + 1}`,
+            // alt genérico para accesibilidad (no es una descripción real).
+            alt: "Foto de avance de obra",
+            fecha: (f.fecha_creacion ?? null) as string | null,
           }));
       }
 

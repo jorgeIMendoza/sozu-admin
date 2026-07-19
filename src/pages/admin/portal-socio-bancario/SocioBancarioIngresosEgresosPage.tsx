@@ -1,3 +1,6 @@
+// @deprecated — removido de Portal Socio Bancario V1 por confidencialidad / fuera de scope.
+// No exponer a rol socio_bancario. Es el P&L / comisión interna de SOZU: nunca visible al banco.
+// Se conserva para reversibilidad / posible reutilización interna.
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownRight,

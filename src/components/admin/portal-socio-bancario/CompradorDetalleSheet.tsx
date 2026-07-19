@@ -54,6 +54,7 @@ export function CompradorDetalleSheet({
   compradores,
   initialPersonaId,
   readOnly = false,
+  bancoMode = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,12 @@ export function CompradorDetalleSheet({
   compradores: CompradorResumen[];
   initialPersonaId?: number | null;
   readOnly?: boolean;
+  /**
+   * Modo banco (Portal Socio Bancario): oculta datos fiscales y de cuentas
+   * bancarias del comprador (PII no necesaria para verificar la venta).
+   * // SWAP POINT: confirmar con aviso de privacidad qué campos se transfieren.
+   */
+  bancoMode?: boolean;
 }) {
   const idPersonas = compradores.map((c) => c.idPersona);
   const { data: fullByPersona, isLoading } = useCompradoresFullDetail(idPersonas);
@@ -186,15 +193,17 @@ export function CompradorDetalleSheet({
               <TabsList className="w-full justify-start flex-wrap h-auto">
                 <TabsTrigger value="basica">Básica</TabsTrigger>
                 <TabsTrigger value="direccion">Dirección</TabsTrigger>
-                <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+                {!bancoMode && <TabsTrigger value="fiscal">Fiscal</TabsTrigger>}
                 <TabsTrigger value="documentos">
                   Documentos
                   {full.documentos.length > 0 && <span className="ml-1.5 text-[10px] opacity-70">({full.documentos.length})</span>}
                 </TabsTrigger>
+                {!bancoMode && (
                 <TabsTrigger value="cuentas">
                   Cuentas
                   {full.cuentasBancarias.length > 0 && <span className="ml-1.5 text-[10px] opacity-70">({full.cuentasBancarias.length})</span>}
                 </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="basica" className="pt-4 space-y-4">
@@ -242,6 +251,7 @@ export function CompradorDetalleSheet({
                 </div>
               </TabsContent>
 
+              {!bancoMode && (
               <TabsContent value="fiscal" className="pt-4 space-y-4">
                 <SectionValidationBar
                   readOnly={readOnly}
@@ -266,6 +276,7 @@ export function CompradorDetalleSheet({
                   <DrawerKv label="Ocupación" value={full.fiscal.ocupacion} />
                 </div>
               </TabsContent>
+              )}
 
               <TabsContent value="documentos" className="pt-4">
                 {full.documentos.length === 0 ? (
@@ -324,6 +335,7 @@ export function CompradorDetalleSheet({
                 )}
               </TabsContent>
 
+              {!bancoMode && (
               <TabsContent value="cuentas" className="pt-4">
                 {full.cuentasBancarias.length === 0 ? (
                   <p className="text-[13px] text-muted-foreground italic">Sin cuentas bancarias registradas.</p>
@@ -350,6 +362,7 @@ export function CompradorDetalleSheet({
                   </div>
                 )}
               </TabsContent>
+              )}
             </Tabs>
           ) : (
             <p className="text-[13px] text-muted-foreground">No se encontró información detallada del comprador.</p>
