@@ -1,3 +1,6 @@
+// @deprecated — removido de Portal Socio Bancario V1 por confidencialidad / fuera de scope.
+// No exponer a rol socio_bancario. Cobranza interna de SOZU: no es visible al banco.
+// Se conserva para reversibilidad / posible reutilización interna.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Wallet,

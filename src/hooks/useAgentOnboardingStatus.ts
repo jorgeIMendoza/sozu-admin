@@ -226,7 +226,11 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
 
   const constanciaApproved = documentos.some((d: any) => d.id_tipo_documento === 6 && d.id_estatus_verificacion === 2);
   const constanciaExists = docTypes.has(6);
-  const fiscalStageComplete = fiscalComplete && constanciaApproved;
+  // La CSF es la fuente de los datos fiscales: si se extrajo y quedó validada
+  // (estatus 2), la sección fiscal se da por válida/completa directamente, sin
+  // exigir el resto de campos (uso_cfdi, IDs país/estado/municipio fiscal) que
+  // la constancia no aporta al extraer.
+  const fiscalStageComplete = constanciaApproved || fiscalComplete;
   const fiscalStagePartial = !fiscalStageComplete && (fiscalPartial || fiscalComplete || constanciaExists);
 
   const basicMissing: string[] = [];

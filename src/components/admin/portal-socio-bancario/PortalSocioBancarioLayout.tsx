@@ -1,31 +1,53 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ArrowLeftRight,
-  Banknote,
   FolderOpen,
   HardHat,
+  LayoutDashboard,
   LogOut,
   Menu,
   TrendingUp,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
-import { supabase } from "@/integrations/supabase/client";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import {
-  SocioBancarioImpersonationProvider,
-  useSocioBancarioImpersonation,
-} from "@/contexts/SocioBancarioImpersonationContext";
-import { SocioBancarioImpersonationSelector } from "./SocioBancarioImpersonationSelector";
+import { useSocioProyecto } from "@/hooks/usePortalSocioBancario/useSocioProyecto";
+
+/**
+ * Selector de desarrollo — visible SOLO cuando el banco financió más de uno.
+ * Cambia el desarrollo activo que consumen todos los módulos del portal.
+ */
+function DesarrolloSelector() {
+  const { desarrollos, idProyecto, setDesarrolloActivo } = useSocioProyecto();
+  if (desarrollos.length <= 1) return null;
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <span className="text-[12px] font-medium text-muted-foreground">Desarrollo:</span>
+      <Select
+        value={idProyecto != null ? String(idProyecto) : undefined}
+        onValueChange={(v) => setDesarrolloActivo(Number(v))}
+      >
+        <SelectTrigger className="h-9 w-[280px]">
+          <SelectValue placeholder="Selecciona un desarrollo" />
+        </SelectTrigger>
+        <SelectContent>
+          {desarrollos.map((d) => (
+            <SelectItem key={d.id} value={String(d.id)}>
+              {d.nombre ?? `Desarrollo #${d.id}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 const BASE = "/admin/portal-socio-bancario";
 
@@ -41,31 +63,30 @@ interface NavGroup {
 }
 
 /**
- * Catálogo de navegación del portal. La visibilidad de cada item NO es fija:
- * se resuelve contra submenus.vista_front_end + submenus_permisos del rol
- * (useAllowedMenus), o del rol impersonado cuando hay impersonación activa.
+ * Navegación del Portal Socio Bancario V1. Reencuadrado alrededor de la única
+ * pregunta del banco: ¿la obra avanza, se vende, y las ventas son reales?
+ * (Resumen → Obra → Comercialización → Evidencia).
+ *
+ * Las rutas confidenciales / fuera de scope (Ingresos y Egresos, Análisis de
+ * Cobranza, Forecast de Ingresos) fueron removidas del sidebar y del router por
+ * confidencialidad; sus componentes se conservan con @deprecated.
  */
 const navGroups: NavGroup[] = [
   {
-    label: "Análisis",
-    items: [
-      { label: "Histórico Comercial", path: `${BASE}/historico-comercial`, icon: TrendingUp },
-      { label: "Análisis de Cobranza", path: `${BASE}/analisis-cobranza`, icon: Banknote },
-    ],
+    label: "Resumen",
+    items: [{ label: "Resumen del Desarrollo", path: `${BASE}/resumen`, icon: LayoutDashboard }],
   },
   {
-    label: "Finanzas",
-    items: [
-      { label: "Ingresos y Egresos", path: `${BASE}/ingresos-egresos`, icon: ArrowLeftRight },
-      { label: "Forecast de Ingresos", path: `${BASE}/forecast-ingresos`, icon: TrendingUp },
-    ],
+    label: "Obra",
+    items: [{ label: "Avance de Obra", path: `${BASE}/avance-obra`, icon: HardHat }],
   },
   {
-    label: "Operación",
-    items: [
-      { label: "Expedientes", path: `${BASE}/expedientes`, icon: FolderOpen },
-      { label: "Avance de Obra", path: `${BASE}/avance-obra`, icon: HardHat },
-    ],
+    label: "Comercialización",
+    items: [{ label: "Ventas e Inventario", path: `${BASE}/ventas-inventario`, icon: TrendingUp }],
+  },
+  {
+    label: "Evidencia",
+    items: [{ label: "Expedientes", path: `${BASE}/expedientes`, icon: FolderOpen }],
   },
 ];
 
@@ -73,55 +94,8 @@ const PortalSocioBancarioLayoutInner = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const { isPathAllowed } = useAllowedMenus();
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { isImpersonating, impersonatedUser } = useSocioBancarioImpersonation();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Al impersonar: rutas que el ROL impersonado puede LEER, para pintar el
-  // sidebar como lo vería ese usuario (sin el bypass de super admin).
-  const { data: impersonatedPaths } = useQuery({
-    queryKey: ["socio-bancario-impersonated-paths", impersonatedUser?.rol_id],
-    enabled: isImpersonating && impersonatedUser?.rol_id != null,
-    queryFn: async () => {
-      const { data: leer } = await supabase
-        .from("permisos")
-        .select("id")
-        .eq("nombre", "leer")
-        .maybeSingle();
-      const leerId = (leer as any)?.id;
-      const { data: perms } = await supabase
-        .from("submenus_permisos")
-        .select("submenu_id")
-        .eq("rol_id", impersonatedUser!.rol_id)
-        .eq("activo", true)
-        .eq("permiso_id", leerId);
-      const ids = (perms ?? []).map((p: any) => p.submenu_id);
-      const set = new Set<string>();
-      if (ids.length) {
-        const { data: subs } = await supabase
-          .from("submenus")
-          .select("vista_front_end")
-          .in("id", ids);
-        (subs ?? []).forEach((s: any) => {
-          if (s.vista_front_end) set.add(s.vista_front_end);
-        });
-      }
-      return set;
-    },
-  });
-
-  const visibleGroups = useMemo(() => {
-    const useImp = isImpersonating && impersonatedPaths != null;
-    return navGroups
-      .map((group) => {
-        const items = group.items.filter((item) =>
-          useImp ? impersonatedPaths!.has(item.path) : isPathAllowed(item.path),
-        );
-        return items.length ? { ...group, items } : null;
-      })
-      .filter(Boolean) as NavGroup[];
-  }, [isPathAllowed, isImpersonating, impersonatedPaths]);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -137,7 +111,9 @@ const PortalSocioBancarioLayoutInner = () => {
 
   const rawName = profile?.nombre || profile?.email?.split("@")[0] || "Usuario";
   const userName = rawName.trim().split(/\s+/).slice(0, 2).join(" ");
-  const userRole = profile?.rol_nombre ?? "Socio Bancario";
+  // El banco es un socio de solo lectura: el pie muestra "Socio Bancario",
+  // nunca el rol interno (Super Administrador / Administrador de Proyecto).
+  const userRole = "Socio Bancario";
   const initials =
     userName
       .split(" ")
@@ -158,7 +134,7 @@ const PortalSocioBancarioLayoutInner = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {visibleGroups.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}
@@ -278,7 +254,9 @@ const PortalSocioBancarioLayoutInner = () => {
         </header>
 
         <main className="px-8 py-4 bg-background min-h-screen">
-          <SocioBancarioImpersonationSelector />
+          {/* Sin selector "Ver como": el banco no impersona. Selector de
+              desarrollo solo si el banco financió más de uno. */}
+          <DesarrolloSelector />
           <Outlet />
         </main>
       </div>
@@ -288,9 +266,7 @@ const PortalSocioBancarioLayoutInner = () => {
 
 export const PortalSocioBancarioLayout = () => (
   <PortalTrackingProvider portal="socio-bancario">
-    <SocioBancarioImpersonationProvider>
-      <PortalSocioBancarioLayoutInner />
-    </SocioBancarioImpersonationProvider>
+    <PortalSocioBancarioLayoutInner />
   </PortalTrackingProvider>
 );
 

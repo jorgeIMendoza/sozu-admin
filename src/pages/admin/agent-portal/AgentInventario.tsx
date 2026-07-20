@@ -360,7 +360,7 @@ const ProjectCard = memo(function ProjectCard({
                   track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
                   setShareOpen(true);
                 }}
-                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md bg-[hsl(158_64%_38%)] text-white hover:brightness-95"
+                className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
               >
                 <Share2 className="h-4 w-4" />
               </button>
@@ -376,7 +376,7 @@ const ProjectCard = memo(function ProjectCard({
           </DialogHeader>
           <button
             onClick={() => handleShare("web")}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(158_64%_38%)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[hsl(158_64%_31%)]"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
           >
             <Globe className="h-4 w-4" /> Ver página web
           </button>

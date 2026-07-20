@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { DevelopmentInfo } from "@/lib/offers/offer-data";
+import { FloorPlanCanvas } from "@/components/admin/PlanosPropertyModal";
 
 interface Props {
   images: string[];
@@ -13,9 +14,16 @@ interface Props {
   /** 18.11.A: si se provee, el botón "Ver recorrido" hace scroll a esta sección
    *  en lugar de abrir el modal de video. */
   tour360Id?: string;
+  /** Plano de ubicación en el nivel. Si la imagen visible coincide con
+   *  `floorPlanUrl` y hay regiones, se renderiza con FloorPlanCanvas para resaltar
+   *  la unidad del usuario en verde (en vez de un <img> plano). */
+  floorPlanUrl?: string;
+  floorPlanRegiones?: any[];
+  floorPlanUnit?: string;
+  floorPlanFullNumber?: string;
 }
 
-const OfferGallery = ({ images, captions, videoUrl, tour360Id }: Props) => {
+const OfferGallery = ({ images, captions, videoUrl, tour360Id, floorPlanUrl, floorPlanRegiones, floorPlanUnit, floorPlanFullNumber }: Props) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -30,6 +38,11 @@ const OfferGallery = ({ images, captions, videoUrl, tour360Id }: Props) => {
   const clampedIdx = Math.min(activeIdx, Math.max(0, visibleItems.length - 1));
   const currentItem = visibleItems[clampedIdx];
   const currentCaption = currentItem ? captions?.[currentItem.orig] : undefined;
+
+  // La imagen visible es el plano de ubicación del nivel → resaltar la unidad.
+  const isFloorPlan =
+    !!currentItem && !!floorPlanUrl && currentItem.url === floorPlanUrl &&
+    Array.isArray(floorPlanRegiones) && floorPlanRegiones.length > 0;
 
   const markBroken = (origIdx: number) =>
     setBrokenIndices((prev) => new Set([...prev, origIdx]));
@@ -83,19 +96,34 @@ const OfferGallery = ({ images, captions, videoUrl, tour360Id }: Props) => {
 
   return (
     <>
-      <div className="relative w-full aspect-video rounded-md overflow-hidden bg-muted">
-        <img
-          key={currentItem?.url}
-          src={currentItem?.url}
-          alt={`Imagen ${clampedIdx + 1}`}
-          width={1280}
-          height={960}
-          onClick={() => setLightboxOpen(true)}
-          onError={() => currentItem && markBroken(currentItem.orig)}
-          loading="eager"
-          decoding="async"
-          className="w-full h-full object-contain cursor-zoom-in animate-in fade-in duration-500"
-        />
+      <div className={`relative w-full rounded-md overflow-hidden bg-muted ${isFloorPlan ? "" : "aspect-video"}`}>
+        {isFloorPlan ? (
+          <div className="w-full cursor-zoom-in" onClick={() => setLightboxOpen(true)}>
+            <FloorPlanCanvas
+              imageUrl={currentItem!.url}
+              regiones={floorPlanRegiones!}
+              highlightUnit={floorPlanUnit ?? ""}
+              fullPropertyNumber={floorPlanFullNumber}
+            />
+            <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-medium">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(34,197,94,0.95)" }} />
+              <span>Tu unidad{floorPlanUnit ? ` · ${floorPlanUnit}` : ""}</span>
+            </div>
+          </div>
+        ) : (
+          <img
+            key={currentItem?.url}
+            src={currentItem?.url}
+            alt={`Imagen ${clampedIdx + 1}`}
+            width={1280}
+            height={960}
+            onClick={() => setLightboxOpen(true)}
+            onError={() => currentItem && markBroken(currentItem.orig)}
+            loading="eager"
+            decoding="async"
+            className="w-full h-full object-contain cursor-zoom-in animate-in fade-in duration-500"
+          />
+        )}
         <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-xs font-medium">
           <span className="font-semibold tabular-nums">{clampedIdx + 1}/{visibleItems.length}</span>
           {currentCaption && (
@@ -184,13 +212,24 @@ const OfferGallery = ({ images, captions, videoUrl, tour360Id }: Props) => {
                 <ChevronLeft className="w-5 h-5" />
               </button>
             )}
-            <img
-              key={currentItem.url}
-              src={currentItem.url}
-              alt={captions?.[currentItem.orig] ?? `Imagen ${clampedIdx + 1} de ${visibleItems.length}`}
-              onError={() => markBroken(currentItem.orig)}
-              className="max-w-full max-h-full object-contain rounded-lg animate-in fade-in-50 duration-300"
-            />
+            {isFloorPlan ? (
+              <div className="w-full max-w-4xl max-h-full overflow-auto">
+                <FloorPlanCanvas
+                  imageUrl={currentItem.url}
+                  regiones={floorPlanRegiones!}
+                  highlightUnit={floorPlanUnit ?? ""}
+                  fullPropertyNumber={floorPlanFullNumber}
+                />
+              </div>
+            ) : (
+              <img
+                key={currentItem.url}
+                src={currentItem.url}
+                alt={captions?.[currentItem.orig] ?? `Imagen ${clampedIdx + 1} de ${visibleItems.length}`}
+                onError={() => markBroken(currentItem.orig)}
+                className="max-w-full max-h-full object-contain rounded-lg animate-in fade-in-50 duration-300"
+              />
+            )}
             {visibleItems.length > 1 && (
               <button
                 onClick={() => stepLightbox(1)}
