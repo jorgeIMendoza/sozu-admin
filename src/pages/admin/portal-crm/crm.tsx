@@ -2,12 +2,16 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
+  useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core";
+import {
   ArrowLeft, StickyNote, ClipboardList, CalendarClock, Briefcase,
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
+  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2792,10 +2796,33 @@ function DealMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Colores de columna del tablero (etapas dinámicas): ganado=verde, perdido=rojo,
+// el resto cicla una paleta por índice.
+const BOARD_COLORS = [
+  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
+];
+function etapaColorClasses(et: any, i: number): string {
+  if (et?.es_ganado) return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
+  if (et?.es_perdido) return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+  return BOARD_COLORS[i % BOARD_COLORS.length];
+}
+
 export function CrmDeals() {
+  const qc = useQueryClient();
+  const [view, setView] = useState<"list" | "board">("list");
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [boardPipeline, setBoardPipeline] = useState<string>("");
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const { data: pipelines } = useQuery({
     queryKey: ["deals-pipelines"],
@@ -2807,13 +2834,15 @@ export function CrmDeals() {
 
   const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
+  // Se traen TODOS los negocios (filtrando por propietario/búsqueda en servidor); el
+  // filtro de pipeline se aplica en cliente para que la Lista y el Tablero compartan datos.
+  const dealsKey = ["deals-list", ownerFilter, search.trim()];
   const { data, isLoading } = useQuery({
-    queryKey: ["deals-list", pipelineFilter, ownerFilter, search.trim()],
+    queryKey: dealsKey,
     queryFn: async () => {
       let q = (supabase as any).from("crm_negocios")
         .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, fecha_creacion")
         .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
-      if (pipelineFilter !== "all") q = q.eq("id_pipeline", Number(pipelineFilter));
       if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
       if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
       const { data: negocios, error } = await q;
@@ -2861,10 +2890,29 @@ export function CrmDeals() {
     },
   });
 
-  const rows = data?.rows ?? [];
+  const rows: any[] = data?.rows ?? [];
+
+  // Pipeline efectivo del tablero: el elegido o, por defecto, el primero.
+  const effectiveBoardPipeline = boardPipeline || (pipelines?.[0] ? String(pipelines[0].id) : "");
+
+  const { data: boardEtapas } = useQuery({
+    queryKey: ["deals-board-etapas", effectiveBoardPipeline],
+    enabled: view === "board" && !!effectiveBoardPipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden, probabilidad, es_ganado, es_perdido")
+        .eq("id_pipeline", Number(effectiveBoardPipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as any[];
+    },
+  });
+
+  const listRows = pipelineFilter === "all" ? rows : rows.filter((r) => String(r.id_pipeline) === pipelineFilter);
+  const boardRows = rows.filter((r) => String(r.id_pipeline) === effectiveBoardPipeline);
+  const activeRows = view === "board" ? boardRows : listRows;
+
   const metrics = useMemo(() => {
     let total = 0, ponderada = 0, abierto = 0, ganado = 0;
-    for (const r of rows) {
+    for (const r of activeRows) {
       const v = Number(r.valor ?? 0);
       total += v;
       ponderada += v * (Number(r.probabilidad ?? 0) / 100);
@@ -2872,11 +2920,53 @@ export function CrmDeals() {
       if (r.es_ganado) ganado += v;
     }
     return { total, ponderada, abierto, ganado };
-  }, [rows]);
+  }, [activeRows]);
+
+  const activeDeal = rows.find((r) => r.id === activeId) ?? null;
+
+  const handleDragEnd = async (e: DragEndEvent) => {
+    setActiveId(null);
+    const dealId = Number(e.active.id);
+    const targetEtapa = e.over ? Number(e.over.id) : null;
+    if (!targetEtapa) return;
+    const deal = rows.find((r) => r.id === dealId);
+    if (!deal || deal.id_etapa === targetEtapa) return;
+    const targetEt: any = (boardEtapas ?? []).find((et: any) => et.id === targetEtapa);
+
+    // Optimista: mueve la tarjeta ya en la UI.
+    qc.setQueryData(dealsKey, (old: any) => old ? {
+      ...old,
+      rows: old.rows.map((r: any) => r.id === dealId ? {
+        ...r, id_etapa: targetEtapa,
+        etapa_nombre: targetEt?.nombre ?? r.etapa_nombre,
+        probabilidad: targetEt ? Number(targetEt.probabilidad) : r.probabilidad,
+        es_ganado: !!targetEt?.es_ganado, es_perdido: !!targetEt?.es_perdido,
+      } : r),
+    } : old);
+
+    const { error } = await (supabase as any).from("crm_negocios").update({ id_etapa: targetEtapa }).eq("id", dealId);
+    if (error) { toast.error(error.message); qc.invalidateQueries({ queryKey: ["deals-list"] }); return; }
+    toast.success(`Movido a "${targetEt?.nombre ?? "etapa"}"`);
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+  };
+
+  const viewToggle = (
+    <div className="inline-flex rounded-md border border-border overflow-hidden">
+      <button onClick={() => setView("list")} title="Vista de lista"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+        <List className="h-4 w-4" />Lista
+      </button>
+      <button onClick={() => setView("board")} title="Vista de tablero"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-border transition-colors ${view === "board" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+        <LayoutGrid className="h-4 w-4" />Tablero
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Negocios" description={`${rows.length} negocio(s)`} />
+      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={viewToggle} />
 
       {/* Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -2888,13 +2978,22 @@ export function CrmDeals() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
-          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los pipelines</SelectItem>
-            {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {view === "list" ? (
+          <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los pipelines</SelectItem>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+            <SelectContent>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={ownerFilter} onValueChange={setOwnerFilter}>
           <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
           <SelectContent>
@@ -2908,10 +3007,28 @@ export function CrmDeals() {
         </div>
       </div>
 
-      {/* Tabla */}
+      {/* Contenido */}
       {isLoading ? (
         <Skeleton className="h-64 w-full" />
-      ) : rows.length === 0 ? (
+      ) : view === "board" ? (
+        !effectiveBoardPipeline ? (
+          <EmptyState title="Sin pipelines" description="Crea un pipeline en Configuración para ver el tablero." />
+        ) : (
+          <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(Number(e.active.id))} onDragEnd={handleDragEnd}>
+            <div className="flex gap-3 overflow-x-auto pb-4">
+              {(boardEtapas ?? []).map((et: any, i: number) => {
+                const colDeals = boardRows.filter((r) => r.id_etapa === et.id);
+                const total = colDeals.reduce((s, r) => s + Number(r.valor ?? 0), 0);
+                return <BoardColumn key={et.id} etapa={et} deals={colDeals} colorClass={etapaColorClasses(et, i)} total={total} />;
+              })}
+              {(boardEtapas ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground py-8">Este pipeline no tiene etapas. Agrégalas en Configuración → Pipelines.</p>
+              )}
+            </div>
+            <DragOverlay>{activeDeal && <DealBoardCard deal={activeDeal} dragging />}</DragOverlay>
+          </DndContext>
+        )
+      ) : listRows.length === 0 ? (
         <EmptyState title="Sin negocios" description="No hay negocios que coincidan con los filtros." />
       ) : (
         <div className="rounded-lg border border-border overflow-x-auto">
@@ -2928,7 +3045,7 @@ export function CrmDeals() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r: any) => (
+              {listRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.nombre}</TableCell>
                   <TableCell className="text-muted-foreground">{r.pipeline_nombre}</TableCell>
@@ -2949,8 +3066,57 @@ export function CrmDeals() {
           </Table>
         </div>
       )}
-      {data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+      {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
     </div>
+  );
+}
+
+// Columna del tablero (zona soltable) con su header de color y total.
+function BoardColumn({ etapa, deals, colorClass, total }: { etapa: any; deals: any[]; colorClass: string; total: number }) {
+  const { setNodeRef, isOver } = useDroppable({ id: etapa.id });
+  return (
+    <div className="min-w-[280px] max-w-[280px] flex flex-col">
+      <div className={`rounded-t-lg px-3 py-2 flex items-center justify-between ${colorClass}`}>
+        <span className="font-semibold text-sm truncate">{etapa.nombre}</span>
+        <Badge variant="secondary" className="text-xs shrink-0">{deals.length}</Badge>
+      </div>
+      <div ref={setNodeRef}
+        className={`border border-t-0 rounded-b-lg bg-muted/30 p-2 space-y-2 min-h-[240px] max-h-[calc(100vh-360px)] overflow-y-auto flex-1 ${isOver ? "ring-2 ring-primary ring-inset" : ""}`}>
+        {deals.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-8">Sin negocios</p>
+        ) : deals.map((d) => <DealBoardCard key={d.id} deal={d} />)}
+      </div>
+      <div className="px-1 pt-1 text-[11px] text-muted-foreground tabular-nums">{fmtMXN(total)}</div>
+    </div>
+  );
+}
+
+// Tarjeta arrastrable del tablero.
+function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
+  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
+  return (
+    <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
+      className={`cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
+      <CardContent className="p-3 space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
+            <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[deal.prioridad].label}`} />
+          )}
+          <p className="text-sm font-semibold truncate flex-1">{deal.nombre}</p>
+        </div>
+        {deal.contacto_nombre && <p className="text-xs text-muted-foreground truncate">{deal.contacto_nombre}</p>}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-bold tabular-nums">{deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—"}</span>
+          {deal.fecha_cierre_estimada && (
+            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+              <Calendar className="h-3 w-3" />{fmtDate(deal.fecha_cierre_estimada)}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground truncate">{deal.propietario_nombre}</p>
+      </CardContent>
+    </Card>
   );
 }
 
