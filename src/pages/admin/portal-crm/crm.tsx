@@ -2255,6 +2255,11 @@ function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [recording, setRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const editor = useEditor({
     extensions: [
@@ -2266,30 +2271,106 @@ function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string
     ],
     editorProps: {
       attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" },
+      // Ctrl+V de imágenes → se adjuntan (no se incrustan en el texto).
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        const imgs: File[] = [];
+        for (const it of Array.from(items)) {
+          if (it.kind === "file" && it.type.startsWith("image/")) {
+            const f = it.getAsFile();
+            if (f) imgs.push(f);
+          }
+        }
+        if (!imgs.length) return false;
+        setPending((p) => [
+          ...p,
+          ...imgs.map((file) => ({ id: crypto.randomUUID(), file, tipo: "image" as AttachKind, nombre: file.name || "imagen.png", previewUrl: URL.createObjectURL(file) })),
+        ]);
+        toast.success(imgs.length > 1 ? `${imgs.length} imágenes adjuntadas` : "Imagen adjuntada");
+        return true;
+      },
     },
     onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
   });
 
+  const addPending = (files: File[]) => {
+    if (!files.length) return;
+    setPending((p) => [
+      ...p,
+      ...files.map((file) => ({ id: crypto.randomUUID(), file, tipo: classifyAttachment(file), nombre: file.name, previewUrl: URL.createObjectURL(file) })),
+    ]);
+  };
+
+  const removePending = (id: string) => {
+    setPending((p) => {
+      const found = p.find((x) => x.id === id);
+      if (found) URL.revokeObjectURL(found.previewUrl);
+      return p.filter((x) => x.id !== id);
+    });
+  };
+
+  const resetAttachments = () => {
+    setPending((p) => { p.forEach((a) => URL.revokeObjectURL(a.previewUrl)); return []; });
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], `nota-voz-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, { type: "audio/webm" });
+        addPending([file]);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setRecording(true);
+    } catch {
+      toast.error("No se pudo acceder al micrófono");
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  };
+
+  const handleOpenChange = (v: boolean) => {
+    if (!v) { resetAttachments(); editor?.commands.clearContent(); setIsEmpty(true); if (recording) stopRecording(); }
+    setOpen(v);
+  };
+
+  const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
+
   const save = async () => {
-    if (!userId || !editor || editor.isEmpty) return;
+    if (!canSave || !editor) return;
     setSaving(true);
     const html = editor.getHTML();
-    const { error } = await (supabase as any).from("crm_notas").insert({
+    const { data, error } = await (supabase as any).from("crm_notas").insert({
       id_entidad_relacionada: Number(contactId),
       id_usuario: userId,
       contenido: html,
-    });
+    }).select("id").single();
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
     toast.success("Nota guardada");
     setOpen(false);
     editor.commands.clearContent();
     setIsEmpty(true);
+    resetAttachments();
     onSaved();
   };
 
+  const attachBtn = "h-7 w-7 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-muted hover:text-foreground";
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
@@ -2302,9 +2383,49 @@ function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string
         <div className="border border-border rounded-lg overflow-hidden">
           <RichNoteToolbar editor={editor} />
           <EditorContent editor={editor} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => { addPending(Array.from(e.target.files ?? [])); e.target.value = ""; }}
+          />
+          {pending.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-3 pt-2">
+              {pending.map((a) => (
+                <div key={a.id} className="relative">
+                  {a.tipo === "image" ? (
+                    <img src={a.previewUrl} alt={a.nombre} className="h-16 w-16 object-cover rounded-md border border-border" />
+                  ) : (
+                    <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs max-w-[200px]">
+                      {a.tipo === "audio" ? <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                      <span className="truncate">{a.nombre}</span>
+                      <span className="text-[10px] text-muted-foreground/70 shrink-0">{humanFileSize(a.file.size)}</span>
+                    </div>
+                  )}
+                  <button type="button" onClick={() => removePending(a.id)} className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow" title="Quitar">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-border bg-muted/20">
+            <button type="button" className={attachBtn} title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={recording ? "h-7 w-7 flex items-center justify-center rounded bg-destructive/10 text-destructive animate-pulse" : attachBtn}
+              title={recording ? "Detener grabación" : "Grabar nota de voz"}
+              onClick={recording ? stopRecording : startRecording}
+            >
+              {recording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={saving || !editor || isEmpty} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button onClick={save} disabled={saving || !canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
           </Button>
         </DialogFooter>
