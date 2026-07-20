@@ -64,5 +64,6 @@ bun.lockb
 # Archivos de análisis/documentación generados localmente
 ARCHITECTURE.md
 DESIGN.md
+CAMBIOS_FRONT_socio_bancario.md
 graphify-out/
 *:Zone.Identifier
