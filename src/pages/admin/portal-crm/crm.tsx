@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -8,7 +8,7 @@ import {
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, Check, ChevronDown, Download, Settings2, Upload, Loader2,
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
-  Image as ImageIcon, Link as LinkIcon,
+  Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -113,6 +113,8 @@ const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "sin_calificar", label: "Sin calificar" },
   { value: "intento_contacto", label: "Intento de contacto" },
   { value: "conectado", label: "Conectado" },
+  { value: "programo_cita", label: "Programó cita" },
+  { value: "asistio_cita", label: "Asistió a cita" },
   { value: "fuera_presupuesto", label: "Fuera de presupuesto" },
   { value: "compra_futura", label: "Compra futura" },
   { value: "sin_respuesta_7", label: "Sin respuesta 7+" },
@@ -207,6 +209,39 @@ const fetchCrmCategorias = async (): Promise<{ id: number; nombre: string }[]> =
     .order("orden");
   if (error) return []; // tabla aún no desplegada en este ambiente → sin categorías
   return data ?? [];
+};
+
+type CrmOwner = { id: string; full_name: string; email: string };
+
+// Propietarios posibles del CRM = usuarios activos cuyo rol tiene acceso a alguna
+// ruta /admin/portal-crm/... (mismo criterio que el selector "Ver como"). Se deriva
+// dinámicamente en vez de hardcodear rol_ids: así incluye Super Admin, Agente Interno,
+// Admin CRM y cualquier otro rol admin del CRM (p. ej. el que solo existe en producción)
+// sin depender del ambiente. Fallback a [1, 9] si aún no hay submenús del CRM en BD.
+const fetchCrmOwners = async (): Promise<CrmOwner[]> => {
+  let rolIds: number[] = [];
+  const { data: subs } = await (supabase as any)
+    .from("submenus")
+    .select("id")
+    .like("vista_front_end", "/admin/portal-crm/%");
+  const submenuIds = (subs ?? []).map((s: any) => s.id);
+  if (submenuIds.length) {
+    const { data: perms } = await (supabase as any)
+      .from("submenus_permisos")
+      .select("rol_id")
+      .in("submenu_id", submenuIds)
+      .eq("activo", true);
+    rolIds = Array.from(new Set((perms ?? []).map((p: any) => p.rol_id)));
+  }
+  if (!rolIds.length) rolIds = [1, 9]; // fallback: Super Admin + Agente Interno
+  const { data } = await (supabase as any)
+    .from("usuarios")
+    .select("auth_user_id, nombre, email")
+    .eq("activo", true)
+    .in("rol_id", rolIds);
+  return (data ?? [])
+    .map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email }))
+    .sort((a: CrmOwner, b: CrmOwner) => (a.full_name ?? "").localeCompare(b.full_name ?? "")) as CrmOwner[];
 };
 
 // Categoría del contacto en la ficha (select único; persiste al instante).
@@ -596,6 +631,8 @@ export function CrmContacts() {
                             conectado: "bg-primary/5 text-primary border-primary/20",
                             sin_calificar: "bg-slate-50 text-slate-500 border-slate-200",
                             intento_contacto: "bg-orange-50 text-orange-700 border-orange-200",
+                            programo_cita: "bg-teal-50 text-teal-700 border-teal-200",
+                            asistio_cita: "bg-green-50 text-green-700 border-green-200",
                             fuera_presupuesto: "bg-red-50 text-red-600 border-red-200",
                             compra_futura: "bg-violet-50 text-violet-700 border-violet-200",
                             sin_respuesta_7: "bg-rose-50 text-rose-600 border-rose-200",
@@ -764,8 +801,14 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  // Auto-asignar el propietario al usuario actual (editable antes de crear).
+  useEffect(() => {
+    const uid = user?.id;
+    if (uid) setForm((f) => (f.contact_owner ? f : { ...f, contact_owner: uid }));
+  }, [user?.id]);
 
   const submit = async () => {
     if (!form.full_name) return;
@@ -796,7 +839,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         id_entidad_relacionada: er.id,
         estatus_lead: form.lead_status,
         etapa_ciclo_vida: form.lifecycle_stage,
-        id_propietario: user?.id ?? null,
+        id_propietario: form.contact_owner || user?.id || null,
       });
       if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
       // 4. Categoría (procedencia) seleccionada (best-effort: si la tabla aún no existe, el contacto igual queda creado)
@@ -855,6 +898,12 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               </Select>
             </CField>
           </div>
+          <CField label="Propietario del contacto">
+            <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
+              <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+              <SelectContent>{(owners as CrmOwner[]).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </CField>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -871,6 +920,103 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
 
+// ─── Adjuntos de notas (imágenes / archivos / notas de voz) ─────────────────────
+
+const CRM_ATTACH_BUCKET = "documentos";
+
+type AttachKind = "image" | "file" | "audio";
+type PendingAttachment = { id: string; file: File; tipo: AttachKind; nombre: string; previewUrl: string };
+type NoteAttachment = { id: number; url: string; tipo: string; nombre: string; mime: string | null };
+
+const classifyAttachment = (file: File): AttachKind => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "file";
+};
+
+const humanFileSize = (bytes?: number | null): string => {
+  if (!bytes && bytes !== 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Sube un archivo al storage y devuelve su URL pública + metadatos.
+async function uploadCrmNoteFile(file: File): Promise<{ url: string; nombre: string; mime: string | null; tamano: number } | null> {
+  const safeExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const path = `crm-notes/${crypto.randomUUID()}.${safeExt}`;
+  const { data, error } = await supabase.storage
+    .from(CRM_ATTACH_BUCKET)
+    .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+  if (error || !data) return null;
+  const { data: pub } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
+  return { url: pub.publicUrl, nombre: file.name, mime: file.type || null, tamano: file.size };
+}
+
+// Sube y registra los adjuntos de una nota (best-effort: si la tabla aún no existe,
+// no rompe el guardado de la nota).
+async function saveNoteAttachments(noteId: number, userId: string | undefined, pend: PendingAttachment[]): Promise<void> {
+  for (const a of pend) {
+    const up = await uploadCrmNoteFile(a.file);
+    if (!up) { toast.error(`No se pudo subir ${a.nombre}`); continue; }
+    const { error } = await (supabase as any).from("crm_notas_adjuntos").insert({
+      id_nota: noteId, tipo: a.tipo, url: up.url, nombre: up.nombre,
+      mime: up.mime, tamano_bytes: up.tamano, id_usuario: userId ?? null,
+    });
+    if (error) console.warn("crm_notas_adjuntos no disponible:", error.message);
+  }
+}
+
+// Chips/vista previa de adjuntos ya guardados en una nota.
+function NoteAttachmentsStrip({ attachments }: { attachments: NoteAttachment[] }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {attachments.map((a) => {
+        if (a.tipo === "image") {
+          return (
+            <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="block">
+              <img src={a.url} alt={a.nombre} className="h-24 w-24 object-cover rounded-md border border-border" />
+            </a>
+          );
+        }
+        if (a.tipo === "audio") {
+          return (
+            <div key={a.id} className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 p-2 max-w-full">
+              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Mic className="h-3 w-3" />{a.nombre}</span>
+              <audio controls src={a.url} className="h-8 max-w-[240px]" />
+            </div>
+          );
+        }
+        return (
+          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-xs text-foreground hover:bg-muted transition-colors">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="truncate max-w-[180px]">{a.nombre}</span>
+            <Download className="h-3 w-3 text-muted-foreground shrink-0" />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// Carga los adjuntos de un conjunto de notas → Record<id_nota, NoteAttachment[]>.
+// Best-effort: si la tabla no existe en el ambiente, devuelve {} sin romper.
+async function fetchNoteAttachments(noteIds: number[]): Promise<Record<number, NoteAttachment[]>> {
+  if (!noteIds.length) return {};
+  const res = await (supabase as any).from("crm_notas_adjuntos")
+    .select("id, id_nota, url, tipo, nombre, mime")
+    .in("id_nota", noteIds).eq("activo", true)
+    .order("id", { ascending: true });
+  if (res.error) return {};
+  const byNote: Record<number, NoteAttachment[]> = {};
+  for (const r of (res.data ?? [])) {
+    (byNote[r.id_nota] ??= []).push({ id: r.id, url: r.url, tipo: r.tipo, nombre: r.nombre, mime: r.mime ?? null });
+  }
+  return byNote;
+}
+
 // ─── Rich Note Editor ─────────────────────────────────────────────────────────
 
 function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
@@ -885,9 +1031,9 @@ function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       if (!file) return;
       const ext = file.name.split(".").pop();
       const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from("public").upload(path, file, { contentType: file.type, upsert: false });
+      const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
       if (error) { toast.error("Error al subir imagen"); return; }
-      const { data: url } = supabase.storage.from("public").getPublicUrl(data.path);
+      const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
       editor.chain().focus().setImage({ src: url.publicUrl }).run();
     };
     input.click();
@@ -935,6 +1081,11 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
   const [activityDate, setActivityDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [recording, setRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const editor = useEditor({
     extensions: [
@@ -946,34 +1097,146 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
     ],
     editorProps: {
       attributes: { class: "prose prose-sm max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none" },
+      // Ctrl+V de imágenes → se adjuntan (no se incrustan en el texto).
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        const imgs: File[] = [];
+        for (const it of Array.from(items)) {
+          if (it.kind === "file" && it.type.startsWith("image/")) {
+            const f = it.getAsFile();
+            if (f) imgs.push(f);
+          }
+        }
+        if (!imgs.length) return false;
+        setPending((p) => [
+          ...p,
+          ...imgs.map((file) => ({ id: crypto.randomUUID(), file, tipo: "image" as AttachKind, nombre: file.name || "imagen.png", previewUrl: URL.createObjectURL(file) })),
+        ]);
+        toast.success(imgs.length > 1 ? `${imgs.length} imágenes adjuntadas` : "Imagen adjuntada");
+        return true;
+      },
     },
     onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
   });
 
+  const addPending = (files: File[]) => {
+    if (!files.length) return;
+    setPending((p) => [
+      ...p,
+      ...files.map((file) => ({ id: crypto.randomUUID(), file, tipo: classifyAttachment(file), nombre: file.name, previewUrl: URL.createObjectURL(file) })),
+    ]);
+  };
+
+  const removePending = (id: string) => {
+    setPending((p) => {
+      const found = p.find((x) => x.id === id);
+      if (found) URL.revokeObjectURL(found.previewUrl);
+      return p.filter((x) => x.id !== id);
+    });
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], `nota-voz-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, { type: "audio/webm" });
+        addPending([file]);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setRecording(true);
+    } catch {
+      toast.error("No se pudo acceder al micrófono");
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  };
+
+  const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
+
   const save = async () => {
-    if (!userId || !editor || editor.isEmpty) return;
+    if (!canSave || !editor) return;
     setSaving(true);
     const html = editor.getHTML();
-    const { error } = await (supabase as any).from("crm_notas").insert({
+    const { data, error } = await (supabase as any).from("crm_notas").insert({
       id_entidad_relacionada: Number(contactId),
       id_usuario: userId,
       contenido: html,
       fecha_actividad: activityDate,
-    });
+    }).select("id").single();
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
     toast.success("Nota guardada");
     editor.commands.clearContent();
     setIsEmpty(true);
+    pending.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+    setPending([]);
     onSaved();
   };
+
+  const btnClass = "h-7 w-7 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-muted hover:text-foreground";
 
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
       <RichNoteToolbar editor={editor} />
       <EditorContent editor={editor} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => { addPending(Array.from(e.target.files ?? [])); e.target.value = ""; }}
+      />
+      {pending.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-3 pt-2">
+          {pending.map((a) => (
+            <div key={a.id} className="relative group">
+              {a.tipo === "image" ? (
+                <img src={a.previewUrl} alt={a.nombre} className="h-16 w-16 object-cover rounded-md border border-border" />
+              ) : (
+                <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs max-w-[200px]">
+                  {a.tipo === "audio" ? <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                  <span className="truncate">{a.nombre}</span>
+                  <span className="text-[10px] text-muted-foreground/70 shrink-0">{humanFileSize(a.file.size)}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => removePending(a.id)}
+                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow"
+                title="Quitar"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/20 gap-2">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <button type="button" className={btnClass} title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
+            <Paperclip className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={recording ? "h-7 w-7 flex items-center justify-center rounded bg-destructive/10 text-destructive animate-pulse" : btnClass}
+            title={recording ? "Detener grabación" : "Grabar nota de voz"}
+            onClick={recording ? stopRecording : startRecording}
+          >
+            {recording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+          </button>
+          <div className="w-px h-4 bg-border mx-0.5" />
           <CalendarClock className="h-3.5 w-3.5 shrink-0" />
           <span>Fecha</span>
           <Input
@@ -986,7 +1249,7 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
         <Button
           size="sm"
           onClick={save}
-          disabled={saving || !editor || isEmpty}
+          disabled={saving || !canSave}
           className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
         >
           {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
@@ -1090,14 +1353,7 @@ export function CrmContactDetail() {
     },
   });
 
-  const { data: owners } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      // rol_id 9 = "Agente Interno", rol_id 1 = "Super Administrador" (el 3 es "Agente Inmobiliario", 200+).
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const { data: notes } = useQuery({
     queryKey: ["contact-notes", contactId],
@@ -1117,7 +1373,9 @@ export function CrmContactDetail() {
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", authorIds);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      // Adjuntos por nota (best-effort: {} si la tabla aún no existe en el ambiente).
+      const attByNote = await fetchNoteAttachments(rows.map((n: any) => n.id));
+      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false, attachments: attByNote[n.id] ?? [] }));
     },
   });
 
@@ -1806,6 +2064,7 @@ function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contac
                 className="mt-1.5 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
                 dangerouslySetInnerHTML={{ __html: note.content }}
               />
+              <NoteAttachmentsStrip attachments={note.attachments ?? []} />
               {/* Footer */}
               <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
                 <button onClick={() => setShowComments((s) => !s)} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
@@ -1874,7 +2133,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   };
 
   let items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
+    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, attachments: n.attachments ?? [], icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
     ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
     ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
@@ -1925,7 +2184,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
           if (it.type === "note") {
             return (
               <div key={it.id} className="pb-4 last:pb-0">
-                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
+                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado, attachments: it.attachments ?? [] }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
               </div>
             );
           }
@@ -2255,14 +2514,8 @@ function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: strin
       return (data ?? []) as { id: number; nombre: string }[];
     },
   });
-  // Propietarios posibles: Super Admin (1) y Agente Interno (9).
-  const { data: owners } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id, nombre, email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  // Propietarios posibles: derivados de los roles con acceso al portal CRM.
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
 
@@ -2431,13 +2684,7 @@ export function CrmDeals() {
     },
   });
 
-  const { data: owners } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id, nombre, email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const { data, isLoading } = useQuery({
     queryKey: ["deals-list", pipelineFilter, ownerFilter, search.trim()],
@@ -2893,13 +3140,7 @@ export function CrmTasks() {
   const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
 
-  const { data: owners = [] } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const { data: tasks = [], isLoading } = useQuery<GlobalTask[]>({
     queryKey: ["crm-tasks-global"],
