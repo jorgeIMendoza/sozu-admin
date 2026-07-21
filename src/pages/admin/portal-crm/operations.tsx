@@ -631,19 +631,20 @@ export function CrmCampaignBuilder() {
             </div>
             <div className="md:col-span-2 space-y-3">
               <p className="text-sm font-semibold">{activeSeq.name}</p>
-              <p className="text-xs text-muted-foreground">{activeSeq.description}</p>
+              <p className="text-xs text-muted-foreground">{activeSeq.objective}</p>
               <div className="space-y-2">
                 {activeSeq.steps.map((step, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
                     <span className="text-xs font-bold text-muted-foreground mt-0.5 w-4 shrink-0">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline" className="text-[10px]">{step.kind}</Badge>
-                        {step.delay_days > 0 && <span className="text-[10px] text-muted-foreground">+{step.delay_days}d</span>}
+                        <Badge variant="outline" className="text-[10px]">{step.channel.replace("_mock", "")}</Badge>
+                        <span className="text-[10px] text-muted-foreground">{step.timing}</span>
                       </div>
-                      <p className="text-xs mt-1">{step.template_hint}</p>
+                      <p className="text-xs mt-1">{step.copy}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{step.objective}</p>
                     </div>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => { navigator.clipboard.writeText(step.template_hint); toast.success("Copiado"); }}>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => { navigator.clipboard.writeText(step.copy); toast.success("Copiado"); }}>
                       <Copy className="w-3 h-3" />
                     </Button>
                   </div>
@@ -689,10 +690,10 @@ export function CrmCampaignBuilder() {
 type ChatMsg = { role: "user" | "assistant"; text: string };
 
 const QUICK_ACTIONS: { label: string; kind: MessageKind; icon: typeof Sparkles }[] = [
-  { label: "Re-engagement", kind: "reengagement", icon: RefreshCw },
-  { label: "Follow-up", kind: "followup", icon: Send },
-  { label: "Intro apertura", kind: "intro", icon: Sparkles },
-  { label: "Confirmación cita", kind: "appointment_confirm", icon: CheckCircle2 },
+  { label: "Re-engagement", kind: "reactivation", icon: RefreshCw },
+  { label: "Follow-up", kind: "email_followup", icon: Send },
+  { label: "Intro apertura", kind: "whatsapp_new_lead", icon: Sparkles },
+  { label: "Confirmación cita", kind: "appointment_reminder", icon: CheckCircle2 },
 ];
 
 const MOCK_CONTACT = {
@@ -711,12 +712,12 @@ export function CrmAiCopilot() {
 
   const generate = (kind: MessageKind) => {
     setGenerating(true);
-    const msg = generateMessage(kind, { contact: MOCK_CONTACT });
+    const msg = generateMessage(kind, { contact_name: MOCK_CONTACT.full_name });
     setTimeout(() => {
       setMessages(prev => [
         ...prev,
         { role: "user", text: `Generar mensaje: ${kind}` },
-        { role: "assistant", text: msg },
+        { role: "assistant", text: msg.subject ? `${msg.subject}\n\n${msg.body}` : msg.body },
       ]);
       setGenerating(false);
     }, 600);
@@ -729,8 +730,8 @@ export function CrmAiCopilot() {
     setMessages(prev => [...prev, { role: "user", text: userMsg }]);
     setGenerating(true);
     setTimeout(() => {
-      const reply = generateMessage("followup", { contact: MOCK_CONTACT });
-      setMessages(prev => [...prev, { role: "assistant", text: `[Basado en tu instrucción: "${userMsg}"]\n\n${reply}` }]);
+      const reply = generateMessage("email_followup", { contact_name: MOCK_CONTACT.full_name });
+      setMessages(prev => [...prev, { role: "assistant", text: `[Basado en tu instrucción: "${userMsg}"]\n\n${reply.subject ? reply.subject + "\n\n" : ""}${reply.body}` }]);
       setGenerating(false);
     }, 800);
   };

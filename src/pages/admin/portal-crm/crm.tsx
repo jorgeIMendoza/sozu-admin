@@ -11,6 +11,7 @@ import {
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
+  MoreHorizontal, Pencil, Trash2,
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
@@ -43,6 +44,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { isToday, isPast, isFuture, parseISO, format as fmtDateFns, addDays, addWeeks, addMonths, addYears } from "date-fns";
@@ -1769,7 +1774,7 @@ function DField({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean };
+type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean; attachments?: any[] };
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -2817,6 +2822,7 @@ function etapaColorClasses(et: any, i: number): string {
 
 export function CrmDeals() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [view, setView] = useState<"list" | "board">("board");
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -2825,6 +2831,9 @@ export function CrmDeals() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [collapsedCols, setCollapsedCols] = useState<Set<number>>(new Set());
   const [manualCols, setManualCols] = useState<Set<number>>(new Set());
+  const [editTarget, setEditTarget] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const { data: pipelines } = useQuery({
@@ -2844,7 +2853,7 @@ export function CrmDeals() {
     queryKey: dealsKey,
     queryFn: async () => {
       let q = (supabase as any).from("crm_negocios")
-        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, prioridad, fecha_creacion")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion")
         .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
       if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
       if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
@@ -2987,6 +2996,21 @@ export function CrmDeals() {
     if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
   };
 
+  const openDeal = (id: number) => navigate(`/admin/portal-crm/ventas/negocios/${id}`);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio eliminado");
+    const er = deleteTarget.id_entidad_relacionada;
+    setDeleteTarget(null);
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (er) qc.invalidateQueries({ queryKey: ["contact-deals", String(er)] });
+  };
+
   const viewToggle = (
     <div className="inline-flex rounded-md border border-border overflow-hidden">
       <button onClick={() => setView("list")} title="Vista de lista"
@@ -3012,37 +3036,35 @@ export function CrmDeals() {
         <DealMetric label="Cerrado ganado" value={fmtMXN(metrics.ganado)} />
       </div>
 
-      {/* Filtros */}
+      {/* Barra: buscador · pipeline · propietario */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-auto sm:min-w-[240px] max-w-xs">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar negocio" className="pl-8 h-9" />
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          {view === "list" ? (
-            <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
-              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los pipelines</SelectItem>
-                {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
-              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
-              <SelectContent>
-                {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
+        {view === "list" ? (
+          <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos los propietarios</SelectItem>
-              {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+              <SelectItem value="all">Todos los pipelines</SelectItem>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
+        ) : (
+          <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+            <SelectContent>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los propietarios</SelectItem>
+            {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Contenido */}
@@ -3059,7 +3081,8 @@ export function CrmDeals() {
                   deals={boardRows.filter((r) => r.id_etapa === et.id)}
                   colorClass={etapaColorClasses(et, i)}
                   collapsed={collapsedCols.has(et.id)}
-                  onToggle={() => toggleCol(et.id)} />
+                  onToggle={() => toggleCol(et.id)}
+                  onOpen={openDeal} onEdit={setEditTarget} onDelete={setDeleteTarget} />
               ))}
               {(boardEtapas ?? []).length === 0 && (
                 <p className="text-sm text-muted-foreground py-8">Este pipeline no tiene etapas. Agrégalas en Configuración → Pipelines.</p>
@@ -3082,6 +3105,7 @@ export function CrmDeals() {
                 <TableHead>Fecha de cierre</TableHead>
                 <TableHead>Propietario</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3102,6 +3126,9 @@ export function CrmDeals() {
                   <TableCell className="text-muted-foreground tabular-nums">{r.fecha_cierre_estimada ? fmtDate(r.fecha_cierre_estimada) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{r.propietario_nombre}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums">{r.valor != null ? fmtMoneda(Number(r.valor), r.moneda) : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <DealActionsMenu deal={r} onOpen={openDeal} onEdit={setEditTarget} onDelete={setDeleteTarget} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -3109,12 +3136,179 @@ export function CrmDeals() {
         </div>
       )}
       {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+
+      {/* Editar negocio */}
+      <EditDealDialog deal={editTarget} pipelines={pipelines ?? []} owners={owners ?? []}
+        onOpenChange={(v) => { if (!v) setEditTarget(null); }}
+        onSaved={() => { qc.invalidateQueries({ queryKey: ["deals-list"] }); if (editTarget?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(editTarget.id_entidad_relacionada)] }); setEditTarget(null); }} />
+
+      {/* Eliminar negocio */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este negocio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará <span className="font-medium text-foreground">{deleteTarget?.nombre}</span>. Podrás recuperarlo desde la base de datos si es necesario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDelete(); }} disabled={deleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              {deleting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Eliminando…</> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
+// Menú de acciones (Ver · Editar · Eliminar) de un negocio.
+function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { deal: any; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void; onBoard?: boolean }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          title="Acciones"
+          className={`inline-flex items-center justify-center rounded-md transition-colors ${onBoard ? "h-6 w-6 text-muted-foreground/60 hover:text-foreground hover:bg-muted" : "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onClick={() => onOpen(deal.id)}><Briefcase className="h-4 w-4 mr-2" />Ver negocio</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onEdit(deal)}><Pencil className="h-4 w-4 mr-2" />Editar</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => onDelete(deal)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Diálogo para editar un negocio (mismos campos que "Acerca de este negocio").
+function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved }: { deal: any | null; pipelines: any[]; owners: any[]; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
+  const [form, setForm] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (deal) setForm({
+      nombre: deal.nombre ?? "",
+      id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
+      id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
+      valor: deal.valor != null ? String(deal.valor) : "",
+      moneda: deal.moneda ?? "MXN",
+      fecha_cierre: deal.fecha_cierre_estimada ?? "",
+      id_propietario: deal.id_usuario_propietario ?? "",
+      tipo_negocio: deal.tipo_negocio ?? "",
+      prioridad: deal.prioridad ?? "",
+    });
+  }, [deal]);
+
+  const { data: etapas } = useQuery({
+    queryKey: ["edit-deal-etapas", form?.id_pipeline],
+    enabled: !!form?.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const save = async () => {
+    if (!form || !form.nombre.trim() || !deal) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({
+      nombre: form.nombre.trim(),
+      id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
+      id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
+      valor: form.valor ? Number(form.valor) : null,
+      moneda: form.moneda,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || null,
+      tipo_negocio: form.tipo_negocio || null,
+      prioridad: form.prioridad || null,
+    }).eq("id", deal.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio actualizado");
+    onSaved();
+  };
+
+  if (!form) return (
+    <Dialog open={!!deal} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Editar negocio</DialogTitle></DialogHeader></DialogContent>
+    </Dialog>
+  );
+
+  return (
+    <Dialog open={!!deal} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Editar negocio</DialogTitle></DialogHeader>
+        <div className="grid gap-3">
+          <DField label="Nombre *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></DField>
+          <div className="grid grid-cols-2 gap-2">
+            <DField label="Pipeline">
+              <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>{pipelines.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+              </Select>
+            </DField>
+            <DField label="Etapa">
+              <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+                <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Etapa" : "Elige pipeline"} /></SelectTrigger>
+                <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+              </Select>
+            </DField>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
+            <DField label="Moneda">
+              <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="MXN">MXN</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
+              </Select>
+            </DField>
+          </div>
+          <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
+          <DField label="Propietario">
+            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          <div className="grid grid-cols-2 gap-2">
+            <DField label="Tipo de negocio">
+              <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </DField>
+            <DField label="Prioridad">
+              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                    <SelectItem key={value} value={value}><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DField>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !form.nombre.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {saving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Columna del tablero (zona soltable). Colapsable a una pestaña vertical.
-function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle }: { etapa: any; deals: any[]; colorClass: string; collapsed: boolean; onToggle: () => void }) {
+function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle, onOpen, onEdit, onDelete }: { etapa: any; deals: any[]; colorClass: string; collapsed: boolean; onToggle: () => void; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: etapa.id });
   const total = deals.reduce((s, r) => s + Number(r.valor ?? 0), 0);
   const ponderada = deals.reduce((s, r) => s + Number(r.valor ?? 0) * (Number(r.probabilidad ?? 0) / 100), 0);
@@ -3144,7 +3338,7 @@ function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle }: { etapa:
       <div className="border border-t-0 bg-muted/30 p-2 space-y-2 min-h-[240px] max-h-[calc(100vh-380px)] overflow-y-auto flex-1">
         {deals.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8">Sin negocios</p>
-        ) : deals.map((d) => <DealBoardCard key={d.id} deal={d} />)}
+        ) : deals.map((d) => <DealBoardCard key={d.id} deal={d} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
       </div>
       <div className="rounded-b-lg border border-t-0 bg-card px-3 py-1.5 text-[11px] text-muted-foreground space-y-0.5">
         <div className="flex items-center justify-between gap-2"><span>Cantidad total</span><span className="font-semibold tabular-nums text-foreground">{fmtMXN(total)}</span></div>
@@ -3167,10 +3361,11 @@ const PRIORIDAD_PILL: Record<string, string> = {
 };
 
 // Tarjeta arrastrable del tablero.
-function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
+function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { deal: any; dragging?: boolean; onOpen?: (id: number) => void; onEdit?: (d: any) => void; onDelete?: (d: any) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
   const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
   const prio = deal.prioridad && PRIORIDAD_META[deal.prioridad] ? deal.prioridad : null;
+  const hasActions = !!(onOpen && onEdit && onDelete);
   return (
     <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
       className={`cursor-grab active:cursor-grabbing border-border hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
@@ -3181,9 +3376,19 @@ function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
               <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
             </span>
           ) : <span />}
-          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-0.5 shrink-0">
+            {hasActions && <DealActionsMenu deal={deal} onOpen={onOpen!} onEdit={onEdit!} onDelete={onDelete!} onBoard />}
+            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" aria-hidden="true" />
+          </div>
         </div>
-        <p className="text-sm font-medium leading-snug">{deal.nombre}</p>
+        {onOpen ? (
+          <button onClick={(e) => { e.stopPropagation(); onOpen(deal.id); }}
+            className="text-sm font-medium leading-snug text-left hover:text-primary hover:underline">
+            {deal.nombre}
+          </button>
+        ) : (
+          <p className="text-sm font-medium leading-snug">{deal.nombre}</p>
+        )}
         {deal.contacto_nombre && (
           <div className="flex items-center gap-2">
             <span className="h-5 w-5 shrink-0 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">{dealInitials(deal.contacto_nombre)}</span>
@@ -3208,8 +3413,14 @@ function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
 export function CrmDealDetail() {
   const { dealId } = useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [form, setForm] = useState<any | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const loadedRef = useRef<string | undefined>(undefined);
+  const skipAutoSave = useRef(true);
 
   // Acota el <main> al alto visible para que cada columna scrollee sola (estilo HubSpot).
   useEffect(() => {
@@ -3282,40 +3493,71 @@ export function CrmDealDetail() {
     },
   });
 
+  // Hidrata el formulario una sola vez por negocio (no en cada refetch, para no
+  // pisar lo que el usuario está escribiendo mientras se autoguarda).
   useEffect(() => {
-    if (deal) setForm({
-      nombre: deal.nombre ?? "",
-      id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
-      id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
-      valor: deal.valor != null ? String(deal.valor) : "",
-      moneda: deal.moneda ?? "MXN",
-      fecha_cierre: deal.fecha_cierre_estimada ?? "",
-      id_propietario: deal.id_usuario_propietario ?? "",
-      tipo_negocio: deal.tipo_negocio ?? "",
-      prioridad: deal.prioridad ?? "",
-    });
-  }, [deal]);
+    if (deal && loadedRef.current !== dealId) {
+      loadedRef.current = dealId;
+      skipAutoSave.current = true;
+      setForm({
+        nombre: deal.nombre ?? "",
+        id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
+        id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
+        valor: deal.valor != null ? String(deal.valor) : "",
+        moneda: deal.moneda ?? "MXN",
+        fecha_cierre: deal.fecha_cierre_estimada ?? "",
+        id_propietario: deal.id_usuario_propietario ?? "",
+        tipo_negocio: deal.tipo_negocio ?? "",
+        prioridad: deal.prioridad ?? "",
+      });
+    }
+  }, [deal, dealId]);
 
-  const save = async () => {
-    if (!form || !form.nombre.trim()) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_negocios").update({
-      nombre: form.nombre.trim(),
-      id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
-      id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
-      valor: form.valor ? Number(form.valor) : null,
-      moneda: form.moneda,
-      fecha_cierre_estimada: form.fecha_cierre || null,
-      id_usuario_propietario: form.id_propietario || null,
-      tipo_negocio: form.tipo_negocio || null,
-      prioridad: form.prioridad || null,
-    }).eq("id", Number(dealId));
-    setSaving(false);
+  // Autoguardado con debounce: cada cambio en el panel se persiste solo.
+  useEffect(() => {
+    if (!form) return;
+    if (skipAutoSave.current) { skipAutoSave.current = false; return; }
+    if (!form.nombre.trim()) return;
+    setSaveState("saving");
+    const t = setTimeout(async () => {
+      const patch = {
+        nombre: form.nombre.trim(),
+        id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
+        id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
+        valor: form.valor ? Number(form.valor) : null,
+        moneda: form.moneda,
+        fecha_cierre_estimada: form.fecha_cierre || null,
+        id_usuario_propietario: form.id_propietario || null,
+        tipo_negocio: form.tipo_negocio || null,
+        prioridad: form.prioridad || null,
+      };
+      const { error } = await (supabase as any).from("crm_negocios").update(patch).eq("id", Number(dealId));
+      if (error) { toast.error(error.message); setSaveState("idle"); return; }
+      setSaveState("saved");
+      // Actualiza el encabezado/resumen local sin refetch (evita pisar el formulario).
+      qc.setQueryData(["deal-detail", dealId], (old: any) => old ? {
+        ...old, ...patch,
+        pipeline_nombre: (pipelines ?? []).find((p) => String(p.id) === form.id_pipeline)?.nombre ?? old.pipeline_nombre,
+        etapa_nombre: (etapas ?? []).find((e: any) => String(e.id) === form.id_etapa)?.nombre ?? "—",
+        propietario_nombre: (owners ?? []).find((o: any) => o.id === form.id_propietario)?.full_name
+          ?? (owners ?? []).find((o: any) => o.id === form.id_propietario)?.email ?? old.propietario_nombre,
+      } : old);
+      qc.invalidateQueries({ queryKey: ["deals-list"] });
+      if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", Number(dealId));
+    setDeleting(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Negocio actualizado");
-    qc.invalidateQueries({ queryKey: ["deal-detail", dealId] });
+    toast.success("Negocio eliminado");
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    navigate("/admin/portal-crm/ventas/negocios");
   };
 
   // Actividad del negocio = notas/tareas de su contacto asociado (reutiliza el Timeline).
@@ -3381,6 +3623,14 @@ export function CrmDealDetail() {
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[220px]">{deal.nombre}</span>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5"><MoreHorizontal className="h-4 w-4" />Acciones</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => setConfirmDeleteOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar negocio</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* 3-column body — estilo HubSpot; cada columna scrollea por su cuenta */}
@@ -3465,9 +3715,15 @@ export function CrmDealDetail() {
                       </SelectContent>
                     </Select>
                   </DField>
-                  <Button onClick={save} disabled={saving || !form.nombre.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                    {saving ? "Guardando…" : "Guardar cambios"}
-                  </Button>
+                  <div className="flex items-center justify-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                    {saveState === "saving" ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Guardando…</>
+                    ) : saveState === "saved" ? (
+                      <><Check className="h-3 w-3 text-emerald-600" />Cambios guardados</>
+                    ) : (
+                      <span>Los cambios se guardan automáticamente</span>
+                    )}
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -3525,6 +3781,22 @@ export function CrmDealDetail() {
               </div>
             </TabsContent>
             <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
+              {/* Registrar actividad (nota / tarea) sobre el contacto asociado */}
+              {!erId ? (
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <p className="text-xs text-muted-foreground">Asocia un contacto a este negocio para registrar notas y tareas.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Registrar actividad</h3>
+                    <TaskDialog contactId={String(erId)} owners={owners} userId={user?.id} onSaved={invalidateActivity}
+                      trigger={<Button size="sm" variant="outline" className="h-8 gap-1.5 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30"><Plus className="h-3.5 w-3.5" />Crear tarea</Button>} />
+                  </div>
+                  <InlineNoteForm contactId={String(erId)} userId={user?.id} onSaved={invalidateActivity} />
+                </div>
+              )}
+
               {/* Actividades recientes (notas/tareas del contacto asociado) */}
               <div className="bg-card border border-border rounded-lg p-4">
                 <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
@@ -3620,6 +3892,24 @@ export function CrmDealDetail() {
           </Accordion>
         </aside>
       </div>
+
+      {/* Confirmar eliminación */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este negocio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará <span className="font-medium text-foreground">{deal.nombre}</span> y volverás a la lista de negocios. Podrás recuperarlo desde la base de datos si es necesario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doDelete(); }} disabled={deleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              {deleting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Eliminando…</> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

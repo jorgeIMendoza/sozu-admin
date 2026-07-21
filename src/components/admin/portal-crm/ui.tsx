@@ -7,21 +7,28 @@ import { Card } from "@/components/ui/card";
 export function PageHeader({
   title,
   description,
+  subtitle,
   actions,
+  children,
 }: {
   title: string;
   description?: string;
+  subtitle?: string;
   actions?: ReactNode;
+  children?: ReactNode;
 }) {
+  // `subtitle` es alias de `description`; `children` se muestra junto a `actions`
+  // en el área superior derecha (badges, selects, botones del encabezado).
+  const sub = description ?? subtitle;
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div className="min-w-0">
         <h1 className="text-xl font-semibold leading-tight tracking-tight">{title}</h1>
-        {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+        {sub && (
+          <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {(actions || children) && <div className="flex flex-wrap items-center gap-2">{actions}{children}</div>}
     </div>
   );
 }
