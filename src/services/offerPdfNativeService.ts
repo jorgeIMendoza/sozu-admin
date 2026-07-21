@@ -422,10 +422,14 @@ export class OfertaPdfNativeService {
     pdf.text("Datos de la Propiedad:", margin, y);
     y += 7;
 
-    // Property info column
-    const propColWidth = contentWidth * 0.35;
-    const iconColWidth = contentWidth * 0.2;
-    const imageColWidth = contentWidth * 0.45;
+    // Property info column. La imagen del modelo va PEGADA a la derecha y más
+    // angosta; los iconos ocupan el espacio entre la columna de datos y la imagen
+    // (antes la imagen se encimaba con el texto de la columna derecha de iconos).
+    const propColWidth = contentWidth * 0.34;
+    const imageColWidth = contentWidth * 0.30;
+    const imageX = margin + contentWidth - imageColWidth; // flush right
+    const iconX = margin + propColWidth + 5;
+    const iconAreaWidth = imageX - 5 - iconX; // ancho disponible para 2 columnas de iconos
 
     const propStartY = y;
     pdf.setFontSize(9);
@@ -501,8 +505,7 @@ export class OfertaPdfNativeService {
       y += 5;
     });
 
-    // Icons column
-    const iconX = margin + propColWidth + 5;
+    // Icons column (iconX / iconAreaWidth definidos arriba)
     let iconY = propStartY;
     const iconSize = 5;
     const iconSpacing = 12;
@@ -553,17 +556,11 @@ export class OfertaPdfNativeService {
       iconItems.push({ icon: "estacionamiento", value: estTexto });
     }
     if (data.bodegas.length > 0) {
-      // Describir bodega con metraje; marcar "incluida" cuando es_incluido = true.
-      const fmtM2 = (m2: any) =>
-        m2 != null ? ` (${Number(m2).toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²)` : "";
+      // Texto corto en el icono (el detalle con precio va en una nota full-width abajo).
       const bodegaValue =
         data.bodegas.length === 1
-          ? `Bodega ${data.bodegas[0].nombre ?? ""}${fmtM2(data.bodegas[0].m2)}${
-              data.bodegas[0].es_incluido ? " incluida" : ""
-            }`.trim()
-          : `${data.bodegas.length} Bodegas${
-              data.bodegas.every((b: any) => b.es_incluido) ? " incluidas" : ""
-            }`;
+          ? `${data.bodegas[0].nombre ?? "Bodega"}`
+          : `${data.bodegas.length} Bodegas`;
       iconItems.push({ icon: "bodega", value: bodegaValue });
     }
     if (data.propertyDetails.tieneBalcon) {
@@ -575,7 +572,7 @@ export class OfertaPdfNativeService {
     iconItems.forEach((item, idx) => {
       const col = idx < iconsPerCol ? 0 : 1;
       const row = idx < iconsPerCol ? idx : idx - iconsPerCol;
-      const x = iconX + col * (iconColWidth / 2);
+      const x = iconX + col * (iconAreaWidth / 2);
       const yPos = propStartY + row * iconSpacing;
 
       const iconBase64 = this.iconCache.get(item.icon);
@@ -592,18 +589,16 @@ export class OfertaPdfNativeService {
       pdf.text(item.value, x + iconSize + 2, yPos + 1);
     });
 
-    // Model image column
+    // Model image column (pegada a la derecha; imageX/imageColWidth definidos arriba)
+    const imageHeight = 35;
     if (modelImageBase64) {
-      const imageX = margin + propColWidth + iconColWidth + 5;
-      const imageWidth = imageColWidth - 10;
-      const imageHeight = 35;
       try {
         pdf.addImage(
           modelImageBase64,
           "JPEG",
           imageX,
           propStartY,
-          imageWidth,
+          imageColWidth,
           imageHeight
         );
       } catch (e) {
@@ -612,6 +607,28 @@ export class OfertaPdfNativeService {
     }
 
     y = Math.max(y, propStartY + 40);
+
+    // Nota full-width de bodegas incluidas: nombre + metraje + precio (precio/m² × m²)
+    // con aclaración de que su valor ya está sumado en los esquemas de pago.
+    const bodegasIncluidasNota = (data.bodegas ?? []).filter((b: any) => b.es_incluido);
+    if (bodegasIncluidasNota.length > 0) {
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(grayColor);
+      for (const b of bodegasIncluidasNota) {
+        const m2Txt = b.m2 != null
+          ? `${Number(b.m2).toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²`
+          : "";
+        const costoTxt = formatCurrency(Number(b.costo ?? 0));
+        const nota = `Bodega ${b.nombre ?? ""}${m2Txt ? ` (${m2Txt})` : ""}: ${costoTxt} — se sumará en los esquemas de pago.`;
+        pdf.text(nota.trim(), margin, y);
+        y += 4.5;
+      }
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(primaryColor);
+      y += 1.5;
+    }
+
     drawLine(y);
     y += 6;
 
