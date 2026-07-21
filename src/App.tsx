@@ -421,6 +421,7 @@ const CrmSettingsIntegrationChecklist = lazyRetry(() => import("./pages/admin/po
 const CrmSettingsOrganization         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsOrganization })));
 const CrmSettingsDevelopments         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsDevelopments })));
 const CrmSettingsPipelines            = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelines })));
+const CrmSettingsLeadStates           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsLeadStates })));
 
 // Portal Bancos
 const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBandeja })));
@@ -1030,6 +1031,7 @@ const App = () => (
                   <Route path="portal-crm/configuracion/usuarios"                 element={<CrmSettingsUsers />} />
                   <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
                   <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
+                  <Route path="portal-crm/configuracion/estados-lead"          element={<CrmSettingsLeadStates />} />
                   {/* rutas antiguas (conservadas) */}
                   <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
                   <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />

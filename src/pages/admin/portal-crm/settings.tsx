@@ -1243,3 +1243,141 @@ export function CrmSettingsPipelines() {
     </div>
   );
 }
+
+// ===================================================================
+// Estados de lead (crm_estados_lead) — CRUD configurable
+// ===================================================================
+const LEAD_STATE_COLORS = [
+  "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#9333ea", "#0891b2",
+  "#14b8a6", "#10b981", "#22c55e", "#f59e0b", "#f97316", "#ea580c",
+  "#ef4444", "#dc2626", "#f43f5e", "#64748b",
+];
+
+type LeadStateRow = { id: number; clave: string; nombre: string; color: string; orden: number; activo: boolean };
+
+function useLeadStatesList() {
+  return useQuery({
+    queryKey: ["cfg-estados-lead"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_estados_lead")
+        .select("id, clave, nombre, color, orden, activo").eq("activo", true).order("orden");
+      return (data ?? []) as LeadStateRow[];
+    },
+  });
+}
+
+// Genera una clave estable (slug) a partir del nombre para guardar en estatus_lead.
+const slugifyLeadState = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[^\x00-\x7f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "estado";
+
+// Alta/edición de un estado de lead. La `clave` se fija al crear y no cambia al editar
+// (para que los contactos existentes que la referencian sigan resolviendo su etiqueta).
+function LeadStateDialog({ estado, nextOrden, onClose, onSaved }: { estado: LeadStateRow | null; nextOrden: number; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!estado;
+  const [nombre, setNombre] = useState(estado?.nombre ?? "");
+  const [color, setColor] = useState(estado?.color ?? "#64748b");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!nombre.trim()) return;
+    setSaving(true);
+    let res;
+    if (isEdit && estado) {
+      res = await (supabase as any).from("crm_estados_lead").update({ nombre: nombre.trim(), color }).eq("id", estado.id);
+    } else {
+      let clave = slugifyLeadState(nombre);
+      const { data: dup } = await (supabase as any).from("crm_estados_lead").select("id").eq("clave", clave).maybeSingle();
+      if (dup) clave = `${clave}_${nextOrden}`;
+      res = await (supabase as any).from("crm_estados_lead").insert({ clave, nombre: nombre.trim(), color, orden: nextOrden, activo: true });
+    }
+    setSaving(false);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success(isEdit ? "Estado actualizado" : "Estado creado"); onSaved();
+  };
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{isEdit ? "Editar estado" : "Nuevo estado de lead"}</DialogTitle></DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5"><Label>Nombre</Label><Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Ej. Programó cita" /></div>
+          <div className="grid gap-1.5">
+            <Label>Color</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {LEAD_STATE_COLORS.map((c) => (
+                <button key={c} type="button" onClick={() => setColor(c)}
+                  className={`h-6 w-6 rounded-full border-2 transition ${color.toLowerCase() === c.toLowerCase() ? "border-foreground scale-110" : "border-transparent"}`}
+                  style={{ backgroundColor: c }} title={c} />
+              ))}
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-6 w-8 rounded border bg-transparent p-0" title="Color personalizado" />
+            </div>
+            <div className="mt-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+                style={{ backgroundColor: `${color}1a`, color, borderColor: `${color}55` }}>
+                {nombre.trim() || "Vista previa"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !nombre.trim()}>{isEdit ? "Guardar" : "Crear"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function CrmSettingsLeadStates() {
+  const qc = useQueryClient();
+  const { data: estados, isLoading } = useLeadStatesList();
+  const [dlg, setDlg] = useState<{ open: boolean; estado: LeadStateRow | null }>({ open: false, estado: null });
+  const list = estados ?? [];
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["cfg-estados-lead"] });
+    qc.invalidateQueries({ queryKey: ["crm-estados-lead"] }); // el que consumen los selects de Contactos
+  };
+  const move = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= list.length) return;
+    const a = list[idx], b = list[j];
+    await (supabase as any).from("crm_estados_lead").update({ orden: b.orden }).eq("id", a.id);
+    await (supabase as any).from("crm_estados_lead").update({ orden: a.orden }).eq("id", b.id);
+    invalidate();
+  };
+  const remove = async (id: number) => {
+    const res = await (supabase as any).from("crm_estados_lead").update({ activo: false }).eq("id", id);
+    if (res.error) { toast.error(res.error.message); return; }
+    toast.success("Estado eliminado"); invalidate();
+  };
+  const nextOrden = list.reduce((m, s) => Math.max(m, s.orden ?? 0), 0) + 10;
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Estados de lead"
+        description="Configura los estados por los que pasa un lead. El color se usa en el badge de la lista de contactos."
+        actions={<Button size="sm" onClick={() => setDlg({ open: true, estado: null })}><Plus className="w-4 h-4 mr-1" />Nuevo estado</Button>} />
+      <div className="rounded-xl border bg-card p-4">
+        {isLoading ? <Skeleton className="h-48 w-full" /> : list.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">Sin estados. Crea el primero.</p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">{list.length} estado(s)</p>
+            {list.map((s, i) => (
+              <div key={s.id} className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/20">
+                <div className="flex flex-col -my-1">
+                  <button disabled={i === 0} onClick={() => move(i, -1)} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                  <button disabled={i === list.length - 1} onClick={() => move(i, 1)} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                </div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border shrink-0"
+                  style={{ backgroundColor: `${s.color}1a`, color: s.color, borderColor: `${s.color}55` }}>{s.nombre}</span>
+                <span className="text-xs text-muted-foreground flex-1 truncate">{s.clave}</span>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-60 hover:opacity-100" onClick={() => setDlg({ open: true, estado: s })}><Edit2 className="w-3 h-3" /></Button>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive opacity-60 hover:opacity-100" onClick={() => remove(s.id)}><Trash2 className="w-3 h-3" /></Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {dlg.open && <LeadStateDialog estado={dlg.estado} nextOrden={nextOrden} onClose={() => setDlg({ open: false, estado: null })} onSaved={() => { invalidate(); setDlg({ open: false, estado: null }); }} />}
+    </div>
+  );
+}

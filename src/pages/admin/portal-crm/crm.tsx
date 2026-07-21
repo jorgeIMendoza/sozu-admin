@@ -134,6 +134,21 @@ const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "fuera_area", label: "Fuera del área" },
 ];
 
+// Estados de lead configurables (tabla crm_estados_lead, administrable en Configuración
+// › Estados de lead). Si la tabla aún no existe o está vacía, cae al catálogo fijo de
+// arriba para no romper. La `clave` es el valor guardado en crm_leads_atribucion.estatus_lead.
+type LeadStateOpt = { value: string; label: string; color?: string };
+const fetchLeadStates = async (): Promise<LeadStateOpt[]> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_estados_lead")
+    .select("clave, nombre, color, orden")
+    .eq("activo", true)
+    .order("orden");
+  if (error || !data || data.length === 0) return META_LEAD_STATUSES;
+  return data.map((r: any) => ({ value: r.clave, label: r.nombre, color: r.color ?? undefined }));
+};
+const useLeadStates = () => useQuery({ queryKey: ["crm-estados-lead"], queryFn: fetchLeadStates });
+
 // Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
 const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
@@ -324,6 +339,7 @@ export function CrmContacts() {
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
   const [editColumnsOpen, setEditColumnsOpen] = useState(false);
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   const persistColumns = (next: ColumnConfig[]) => {
     setColumns(next);
@@ -552,7 +568,7 @@ export function CrmContacts() {
         <CFilter value={filterSource} onChange={(v) => { setFilterSource(v); setPage(0); }} placeholder="Fuente"
           options={[{ v: "all", l: "Todas las fuentes" }, { v: "meta", l: "Solo Meta" }, { v: "manual", l: "Manual" }]} />
         <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
-          options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
+          options={[{ v: "all", l: "Todos estados" }, ...leadStates.map((s) => ({ v: s.value, l: s.label }))]} />
         {(categoriasCatalog as any[]).length > 0 && (
           <CFilter value={filterCategoria} onChange={(v) => { setFilterCategoria(v); setPage(0); }} placeholder="Categoría"
             options={[{ v: "all", l: "Todas las categorías" }, ...(categoriasCatalog as any[]).map((c: any) => ({ v: String(c.id), l: c.nombre }))]} />
@@ -632,7 +648,8 @@ export function CrmContacts() {
                         case "phone":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.phone || "—"}</td>;
                         case "lead_status": {
-                          const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
+                          const st = leadStates.find((s) => s.value === c.lead_status);
+                          const metaLabel = st?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
                           const statusColor: Record<string, string> = {
                             nuevo: "bg-sky-50 text-sky-700 border-sky-200",
                             en_curso: "bg-amber-50 text-amber-700 border-amber-200",
@@ -657,10 +674,15 @@ export function CrmContacts() {
                             unqualified: "bg-slate-50 text-slate-500 border-slate-200",
                             lost: "bg-red-50 text-red-600 border-red-200",
                           };
-                          const cls = statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200";
+                          // Color configurable (hex de crm_estados_lead) vía estilo inline;
+                          // si el estado no trae color, cae al mapa de clases de siempre.
+                          const badgeStyle = st?.color
+                            ? { backgroundColor: `${st.color}1a`, color: st.color, borderColor: `${st.color}55` }
+                            : undefined;
+                          const cls = st?.color ? "" : (statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200");
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>{metaLabel}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`} style={badgeStyle}>{metaLabel}</span>
                             </td>
                           );
                         }
@@ -813,6 +835,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
   // Auto-asignar el propietario al usuario actual (editable antes de crear).
   useEffect(() => {
     const uid = user?.id;
@@ -897,7 +920,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
             <CField label="Estado del lead">
               <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </CField>
             <CField label="Lifecycle">
@@ -1716,6 +1739,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
     development_id: contact.development_id ?? "", contact_owner: contact.contact_owner ?? "",
   });
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
@@ -1781,7 +1805,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
         <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            {leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
       </CField>
