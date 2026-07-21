@@ -1610,7 +1610,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluida en precio del depa)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluida en el precio total del depa)</span>
                         ) : (
                           <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
                         )}
@@ -1634,7 +1634,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Car className="h-3 w-3" />
                         {est.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluido en precio del depa)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluido en el precio total del depa)</span>
                         ) : (
                           <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
                         )}
