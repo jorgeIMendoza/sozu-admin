@@ -4302,7 +4302,7 @@ export function CrmAppointments() {
       if (error) throw error;
     },
     onSuccess: (_d, v) => {
-      qc.invalidateQueries({ queryKey: ["crm-citas-global"] });
+      qc.refetchQueries({ queryKey: ["crm-citas-global"] });
       setPreview((p) => (p && p.id === v.id ? { ...p, estatus: v.estatus } : p));
       toast.success("Cita actualizada");
     },
@@ -4310,7 +4310,7 @@ export function CrmAppointments() {
   });
   const removeCita = useMutation({
     mutationFn: async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-citas-global"] }); setPreview(null); toast.success("Cita eliminada"); },
+    onSuccess: () => { qc.refetchQueries({ queryKey: ["crm-citas-global"] }); setPreview(null); toast.success("Cita eliminada"); },
     onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
@@ -4330,7 +4330,7 @@ export function CrmAppointments() {
           <h1 className="text-2xl font-semibold">Citas</h1>
           <p className="text-sm text-muted-foreground">{citas.length} cita{citas.length === 1 ? "" : "s"} · {counts.upcoming} próxima{counts.upcoming === 1 ? "" : "s"}</p>
         </div>
-        <NewGlobalCitaDialog open={open} onOpenChange={setOpen} owners={owners} defaultAssignee={user?.id ?? ""} onCreated={() => qc.invalidateQueries({ queryKey: ["crm-citas-global"] })} />
+        <NewGlobalCitaDialog open={open} onOpenChange={setOpen} owners={owners} defaultAssignee={user?.id ?? ""} onCreated={() => qc.refetchQueries({ queryKey: ["crm-citas-global"] })} />
       </div>
 
       {/* Tabs con conteos */}
