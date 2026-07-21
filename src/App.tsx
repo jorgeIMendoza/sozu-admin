@@ -357,6 +357,7 @@ const CrmExecutiveWeeklyDigest  = lazyRetry(() => import("./pages/admin/portal-c
 const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
 const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
 const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
+const CrmDealDetail        = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDealDetail })));
 const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
 const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
 const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
@@ -969,6 +970,7 @@ const App = () => (
                   <Route path="portal-crm/ventas/contactos" element={<CrmContacts />} />
                   <Route path="portal-crm/ventas/contactos/:contactId" element={<CrmContactDetail />} />
                   <Route path="portal-crm/ventas/negocios" element={<CrmDeals />} />
+                  <Route path="portal-crm/ventas/negocios/:dealId" element={<CrmDealDetail />} />
                   <Route path="portal-crm/ventas/tareas" element={<CrmTasks />} />
                   <Route path="portal-crm/ventas/citas" element={<CrmAppointments />} />
                   <Route path="portal-crm/ventas/rendimiento-asesores" element={<CrmAgentPerformance />} />
