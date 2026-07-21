@@ -141,6 +141,7 @@ export function ExpedienteDocumentos({
   cuentaId,
   propiedadId,
   readOnly = false,
+  idProyecto = null,
 }: {
   cuentaId: number;
   propiedadId?: number | null;
@@ -151,6 +152,8 @@ export function ExpedienteDocumentos({
    * Marcar como revisado, Levantar observación.
    */
   readOnly?: boolean;
+  /** Desarrollo del socio (requerido para persistir en socio_bancario_revisiones). */
+  idProyecto?: number | null;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -175,12 +178,37 @@ export function ExpedienteDocumentos({
   const [revisados, setRevisados] = useState<Set<number>>(new Set());
   const [obsFor, setObsFor] = useState<DocItem | null>(null);
   const [obsText, setObsText] = useState('');
-  const toggleRevisado = (id: number) =>
+  const toggleRevisadoLocal = (id: number) =>
     setRevisados((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
+
+  // Persiste una acción del banco en socio_bancario_revisiones (revisa, NO valida:
+  // no toca documentos.id_estatus_verificacion ni la verificación interna de SOZU).
+  const persistirRevision = async (
+    tipo: "revisado" | "observacion",
+    opts: { idDocumento?: number; observacion?: string } = {},
+  ): Promise<boolean> => {
+    if (idProyecto == null) {
+      toast({ title: "Falta el desarrollo", description: "No se pudo asociar la revisión a un desarrollo.", variant: "destructive" });
+      return false;
+    }
+    const { error } = await (supabase as any).from("socio_bancario_revisiones").insert({
+      id_documento: opts.idDocumento ?? null,
+      id_cuenta_cobranza: cuentaId,
+      id_proyecto: idProyecto,
+      correo_usuario: user?.email ?? null,
+      tipo,
+      observacion: opts.observacion ?? null,
+    });
+    if (error) {
+      toast({ title: "No se pudo guardar", description: pgErrorMessage(error), variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
 
   // Documento existente (activo) por cada tipo subible → controla "Subir" vs "Actualizar".
   const existentePorTipo = useMemo(() => {
@@ -310,7 +338,11 @@ export function ExpedienteDocumentos({
                       size="sm"
                       variant={revisados.has(doc.id) ? 'default' : 'outline'}
                       className="h-8 gap-1.5 rounded-lg px-3 text-[12px] font-medium"
-                      onClick={() => toggleRevisado(doc.id)}
+                      onClick={async () => {
+                        if (revisados.has(doc.id)) { toggleRevisadoLocal(doc.id); return; }
+                        const ok = await persistirRevision('revisado', { idDocumento: doc.id });
+                        if (ok) { toggleRevisadoLocal(doc.id); toast({ title: 'Documento marcado como revisado' }); }
+                      }}
                     >
                       <CheckCheck className="h-3.5 w-3.5" /> {revisados.has(doc.id) ? 'Revisado' : 'Marcar revisado'}
                     </Button>
@@ -412,12 +444,18 @@ export function ExpedienteDocumentos({
             <Button
               className="h-9 gap-1.5 text-[13px]"
               disabled={!obsText.trim()}
-              onClick={() => {
-                // SWAP POINT: persistir la observación del banco en tabla separada
-                // (socio_bancario_revisiones). Hoy solo confirma en UI.
-                toast({ title: 'Observación registrada', description: 'Se compartió con SOZU para su atención.' });
-                setObsFor(null);
-                setObsText('');
+              onClick={async () => {
+                // Persiste en socio_bancario_revisiones (tabla separada de la
+                // verificación interna de SOZU).
+                const ok = await persistirRevision('observacion', {
+                  idDocumento: obsFor?.id,
+                  observacion: obsText.trim(),
+                });
+                if (ok) {
+                  toast({ title: 'Observación registrada', description: 'Se compartió con SOZU para su atención.' });
+                  setObsFor(null);
+                  setObsText('');
+                }
               }}
             >
               <Flag className="h-3.5 w-3.5" /> Enviar observación

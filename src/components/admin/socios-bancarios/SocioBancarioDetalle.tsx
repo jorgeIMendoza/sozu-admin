@@ -21,20 +21,12 @@ import {
   type EstadoUsuarioSocio,
 } from "@/hooks/useSociosBancarios";
 
+// Estado derivado de activo + email_confirmado (no hay columna estado).
 const ESTADO_USUARIO: Record<EstadoUsuarioSocio, { label: string; cls: string }> = {
   invitado: { label: "Invitado", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
   activo: { label: "Activo", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  inactivo: { label: "Inactivo", cls: "bg-muted text-muted-foreground" },
+  revocado: { label: "Revocado", cls: "bg-muted text-muted-foreground" },
 };
-
-function fmtFecha(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  } catch {
-    return "—";
-  }
-}
 
 export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onBack: () => void }) {
   const { data: banco } = useSocioBancarioDetalle(idSocio);
@@ -84,8 +76,8 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
             </p>
           </div>
           {banco && (
-            <Badge variant="outline" className={cn("ml-2", banco.estado === "activo" ? "border-success text-success" : "text-muted-foreground")}>
-              {banco.estado === "activo" ? "Activo" : "Inactivo"}
+            <Badge variant="outline" className={cn("ml-2", banco.activo ? "border-success text-success" : "text-muted-foreground")}>
+              {banco.activo ? "Activo" : "Inactivo"}
             </Badge>
           )}
         </div>
@@ -160,32 +152,30 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                 <th className="px-3 py-2 text-left">Correo</th>
                 <th className="px-3 py-2 text-left">Teléfono</th>
                 <th className="px-3 py-2 text-left">Estado</th>
-                <th className="px-3 py-2 text-left">Último acceso</th>
                 <th className="px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {loadingUsers ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="inline h-4 w-4 animate-spin mr-2" />Cargando…</td></tr>
+                <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="inline h-4 w-4 animate-spin mr-2" />Cargando…</td></tr>
               ) : usuarios.length === 0 ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Sin usuarios. Agrega el primero con una invitación.</td></tr>
+                <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Sin usuarios. Agrega el primero con una invitación.</td></tr>
               ) : (
                 usuarios.map((u) => {
                   const meta = ESTADO_USUARIO[u.estado];
                   return (
-                    <tr key={u.id} className="hover:bg-muted/20">
+                    <tr key={u.email} className="hover:bg-muted/20">
                       <td className="px-3 py-2 font-medium">{u.nombre ?? "—"}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{u.correo}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{u.email}</td>
                       <td className="px-3 py-2 text-muted-foreground tabular-nums">{u.telefono ?? "—"}</td>
                       <td className="px-3 py-2"><span className={cn("inline-flex rounded-md px-2 py-0.5 text-[11px] font-medium", meta.cls)}>{meta.label}</span></td>
-                      <td className="px-3 py-2 text-muted-foreground tabular-nums">{fmtFecha(u.ultimo_acceso)}</td>
                       <td className="px-3 py-2">
                         <div className="flex justify-end gap-1.5">
                           {u.estado === "invitado" && (
                             <Button
                               size="sm" variant="ghost" className="h-8 gap-1 text-[12px]"
                               disabled={reenviar.isPending}
-                              onClick={() => reenviar.mutate({ idUsuario: u.id, correo: u.correo }, {
+                              onClick={() => reenviar.mutate({ correo: u.email }, {
                                 onSuccess: () => toast({ title: "Invitación reenviada" }),
                                 onError: (e: any) => toast({ title: "No se pudo reenviar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
@@ -193,10 +183,10 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                               <Mail className="h-3.5 w-3.5" /> Reenviar
                             </Button>
                           )}
-                          {u.estado === "inactivo" ? (
+                          {u.estado === "revocado" ? (
                             <Button
                               size="sm" variant="outline" className="h-8 gap-1 text-[12px]"
-                              onClick={() => toggleUsuario.mutate({ id: u.id, activar: true }, {
+                              onClick={() => toggleUsuario.mutate({ correo: u.email, activar: true }, {
                                 onSuccess: () => toast({ title: "Usuario reactivado" }),
                                 onError: (e: any) => toast({ title: "No se pudo reactivar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
@@ -206,12 +196,12 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                           ) : (
                             <Button
                               size="sm" variant="ghost" className="h-8 gap-1 text-[12px] text-destructive hover:text-destructive"
-                              onClick={() => toggleUsuario.mutate({ id: u.id, activar: false }, {
-                                onSuccess: () => toast({ title: "Acceso desactivado", description: "Se revocó el acceso del usuario." }),
-                                onError: (e: any) => toast({ title: "No se pudo desactivar", description: e?.message ?? "Error", variant: "destructive" }),
+                              onClick={() => toggleUsuario.mutate({ correo: u.email, activar: false }, {
+                                onSuccess: () => toast({ title: "Acceso revocado", description: "Se revocó el acceso del usuario." }),
+                                onError: (e: any) => toast({ title: "No se pudo revocar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
                             >
-                              <Ban className="h-3.5 w-3.5" /> Desactivar
+                              <Ban className="h-3.5 w-3.5" /> Revocar
                             </Button>
                           )}
                         </div>
