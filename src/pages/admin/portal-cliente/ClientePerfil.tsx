@@ -2,7 +2,7 @@ import {
   User, Mail, FileText, LogOut, Shield, ArrowLeft,
   CheckCircle2, Building2, CreditCard, Lock, Eye, EyeOff,
   BadgeCheck, AlertCircle, Clock, Loader2, Check, X,
-  Download, Pencil, Upload, Camera, Trash2,
+  Download, Pencil, Upload, Camera, Trash2, Plus,
 } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -190,12 +190,14 @@ const CancelBtn = ({ onClick }: { onClick: () => void }) => (
 const ModalHeader = ({
   icon: Icon, title, subtitle, onClose,
 }: {
-  icon: React.ElementType; title: string; subtitle: string; onClose: () => void;
+  icon?: React.ElementType; title: string; subtitle: string; onClose: () => void;
 }) => (
   <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-[#ECEEF0] shrink-0">
-    <div className="w-9 h-9 rounded-md bg-[#E8F5EE] flex items-center justify-center shrink-0">
-      <Icon className="w-4 h-4 text-[hsl(158_64%_38%)]" />
-    </div>
+    {Icon && (
+      <div className="w-9 h-9 rounded-md bg-[#E8F5EE] flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4 text-[hsl(158_64%_38%)]" />
+      </div>
+    )}
     <div className="flex-1 min-w-0">
       <h3 className="font-bold text-[#171A1D] text-sm leading-tight">{title}</h3>
       <p className="text-xs text-[#9AA3AD]">{subtitle}</p>
@@ -356,6 +358,9 @@ const ClientePerfil = () => {
   const [savingCuenta, setSavingCuenta] = useState(false);
   const [showBancoList, setShowBancoList] = useState(false);
   const [bancoSearch, setBancoSearch] = useState('');
+  const [addingBanco, setAddingBanco] = useState(false);
+  const [showAddBanco, setShowAddBanco] = useState(false);
+  const [nuevoBanco, setNuevoBanco] = useState('');
 
   /* PW auth gate */
   const PW_AUTH_GRACE = 90_000;
@@ -887,6 +892,40 @@ const ClientePerfil = () => {
       queryClient.refetchQueries({ queryKey: ['cliente-perfil-docs', effectivePersonaId] });
     } finally {
       setSavingCuenta(false);
+    }
+  };
+
+  /* Alta de banco no listado en catálogo (clientes extranjeros / bancos ausentes).
+     Inserta en `bancos` y lo selecciona. Dedup case-insensitive para no duplicar. */
+  const handleAddBanco = async () => {
+    const nombre = nuevoBanco.trim();
+    if (nombre.length < 2) { toast.error('Escribe el nombre del banco'); return; }
+    const existente = bancosOptions.find(b => b.nombre.trim().toLowerCase() === nombre.toLowerCase());
+    if (existente) {
+      setAddCuenta(f => ({ ...f, id_banco: String(existente.id) }));
+      setShowAddBanco(false); setNuevoBanco(''); setBancoSearch('');
+      toast.info('Ese banco ya existía; se seleccionó.');
+      return;
+    }
+    setAddingBanco(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('bancos')
+        .insert({ nombre, activo: true })
+        .select('id, nombre')
+        .single();
+      if (error || !data) { toast.error('No se pudo agregar el banco' + (error ? `: ${error.message}` : '')); return; }
+      queryClient.setQueryData(
+        ['bancos-catalog'],
+        (prev: { id: number; nombre: string }[] | undefined) =>
+          [...(prev || []), { id: data.id as number, nombre: data.nombre as string }]
+            .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
+      setAddCuenta(f => ({ ...f, id_banco: String(data.id) }));
+      setShowAddBanco(false); setNuevoBanco(''); setBancoSearch('');
+      toast.success('Banco agregado');
+    } finally {
+      setAddingBanco(false);
     }
   };
 
@@ -1928,7 +1967,7 @@ const ClientePerfil = () => {
           const titularIsSame = !!personaNombre && addCuenta.titular.trim() === personaNombre.trim();
           const content = (
             <>
-              <ModalHeader icon={CreditCard} title="Nueva cuenta bancaria" subtitle="SOZU usará esta cuenta para depósitos" onClose={onClose} />
+              <ModalHeader title="Nueva cuenta bancaria" subtitle="SOZU usará esta cuenta para depósitos" onClose={onClose} />
               <div className="px-5 pt-4 pb-2 space-y-4 overflow-y-auto flex-1">
                 <FormField label="Banco *">
                   <div className="relative">
@@ -1942,11 +1981,14 @@ const ClientePerfil = () => {
                       onChange={(e) => { setBancoSearch(e.target.value); setAddCuenta(f => ({ ...f, id_banco: '' })); setShowBancoList(true); }}
                       onBlur={() => setTimeout(() => setShowBancoList(false), 150)}
                     />
-                    {showBancoList && (
-                      <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-[#ECEEF0] bg-white shadow-lg">
-                        {bancosOptions
-                          .filter(b => !bancoSearch || b.nombre.toLowerCase().includes(bancoSearch.toLowerCase()))
-                          .map(b => (
+                    {showBancoList && (() => {
+                      const q = bancoSearch.trim();
+                      const filtrados = bancosOptions.filter(b => !q || b.nombre.toLowerCase().includes(q.toLowerCase()));
+                      const hayExacto = !!q && bancosOptions.some(b => b.nombre.trim().toLowerCase() === q.toLowerCase());
+                      const puedeAgregar = q.length >= 2 && !hayExacto;
+                      return (
+                        <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-[#ECEEF0] bg-white shadow-lg">
+                          {filtrados.map(b => (
                             <button key={b.id} type="button"
                               onMouseDown={() => { setAddCuenta(f => ({ ...f, id_banco: String(b.id) })); setBancoSearch(''); setShowBancoList(false); }}
                               className={`block w-full px-3 py-2.5 text-left text-sm transition-colors ${String(b.id) === addCuenta.id_banco ? 'bg-[#E8F5EE] text-[hsl(158_64%_38%)] font-semibold' : 'text-[#171A1D] hover:bg-[#F6F7F8]'}`}
@@ -1954,8 +1996,21 @@ const ClientePerfil = () => {
                               {b.nombre}
                             </button>
                           ))}
-                      </div>
-                    )}
+                          {filtrados.length === 0 && !puedeAgregar && (
+                            <div className="px-3 py-2.5 text-sm text-[#9AA3AD]">Sin resultados</div>
+                          )}
+                          {puedeAgregar && (
+                            <button type="button"
+                              onMouseDown={(e) => { e.preventDefault(); setNuevoBanco(q); setShowBancoList(false); setShowAddBanco(true); }}
+                              className="flex w-full items-center gap-2 border-t border-[#ECEEF0] px-3 py-2.5 text-left text-sm font-medium text-[hsl(158_64%_38%)] transition-colors hover:bg-[#F6F7F8]"
+                            >
+                              <Plus className="h-4 w-4 shrink-0" />
+                              Agregar «{q}»
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </FormField>
                 <FormField label="Número de cuenta *">
@@ -2021,11 +2076,21 @@ const ClientePerfil = () => {
                   </label>
                 </FormField>
               </div>
-              <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-[#ECEEF0] shrink-0">
-                {(addCuenta.id_banco && addCuenta.numero_cuenta.trim().length >= 8 && addCuenta.titular.trim() && addEvidencia)
-                  ? <PrimaryBtn onClick={handleAddCuenta} loading={savingCuenta} label="Guardar cuenta" />
-                  : <GrayBtn label="Guardar cuenta" />}
-                <CancelBtn onClick={onClose} />
+              <div className="px-5 pb-8 pt-3 flex gap-2.5 border-t border-[#ECEEF0] shrink-0">
+                <button
+                  onClick={onClose}
+                  className="flex-1 h-11 rounded-md text-sm font-semibold border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] hover:bg-[#F6FBF8] transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddCuenta}
+                  disabled={savingCuenta || !(addCuenta.id_banco && addCuenta.numero_cuenta.trim().length >= 8 && addCuenta.titular.trim() && addEvidencia)}
+                  className="flex-1 h-11 rounded-md text-sm font-semibold flex items-center justify-center gap-2 bg-[hsl(158_64%_38%)] text-white hover:opacity-90 transition-opacity active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingCuenta && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {savingCuenta ? 'Guardando...' : 'Guardar cuenta'}
+                </button>
               </div>
             </>
           );
@@ -2038,6 +2103,61 @@ const ClientePerfil = () => {
           ) : (
             <Sheet open={showAddCuenta} onOpenChange={(v) => !v && onClose()}>
               <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[90dvh] [&>button:last-child]:hidden">
+                {content}
+              </SheetContent>
+            </Sheet>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════
+            MODAL - Agregar banco (fuera de catálogo)
+        ══════════════════════════════════════════════ */}
+        {(() => {
+          const onClose = () => { setShowAddBanco(false); setNuevoBanco(''); };
+          const valido = nuevoBanco.trim().length >= 2;
+          const content = (
+            <>
+              <ModalHeader title="Agregar banco" subtitle="Registra un banco que no está en el catálogo" onClose={onClose} />
+              <div className="px-5 pt-4 pb-2 space-y-4 overflow-y-auto flex-1">
+                <FormField label="Nombre del banco *">
+                  <input
+                    className={INPUT_CLS}
+                    value={nuevoBanco}
+                    autoFocus
+                    onChange={(e) => setNuevoBanco(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && valido && !addingBanco) handleAddBanco(); }}
+                    placeholder="Ej. Bank of America, Santander España…"
+                    maxLength={120}
+                  />
+                </FormField>
+              </div>
+              <div className="px-5 pb-8 pt-3 flex gap-2.5 border-t border-[#ECEEF0] shrink-0">
+                <button
+                  onClick={onClose}
+                  className="flex-1 h-11 rounded-md text-sm font-semibold border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] hover:bg-[#F6FBF8] transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddBanco}
+                  disabled={!valido || addingBanco}
+                  className="flex-1 h-11 rounded-md text-sm font-semibold flex items-center justify-center gap-2 bg-[hsl(158_64%_38%)] text-white hover:opacity-90 transition-opacity active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {addingBanco && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {addingBanco ? 'Guardando...' : 'Guardar banco'}
+                </button>
+              </div>
+            </>
+          );
+          return isDesktop ? (
+            <Dialog open={showAddBanco} onOpenChange={(v) => !v && onClose()}>
+              <DialogContent style={SYS_FONT} className="p-0 max-w-md flex flex-col max-h-[90vh] [&>button:last-child]:hidden">
+                {content}
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <Sheet open={showAddBanco} onOpenChange={(v) => !v && onClose()}>
+              <SheetContent style={SYS_FONT} side="bottom" className="p-0 rounded-t-2xl flex flex-col max-h-[85dvh] [&>button:last-child]:hidden">
                 {content}
               </SheetContent>
             </Sheet>

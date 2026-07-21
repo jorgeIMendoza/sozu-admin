@@ -343,7 +343,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         .from("estatus_proyecto")
         .select("*")
         .eq("activo", true)
-        .order("nombre");
+        .order("id");
 
       if (error) throw error;
       return data;
@@ -744,8 +744,11 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                               </FormControl>
                               <SelectContent>
                                 {estatusProyecto?.map((estatus) => {
+                                  // Fuente única: columna porcentaje_avance; fallback legacy id/total
+                                  // mientras se aplica el DDL.
                                   const totalEstatus = estatusProyecto.length || 13;
-                                  const porcentaje = Math.round((estatus.id / totalEstatus) * 100);
+                                  const porcentaje = (estatus as any).porcentaje_avance
+                                    ?? Math.round((estatus.id / totalEstatus) * 100);
                                   return (
                                     <SelectItem key={estatus.id} value={estatus.id.toString()}>
                                       {estatus.nombre} ({porcentaje}%)

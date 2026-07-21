@@ -501,7 +501,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)]/40 bg-[hsl(158_64%_38%)]/[0.06] py-3 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/12"
+        className="w-full flex items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-3 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
       >
         <FileImage className="h-4 w-4" />
         Ver planos

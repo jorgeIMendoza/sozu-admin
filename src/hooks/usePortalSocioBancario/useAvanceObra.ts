@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 
 /**
  * Datos de "Avance de obra" para el Portal Socio Bancario.
  *
  * Replica el esquema de la Oferta Comercial Digital
  * (src/lib/offers/use-offer-db.ts → OfferConstructionProgress):
- *   - % de avance global derivado de fechas del proyecto
- *     (fecha_lanzamiento → fecha_entrega_proyecto/fecha_entrega).
- *   - Etapas fijas con umbral global acumulado (DEFAULT_MILESTONES).
+ *   - % de avance global = etapa del proyecto (id_estatus_proyecto) vía
+ *     catálogo estatus_proyecto.porcentaje_avance (fuente única de verdad).
+ *   - Etapas reales del catálogo de estatus (no plantilla fija).
  *   - Videos de avance: videos_youtube filtrado por id_proyecto.
  *   - Fotos de avance: multimedias_proyecto con categoría "Avances de obra".
  */
@@ -29,10 +30,6 @@ export interface AvanceObraVideo {
 export interface AvanceObraFoto {
   src: string;
   alt: string;
-  /** Fecha real de la foto (multimedias_proyecto.fecha_creacion), o null. */
-  fecha: string | null;
-  // SWAP POINT: descripción por foto — `multimedias_proyecto` no tiene columna
-  // de descripción hoy. Cuando exista, exponerla aquí (no fabricar texto).
 }
 
 export interface AvanceObraData {
@@ -47,24 +44,6 @@ export interface AvanceObraData {
 export interface ProyectoAvanceObra {
   id: number;
   nombre: string;
-}
-
-export const AVANCE_OBRA_MILESTONES: AvanceObraMilestone[] = [
-  { phase: "Cimentación", pct: 5, done: false },
-  { phase: "Estructura", pct: 28, done: false },
-  { phase: "Albañilería", pct: 55, done: false },
-  { phase: "Instalaciones", pct: 75, done: false },
-  { phase: "Acabados", pct: 90, done: false },
-  { phase: "Entrega", pct: 100, done: false },
-];
-
-function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
-  if (!inicio || !entrega) return 0;
-  const start = new Date(inicio).getTime();
-  const end = new Date(entrega).getTime();
-  const now = Date.now();
-  if (end <= start) return 0;
-  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
 }
 
 function toEmbedUrl(url: string): string {
@@ -99,34 +78,32 @@ export function useProyectosAvanceObra() {
 }
 
 export function useAvanceObraProyecto(proyectoId: number | null) {
-  // TODO RLS: acotar server-side por desarrollo asignado al socio (Jorge).
   return useQuery({
     queryKey: ["socio-bancario-avance-obra", proyectoId],
     enabled: proyectoId !== null,
     staleTime: 60_000,
     queryFn: async (): Promise<AvanceObraData> => {
-      // 1) Fechas del proyecto → % de avance global.
-      // NOTA: este "% real" es una ESTIMACIÓN por tiempo transcurrido (no un
-      // avance físico medido). No existe tabla de programa/baseline de obra en
-      // la base → el "programado" y la curva programada se dejan como estado
-      // vacío honesto en la UI. // SWAP POINT: tabla de programa de obra.
-      const { data: proj, error: projErr } = await (supabase as any)
-        .from("proyectos")
-        .select(
-          "id, fecha_inicio_construccion, fecha_lanzamiento, fecha_entrega_proyecto, fecha_entrega, fecha_actualizacion",
-        )
-        .eq("id", proyectoId)
-        .maybeSingle();
+      // 1) Etapa del proyecto → % de avance global (fuente única de verdad).
+      const [{ data: proj, error: projErr }, { data: estatusRows }] = await Promise.all([
+        (supabase as any)
+          .from("proyectos")
+          .select("id, fecha_lanzamiento, fecha_entrega_proyecto, fecha_entrega, fecha_actualizacion, id_estatus_proyecto")
+          .eq("id", proyectoId)
+          .maybeSingle(),
+        (supabase as any)
+          .from("estatus_proyecto")
+          .select("*")
+          .eq("activo", true),
+      ]);
       if (projErr) throw projErr;
 
-      const inicio: string | null =
-        proj?.fecha_inicio_construccion ?? proj?.fecha_lanzamiento ?? null;
       const entrega: string | null =
         proj?.fecha_entrega_proyecto ?? proj?.fecha_entrega ?? null;
-      const progress = calcProgressFromDates(inicio, entrega);
-      const milestones = AVANCE_OBRA_MILESTONES.map((m) => ({
+      const estatusCatalog = mapEstatusCatalog((estatusRows ?? []) as any[]);
+      const progress = progressFromEstatus(estatusCatalog, proj?.id_estatus_proyecto ?? null);
+      const milestones: AvanceObraMilestone[] = milestonesFromEstatus(estatusCatalog).map((m) => ({
         ...m,
-        done: progress >= m.pct,
+        done: progress > m.pct, // etapa superada; la == avance es la ACTUAL
       }));
 
       // 2) Historial de videos de avance (más reciente primero).
@@ -161,21 +138,19 @@ export function useAvanceObraProyecto(proyectoId: number | null) {
       if (avanceCatId != null) {
         const { data: fotoRows, error: fotoErr } = await (supabase as any)
           .from("multimedias_proyecto")
-          .select("id, url, id_categoria, fecha_creacion")
+          .select("id, url, id_categoria")
           .eq("id_proyecto", proyectoId)
           .eq("id_categoria", avanceCatId)
           .eq("es_imagen", true)
           .eq("activo", true)
-          .order("fecha_creacion", { ascending: false, nullsFirst: false })
+          .order("id", { ascending: false })
           .limit(50);
         if (fotoErr) throw fotoErr;
         fotos = ((fotoRows || []) as Array<any>)
           .filter((f) => f.url)
-          .map((f) => ({
+          .map((f, i) => ({
             src: f.url as string,
-            // alt genérico para accesibilidad (no es una descripción real).
-            alt: "Foto de avance de obra",
-            fecha: (f.fecha_creacion ?? null) as string | null,
+            alt: `Avance de obra ${i + 1}`,
           }));
       }
 

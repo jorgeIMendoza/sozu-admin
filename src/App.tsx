@@ -160,8 +160,6 @@ const ClientePropiedadPago = lazyRetry(() => import("./pages/admin/portal-client
 const ClienteDetallesTecnicos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDetallesTecnicos"));
 const ClienteDocumentos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDocumentos"));
 const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteNotificaciones"));
-const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
-const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
 const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
 const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
@@ -664,9 +662,9 @@ const App = () => (
                     <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
                     <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
-                    <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                    <Route path="portal-cliente/en-adquisicion" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=adquisicion" replace />} />
                     <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
-                    <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                    <Route path="portal-cliente/patrimonio" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=patrimonio" replace />} />
                     <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
@@ -850,9 +848,9 @@ const App = () => (
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
                   <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
-                  <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                  <Route path="portal-cliente/en-adquisicion" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=adquisicion" replace />} />
                   <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
-                  <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                  <Route path="portal-cliente/patrimonio" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=patrimonio" replace />} />
                   <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />

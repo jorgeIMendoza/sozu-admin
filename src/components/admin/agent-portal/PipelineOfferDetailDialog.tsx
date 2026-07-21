@@ -2,16 +2,19 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, ExternalLink } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ENVIRONMENT } from "@/lib/config";
 import { toast } from "sonner";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
+const MODAL_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+// Botón de acción invertido: blanco + verde, al hover invierte a verde + blanco.
+const GREEN_ACTION_BTN =
+  "inline-flex items-center justify-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
 interface PipelineOfferDetailDialogProps {
   open: boolean;
@@ -237,28 +240,22 @@ export function PipelineOfferDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="light max-w-md mx-auto p-0 gap-0 rounded-2xl max-h-[90vh]">
-        <DialogHeader className="p-4 pb-2 border-b">
-          <DialogTitle className="text-base font-bold text-center">
+      <DialogContent
+        className="light max-w-[480px] mx-auto p-0 gap-0 rounded-md overflow-hidden max-h-[90vh]"
+        style={{ fontFamily: MODAL_FONT }}
+      >
+        <DialogHeader className="space-y-1 border-b border-[#ECEEF0] px-[22px] py-5 text-left">
+          <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
             Detalle de Oferta
           </DialogTitle>
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-[12px] font-normal text-[#6B7280]">
             {isProducto ? oferta.producto_nombre : oferta.propiedad_nombre}
             {oferta.proyecto_nombre ? ` de ${oferta.proyecto_nombre}` : ''}
           </p>
-          <div className="flex justify-center pt-1">
-            <button
-              onClick={() => window.open(`/oferta/${oferta.id}`, '_blank')}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 transition-colors"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Ver oferta pública
-            </button>
-          </div>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[75vh]">
-          <div className="p-4 space-y-4">
+        <div className="max-h-[calc(90vh-11rem)] overflow-y-auto px-[22px] py-[22px]">
+          <div className="space-y-5">
             {/* Offer info */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -448,15 +445,16 @@ export function PipelineOfferDetailDialog({
             </div>
 
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Sticky save button */}
         {!alreadyHasScheme && selectedSchemeId && (
-          <div className="border-t p-3 bg-background">
-            <Button
+          <div className="border-t border-[#ECEEF0] px-[22px] py-4 bg-background">
+            <button
+              type="button"
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
-              className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              className={cn(GREEN_ACTION_BTN, "w-full h-11")}
             >
               {saveMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -464,12 +462,12 @@ export function PipelineOfferDetailDialog({
                 <Check className="h-4 w-4" />
               )}
               Guardar plan seleccionado
-            </Button>
+            </button>
           </div>
         )}
 
         {alreadyHasScheme && (
-          <div className="border-t p-2 bg-background text-center">
+          <div className="border-t border-[#ECEEF0] p-3 bg-background text-center">
             <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" /> Plan ya seleccionado - no se puede cambiar
             </p>
