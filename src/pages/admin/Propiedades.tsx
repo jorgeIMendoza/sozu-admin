@@ -961,22 +961,34 @@ const Propiedades = () => {
   const { data: precioRange } = useQuery({
     queryKey: ['precio-range-filter', accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      // Select con join para poder filtrar por proyectos accesibles (usuarios restringidos).
-      const selectWithJoin =
-        'precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id)))';
+      // NO usar embed !inner a proyectos aquí: el join de 4 tablas sobre ~50k propiedades
+      // provocaba `statement timeout` (57014). Para usuarios restringidos resolvemos los
+      // id_edificio_modelo accesibles y filtramos por esa columna directa (indexada).
+      let emIdsAccesibles: number[] | null = null;
+      if (!hasUnrestrictedAccess) {
+        if (accessibleProjectIds.length === 0) return { min: 0, max: 100000000 };
+        const { data: edificiosAcc } = await supabase
+          .from('edificios').select('id').in('id_proyecto', accessibleProjectIds).eq('activo', true);
+        const edificioIds = (edificiosAcc || []).map((e: any) => e.id);
+        if (edificioIds.length === 0) return { min: 0, max: 100000000 };
+        const { data: emsAcc } = await supabase
+          .from('edificios_modelos').select('id').in('id_edificio', edificioIds).eq('activo', true);
+        emIdsAccesibles = (emsAcc || []).map((m: any) => m.id);
+        if (emIdsAccesibles.length === 0) return { min: 0, max: 100000000 };
+      }
 
       const applyFilters = (q: any) => {
         q = q.eq('activo', true).eq('es_aprobado', true).gt('precio_lista', 0);
         q = q.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
-        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-          q = q.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        if (emIdsAccesibles) {
+          q = q.in('id_edificio_modelo', emIdsAccesibles);
         }
         return q;
       };
 
       // Total de propiedades elegibles: se usa para ubicar los percentiles por posición.
       const { count } = await applyFilters(
-        supabase.from('propiedades').select(selectWithJoin, { count: 'exact', head: true })
+        supabase.from('propiedades').select('precio_lista', { count: 'exact', head: true })
       );
       const n = count || 0;
       if (n === 0) return { min: 0, max: 100000000 };
@@ -986,7 +998,7 @@ const Propiedades = () => {
       const idxHigh = Math.min(Math.floor(n * 0.99), n - 1);
 
       const fetchAt = async (idx: number): Promise<number | null> => {
-        const { data } = await applyFilters(supabase.from('propiedades').select(selectWithJoin))
+        const { data } = await applyFilters(supabase.from('propiedades').select('precio_lista'))
           .order('precio_lista', { ascending: true })
           .range(idx, idx);
         return (data?.[0] as any)?.precio_lista ?? null;
