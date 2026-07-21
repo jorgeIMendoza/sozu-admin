@@ -51,7 +51,7 @@ const PrecioFinalBadge = ({ value, esIncluido }: { value: number | null; esInclu
         <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300">
           {formattedValue}
         </Badge>
-        <span className="text-xs text-muted-foreground italic">(incluido en precio del depa)</span>
+        <span className="text-xs text-muted-foreground italic">(se incluirá en el precio total de la oferta)</span>
       </div>
     );
   }

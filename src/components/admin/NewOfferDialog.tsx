@@ -868,7 +868,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       const { data: allBodegas } = await supabase
         .from("bodegas")
         .select(`
-          id, nombre, id_producto, m2,
+          id, nombre, id_producto, m2, es_incluido,
           productos_servicios!bodegas_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
         `)
         .eq("id_propiedad", propertyId)
@@ -878,7 +878,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       const { data: allEstacionamientos } = await supabase
         .from("estacionamientos")
         .select(`
-          id, nombre, id_producto, m2,
+          id, nombre, id_producto, m2, es_incluido,
           productos_servicios!estacionamientos_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
         `)
         .eq("id_propiedad", propertyId)
@@ -895,8 +895,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         const precioLista = productService?.precio_lista || 0;
         const m2 = product.m2 || 0;
         const precioFinal = precioLista * m2;
-        
-        // Only generate offer if price is greater than 0
+
+        // Bodega/estacionamiento incluido (es_incluido) NO genera oferta ni PDF aparte:
+        // su valor ya suma al precio total de la propiedad. Tampoco si el precio es 0.
+        if ((product as any).es_incluido) {
+          console.log(`Skipping product offer for ${product.nombre} - es_incluido (incluido en el precio total del depa)`);
+          continue;
+        }
         if (precioFinal <= 0) {
           console.log(`Skipping product offer for ${product.nombre} - price is 0 (included in apartment)`);
           continue;
