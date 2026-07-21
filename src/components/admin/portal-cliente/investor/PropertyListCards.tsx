@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   Calendar,
   CheckCircle2,
+  MapPin,
 } from "lucide-react";
 import { getPropertyStatus } from "@/lib/portal-cliente/mock-data";
 import type { InvestmentProperty } from "@/lib/portal-cliente/types";
@@ -88,19 +89,12 @@ function MiniCarousel({
 
 // ── Card: propiedad en adquisición ──
 
-const STAGE_ORDER = ["preventa", "pago_final", "escrituracion", "entrega"] as const;
-const STAGE_SHORT: Record<string, string> = {
-  preventa: "Preventa",
-  pago_final: "Pago",
-  escrituracion: "Escritura",
-  entrega: "Entrega",
-};
-
-const statusTone: Record<string, string> = {
-  warning: "bg-warning/15 text-warning",
-  primary: "bg-primary/15 text-primary",
-  success: "bg-success/15 text-success",
-  destructive: "bg-destructive/15 text-destructive",
+// Punto de color del badge sobre la imagen (pill blanco sólido = siempre legible).
+const statusDot: Record<string, string> = {
+  warning: "bg-warning",
+  primary: "bg-primary",
+  success: "bg-success",
+  destructive: "bg-destructive",
 };
 
 export function AcquisitionCard({
@@ -118,7 +112,6 @@ export function AcquisitionCard({
       : 0;
   const heroImage = property.image || getPropertyImage(property.id, property.projectName);
   const activeStage = inv.stages.find((s) => s.status === "active");
-  const currentIdx = activeStage ? STAGE_ORDER.indexOf(activeStage.id as typeof STAGE_ORDER[number]) : -1;
   const pendingDocs = inv.additionalProducts?.reduce(
     (s, p) => s + p.documents.filter((d) => d.status === "pendiente").length,
     0,
@@ -131,119 +124,85 @@ export function AcquisitionCard({
     <div
       data-cta="cliente.adquisicion.ver-propiedad"
       onClick={onClick}
-      className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
+      className="group cursor-pointer rounded-2xl bg-card border border-border hover:shadow-lg hover:shadow-black/[0.06] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col"
     >
-      <div className="flex gap-4 p-4">
-        <div className="flex-shrink-0">
-          <div className="w-[120px] h-[100px] rounded-xl overflow-hidden">
-            <MiniCarousel
-              projectId={property.projectId}
-              fallbackUrl={heroImage || undefined}
-              imageGradient={property.imageGradient}
-              alt={property.projectName}
+      {/* Hero */}
+      <div className="relative h-44">
+        <MiniCarousel
+          projectId={property.projectId}
+          fallbackUrl={heroImage || undefined}
+          imageGradient={property.imageGradient}
+          alt={property.projectName}
+        />
+        {/* Capa negra bajo el texto para legibilidad del título/ubicación */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/55 to-transparent pointer-events-none" />
+
+        {/* Estatus: pill blanco sólido + punto de color → siempre visible sobre la foto */}
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-white text-neutral-900 shadow-md whitespace-nowrap">
+          <span className={`w-1.5 h-1.5 rounded-full ${statusDot[status.color] ?? "bg-neutral-400"}`} />
+          {status.label}
+        </span>
+
+        {/* Título sobre la imagen */}
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <p className="font-display font-bold text-[17px] text-white leading-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]">
+            {property.projectName}
+            <span className="font-medium text-white/85"> · U-{property.unitNumber}</span>
+          </p>
+          {property.location && (
+            <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-white/90 truncate max-w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
+              <MapPin className="w-3 h-3 shrink-0" />
+              <span className="truncate">{property.location}</span>
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Cuerpo */}
+      <div className="p-4 flex-1 flex flex-col gap-3.5">
+        {/* Avance de pago */}
+        <div>
+          <div className="flex items-end justify-between mb-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+              Avance de pago
+            </span>
+            <span className="font-display font-bold text-[15px] text-foreground tabular-nums leading-none">
+              {paidPct}
+              <span className="text-[11px] font-semibold text-muted-foreground">%</span>
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-[width] duration-500"
+              style={{ width: `${paidPct}%` }}
             />
           </div>
         </div>
-        <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[14px] text-foreground leading-tight">
-                <span className="font-semibold font-display">{property.projectName}</span>
-                <span className="text-muted-foreground font-normal"> · U-{property.unitNumber}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {property.location}
-              </p>
-            </div>
-            <span
-              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                statusTone[status.color] ?? "bg-muted text-muted-foreground"
-              }`}
-            >
-              {status.label}
-            </span>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] mb-1">
-              <span className="text-muted-foreground">Pagado</span>
-              <span className="text-foreground tabular-nums font-medium">{paidPct}%</span>
-            </div>
-            <div className="w-full h-[3px] bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full"
-                style={{ width: `${paidPct}%` }}
-              />
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-1">
-          {STAGE_ORDER.map((stage, idx) => {
-            const reached = currentIdx >= idx || inv.stages.find((s) => s.id === stage)?.status === "completed";
-            const isCurrent = currentIdx === idx;
-            return (
-              <div
-                key={stage}
-                className={`flex-1 h-[3px] rounded-full ${
-                  isCurrent
-                    ? "bg-primary"
-                    : reached
-                    ? "bg-primary/60"
-                    : "bg-muted"
-                }`}
-              />
-            );
-          })}
-        </div>
-        <div className="flex justify-between mt-1.5 text-[9px] font-medium tracking-wide uppercase">
-          {STAGE_ORDER.map((stage, idx) => (
-            <span
-              key={stage}
-              className={
-                currentIdx === idx
-                  ? "text-primary"
-                  : currentIdx > idx
-                  ? "text-foreground/70"
-                  : "text-muted-foreground/60"
-              }
-            >
-              {STAGE_SHORT[stage]}
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border-subtle bg-muted/20 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap text-[11px] min-w-0">
+          {nextAmount ? (
+            <span className="inline-flex items-center gap-1.5 text-foreground min-w-0">
+              <CreditCard className="w-3.5 h-3.5 text-warning shrink-0" />
+              <span className="tabular-nums font-semibold">{fmt(nextAmount)}</span>
+              <span className="text-muted-foreground truncate">· {nextDate}</span>
             </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-4 py-3 border-t border-border-subtle flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-4 flex-wrap text-[11px]">
-          {nextAmount && (
-            <span className="inline-flex items-center gap-1.5 text-foreground">
-              <CreditCard className="w-3.5 h-3.5 text-warning" />
-              <span className="tabular-nums font-medium">{fmt(nextAmount)}</span>
-              <span className="text-muted-foreground">· {nextDate}</span>
-            </span>
-          )}
-          {!nextAmount && nextDate && (
+          ) : nextDate ? (
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <Calendar className="w-3.5 h-3.5" />
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
               {nextDate}
             </span>
-          )}
+          ) : null}
           {pendingDocs > 0 && (
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-3.5 h-3.5 shrink-0" />
               {pendingDocs} doc{pendingDocs > 1 ? "s" : ""}
             </span>
           )}
-          {financials.estimatedAppreciation > 0 && (
-            <span className="inline-flex items-center gap-1 text-success">
-              <TrendingUp className="w-3.5 h-3.5" />
-              +{financials.estimatedAppreciation}%
-            </span>
-          )}
         </div>
-        <span className="text-[12px] font-medium text-primary group-hover:underline inline-flex items-center gap-0.5">
+        <span className="text-[12px] font-semibold text-primary inline-flex items-center gap-0.5 shrink-0 group-hover:gap-1.5 transition-all">
           Ver detalle
           <ChevronRight className="w-3.5 h-3.5" />
         </span>
@@ -276,85 +235,71 @@ export function PatrimonyCard({
     <div
       data-cta="cliente.patrimonio.ver-propiedad"
       onClick={onClick}
-      className="group cursor-pointer rounded-2xl bg-card border border-border hover:border-border-soft hover:shadow-sm transition-all overflow-hidden"
+      className="group cursor-pointer rounded-2xl bg-card border border-border hover:shadow-lg hover:shadow-black/[0.06] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col"
     >
-      <div className="flex gap-4 p-4">
-        <div className="flex-shrink-0 relative">
-          <div
-            className={`w-[120px] h-[100px] rounded-xl overflow-hidden ${
-              heroImage ? "" : `bg-gradient-to-br ${property.imageGradient}`
-            }`}
-          >
-            {heroImage && (
-              <img
-                src={heroImage}
-                alt={property.projectName}
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-          <span className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-success text-success-foreground flex items-center justify-center shadow">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-          </span>
+      {/* Hero */}
+      <div className="relative h-44">
+        <MiniCarousel
+          projectId={property.projectId}
+          fallbackUrl={heroImage || undefined}
+          imageGradient={property.imageGradient}
+          alt={property.projectName}
+        />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/55 to-transparent pointer-events-none" />
+
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-white text-neutral-900 shadow-md">
+          <span className="w-1.5 h-1.5 rounded-full bg-success" />
+          Entregada
+        </span>
+        <span className="absolute top-3 left-3 text-[10px] font-semibold px-2 py-1 rounded-full bg-black/55 text-white backdrop-blur-md shadow-sm whitespace-nowrap">
+          Tuya desde {property.deliveryDate}
+        </span>
+
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <p className="font-display font-bold text-[17px] text-white leading-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]">
+            {property.projectName}
+            <span className="font-medium text-white/85"> · U-{property.unitNumber}</span>
+          </p>
+          {property.location && (
+            <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-white/90 truncate max-w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
+              <MapPin className="w-3 h-3 shrink-0" />
+              <span className="truncate">{property.location}</span>
+            </p>
+          )}
         </div>
+      </div>
 
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[14px] text-foreground leading-tight">
-                <span className="font-semibold font-display">{property.projectName}</span>
-                <span className="text-muted-foreground font-normal"> · U-{property.unitNumber}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {property.location}
-              </p>
-            </div>
-            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
-              Tuya desde {property.deliveryDate}
-            </span>
+      {/* Valor / plusvalía */}
+      <div className="p-4 flex-1">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-muted/40 p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Valor actual</p>
+            <p className="text-[16px] font-display font-bold text-foreground tabular-nums mt-0.5">
+              {fmt(valueMXN)}
+            </p>
           </div>
-
-          <div className="grid grid-cols-2 divide-x divide-border-subtle border-y border-border-subtle py-2 mt-1">
-            <div className="px-2 first:pl-0">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Valor actual
-              </p>
-              <p className="text-[14px] font-semibold text-foreground tabular-nums mt-0.5">
-                {fmt(valueMXN)}
-              </p>
-            </div>
-            <div className="px-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Plusvalía
-              </p>
-              <p
-                className={`text-[14px] font-semibold tabular-nums mt-0.5 inline-flex items-center gap-1 ${
-                  plusvaliaPct >= 0 ? "text-success" : "text-destructive"
-                }`}
-              >
-                <TrendingUp className="w-3 h-3" />
-                {plusvaliaPct >= 0 ? "+" : ""}
-                {plusvaliaPct}%
-              </p>
-            </div>
+          <div className="rounded-xl bg-muted/40 p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Plusvalía</p>
+            <p
+              className={`text-[16px] font-display font-bold tabular-nums mt-0.5 inline-flex items-center gap-1 ${
+                plusvaliaPct >= 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              {plusvaliaPct >= 0 ? "+" : ""}
+              {plusvaliaPct}%
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-border-subtle flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap text-[11px]">
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${maintConfig.cls}`}>
-            <Mi className="w-3 h-3" />
-            {maintConfig.label}
-          </span>
-          {maintenance && (
-            <span className="text-muted-foreground">
-              Próx. {fmt(maintenance.monthlyFee)} · {maintenance.nextDueDate}
-            </span>
-          )}
-          <span className="text-muted-foreground">· Uso propio</span>
-        </div>
-        <span className="text-[12px] font-medium text-primary group-hover:underline inline-flex items-center gap-0.5">
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border-subtle bg-muted/20 flex items-center justify-between gap-3">
+        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${maintConfig.cls}`}>
+          <Mi className="w-3 h-3" />
+          {maintConfig.label}
+        </span>
+        <span className="text-[12px] font-semibold text-primary inline-flex items-center gap-0.5 shrink-0 group-hover:gap-1.5 transition-all">
           Ver detalle
           <ChevronRight className="w-3.5 h-3.5" />
         </span>

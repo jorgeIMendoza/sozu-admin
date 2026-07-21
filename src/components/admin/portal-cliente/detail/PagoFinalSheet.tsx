@@ -173,6 +173,23 @@ const PagoFinalSheet = ({
 }: PagoFinalSheetProps) => {
   const { financials, property } = investment;
   const cuentaId = Number(property.id);
+
+  // ── Total de escrituración COMBINADO ──────────────────────────────────────
+  // La propiedad manda: al llegar al pago a escrituración se suma su saldo con
+  // TODO lo que se deba de sus productos (bodega y/o estacionamiento) para pedir
+  // UN solo crédito (no 2-3). El crédito único se registra en la cuenta principal
+  // y se marca tipo_financiamiento en todas las cuentas relacionadas.
+  const productosPendientes = (investment.additionalProducts ?? []).filter(
+    (p) => p.pendingBalance > 0.01,
+  );
+  const saldoPropiedad = Math.max(0, financials.pendingBalance);
+  const saldoProductos = productosPendientes.reduce((s, p) => s + p.pendingBalance, 0);
+  const saldoEscrituracion = saldoPropiedad + saldoProductos;
+  const hayProductos = productosPendientes.length > 0;
+  const relatedCuentaIds = [cuentaId, ...productosPendientes.map((p) => Number(p.id))].filter(
+    (id) => Number.isFinite(id),
+  );
+
   const queryClient = useQueryClient();
   const { data: solicitudVigente } = useSolicitudCreditoVigente(cuentaId);
   const { data: bancos } = useBancosConvenio();
@@ -189,7 +206,7 @@ const PagoFinalSheet = ({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const isFullyPaid = financials.pendingBalance <= 0;
+  const isFullyPaid = saldoEscrituracion <= 0;
 
   // Hydrate persisted mortgage process when sheet opens.
   // Prioridad: (1) store en memoria; (2) solicitud persistida en BD - sobrevive
@@ -226,10 +243,11 @@ const PagoFinalSheet = ({
   };
 
   const handlePropiosAction = async () => {
+    // Marcar la propiedad Y sus productos (bodega/estac) como recursos propios.
     await (supabase as any)
       .from('cuentas_cobranza')
       .update({ tipo_financiamiento: 'RECURSOS_PROPIOS' })
-      .eq('id', cuentaId);
+      .in('id', relatedCuentaIds);
     queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     if (onViewPaymentInstructions) {
       onClose();
@@ -247,15 +265,17 @@ const PagoFinalSheet = ({
     saveMortgageProcess(newProcess);
     setProcess(newProcess);
 
+    // Marcar la propiedad Y sus productos como crédito hipotecario (un solo crédito).
     await (supabase as any)
       .from('cuentas_cobranza')
       .update({ tipo_financiamiento: 'CREDITO_HIPOTECARIO' })
-      .eq('id', cuentaId);
+      .in('id', relatedCuentaIds);
 
+    // El crédito único se registra en la cuenta PRINCIPAL por el total combinado.
     await (supabase as any)
       .from('creditos_hipotecarios')
       .upsert(
-        { id_cuenta_cobranza: cuentaId, id_banco: choice.bank.idBanco, monto_credito: 0 },
+        { id_cuenta_cobranza: cuentaId, id_banco: choice.bank.idBanco, monto_credito: saldoEscrituracion },
         { onConflict: 'id_cuenta_cobranza' },
       );
 
@@ -613,12 +633,48 @@ const PagoFinalSheet = ({
           </div>
         </SheetHeader>
 
-        {/* Financial summary */}
-        <div className="flex justify-between items-center py-3 border-b border-border">
-          <span className="text-sm text-muted-foreground">Saldo a liquidar</span>
-          <span className="text-lg font-bold text-foreground tabular-nums">
-            ${financials.pendingBalance.toLocaleString("es-MX")} MXN
-          </span>
+        {/* Resumen financiero — total de escrituración combinado */}
+        <div className="py-3 border-b border-border">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">
+              {hayProductos ? "Total a escriturar" : "Saldo a liquidar"}
+            </span>
+            <span className="text-lg font-bold text-foreground tabular-nums">
+              ${saldoEscrituracion.toLocaleString("es-MX")} MXN
+            </span>
+          </div>
+          {hayProductos && (
+            <div className="mt-2.5 rounded-xl bg-muted/50 border border-border divide-y divide-border/60">
+              <div className="flex justify-between items-center px-3 py-2">
+                <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5" /> Propiedad
+                </span>
+                <span className="text-xs font-medium text-foreground tabular-nums">
+                  ${saldoPropiedad.toLocaleString("es-MX")}
+                </span>
+              </div>
+              {productosPendientes.map((p) => (
+                <div key={p.id} className="flex justify-between items-center px-3 py-2">
+                  <span className="text-xs text-muted-foreground truncate">{p.name}</span>
+                  <span className="text-xs font-medium text-foreground tabular-nums">
+                    ${p.pendingBalance.toLocaleString("es-MX")}
+                  </span>
+                </div>
+              ))}
+              <div className="flex justify-between items-center px-3 py-2 bg-primary/[0.04]">
+                <span className="text-xs font-semibold text-foreground">Total</span>
+                <span className="text-xs font-bold text-foreground tabular-nums">
+                  ${saldoEscrituracion.toLocaleString("es-MX")} MXN
+                </span>
+              </div>
+            </div>
+          )}
+          {hayProductos && (
+            <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
+              Tu departamento y sus complementos (bodega/estacionamiento) se liquidan en un
+              <span className="font-medium text-foreground"> solo crédito</span>, no en varios.
+            </p>
+          )}
         </div>
         {stage.details?.["Fecha límite"] && (
           <div className="flex justify-between items-center py-3 border-b border-border">
@@ -642,7 +698,7 @@ const PagoFinalSheet = ({
           <div className="mt-5">
             <PreQualificationFlow
               bank={process.choice.bank}
-              pendingBalance={financials.pendingBalance}
+              pendingBalance={saldoEscrituracion}
               onComplete={handlePrequalificationComplete}
               onCancel={() => {
                 clearMortgageProcess(property.id);

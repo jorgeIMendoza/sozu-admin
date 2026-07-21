@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronLeft,
@@ -28,11 +28,11 @@ import { usePaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/pa
 import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import { fmtMXN, fmtMXNDecimals } from "@/lib/utils";
 import { getPropertyImage } from "@/lib/portal-cliente/property-images";
-import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
+import { useProjectPhotos, useModelPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
 import FichaTecnicaSection from "./FichaTecnicaSection";
-import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
+import { useClientePropiedadDetalle, type PropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
@@ -66,6 +66,14 @@ const STAGES = [
   },
 ] as const;
 
+type DetailTab = "pagos" | "obra" | "docs" | "ficha";
+const DETAIL_TABS: { id: DetailTab; label: string; Icon: typeof CreditCard }[] = [
+  { id: "pagos", label: "Pagos", Icon: CreditCard },
+  { id: "obra", label: "Avance de obra", Icon: Building2 },
+  { id: "docs", label: "Documentos", Icon: FileText },
+  { id: "ficha", label: "Ficha técnica", Icon: Layers },
+];
+
 const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const { property, stages } = investment;
   const activeStage = stages.find((s) => s.status === "active");
@@ -77,6 +85,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
   const [showPaySheet, setShowPaySheet] = useState(false);
   const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
+  const [tab, setTab] = useState<DetailTab>("pagos");
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
   const enDemanda = !!property.enDemanda;
 
@@ -136,27 +145,22 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
       </div>
 
       {/* ── 2-col grid ── */}
-      <div className="md:grid md:grid-cols-[1fr_300px] md:gap-6 space-y-4 md:space-y-0">
+      <div className="md:grid md:grid-cols-[minmax(0,1fr)_300px] md:gap-6 space-y-4 md:space-y-0">
 
         {/* ── Left column ── */}
-        <div className="space-y-4">
-          {/* 0 · Confirmación de forma de pago final elegida */}
+        <div className="space-y-4 min-w-0">
+          {/* Confirmación de forma de pago final elegida (si aplica) */}
           <PaymentMethodBadge cuentaId={Number(property.id)} tipo={property.tipoFinanciamiento} />
 
-          {/* 1 · Imagen */}
-          <PropertyImage investment={investment} />
+          {/* Galería (portada → planos → modelo → multimedia) */}
+          <PropertyImage investment={investment} propDetalle={propDetalle ?? null} />
 
-          {/* 2 · Avance de obra */}
-          <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
+          {/* Resumen financiero (mobile) — lo primero que quiere ver el cliente */}
+          <div className="md:hidden">
+            <FinancialSideCard investment={investment} onPay={handlePay} />
+          </div>
 
-          {/* 3 · Productos adicionales */}
-          {(investment.additionalProducts?.length ?? 0) > 0 && (
-            <div className="rounded-2xl bg-card border border-border overflow-hidden">
-              <AdditionalProducts products={investment.additionalProducts!} />
-            </div>
-          )}
-
-          {/* 4 · Etapa actual */}
+          {/* Etapa actual */}
           <section className="rounded-2xl bg-card border border-border p-5">
             <div className="flex items-center gap-2 mb-5">
               <Building2 className="w-4 h-4 text-muted-foreground" />
@@ -213,27 +217,59 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
             </div>
           </section>
 
-          {/* Precio de compra (mobile only - desktop shows in right col) */}
-          <div className="md:hidden">
-            <FinancialSideCard investment={investment} onPay={handlePay} />
-          </div>
-
-          {/* 5 · Cronograma de pagos */}
-          <PaymentSchedule investment={investment} />
-
-          {/* 6 · Documentos */}
-          <PropertyDocuments propertyId={property.id} />
-
-          {/* 7 · Ficha técnica */}
-          {loadingFicha ? (
-            <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
-              <div className="h-3 w-32 bg-muted rounded" />
-              <div className="h-3 w-48 bg-muted rounded" />
-              <div className="h-40 bg-muted rounded-xl" />
+          {/* Pestañas: organiza el resto de la información */}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/60 overflow-x-auto scrollbar-none">
+              {DETAIL_TABS.map(({ id, label, Icon }) => {
+                const active = tab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className={`flex-1 min-w-fit inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${
+                      active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
-          ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
-            <FichaTecnicaSection propDetalle={propDetalle} />
-          ) : null}
+
+            <div className="mt-4 space-y-4 min-w-0">
+              {tab === "pagos" && <PaymentSchedule investment={investment} />}
+
+              {tab === "obra" && (
+                <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
+              )}
+
+              {tab === "docs" && <PropertyDocuments propertyId={property.id} />}
+
+              {tab === "ficha" && (
+                <>
+                  {loadingFicha ? (
+                    <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
+                      <div className="h-3 w-32 bg-muted rounded" />
+                      <div className="h-3 w-48 bg-muted rounded" />
+                      <div className="h-40 bg-muted rounded-xl" />
+                    </div>
+                  ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
+                    <FichaTecnicaSection propDetalle={propDetalle} />
+                  ) : (
+                    <p className="text-[13px] text-muted-foreground px-1 py-4">Sin ficha técnica disponible.</p>
+                  )}
+
+                  {(investment.additionalProducts?.length ?? 0) > 0 && (
+                    <div className="rounded-2xl bg-card border border-border overflow-hidden">
+                      <AdditionalProducts products={investment.additionalProducts!} />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
 
           {/* Agente (mobile only - desktop shows in right col) */}
           <div className="md:hidden">
@@ -324,90 +360,127 @@ const Lightbox = ({ src, alt = "", open, onClose }: LightboxProps) => {
 
 // ── Property image ──
 
-const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
+const GALLERY_CAT_LABEL: Record<string, string> = {
+  proyecto: "Proyecto",
+  nivel: "Plano de nivel",
+  depto: "Plano del depto",
+  modelo: "Modelo",
+  galeria: "Galería",
+};
+const isPlano = (cat: string) => cat === "nivel" || cat === "depto";
+
+const PropertyImage = ({
+  investment,
+  propDetalle,
+}: {
+  investment: InvestmentProperty;
+  propDetalle: PropiedadDetalle | null;
+}) => {
   const { property } = investment;
-  const heroImg = property.image || getPropertyImage(property.id, property.projectName);
+  const heroImg = property.image || propDetalle?.imageUrl || getPropertyImage(property.id, property.projectName);
+  const { data: modelPhotos } = useModelPhotos(propDetalle?.idModelo ?? undefined);
   const { data: projectPhotos } = useProjectPhotos(property.projectId);
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  const allUrls: string[] = projectPhotos?.length
-    ? projectPhotos.map((p) => p.url).filter(Boolean)
-    : heroImg
-    ? [heroImg]
-    : [];
+  // Orden pedido: 1) portada del proyecto · 2) planos (nivel + depto) ·
+  // 3) imágenes del modelo · 4) multimedia general del proyecto.
+  const items = useMemo(() => {
+    const list: { url: string; cat: string }[] = [];
+    const seen = new Set<string>();
+    const push = (url: string | null | undefined, cat: string) => {
+      if (url && !seen.has(url)) { seen.add(url); list.push({ url, cat }); }
+    };
+    push(heroImg, "proyecto");
+    push(propDetalle?.planoUbicacionUrl, "nivel");
+    push(propDetalle?.planoArquitectonico, "depto");
+    (modelPhotos ?? []).forEach((p) => push(p.url, "modelo"));
+    (projectPhotos ?? []).forEach((p) => push(p.url, "galeria"));
+    return list;
+  }, [heroImg, propDetalle, modelPhotos, projectPhotos]);
 
-  const goTo = (idx: number) =>
-    setActiveIdx(Math.max(0, Math.min(allUrls.length - 1, idx)));
-
-  const current = allUrls[activeIdx] ?? null;
+  const safeIdx = Math.min(activeIdx, Math.max(0, items.length - 1));
+  const current = items[safeIdx] ?? null;
+  const goTo = (idx: number) => setActiveIdx(Math.max(0, Math.min(items.length - 1, idx)));
 
   if (!current) {
     return (
-      <div
-        className={`aspect-video rounded-2xl bg-gradient-to-br ${property.imageGradient} flex flex-col items-center justify-end p-5 pb-6`}
-      >
+      <div className={`aspect-video rounded-2xl bg-gradient-to-br ${property.imageGradient} flex flex-col items-center justify-end p-5 pb-6`}>
         <p className="font-display font-bold text-foreground/50 text-xl text-center">{property.projectName}</p>
         <p className="text-foreground/35 text-[13px] mt-1">U-{property.unitNumber}</p>
       </div>
     );
   }
 
+  const plano = isPlano(current.cat);
+
   return (
     <>
       <div className="space-y-2">
         <div
-          className="relative w-full aspect-video rounded-2xl overflow-hidden bg-muted cursor-zoom-in group"
+          className={`relative w-full aspect-video rounded-2xl overflow-hidden cursor-zoom-in group ${plano ? "bg-white dark:bg-neutral-100" : "bg-muted"}`}
           onClick={() => setLightboxOpen(true)}
         >
           <img
-            src={current}
-            alt={`${property.projectName} U-${property.unitNumber}`}
-            className="w-full h-full object-cover object-bottom"
+            src={current.url}
+            alt={`${property.projectName} · ${GALLERY_CAT_LABEL[current.cat]}`}
+            className={`w-full h-full ${plano ? "object-contain p-2" : "object-cover object-center"}`}
             loading="lazy"
             decoding="async"
           />
+
+          {/* Categoría de la imagen */}
+          <span className="absolute top-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full bg-black/60 text-white backdrop-blur-md shadow-sm">
+            {GALLERY_CAT_LABEL[current.cat] ?? "Imagen"}
+          </span>
+
           <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <Maximize2 className="w-3.5 h-3.5" />
           </div>
-          {allUrls.length > 1 && (
+
+          {items.length > 1 && (
             <>
               <button
-                onClick={(e) => { e.stopPropagation(); goTo(activeIdx - 1); }}
-                disabled={activeIdx === 0}
+                onClick={(e) => { e.stopPropagation(); goTo(safeIdx - 1); }}
+                disabled={safeIdx === 0}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
                 aria-label="Anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); goTo(activeIdx + 1); }}
-                disabled={activeIdx === allUrls.length - 1}
+                onClick={(e) => { e.stopPropagation(); goTo(safeIdx + 1); }}
+                disabled={safeIdx === items.length - 1}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
                 aria-label="Siguiente"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
               <div className="absolute bottom-2 right-3 px-1.5 py-0.5 rounded bg-black/50 text-white text-[10px] tabular-nums">
-                {activeIdx + 1} / {allUrls.length}
+                {safeIdx + 1} / {items.length}
               </div>
             </>
           )}
         </div>
 
-        {allUrls.length > 1 && (
+        {items.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-            {allUrls.map((url, i) => (
+            {items.map((it, i) => (
               <button
-                key={i}
+                key={`${it.cat}-${i}`}
                 onClick={() => goTo(i)}
+                title={GALLERY_CAT_LABEL[it.cat]}
                 className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
-                  i === activeIdx
-                    ? "border-primary ring-1 ring-primary/30"
-                    : "border-transparent opacity-60 hover:opacity-90"
-                }`}
+                  i === safeIdx ? "border-primary ring-1 ring-primary/30" : "border-transparent opacity-60 hover:opacity-90"
+                } ${isPlano(it.cat) ? "bg-white dark:bg-neutral-100" : ""}`}
               >
-                <img src={url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <img
+                  src={it.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className={`w-full h-full ${isPlano(it.cat) ? "object-contain p-0.5" : "object-cover"}`}
+                />
               </button>
             ))}
           </div>
@@ -415,8 +488,8 @@ const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
       </div>
 
       <Lightbox
-        src={current}
-        alt={`${property.projectName} U-${property.unitNumber}`}
+        src={current.url}
+        alt={`${property.projectName} · ${GALLERY_CAT_LABEL[current.cat]}`}
         open={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />
@@ -892,25 +965,38 @@ function getStageInfo(stageId: string) {
 }
 
 function getContextualCTA(investment: InvestmentProperty, onPay: () => void) {
-  const { financials, stages } = investment;
+  const { financials, stages, payments, property } = investment;
   const active = stages.find((s) => s.status === "active");
+  const tipoFin = property.tipoFinanciamiento;
+  const primary = "bg-primary text-primary-foreground hover:bg-primary/90";
 
-  if (active?.id === "pago_final" && financials.pendingBalance > 0) {
-    if (investment.property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
-      return { label: "Ver crédito hipotecario", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <Landmark className="w-4 h-4" />, onClick: onPay };
+  // Solo queda el pago a escrituración (último pago) → aquí SÍ se confirma la
+  // forma de pago (recursos propios vs crédito hipotecario).
+  const pendingPayments = payments.filter((p) => p.status !== "pagado");
+  const isLastPayment = pendingPayments.length === 1;
+
+  // Fases con saldo pendiente (preventa / pago)
+  if ((active?.id === "pago_final" || active?.id === "preventa") && financials.pendingBalance > 0) {
+    if (isLastPayment) {
+      if (tipoFin === "CREDITO_HIPOTECARIO") {
+        return { label: "Ver crédito hipotecario", classes: primary, icon: <Landmark className="w-4 h-4" />, onClick: onPay };
+      }
+      if (tipoFin === "RECURSOS_PROPIOS") {
+        return { label: "Ver datos de pago", classes: primary, icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
+      }
+      // Falta elegir: este es el único momento donde se "confirma" la forma de pago.
+      return { label: "Confirmar forma de pago", classes: primary, icon: <Landmark className="w-4 h-4" />, onClick: onPay };
     }
-    return { label: `Pagar ${fmtMXN(financials.pendingBalance)}`, classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
+    // Aún hay parcialidades pendientes → solo mostrar datos de pago (monto + CLABE STP).
+    return { label: "Ver datos de pago", classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
   }
   if (active?.id === "escrituracion") {
-    return { label: "Agendar firma con notaría", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <FileText className="w-4 h-4" />, onClick: () => console.log("escritura") };
+    return { label: "Agendar firma con notaría", classes: primary, icon: <FileText className="w-4 h-4" />, onClick: () => console.log("escritura") };
   }
   if (active?.id === "entrega") {
     return { label: "Agendar visita de entrega", classes: "bg-success text-success-foreground hover:bg-success/90", icon: <Calendar className="w-4 h-4" />, onClick: () => console.log("entrega") };
   }
-  if (active?.id === "preventa") {
-    return { label: "Confirmar plan de pagos", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
-  }
-  return { label: "Hablar con mi agente", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <User className="w-4 h-4" />, onClick: () => console.log("agente") };
+  return { label: "Hablar con mi agente", classes: primary, icon: <User className="w-4 h-4" />, onClick: () => console.log("agente") };
 }
 
 export default PropertyAcquisitionDetail;
