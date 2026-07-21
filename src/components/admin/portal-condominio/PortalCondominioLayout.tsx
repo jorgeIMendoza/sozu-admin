@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -23,7 +24,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/SozuLogo";
+import { supabase } from "@/integrations/supabase/client";
 import { CondominioProvider, useCondominio } from "@/contexts/CondominioContext";
+import {
+  CondominioImpersonationProvider,
+  useCondominioImpersonation,
+} from "@/contexts/CondominioImpersonationContext";
+import { CondominioImpersonationSelector } from "./CondominioImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { usePortalNav } from "@/hooks/usePortalNav";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
@@ -79,7 +86,40 @@ const PortalCondominioLayoutInner = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navFromDb = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathAllowed, disabledPaths } = useAllowedMenus();
+  const { impersonatedRolId, isImpersonating } = useCondominioImpersonation();
+
+  // Al impersonar: paths que el ROL impersonado puede LEER (submenus_permisos),
+  // para pintar el sidebar como lo vería ese usuario (sin bypass de super admin).
+  const { data: impersonatedPaths } = useQuery({
+    queryKey: ["condominio-impersonated-paths", impersonatedRolId],
+    enabled: isImpersonating && impersonatedRolId != null,
+    queryFn: async () => {
+      const { data: leer } = await (supabase as any)
+        .from("permisos").select("id").eq("nombre", "leer").maybeSingle();
+      const leerId = (leer as any)?.id;
+      const { data: perms } = await (supabase as any)
+        .from("submenus_permisos")
+        .select("submenu_id")
+        .eq("rol_id", impersonatedRolId)
+        .eq("activo", true)
+        .eq("permiso_id", leerId);
+      const ids = (perms ?? []).map((p: any) => p.submenu_id);
+      const set = new Set<string>();
+      if (ids.length) {
+        const { data: subs } = await (supabase as any)
+          .from("submenus").select("vista_front_end").in("id", ids);
+        (subs ?? []).forEach((s: any) => { if (s.vista_front_end) set.add(s.vista_front_end); });
+      }
+      return set;
+    },
+  });
+
+  // ¿El rol EFECTIVO puede ver este path? Impersonando → permisos del rol
+  // impersonado; si no → permisos del rol real (incluye wildcard Super Admin).
+  const isEffectivelyAllowed = (path: string) =>
+    isImpersonating ? (impersonatedPaths?.has(path) ?? false) : isPathAllowed(path);
+
   const navItems = (() => {
     let items = navFromDb.slice();
     // Titularidad tras Cobranza (si no viene de BD).
@@ -96,8 +136,9 @@ const PortalCondominioLayoutInner = () => {
       if (idx === -1) items = [...items, item];
       else items.splice(idx + 1, 0, item);
     }
-    // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo).
-    return items.filter((i) => !disabledPaths.has(i.path));
+    // Menús por rol: solo los permitidos para el rol efectivo, y ocultar los
+    // apagados en BD (submenu activo=false o menú padre inactivo).
+    return items.filter((i) => isEffectivelyAllowed(i.path) && !disabledPaths.has(i.path));
   })();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
@@ -214,6 +255,7 @@ const PortalCondominioLayoutInner = () => {
               <span className="text-muted-foreground">{currentSection}</span>
             </div>
             <div className="flex items-center gap-3">
+              <CondominioImpersonationSelector />
               <CondominioSelector />
               <div className="min-w-0 text-right">
                 <p className="text-sm font-medium text-foreground truncate">{userName}</p>
@@ -240,6 +282,7 @@ const PortalCondominioLayoutInner = () => {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <CondominioImpersonationSelector />
               <CondominioSelector />
               <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
                 {initials}
@@ -257,9 +300,11 @@ const PortalCondominioLayoutInner = () => {
 };
 
 export const PortalCondominioLayout = () => (
-  <CondominioProvider>
-    <PortalCondominioLayoutInner />
-  </CondominioProvider>
+  <CondominioImpersonationProvider>
+    <CondominioProvider>
+      <PortalCondominioLayoutInner />
+    </CondominioProvider>
+  </CondominioImpersonationProvider>
 );
 
 export default PortalCondominioLayout;

@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Eye, CheckCircle2, XCircle, Upload, Loader2,
   History as HistoryIcon, User as UserIcon, MessageSquare,
+  Download, CheckCheck, Flag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -136,7 +137,24 @@ async function fetchDocsYHistorial(cuentaId: number): Promise<{ docs: DocItem[];
   return { docs, historial };
 }
 
-export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: number; propiedadId?: number | null }) {
+export function ExpedienteDocumentos({
+  cuentaId,
+  propiedadId,
+  readOnly = false,
+  idProyecto = null,
+}: {
+  cuentaId: number;
+  propiedadId?: number | null;
+  /**
+   * Modo banco (Portal Socio Bancario): el banco VERIFICA, no valida. Oculta
+   * Validar/Rechazar, subir/actualizar y el historial de verificaciones internas
+   * (emails de empleados SOZU). Sustituye por acciones de banco: Descargar,
+   * Marcar como revisado, Levantar observación.
+   */
+  readOnly?: boolean;
+  /** Desarrollo del socio (requerido para persistir en socio_bancario_revisiones). */
+  idProyecto?: number | null;
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -153,6 +171,44 @@ export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: numb
   const [rejectFor, setRejectFor] = useState<DocItem | null>(null);
   const [rejectJustification, setRejectJustification] = useState('');
   const [busyDocId, setBusyDocId] = useState<number | null>(null);
+
+  // Acciones del banco (solo readOnly). // SWAP POINT: persistir "revisado por
+  // banco" y "observación" en una tabla separada (p.ej. socio_bancario_revisiones),
+  // NUNCA en la verificación interna de SOZU. Hoy es estado local de sesión.
+  const [revisados, setRevisados] = useState<Set<number>>(new Set());
+  const [obsFor, setObsFor] = useState<DocItem | null>(null);
+  const [obsText, setObsText] = useState('');
+  const toggleRevisadoLocal = (id: number) =>
+    setRevisados((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  // Persiste una acción del banco en socio_bancario_revisiones (revisa, NO valida:
+  // no toca documentos.id_estatus_verificacion ni la verificación interna de SOZU).
+  const persistirRevision = async (
+    tipo: "revisado" | "observacion",
+    opts: { idDocumento?: number; observacion?: string } = {},
+  ): Promise<boolean> => {
+    if (idProyecto == null) {
+      toast({ title: "Falta el desarrollo", description: "No se pudo asociar la revisión a un desarrollo.", variant: "destructive" });
+      return false;
+    }
+    const { error } = await (supabase as any).from("socio_bancario_revisiones").insert({
+      id_documento: opts.idDocumento ?? null,
+      id_cuenta_cobranza: cuentaId,
+      id_proyecto: idProyecto,
+      correo_usuario: user?.email ?? null,
+      tipo,
+      observacion: opts.observacion ?? null,
+    });
+    if (error) {
+      toast({ title: "No se pudo guardar", description: pgErrorMessage(error), variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
 
   // Documento existente (activo) por cada tipo subible → controla "Subir" vs "Actualizar".
   const existentePorTipo = useMemo(() => {
@@ -204,23 +260,25 @@ export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: numb
 
   return (
     <div className="mt-4 space-y-5">
-      {/* ── Botones de subida (solo 2 tipos permitidos) ── */}
-      <div className="flex flex-wrap gap-2">
-        {UPLOAD_DOC_TYPES.map((t) => {
-          const existe = existentePorTipo.has(t.id);
-          return (
-            <Button
-              key={t.id}
-              size="sm"
-              variant="outline"
-              className="h-9 gap-2 rounded-lg border-dashed text-[12px] font-medium"
-              onClick={() => setUploadType(t)}
-            >
-              <Upload className="h-3.5 w-3.5" /> {existe ? 'Actualizar' : 'Subir'} {t.label}
-            </Button>
-          );
-        })}
-      </div>
+      {/* ── Botones de subida (solo 2 tipos permitidos) — ocultos para el banco ── */}
+      {!readOnly && (
+        <div className="flex flex-wrap gap-2">
+          {UPLOAD_DOC_TYPES.map((t) => {
+            const existe = existentePorTipo.has(t.id);
+            return (
+              <Button
+                key={t.id}
+                size="sm"
+                variant="outline"
+                className="h-9 gap-2 rounded-lg border-dashed text-[12px] font-medium"
+                onClick={() => setUploadType(t)}
+              >
+                <Upload className="h-3.5 w-3.5" /> {existe ? 'Actualizar' : 'Subir'} {t.label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Lista de documentos ── */}
       {isLoading ? (
@@ -261,32 +319,72 @@ export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: numb
                   <span className={cn('h-1.5 w-1.5 rounded-full', si.dot)} /> {si.label}
                 </span>
 
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-lg bg-emerald-600 px-3 text-[12px] font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40"
-                    disabled={busy || doc.estatus === 2}
-                    onClick={() => cambiarEstatus(doc, 2, 'Documento validado')}
-                  >
-                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Validar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1.5 rounded-lg border-rose-200 px-3 text-[12px] font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40 dark:border-rose-900/40 dark:hover:bg-rose-950/30"
-                    disabled={busy || doc.estatus === 3}
-                    onClick={() => { setRejectFor(doc); setRejectJustification(''); }}
-                  >
-                    <XCircle className="h-3.5 w-3.5" /> Rechazar
-                  </Button>
-                </div>
+                {readOnly ? (
+                  // Acciones del BANCO: verificar (no validar). Descargar, marcar
+                  // revisado y levantar observación. La validación interna de SOZU
+                  // no se expone; solo se muestra el estatus (badge de arriba).
+                  <div className="flex shrink-0 items-center gap-2">
+                    {doc.url && (
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium hover:bg-muted"
+                      >
+                        <Download className="h-3.5 w-3.5" /> Descargar
+                      </a>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={revisados.has(doc.id) ? 'default' : 'outline'}
+                      className="h-8 gap-1.5 rounded-lg px-3 text-[12px] font-medium"
+                      onClick={async () => {
+                        if (revisados.has(doc.id)) { toggleRevisadoLocal(doc.id); return; }
+                        const ok = await persistirRevision('revisado', { idDocumento: doc.id });
+                        if (ok) { toggleRevisadoLocal(doc.id); toast({ title: 'Documento marcado como revisado' }); }
+                      }}
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" /> {revisados.has(doc.id) ? 'Revisado' : 'Marcar revisado'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-lg px-3 text-[12px] font-medium"
+                      onClick={() => { setObsFor(doc); setObsText(''); }}
+                    >
+                      <Flag className="h-3.5 w-3.5" /> Observación
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-lg bg-emerald-600 px-3 text-[12px] font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40"
+                      disabled={busy || doc.estatus === 2}
+                      onClick={() => cambiarEstatus(doc, 2, 'Documento validado')}
+                    >
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Validar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-lg border-rose-200 px-3 text-[12px] font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40 dark:border-rose-900/40 dark:hover:bg-rose-950/30"
+                      disabled={busy || doc.estatus === 3}
+                      onClick={() => { setRejectFor(doc); setRejectJustification(''); }}
+                    >
+                      <XCircle className="h-3.5 w-3.5" /> Rechazar
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* ── Historial de verificaciones (mismo origen que el modal de cuenta) ── */}
+      {/* ── Historial de verificaciones interno (emails de empleados SOZU) ──
+          OCULTO para el banco (minimización de PII / LFPDPPP). */}
+      {!readOnly && (
       <div>
         <h4 className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold">
           <HistoryIcon className="h-4 w-4 text-primary" /> Historial de verificaciones
@@ -318,6 +416,53 @@ export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: numb
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Diálogo de observación del banco (readOnly) ── */}
+      <Dialog open={!!obsFor} onOpenChange={(o) => { if (!o) { setObsFor(null); setObsText(''); } }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-[16px]">Levantar observación</DialogTitle>
+            <DialogDescription className="text-[13px]">
+              {obsFor?.tipoNombre}. La observación se comparte con SOZU para su atención.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-[13px]">Observación <span className="text-destructive">*</span></Label>
+            <Textarea
+              placeholder="Describe la observación sobre este documento…"
+              value={obsText}
+              onChange={(e) => setObsText(e.target.value)}
+              className="min-h-[100px] text-[13px]"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="h-9 text-[13px]" onClick={() => { setObsFor(null); setObsText(''); }}>
+              Cancelar
+            </Button>
+            <Button
+              className="h-9 gap-1.5 text-[13px]"
+              disabled={!obsText.trim()}
+              onClick={async () => {
+                // Persiste en socio_bancario_revisiones (tabla separada de la
+                // verificación interna de SOZU).
+                const ok = await persistirRevision('observacion', {
+                  idDocumento: obsFor?.id,
+                  observacion: obsText.trim(),
+                });
+                if (ok) {
+                  toast({ title: 'Observación registrada', description: 'Se compartió con SOZU para su atención.' });
+                  setObsFor(null);
+                  setObsText('');
+                }
+              }}
+            >
+              <Flag className="h-3.5 w-3.5" /> Enviar observación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Diálogo de subida / actualización ── */}
       <SubirDocumentoDialog

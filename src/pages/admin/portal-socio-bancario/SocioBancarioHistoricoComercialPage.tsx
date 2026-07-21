@@ -1,3 +1,6 @@
+// @deprecated — removido de Portal Socio Bancario V1 por confidencialidad / fuera de scope.
+// No exponer a rol socio_bancario. Reencuadrado en SocioBancarioVentasInventarioPage.
+// Se conserva para reversibilidad / posible reutilización interna.
 import { useMemo, useState } from "react";
 import {
   TrendingDown,

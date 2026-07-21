@@ -14,8 +14,23 @@ import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBi
 import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/portal-socio-bancario/CompradorDetalleSheet';
 import { ExpedienteDocumentos } from '@/components/admin/portal-socio-bancario/ExpedienteDocumentos';
+import { DesarrolloNoAsignado } from '@/components/admin/portal-socio-bancario/EmptyStates';
+import { useSocioProyecto } from '@/hooks/usePortalSocioBancario/useSocioProyecto';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
 import { cn } from '@/lib/utils';
+
+/**
+ * Enmascara un RFC para minimización de PII (LFPDPPP): muestra los primeros 4
+ * caracteres y oculta el resto. El banco no necesita el RFC completo para
+ * verificar que la venta es real. // SWAP POINT: confirmar con aviso de
+ * privacidad qué campos pueden transferirse al banco.
+ */
+function maskRfc(rfc: string | null | undefined): string {
+  const v = (rfc ?? '').trim();
+  if (!v) return '—';
+  if (v.length <= 4) return v;
+  return `${v.slice(0, 4)}${'•'.repeat(Math.max(3, v.length - 4))}`;
+}
 
 type Person = { id: number; nombre_legal: string | null; rfc: string | null };
 type Option = { id: string; label: string };
@@ -564,7 +579,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                           <ExternalLink className="h-3 w-3 shrink-0" />
                         </button>
                       </td>
-                      <td className="px-4 py-2 font-mono text-muted-foreground">{buyer.rfc || '—'}</td>
+                      <td className="px-4 py-2 font-mono text-muted-foreground">{maskRfc(buyer.rfc)}</td>
                     </tr>
                   )) : (
                     <tr><td colSpan={2} className="px-4 py-6 text-center text-sm text-muted-foreground">Sin compradores ligados</td></tr>
@@ -604,10 +619,14 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
               </div>
             )}
 
-            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} />
+            {/* readOnly: el banco VERIFICA, no valida. Sin Validar/Rechazar ni
+                historial de verificaciones internas (emails de empleados SOZU). */}
+            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} idProyecto={row.proyectoId} readOnly />
           </section>
 
-          <BitacoraSection cuentaId={row.cuentaId} />
+          {/* Bitácora interna de SOZU (nombres de empleados) OCULTA para el banco
+              (minimización de PII / LFPDPPP). El componente BitacoraSection se
+              conserva definido pero no se renderiza en el Portal Socio Bancario. */}
         </div>
       </DialogContent>
     </Dialog>
@@ -624,6 +643,8 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
         idCuentaCobranza={row.cuentaId}
         compradores={row.compradores.map((b) => ({ idPersona: b.id, nombre: b.nombre_legal || '—' }))}
         initialPersonaId={compradorSel}
+        readOnly
+        bancoMode
       />
     )}
     </>
@@ -1080,7 +1101,6 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
 
 export default function SocioBancarioExpedientes() {
   const [search, setSearch] = useState('');
-  const [projectFilter, setProjectFilter] = useState(ALL_VALUE);
   const [bodegaFilter, setBodegaFilter] = useState(ALL_VALUE);
   const [paqueteFilter, setPaqueteFilter] = useState(ALL_VALUE);
   const [condensadoraFilter, setCondensadoraFilter] = useState(ALL_VALUE);
@@ -1092,9 +1112,15 @@ export default function SocioBancarioExpedientes() {
   const [selected, setSelected] = useState<ExpedienteRow | null>(null);
   const { exportToExcel, isExporting } = useExportToExcel();
 
+  // Scope obligatorio: solo el desarrollo del socio. Nunca "todos", nunca default.
+  const { idProyecto, noAsignado } = useSocioProyecto();
+
   const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ['socio-bancario-expedientes'],
-    queryFn: fetchExpedientes,
+    queryKey: ['socio-bancario-expedientes', idProyecto],
+    // El filtro por desarrollo se aplica en el ORIGEN (fetchExpedientes acota por
+    // proyecto). // SWAP POINT: reforzar con RLS server-side por id_proyecto.
+    queryFn: () => fetchExpedientes(idProyecto as number),
+    enabled: idProyecto != null,
     staleTime: 60_000,
   });
 
@@ -1109,7 +1135,6 @@ export default function SocioBancarioExpedientes() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
-      if (projectFilter !== ALL_VALUE && String(row.proyectoId) !== projectFilter) return false;
       if (modelFilter !== ALL_VALUE && String(row.modeloId) !== modelFilter) return false;
       if (floorFilter !== ALL_VALUE && row.piso !== floorFilter) return false;
       if (ownerFilter !== ALL_VALUE && row.propietario !== ownerFilter) return false;
@@ -1134,7 +1159,7 @@ export default function SocioBancarioExpedientes() {
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, projectFilter, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter, compradorFilter, docsFilter]);
+  }, [rows, search, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter, compradorFilter, docsFilter]);
 
   // Exporta a Excel (CSV) los expedientes según los filtros activos.
   const handleExport = () => {
@@ -1170,6 +1195,14 @@ export default function SocioBancarioExpedientes() {
     exportToExcel({ data: exportData, filename: 'escrituracion_expedientes' });
   };
 
+  if (noAsignado) {
+    return (
+      <div className="max-w-[1600px] px-10 py-8">
+        <DesarrolloNoAsignado />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1600px] space-y-6 px-10 py-8">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -1194,10 +1227,7 @@ export default function SocioBancarioExpedientes() {
             className="h-[38px] rounded-lg bg-card pl-10 text-[13px]"
           />
         </div>
-        <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger className="h-[38px] w-[210px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Proyecto" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todos los proyectos</SelectItem>{options.projects.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
+        {/* El Proyecto queda FIJO al desarrollo del socio (sin selector). */}
         <Select value={ownerFilter} onValueChange={setOwnerFilter}>
           <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Propietario" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los propietarios</SelectItem>{options.owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
@@ -1377,7 +1407,21 @@ const ESTAC_RE = /estacionamiento/i;
 const PAQUETE_RE = /amueblad/i;
 const CONDENSADORA_RE = /condensador/i;
 
-async function fetchExpedientes(): Promise<ExpedienteRow[]> {
+async function fetchExpedientes(idProyecto: number): Promise<ExpedienteRow[]> {
+  // 0) SCOPE por desarrollo (origen). Solo las propiedades del proyecto del socio.
+  //    // SWAP POINT: reforzar con RLS server-side por id_proyecto — sin RLS el
+  //    filtro server-side vía id_edificio_modelo es la frontera de la app.
+  const edsProyecto = await fetchInBatches<any>([idProyecto], () =>
+    (supabase as any).from('edificios').select('id').eq('id_proyecto', idProyecto).eq('activo', true),
+  );
+  const edIdsProyecto = edsProyecto.map((e: any) => e.id as number);
+  if (!edIdsProyecto.length) return [];
+  const emsProyecto = await fetchInBatches<any>(edIdsProyecto, (b) =>
+    (supabase as any).from('edificios_modelos').select('id').in('id_edificio', b as number[]),
+  );
+  const allowedEmIds = new Set<number>(emsProyecto.map((e: any) => e.id as number));
+  if (!allowedEmIds.size) return [];
+
   // 1) TODAS las cuentas de cobranza activas (paginado — PostgREST corta a 1000).
   //    Partimos de cuentas (≈1.7k) en vez de propiedades (>8k): es más acotado y
   //    captura la cuenta de la unidad + las cuentas de producto (bodega, etc.),
@@ -1411,14 +1455,16 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   // 3) Propiedades referenciadas por las cuentas. Se muestran TODAS las cuentas
   //    sin importar el estatus de disponibilidad de la propiedad.
   const propIds = [...new Set(cuentas.map((c) => c.id_propiedad).filter(Boolean))] as number[];
-  const propiedades = await fetchInBatches<any>(propIds, (batch) =>
+  const propiedadesRaw = await fetchInBatches<any>(propIds, (batch) =>
     (supabase as any)
       .from('propiedades')
       .select('id, numero_propiedad, id_tipo_propiedad, numero_piso, m2_interiores, m2_exteriores, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad')
       .eq('activo', true)
-      .in('id', batch as number[]),
+      .in('id', batch as number[])
+      .in('id_edificio_modelo', [...allowedEmIds]),
   );
-  const eligibleProps = propiedades;
+  // Defensa en profundidad: solo propiedades del proyecto del socio.
+  const eligibleProps = propiedadesRaw.filter((p: any) => allowedEmIds.has(p.id_edificio_modelo));
   if (!eligibleProps.length) return [];
   const eligiblePropIds = new Set<number>(eligibleProps.map((p: any) => p.id));
 

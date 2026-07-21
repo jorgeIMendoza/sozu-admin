@@ -64,6 +64,7 @@ const Inmobiliarias = lazyRetry(() => import("./pages/admin/Inmobiliarias"));
 const Administradoras = lazyRetry(() => import("./pages/admin/Administradoras"));
 const Notarias = lazyRetry(() => import("./pages/admin/Notarias"));
 const Bancos = lazyRetry(() => import("./pages/admin/Bancos"));
+const SociosBancarios = lazyRetry(() => import("./pages/admin/SociosBancarios"));
 const CuentasSozu = lazyRetry(() => import("./pages/admin/CuentasSozu"));
 const Prospectos = lazyRetry(() => import("./pages/admin/Prospectos"));
 const Compradores = lazyRetry(() => import("./pages/admin/Compradores"));
@@ -272,11 +273,11 @@ const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-dir
 const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
 const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
 
-// Portal Socio Bancario (copias independientes de Alta Dirección / Legal Flow + Avance de Obra)
-const SocioBancarioHistoricoComercial = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioHistoricoComercialPage"));
-const SocioBancarioAnalisisCobranza = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioAnalisisCobranzaPage"));
-const SocioBancarioIngresosEgresos = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioIngresosEgresosPage"));
-const SocioBancarioForecastIngresos = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioForecastIngresosPage"));
+// Portal Socio Bancario V1 (reencuadre: Resumen → Obra → Comercialización → Evidencia).
+// Las páginas Histórico/Cobranza/Ingresos-Egresos/Forecast quedan @deprecated (fuera
+// de scope / confidencial), sin ruta ni lazy import en el portal del banco.
+const SocioBancarioResumen = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioResumenPage"));
+const SocioBancarioVentasInventario = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioVentasInventarioPage"));
 const SocioBancarioExpedientes = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioExpedientesPage"));
 const SocioBancarioAvanceObra = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioAvanceObraPage"));
 
@@ -354,6 +355,7 @@ const CrmExecutiveWeeklyDigest  = lazyRetry(() => import("./pages/admin/portal-c
 const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
 const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
 const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
+const CrmDealDetail        = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDealDetail })));
 const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
 const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
 const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
@@ -745,6 +747,7 @@ const App = () => (
                   <Route path="administradoras" element={<Administradoras />} />
                   <Route path="notarias" element={<Notarias />} />
                   <Route path="bancos" element={<Bancos />} />
+                  <Route path="socios-bancarios" element={<SociosBancarios />} />
                   <Route path="cuentas-sozu" element={<CuentasSozu />} />
                   <Route path="prospectos" element={<Prospectos />} />
                   <Route path="compradores" element={<Compradores />} />
@@ -965,6 +968,7 @@ const App = () => (
                   <Route path="portal-crm/ventas/contactos" element={<CrmContacts />} />
                   <Route path="portal-crm/ventas/contactos/:contactId" element={<CrmContactDetail />} />
                   <Route path="portal-crm/ventas/negocios" element={<CrmDeals />} />
+                  <Route path="portal-crm/ventas/negocios/:dealId" element={<CrmDealDetail />} />
                   <Route path="portal-crm/ventas/tareas" element={<CrmTasks />} />
                   <Route path="portal-crm/ventas/citas" element={<CrmAppointments />} />
                   <Route path="portal-crm/ventas/rendimiento-asesores" element={<CrmAgentPerformance />} />
@@ -1071,13 +1075,14 @@ const App = () => (
                   <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
                   <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
 
-                  {/* Portal Socio Bancario */}
-                  <Route path="portal-socio-bancario/historico-comercial" element={<SocioBancarioHistoricoComercial />} />
-                  <Route path="portal-socio-bancario/analisis-cobranza" element={<SocioBancarioAnalisisCobranza />} />
-                  <Route path="portal-socio-bancario/ingresos-egresos" element={<SocioBancarioIngresosEgresos />} />
-                  <Route path="portal-socio-bancario/forecast-ingresos" element={<SocioBancarioForecastIngresos />} />
-                  <Route path="portal-socio-bancario/expedientes" element={<SocioBancarioExpedientes />} />
+                  {/* Portal Socio Bancario V1 — Resumen → Obra → Comercialización → Evidencia */}
+                  <Route path="portal-socio-bancario" element={<Navigate to="/admin/portal-socio-bancario/resumen" replace />} />
+                  <Route path="portal-socio-bancario/resumen" element={<SocioBancarioResumen />} />
                   <Route path="portal-socio-bancario/avance-obra" element={<SocioBancarioAvanceObra />} />
+                  <Route path="portal-socio-bancario/ventas-inventario" element={<SocioBancarioVentasInventario />} />
+                  <Route path="portal-socio-bancario/expedientes" element={<SocioBancarioExpedientes />} />
+                  {/* Rutas deprecadas (confidencial / fuera de scope V1): historico-comercial,
+                      analisis-cobranza, ingresos-egresos, forecast-ingresos → removidas del router. */}
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />

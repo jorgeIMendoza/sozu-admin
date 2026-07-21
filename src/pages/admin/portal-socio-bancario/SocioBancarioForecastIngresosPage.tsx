@@ -1,3 +1,7 @@
+// @deprecated — removido de Portal Socio Bancario V1 por confidencialidad / fuera de scope.
+// No exponer a rol socio_bancario. El inventario a precio de lista se reencuadró en
+// SocioBancarioVentasInventarioPage; el resto (forecast total / comisión) no es visible al banco.
+// Se conserva para reversibilidad / posible reutilización interna.
 /**
  * Forecast de Ingresos — Portal Alta Dirección.
  *
