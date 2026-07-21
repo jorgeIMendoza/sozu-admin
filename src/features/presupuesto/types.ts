@@ -13,6 +13,7 @@ export interface AreaGasto {
   id: string;
   numero: number; // 1..N (orden)
   nombre: string; // "Administración", "Seguridad", ... (DATO, no hardcode)
+  activo: boolean; // soft-disable, nunca hard-delete
 }
 
 // Nivel 2
@@ -21,6 +22,7 @@ export interface CentroCosto {
   areaId: string;
   codigo: string; // "1.1", "2.3", ...
   nombre: string; // "Personal Interno", "Empresa Subcontratada", ...
+  activo: boolean; // soft-disable, nunca hard-delete
 }
 
 // Nivel 3 — la partida presupuestal
@@ -34,11 +36,25 @@ export interface Concepto {
   activo: boolean;
 }
 
-// Una erogación real contra un concepto en un mes — VIENE DE TESORERÍA
+// Egreso de Tesorería — FUENTE ÚNICA. Un egreso clasificado (conceptoPresupuestalId
+// != null) deriva una Erogación contra ese concepto, en el mes de su fecha.
+// Un egreso sin clasificar NO cuenta en el erogado y se advierte como pendiente.
+export interface EgresoTesoreria {
+  id: string;
+  fecha: string; // ISO; determina el mes
+  monto: number;
+  proveedor: string;
+  concepto: string; // descripción del egreso
+  categoria: string; // categoría libre de Tesorería (o el área si está clasificado)
+  estatus: "pagado" | "programado" | "pendiente";
+  conceptoPresupuestalId: string | null; // null = sin clasificar
+}
+
+// Una erogación real contra un concepto en un mes — DERIVADA de un egreso clasificado.
 export interface Erogacion {
   id: string;
   conceptoId: string;
-  egresoTesoreriaId: string; // // SWAP POINT: id del egreso en Tesorería que la origina
+  egresoTesoreriaId: string; // id del egreso de Tesorería que la origina
   fecha: string; // ISO; determina el mes
   monto: number;
   proveedor: string;

@@ -6,6 +6,8 @@
 import { useMemo } from "react";
 import { AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCondominio } from "@/contexts/CondominioContext";
+import { useCondominioDataset } from "@/hooks/condominio/useCondominioData";
 import { usePresupuestoStore, presupuestoAnualTotal } from "./store";
 import {
   derivarArea,
@@ -46,7 +48,19 @@ function KPI({
 export function DashboardPresupuestal() {
   const presupuesto = usePresupuestoStore((s) => s.presupuesto);
   const erogaciones = usePresupuestoStore((s) => s.erogaciones);
+  const egresos = usePresupuestoStore((s) => s.egresos);
   const mesActual = usePresupuestoStore((s) => s.mesActual());
+
+  // Cobranza esperada desde la MISMA fuente que el Dashboard del condominio
+  // (useCondominioDataset). // SWAP POINT: módulo de Cobranza del condominio.
+  const { proyectoId } = useCondominio();
+  const { data: dataset } = useCondominioDataset(proyectoId);
+  const cobranzaMensualReal = dataset?.kpis?.totalEsperado ?? null;
+  const cobranzaDesdeDataset = cobranzaMensualReal != null;
+
+  // Integridad: egresos pagados sin clasificar (no cuentan en erogado).
+  const pagadosSinClasificar = egresos.filter((e) => !e.conceptoPresupuestalId && e.estatus === "pagado");
+  const montoSinClasificar = pagadosSinClasificar.reduce((s, e) => s + e.monto, 0);
 
   const { total, porArea, anual, fondoArea } = useMemo(() => {
     const total = derivarTotal(presupuesto, erogaciones, mesActual);
@@ -65,9 +79,8 @@ export function DashboardPresupuestal() {
   const semTotal = semaforoDe(total);
   const maxArea = porArea[0]?.d.presupuestoAnual ?? 1;
 
-  // Cobertura: cuánto del presupuesto cubre la cobranza esperada.
-  // SWAP POINT: cobranzaEsperadaAnual desde el módulo de Cobranza del condominio.
-  const cobranza = presupuesto.cobranzaEsperadaAnual;
+  // Cobertura: cuánto del presupuesto cubre la cobranza esperada (fuente única).
+  const cobranza = cobranzaDesdeDataset ? (cobranzaMensualReal as number) * 12 : presupuesto.cobranzaEsperadaAnual;
   const cobertura = anual > 0 ? (cobranza / anual) * 100 : 0;
   const cubre = cobertura >= 100;
 
@@ -80,6 +93,17 @@ export function DashboardPresupuestal() {
 
   return (
     <div className="space-y-4">
+      {/* Integridad: egresos pagados sin clasificar (no cuentan en erogado) */}
+      {pagadosSinClasificar.length > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-sm">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <span>
+            <span className="font-semibold tabular-nums">{pagadosSinClasificar.length}</span> egreso(s) pagado(s) sin clasificar por{" "}
+            <span className="font-semibold tabular-nums">{fmtMXN(montoSinClasificar)}</span>. No cuentan en el erogado hasta clasificarse en Tesorería.
+          </span>
+        </div>
+      )}
+
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPI title="Presupuesto anual" value={fmtMXN(total.presupuestoAnual)} sub={`Ejercicio ${presupuesto.ejercicio}`} />
@@ -109,6 +133,11 @@ export function DashboardPresupuestal() {
           </p>
           <p className="text-xs text-muted-foreground mt-1 tabular-nums">
             Cobranza esperada {fmtMXN(cobranza)} vs presupuesto {fmtMXN(anual)}
+          </p>
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            Fuente: {cobranzaDesdeDataset
+              ? `Cobranza del condominio · ${fmtMXN(cobranzaMensualReal as number)}/mes × 12 (misma que el Dashboard)`
+              : "estimación local (sin dataset del condominio)"}
           </p>
           {!cubre && (
             <p className="text-xs text-destructive mt-1 tabular-nums">

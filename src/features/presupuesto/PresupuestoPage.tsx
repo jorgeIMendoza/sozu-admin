@@ -2,14 +2,11 @@
 // Portal Condominio · Presupuesto — página principal.
 // Header + selector de ejercicio + badge de estado + pestañas:
 // Dashboard · Presupuesto (árbol) · Seguimiento mensual · Erogaciones · Propuestas.
-// Controles de demo detrás de import.meta.env.DEV.
 // =============================================================
 import { useState } from "react";
-import { RotateCcw, CalendarClock, Beaker } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/pages/admin/portal-condominio/_helpers";
 import { usePresupuestoStore } from "./store";
-import { MESES } from "./logic";
 import type { EstadoPresupuesto } from "./types";
 import { DashboardPresupuestal } from "./DashboardPresupuestal";
 import { ArbolPresupuesto } from "./ArbolPresupuesto";
@@ -34,10 +31,8 @@ const ESTADO_LABEL: Record<EstadoPresupuesto, string> = {
 export default function PresupuestoPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const presupuesto = usePresupuestoStore((s) => s.presupuesto);
-  const mesActual = usePresupuestoStore((s) => s.mesActual());
-  const reset = usePresupuestoStore((s) => s.reset);
-  const avanzarMes = usePresupuestoStore((s) => s.avanzarMes);
-  const registrar = usePresupuestoStore((s) => s.registrarErogacionDesdeTesoreria);
+  const aprobarPresupuesto = usePresupuestoStore((s) => s.aprobarPresupuesto);
+  const reabrirBorrador = usePresupuestoStore((s) => s.reabrirBorrador);
 
   const tabs: { k: Tab; label: string }[] = [
     { k: "dashboard", label: "Dashboard" },
@@ -66,45 +61,25 @@ export default function PresupuestoPage() {
             <span className={cn("px-2.5 py-1 rounded-md text-xs font-medium", ESTADO_BADGE[presupuesto.estado])}>
               {ESTADO_LABEL[presupuesto.estado]}
             </span>
+            {presupuesto.estado === "borrador" ? (
+              <button
+                onClick={() => { aprobarPresupuesto(); toast({ title: "Presupuesto aprobado", description: "El catálogo y montos quedan bloqueados; los cambios requieren Modificación Presupuestal." }); }}
+                className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+              >
+                Aprobar presupuesto
+              </button>
+            ) : (
+              <button
+                onClick={() => { reabrirBorrador(); toast({ title: "Reabierto a borrador", description: "Edición libre del catálogo y montos." }); }}
+                className="h-8 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted"
+              >
+                Reabrir a borrador
+              </button>
+            )}
           </div>
         }
       />
 
-      {/* Controles de demo (solo DEV) */}
-      {import.meta.env.DEV && (
-        <div className="flex flex-wrap items-center gap-2 mb-4 rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2">
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-            <Beaker className="h-3.5 w-3.5" /> Demo
-          </span>
-          <button
-            onClick={() => { reset(); toast({ title: "Datos repoblados" }); }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-border hover:bg-muted"
-          >
-            <RotateCcw className="h-3 w-3" /> Repoblar
-          </button>
-          <button
-            onClick={() => { avanzarMes(); toast({ title: "Mes avanzado" }); }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-border hover:bg-muted"
-          >
-            <CalendarClock className="h-3 w-3" /> Avanzar mes (actual: {MESES[mesActual]})
-          </button>
-          <button
-            onClick={() => {
-              // Simula un egreso ya clasificado que entra por Tesorería.
-              registrar({
-                conceptoId: "k-cfe",
-                monto: 22000,
-                proveedor: "CFE",
-                concepto: `Consumo CFE áreas comunes (${MESES[mesActual]})`,
-              });
-              toast({ title: "Egreso clasificado simulado", description: "Se registró una erogación contra CFE." });
-            }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-border hover:bg-muted"
-          >
-            <Beaker className="h-3 w-3" /> Simular egreso clasificado
-          </button>
-        </div>
-      )}
 
       {/* Pestañas */}
       <div className="inline-flex flex-wrap rounded-lg border border-border p-0.5 text-sm mb-4">

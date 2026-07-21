@@ -9,7 +9,7 @@ import type {
   AreaGasto,
   CentroCosto,
   Concepto,
-  Erogacion,
+  EgresoTesoreria,
   Presupuesto,
   PropuestaRevision,
 } from "./types";
@@ -18,40 +18,40 @@ const EJERCICIO = 2026;
 
 // ── Nivel 1: Áreas ───────────────────────────────────────────
 const AREAS: AreaGasto[] = [
-  { id: "a1", numero: 1, nombre: "Administración" },
-  { id: "a2", numero: 2, nombre: "Seguridad" },
-  { id: "a3", numero: 3, nombre: "Jardinería" },
-  { id: "a4", numero: 4, nombre: "Casa Club" },
-  { id: "a5", numero: 5, nombre: "Gimnasio" },
-  { id: "a6", numero: 6, nombre: "Área de Alberca" },
-  { id: "a7", numero: 7, nombre: "Vialidades e Infraestructura" },
-  { id: "a8", numero: 8, nombre: "Comunicación y Tecnología" },
-  { id: "a9", numero: 9, nombre: "Fondo de Reserva" },
-  { id: "a10", numero: 10, nombre: "Gastos Financieros" },
+  { id: "a1", numero: 1, nombre: "Administración", activo: true },
+  { id: "a2", numero: 2, nombre: "Seguridad", activo: true },
+  { id: "a3", numero: 3, nombre: "Jardinería", activo: true },
+  { id: "a4", numero: 4, nombre: "Casa Club", activo: true },
+  { id: "a5", numero: 5, nombre: "Gimnasio", activo: true },
+  { id: "a6", numero: 6, nombre: "Área de Alberca", activo: true },
+  { id: "a7", numero: 7, nombre: "Vialidades e Infraestructura", activo: true },
+  { id: "a8", numero: 8, nombre: "Comunicación y Tecnología", activo: true },
+  { id: "a9", numero: 9, nombre: "Fondo de Reserva", activo: true },
+  { id: "a10", numero: 10, nombre: "Gastos Financieros", activo: true },
 ];
 
 // ── Nivel 2: Centros de costo ────────────────────────────────
 const CENTROS: CentroCosto[] = [
-  { id: "cc1.1", areaId: "a1", codigo: "1.1", nombre: "Personal Interno" },
-  { id: "cc1.2", areaId: "a1", codigo: "1.2", nombre: "Gastos de Oficina" },
-  { id: "cc1.3", areaId: "a1", codigo: "1.3", nombre: "Honorarios" },
-  { id: "cc2.1", areaId: "a2", codigo: "2.1", nombre: "Personal Interno de Seguridad" },
-  { id: "cc2.2", areaId: "a2", codigo: "2.2", nombre: "Empresa Subcontratada" },
-  { id: "cc2.3", areaId: "a2", codigo: "2.3", nombre: "Equipamiento" },
-  { id: "cc3.1", areaId: "a3", codigo: "3.1", nombre: "Personal" },
-  { id: "cc3.2", areaId: "a3", codigo: "3.2", nombre: "Insumos y Equipo" },
-  { id: "cc4.1", areaId: "a4", codigo: "4.1", nombre: "Operación" },
-  { id: "cc4.2", areaId: "a4", codigo: "4.2", nombre: "Mantenimiento" },
-  { id: "cc5.1", areaId: "a5", codigo: "5.1", nombre: "Mantenimiento de Equipo" },
-  { id: "cc5.2", areaId: "a5", codigo: "5.2", nombre: "Servicios" },
-  { id: "cc6.1", areaId: "a6", codigo: "6.1", nombre: "Personal" },
-  { id: "cc6.2", areaId: "a6", codigo: "6.2", nombre: "Químicos y Mantenimiento" },
-  { id: "cc7.1", areaId: "a7", codigo: "7.1", nombre: "Alumbrado Público" },
-  { id: "cc7.2", areaId: "a7", codigo: "7.2", nombre: "Obra Civil" },
-  { id: "cc8.1", areaId: "a8", codigo: "8.1", nombre: "Conectividad" },
-  { id: "cc8.2", areaId: "a8", codigo: "8.2", nombre: "Plataformas" },
-  { id: "cc9.1", areaId: "a9", codigo: "9.1", nombre: "Aportación a Fondo" },
-  { id: "cc10.1", areaId: "a10", codigo: "10.1", nombre: "Comisiones y Servicios Bancarios" },
+  { id: "cc1.1", areaId: "a1", codigo: "1.1", nombre: "Personal Interno", activo: true },
+  { id: "cc1.2", areaId: "a1", codigo: "1.2", nombre: "Gastos de Oficina", activo: true },
+  { id: "cc1.3", areaId: "a1", codigo: "1.3", nombre: "Honorarios", activo: true },
+  { id: "cc2.1", areaId: "a2", codigo: "2.1", nombre: "Personal Interno de Seguridad", activo: true },
+  { id: "cc2.2", areaId: "a2", codigo: "2.2", nombre: "Empresa Subcontratada", activo: true },
+  { id: "cc2.3", areaId: "a2", codigo: "2.3", nombre: "Equipamiento", activo: true },
+  { id: "cc3.1", areaId: "a3", codigo: "3.1", nombre: "Personal", activo: true },
+  { id: "cc3.2", areaId: "a3", codigo: "3.2", nombre: "Insumos y Equipo", activo: true },
+  { id: "cc4.1", areaId: "a4", codigo: "4.1", nombre: "Operación", activo: true },
+  { id: "cc4.2", areaId: "a4", codigo: "4.2", nombre: "Mantenimiento", activo: true },
+  { id: "cc5.1", areaId: "a5", codigo: "5.1", nombre: "Mantenimiento de Equipo", activo: true },
+  { id: "cc5.2", areaId: "a5", codigo: "5.2", nombre: "Servicios", activo: true },
+  { id: "cc6.1", areaId: "a6", codigo: "6.1", nombre: "Personal", activo: true },
+  { id: "cc6.2", areaId: "a6", codigo: "6.2", nombre: "Químicos y Mantenimiento", activo: true },
+  { id: "cc7.1", areaId: "a7", codigo: "7.1", nombre: "Alumbrado Público", activo: true },
+  { id: "cc7.2", areaId: "a7", codigo: "7.2", nombre: "Obra Civil", activo: true },
+  { id: "cc8.1", areaId: "a8", codigo: "8.1", nombre: "Conectividad", activo: true },
+  { id: "cc8.2", areaId: "a8", codigo: "8.2", nombre: "Plataformas", activo: true },
+  { id: "cc9.1", areaId: "a9", codigo: "9.1", nombre: "Aportación a Fondo", activo: true },
+  { id: "cc10.1", areaId: "a10", codigo: "10.1", nombre: "Comisiones y Servicios Bancarios", activo: true },
 ];
 
 // ── Nivel 3: Conceptos (partidas) ────────────────────────────
@@ -109,94 +109,13 @@ const CONCEPTOS: Concepto[] = [
   concepto("k-seguroComunes", "cc10.1", "Seguro de áreas comunes", 4000),
 ];
 
-// ── Erogaciones (fuente: Tesorería) ──────────────────────────
-// Helper: emite una erogación por mes (0-index) para un concepto.
-function mensualISO(mes: number): string {
-  return `${EJERCICIO}-${String(mes + 1).padStart(2, "0")}-05`;
-}
+// ── Egresos de Tesorería (FUENTE ÚNICA) ──────────────────────
+// SIN datos hardcodeados: el módulo arranca sin egresos. Los egresos reales
+// entran por Tesorería (Nuevo egreso, clasificados) y de ahí se derivan las
+// erogaciones del presupuesto. Con la lista vacía, el erogado es 0 en todo el
+// catálogo. // SWAP POINT: persistencia real de egresos.
 
-// egresoTesoreriaId liga (mock) con el egreso que la origina en Tesorería.
-// Algunos referencian egresos existentes del mock de Tesorería (exp-*).
-let egSeq = 0;
-function ero(
-  conceptoId: string,
-  mes: number,
-  monto: number,
-  proveedor: string,
-  concepto: string,
-  egresoTesoreriaId?: string,
-): Erogacion {
-  egSeq += 1;
-  return {
-    id: `ero-${conceptoId}-${mes}-${egSeq}`,
-    conceptoId,
-    egresoTesoreriaId: egresoTesoreriaId ?? `teso-2026-${String(egSeq).padStart(4, "0")}`, // SWAP POINT
-    fecha: mensualISO(mes),
-    monto,
-    proveedor,
-    concepto,
-  };
-}
-
-// Recurrente: emite el monto mensual del concepto para los meses [0..hastaMes].
-function recurrente(
-  conceptoId: string,
-  monto: number,
-  proveedor: string,
-  desc: string,
-  hastaMes: number,
-  egresoBase?: string,
-): Erogacion[] {
-  const out: Erogacion[] = [];
-  for (let m = 0; m <= hastaMes; m++) {
-    out.push(ero(conceptoId, m, monto, proveedor, desc, egresoBase ? `${egresoBase}-${m}` : undefined));
-  }
-  return out;
-}
-
-// Mes actual del demo = Jul (index 6). Los recurrentes se cargan Ene–Jun (0..5)
-// → erogado (6 meses) < presupuesto a la fecha (7 meses) ⇒ áreas "dentro".
-const HASTA = 5;
-
-const EROGACIONES: Erogacion[] = [
-  // Administración (dentro)
-  ...recurrente("k-adminGral", 45000, "Nómina interna", "Sueldo Administrador General", HASTA, "exp-1"),
-  ...recurrente("k-asistente", 22000, "Nómina interna", "Sueldo asistente administrativo", HASTA),
-  ...recurrente("k-imssAdmin", 18000, "IMSS", "Cuotas IMSS/INFONAVIT", HASTA),
-  ...recurrente("k-contador", 15000, "Contable SC", "Honorarios contador externo", HASTA),
-  ...recurrente("k-honorarios", 90000, "Admin SC", "Honorarios de administración", HASTA, "exp-9"),
-  ...recurrente("k-software", 8758, "Software MX", "Suscripción software administración", HASTA),
-  // Seguridad (dentro)
-  ...recurrente("k-vigilancia", 361520, "SecureMX", "Servicio de vigilancia mensual", HASTA, "exp-3"),
-  ...recurrente("k-jefeSeg", 25000, "Nómina interna", "Sueldo jefe de seguridad", HASTA),
-  ...recurrente("k-imssSeg", 12111, "IMSS", "Prestaciones IMSS seguridad", HASTA),
-  ...recurrente("k-cctv", 12000, "VideoTech", "Mantenimiento CCTV", HASTA, "exp-10"),
-  // Jardinería (SOBRE-EJERCIDA: recurrente + reencespado extraordinario)
-  ...recurrente("k-jardinero", 18000, "Nómina interna", "Sueldo jardineros", HASTA),
-  ...recurrente("k-plantas", 9000, "Vivero Central", "Plantas y fertilizantes", HASTA),
-  ...recurrente("k-equipoJardin", 8000, "JardinTools", "Mantenimiento de equipo", HASTA),
-  ero("k-plantas", 4, 78000, "Vivero Central", "Reencespado extraordinario áreas verdes"),
-  ero("k-equipoJardin", 5, 52000, "JardinTools", "Compra de podadora industrial"),
-  // Casa Club (dentro)
-  ...recurrente("k-anfitrion", 12000, "Nómina interna", "Anfitrión Casa Club", HASTA),
-  ...recurrente("k-limpiezaClub", 8000, "Clean Pro SA", "Limpieza Casa Club", HASTA, "exp-2"),
-  // Gimnasio (dentro)
-  ...recurrente("k-aparatos", 9000, "GymFix", "Mantenimiento de aparatos", HASTA),
-  ...recurrente("k-instructor", 4000, "Instructor externo", "Instructor por horas", HASTA),
-  // Alberca (dentro)
-  ...recurrente("k-salvavidas", 14000, "Nómina interna", "Sueldo salvavidas", HASTA),
-  ...recurrente("k-quimicos", 12000, "AquaClean", "Cloro y químicos", HASTA),
-  // Vialidades e Infraestructura (dentro)
-  ...recurrente("k-cfe", 22000, "CFE", "Consumo CFE áreas comunes", HASTA, "exp-5"),
-  ...recurrente("k-luminarias", 6000, "IluminaMX", "Mantenimiento de luminarias", HASTA),
-  // Gastos Financieros (dentro)
-  ...recurrente("k-comisionesBanco", 5000, "Banco / STP", "Comisiones bancarias", HASTA),
-  ...recurrente("k-seguroComunes", 4000, "Seguros GNP", "Seguro de áreas comunes", HASTA),
-  // Comunicación y Tecnología → SIN erogaciones (erogado 0)
-  // Fondo de Reserva → SIN erogaciones (erogado 0)
-];
-
-// ── Presupuesto aprobado 2026 ────────────────────────────────
+// ── Presupuesto aprobado 2026 (CATÁLOGO = configuración, se conserva) ─────────
 export const MOCK_PRESUPUESTO: Presupuesto = {
   id: "pre-margot-2026",
   condominioId: "margot",
@@ -206,38 +125,26 @@ export const MOCK_PRESUPUESTO: Presupuesto = {
   centrosCosto: CENTROS,
   conceptos: CONCEPTOS,
   numeroUnidades: 111, // divisor de cuota (configurable; el ejemplo es de 111 propiedades)
-  cobranzaEsperadaAnual: 9_800_000, // SWAP POINT: viene del módulo de Cobranza del condominio
+  // Fallback si no hay dataset del condominio. El Dashboard presupuestal PREFIERE
+  // la cobranza esperada real (useCondominioDataset, misma que el Dashboard). // SWAP POINT.
+  cobranzaEsperadaAnual: 9_800_000,
   umbralFondoReserva: 0.1, // Fondo ≥ 10% del presupuesto anual
   fechaAprobacion: "2025-12-15",
   aprobadoPor: "Asamblea de condóminos",
 };
 
-export const MOCK_EROGACIONES: Erogacion[] = EROGACIONES;
+// Egresos: SIN semilla (fuente única vacía). El erogado arranca en 0.
+export const MOCK_EGRESOS: EgresoTesoreria[] = [];
 
-// ── Propuesta de revisión abierta (columna "Eduardo") ────────
-export const MOCK_PROPUESTAS: PropuestaRevision[] = [
-  {
-    id: "prop-1",
-    presupuestoId: "pre-margot-2026",
-    autor: "Eduardo",
-    fecha: "2026-06-20",
-    cambios: {
-      "k-vigilancia": 372000, // renovación de contrato de vigilancia (+10,480)
-      "k-honorarios": 85000, // renegociación honorarios (−5,000)
-      "k-appResidentes": 9500, // upgrade app de residentes (+3,500)
-      "k-fondoReserva": 50000, // reforzar Fondo de Reserva (+6,000)
-    },
-    estado: "abierta",
-    nota: "Ajustes propuestos para el 2º semestre: renovación de vigilancia, renegociación de honorarios y refuerzo del Fondo de Reserva.",
-  },
-];
+// Propuestas de revisión: SIN semilla (se crean desde el módulo).
+export const MOCK_PROPUESTAS: PropuestaRevision[] = [];
 
-export const MOCK_AUDITORIA_INICIAL = [
-  {
-    id: "aud-seed-1",
-    timestamp: "2025-12-15T18:00:00.000Z",
-    usuario: "Asamblea de condóminos",
-    accion: "Presupuesto aprobado",
-    detalle: "Ejercicio 2026 aprobado en asamblea. Presupuesto anual ≈ $10,456,668.",
-  },
-];
+// Auditoría: SIN semilla. Se llena con las acciones reales (modificaciones,
+// aprobaciones, altas/bajas del catálogo) conforme ocurren.
+export const MOCK_AUDITORIA_INICIAL: {
+  id: string;
+  timestamp: string;
+  usuario: string;
+  accion: string;
+  detalle: string;
+}[] = [];
