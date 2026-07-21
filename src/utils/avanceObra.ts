@@ -1,10 +1,51 @@
-// Avance de obra: NO existe en DB, se calcula al vuelo desde las fechas del
-// proyecto (misma lógica que la oferta digital en use-offer-db.ts).
+// Avance de obra — FUENTE ÚNICA DE VERDAD:
+//   proyectos.id_estatus_proyecto → estatus_proyecto.porcentaje_avance
+// El % NO se calcula por fechas (la fecha de entrega es variable). Se toma del
+// estatus/etapa que el admin fija en "Editar Proyecto". Todos los portales
+// (oferta digital, portal cliente, socio bancario, inventario agente) consumen
+// estos helpers para hablar el mismo idioma.
 
 export interface Milestone {
   phase: string;
   pct: number;
   done: boolean;
+}
+
+/** Etapa del catálogo estatus_proyecto con su % de avance efectivo. */
+export interface EtapaEstatus {
+  id: number;
+  nombre: string;
+  porcentaje: number;
+}
+
+/**
+ * Normaliza las filas de `estatus_proyecto` a EtapaEstatus, ordenadas por avance.
+ * `porcentaje` = columna `porcentaje_avance`; si aún no existe (DDL pendiente)
+ * cae al legacy `round(id / total * 100)` para no romper nada mientras se aplica.
+ */
+export function mapEstatusCatalog(
+  rows: Array<{ id: number; nombre: string; porcentaje_avance?: number | null }>,
+): EtapaEstatus[] {
+  const total = rows.length || 13;
+  return rows
+    .map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      porcentaje: r.porcentaje_avance ?? Math.round((r.id / total) * 100),
+    }))
+    .sort((a, b) => a.porcentaje - b.porcentaje || a.id - b.id);
+}
+
+/** % global = avance de la etapa seleccionada del proyecto (fuente única). */
+export function progressFromEstatus(etapas: EtapaEstatus[], idEstatus?: number | null): number {
+  if (!idEstatus) return 0;
+  const sel = etapas.find((e) => e.id === idEstatus);
+  return sel ? Math.min(100, Math.max(0, Math.round(sel.porcentaje))) : 0;
+}
+
+/** Catálogo de etapas como milestones (sin marcar `done`; usar deriveStages). */
+export function milestonesFromEstatus(etapas: EtapaEstatus[]): Milestone[] {
+  return etapas.map((e) => ({ phase: e.nombre, pct: e.porcentaje, done: false }));
 }
 
 export const DEFAULT_MILESTONES: Milestone[] = [
@@ -16,7 +57,11 @@ export const DEFAULT_MILESTONES: Milestone[] = [
   { phase: "Entrega", pct: 100, done: false },
 ];
 
-/** % de avance = proporción de tiempo transcurrido entre lanzamiento y entrega. */
+/**
+ * @deprecated El avance NO se calcula por fechas (la entrega es variable).
+ * Usar `progressFromEstatus` sobre el catálogo estatus_proyecto. Se conserva
+ * solo como fallback histórico; no usar en código nuevo.
+ */
 export function calcProgressFromDates(inicio?: string | null, entrega?: string | null): number {
   if (!inicio || !entrega) return 0;
   const start = new Date(inicio).getTime();
@@ -31,29 +76,29 @@ export function applyProgressToMilestones(pct: number): Milestone[] {
 }
 
 export interface StageRow extends Milestone {
-  /** Avance PROPIO de la etapa (0-100 dentro de su banda), coherente con el % global. */
+  /** % acumulado (hito) de la etapa; sirve como número mostrado en el roadmap. */
   ownPct: number;
 }
 
 /**
- * Reescala cada etapa a su propio 0-100 dentro de su banda del % global.
- * El `pct` del milestone es el umbral global acumulado al terminar esa etapa.
- * Fuente de verdad compartida entre la oferta digital y el portal agente.
+ * Modelo DISCRETO alineado con el catálogo estatus_proyecto: cada etapa es un
+ * hito con su % acumulado (`pct`). `progress` = % de la etapa SELECCIONADA.
+ *   - etapas con pct < progress → terminadas (done)
+ *   - la etapa seleccionada (pct == progress) → ACTUAL (no done, la marca isCurrent)
+ *   - etapas con pct > progress → pendientes
+ * Así "Etapa actual" coincide exactamente con el estatus elegido en Editar Proyecto.
  */
-export function deriveStages(progress: number): StageRow[] {
-  return DEFAULT_MILESTONES.map((m, i) => {
-    const prev = i === 0 ? 0 : DEFAULT_MILESTONES[i - 1].pct;
-    const band = m.pct - prev;
-    const ownPct = band <= 0
-      ? (progress >= m.pct ? 100 : 0)
-      : Math.round(Math.min(100, Math.max(0, ((progress - prev) / band) * 100)));
-    return { ...m, ownPct, done: ownPct >= 100 };
-  });
+export function deriveStages(progress: number, milestones: Milestone[] = DEFAULT_MILESTONES): StageRow[] {
+  return milestones.map((m) => ({
+    ...m,
+    ownPct: m.pct,
+    done: m.pct < progress,
+  }));
 }
 
-/** Etapa actual = primera etapa aún no terminada (o la última terminada). */
+/** Etapa actual = primera etapa aún no terminada = la etapa seleccionada. */
 export function currentStageOf(stages: StageRow[]): string {
-  return stages.find((m) => m.ownPct < 100)?.phase
+  return stages.find((m) => !m.done)?.phase
     ?? [...stages].reverse().find((m) => m.done)?.phase
     ?? "—";
 }

@@ -21,6 +21,7 @@ interface Props {
 
 const OfferConstructionProgress = ({
   progress,
+  milestones,
   estimatedDelivery,
   lastUpdated,
   videoUrl,
@@ -37,8 +38,8 @@ const OfferConstructionProgress = ({
     return () => document.removeEventListener("keydown", handler);
   }, [lightboxIndex]);
 
-  // Lógica compartida (fuente de verdad): avance propio por etapa + etapa actual.
-  const stageRows = deriveStages(progress);
+  // Lógica compartida (fuente de verdad): etapas reales del proyecto (estatus_proyecto).
+  const stageRows = deriveStages(progress, milestones);
   const currentStage = currentStageOf(stageRows);
 
   return (
@@ -136,11 +137,17 @@ const OfferConstructionProgress = ({
             })}
           </ul>
 
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-3 border-t border-border/60">
-            <Calendar className="w-3 h-3 shrink-0" />
-            Entrega estimada ·{" "}
-            {new Date(estimatedDelivery).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-          </p>
+          <div className="pt-3 border-t border-border/60 space-y-0.5">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Calendar className="w-3 h-3 shrink-0" />
+              Posible fecha de entrega ·{" "}
+              {new Date(estimatedDelivery).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 leading-snug">
+              Fecha estimada y sujeta a cambios según el avance de obra. No constituye una fecha
+              de entrega contractual.
+            </p>
+          </div>
         </div>
       </div>
 

@@ -129,15 +129,21 @@ const ConstructionProgress = ({ data }: ConstructionProgressProps) => {
               ))}
             </ul>
 
-            <p className="mt-4 pt-3 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
-              <Calendar className="w-3 h-3" />
-              Entrega estimada ·{" "}
-              {new Date(data.estimatedDelivery).toLocaleDateString("es-MX", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
+            <div className="mt-4 pt-3 border-t border-border space-y-0.5">
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <Calendar className="w-3 h-3" />
+                Posible fecha de entrega ·{" "}
+                {new Date(data.estimatedDelivery).toLocaleDateString("es-MX", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                Fecha estimada y sujeta a cambios según el avance de obra. No constituye una
+                fecha de entrega contractual.
+              </p>
+            </div>
           </div>
 
           {/* Featured video (latest) */}

@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
+import { mapEstatusCatalog } from "@/utils/avanceObra";
 import { OptImg } from "@/components/ui/OptImg";
 
 interface ProyectoCard {
@@ -54,7 +55,7 @@ const AgentInventario = () => {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("estatus_proyecto")
-        .select("id, nombre")
+        .select("*")
         .eq("activo", true)
         .order("id");
       return data || [];
@@ -149,12 +150,12 @@ const AgentInventario = () => {
   });
 
   const proyectosConAvance = useMemo(() => {
-    const totalEstatus = estatusData?.length || 13;
+    // Fuente única: estatus_proyecto.porcentaje_avance (fallback id/total legacy).
+    const catalog = mapEstatusCatalog(estatusData ?? []);
+    const pctById = new Map(catalog.map((e) => [e.id, e.porcentaje]));
     return proyectos.map(p => ({
       ...p,
-      avance: p.id_estatus_proyecto && totalEstatus > 0
-        ? Math.round((p.id_estatus_proyecto / totalEstatus) * 100)
-        : 0,
+      avance: p.id_estatus_proyecto ? (pctById.get(p.id_estatus_proyecto) ?? 0) : 0,
     }));
   }, [proyectos, estatusData]);
 

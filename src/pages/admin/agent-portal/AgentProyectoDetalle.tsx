@@ -18,11 +18,11 @@ import { createPortal } from "react-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
-import { Globe, Play, X, ChevronLeft, CheckCircle2, Circle } from "lucide-react";
+import { Globe, Play, X, ChevronLeft, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
 import { OptImg } from "@/components/ui/OptImg";
 import { cn } from "@/lib/utils";
-import { calcProgressFromDates, deriveStages, currentStageOf } from "@/utils/avanceObra";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus, deriveStages, currentStageOf } from "@/utils/avanceObra";
 
 /** Monta children solo al entrar (o acercarse) al viewport — para diferir mapas/iframes pesados. */
 const LazyVisible = ({ children, minHeight = 200, rootMargin = "250px" }: { children: ReactNode; minHeight?: number; rootMargin?: string }) => {
@@ -214,6 +214,7 @@ const AgentProyectoDetalle = () => {
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [showAllAmenidades, setShowAllAmenidades] = useState(false);
   const [planoModeloUrl, setPlanoModeloUrl] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const modelosRef = useRef<HTMLDivElement>(null);
   const vistasRef = useRef<HTMLDivElement>(null);
@@ -281,13 +282,21 @@ const AgentProyectoDetalle = () => {
     enabled: projectId > 0,
   });
 
-  // Avance de obra — calculado al vuelo desde fechas (igual que la oferta digital).
-  // No hay tabla de avance: % = tiempo transcurrido lanzamiento→entrega + plantilla fija.
-  const avanceObra = calcProgressFromDates(
-    project?.fecha_lanzamiento,
-    project?.fecha_entrega_proyecto ?? project?.fecha_entrega,
-  );
-  const milestones = deriveStages(avanceObra);
+  // Avance de obra — fuente única: etapa (id_estatus_proyecto) vía catálogo
+  // estatus_proyecto.porcentaje_avance. Igual que la oferta digital y Editar Proyecto.
+  const { data: estatusRows } = useQuery({
+    queryKey: ["estatus-proyecto-catalog"],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("estatus_proyecto")
+        .select("*")
+        .eq("activo", true);
+      return data || [];
+    },
+  });
+  const estatusCatalog = mapEstatusCatalog(estatusRows ?? []);
+  const avanceObra = progressFromEstatus(estatusCatalog, project?.id_estatus_proyecto);
+  const milestones = deriveStages(avanceObra, milestonesFromEstatus(estatusCatalog));
   const currentStage = currentStageOf(milestones);
 
   // Fetch amenidades
@@ -662,13 +671,19 @@ const AgentProyectoDetalle = () => {
           <SectionCard icon={FileText} title="Concepto" bodyClassName="p-4 md:p-5 space-y-3">
             <p className="text-sm text-foreground leading-relaxed">{project.descripcion}</p>
             {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
-              <p className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563]">
-                <Calendar className="h-4 w-4 text-[#1A1D21]" />
-                Fecha de entrega:{" "}
-                <span className="font-bold text-foreground">
-                  {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
-                </span>
-              </p>
+              <>
+                <p className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563]">
+                  <Calendar className="h-4 w-4 text-[#1A1D21]" />
+                  Posible fecha de entrega:{" "}
+                  <span className="font-bold text-foreground">
+                    {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
+                  </span>
+                </p>
+                <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                  Fecha estimada y sujeta a cambios según el avance de obra. No constituye una
+                  fecha de entrega contractual.
+                </p>
+              </>
             )}
           </SectionCard>
         )}
@@ -835,10 +850,15 @@ const AgentProyectoDetalle = () => {
                       })}
                     </ul>
                     {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
-                      <p className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="h-3 w-3 text-[#1A1D21]" />
-                        Entrega estimada · {fmtLargo(project.fecha_entrega || project.fecha_entrega_proyecto)}
-                      </p>
+                      <div className="mt-4 pt-3 border-t border-gray-100 space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3 text-[#1A1D21]" />
+                          Posible fecha de entrega · {fmtLargo(project.fecha_entrega || project.fecha_entrega_proyecto)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                          Fecha estimada y sujeta a cambios según el avance de obra.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -951,7 +971,7 @@ const AgentProyectoDetalle = () => {
               {brochure && (
                 <div
                   className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); window.open(brochure.url, '_blank'); }}
+                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
@@ -1022,6 +1042,50 @@ const AgentProyectoDetalle = () => {
           {planoModeloUrl && (
             <img src={planoModeloUrl} alt="Plano del modelo" className="w-full object-contain max-h-[70vh] rounded-md" />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Visor in-app de material comercial (PDF) sin salir de la plataforma. */}
+      <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
+        <DialogContent
+          className="max-w-4xl gap-0 overflow-hidden rounded-md p-0"
+          style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
+        >
+          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
+            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
+              {previewFile?.name || "Documento"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="bg-[#F6F7F8] p-4">
+            {previewFile && (
+              <iframe
+                src={previewFile.url}
+                title={previewFile.name || "Documento"}
+                className="h-[75vh] w-full rounded-md border border-gray-200 bg-white"
+              />
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
+            <a
+              href={previewFile?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-[#ECEEF0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+            >
+              <span className="inline-flex items-center gap-1.5"><ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña</span>
+            </a>
+            <a
+              href={previewFile?.url}
+              download={previewFile?.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
+            >
+              <Download className="h-3.5 w-3.5" /> Descargar
+            </a>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -65,25 +65,15 @@ export default function SocioBancarioAvanceObraPage() {
 
   const progress = data?.progress ?? 0;
 
-  // Avance PROPIO de cada etapa (0-100 dentro de su banda), coherente con
-  // el % global. El pct del milestone es el umbral global acumulado.
+  // Modelo discreto (mismo que oferta/cliente): cada etapa es un hito con su %
+  // acumulado; la etapa seleccionada es la ACTUAL. `done` viene del hook (pct < avance).
   const stageRows = useMemo(() => {
     const milestones = data?.milestones ?? [];
-    return milestones.map((m, i) => {
-      const prev = i === 0 ? 0 : milestones[i - 1].pct;
-      const band = m.pct - prev;
-      const ownPct =
-        band <= 0
-          ? progress >= m.pct
-            ? 100
-            : 0
-          : Math.round(Math.min(100, Math.max(0, ((progress - prev) / band) * 100)));
-      return { ...m, ownPct, done: ownPct >= 100 };
-    });
-  }, [data?.milestones, progress]);
+    return milestones.map((m) => ({ ...m, ownPct: m.pct }));
+  }, [data?.milestones]);
 
   const currentStage =
-    stageRows.find((m) => m.ownPct < 100)?.phase ??
+    stageRows.find((m) => !m.done)?.phase ??
     [...stageRows].reverse().find((m) => m.done)?.phase ??
     "—";
 
@@ -283,10 +273,15 @@ export default function SocioBancarioAvanceObraPage() {
                   );
                 })}
               </ul>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-3 mt-3 border-t border-border/60">
-                <Calendar className="w-3 h-3 shrink-0" />
-                Entrega estimada · {fmtFecha(data.estimatedDelivery)}
-              </p>
+              <div className="pt-3 mt-3 border-t border-border/60 space-y-0.5">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  Posible fecha de entrega · {fmtFecha(data.estimatedDelivery)}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                  Fecha estimada y sujeta a cambios según el avance de obra.
+                </p>
+              </div>
             </Panel>
           </div>
 

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
 import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
 
@@ -46,26 +47,12 @@ function toEmbedUrl(url: string): string {
   return url;
 }
 
-function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
-  if (!inicio || !entrega) return 0;
-  const start = new Date(inicio).getTime();
-  const end   = new Date(entrega).getTime();
-  const now   = Date.now();
-  if (end <= start) return 0;
-  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
-}
-
-const DEFAULT_MILESTONES = [
-  { phase: "Cimentación",   pct: 5,   done: false },
-  { phase: "Estructura",    pct: 28,  done: false },
-  { phase: "Albañilería",   pct: 55,  done: false },
-  { phase: "Instalaciones", pct: 75,  done: false },
-  { phase: "Acabados",      pct: 90,  done: false },
-  { phase: "Entrega",       pct: 100, done: false },
-];
-
-function applyProgressToMilestones(milestones: typeof DEFAULT_MILESTONES, pct: number) {
-  return milestones.map((m) => ({ ...m, done: pct >= m.pct }));
+function applyProgressToMilestones(
+  milestones: { phase: string; pct: number; done: boolean }[],
+  pct: number,
+) {
+  // done = etapa superada (pct < avance); la etapa == avance es la ACTUAL.
+  return milestones.map((m) => ({ ...m, done: pct > m.pct }));
 }
 
 function fmtDate(ts: string): string {
@@ -229,6 +216,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: vista },
     { data: esquemas },
     { data: categoriasMultimedia },
+    { data: estatusCatalogRows },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -268,6 +256,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     supabase
       .from("categorias_multimedia_proyecto")
       .select("id, nombre")
+      .eq("activo", true),
+    // Catálogo de etapas de obra — fuente única del % de avance
+    (supabase as any)
+      .from("estatus_proyecto")
+      .select("*")
       .eq("activo", true),
   ]);
 
@@ -428,12 +421,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ? fotoRows.filter((f: any) => f.id_categoria === generalId)
     : fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
 
-  const globalProgress = calcProgressFromDates(
-    (proyecto as any).fecha_lanzamiento,
-    (proyecto as any).fecha_entrega_proyecto ?? (proyecto as any).fecha_entrega,
-  );
-
-  const milestones = applyProgressToMilestones(DEFAULT_MILESTONES, globalProgress);
+  // Avance de obra — fuente única: etapa (id_estatus_proyecto) del proyecto.
+  const estatusCatalog = mapEstatusCatalog((estatusCatalogRows ?? []) as any[]);
+  const globalProgress = progressFromEstatus(estatusCatalog, (proyecto as any).id_estatus_proyecto);
+  const milestones = applyProgressToMilestones(milestonesFromEstatus(estatusCatalog), globalProgress);
 
   const constructionPhotos = avanceFotos.slice(0, 6).map((f: any) => ({
     src: toOptimizedUrl(f.url, 800, 75),
