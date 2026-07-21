@@ -2558,7 +2558,8 @@ function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: an
           ) : (
             <div className="space-y-1.5">
               {list.map((d: any) => (
-                <div key={d.id} className="rounded-md border border-border p-2.5 bg-card">
+                <Link key={d.id} to={`/admin/portal-crm/ventas/negocios/${d.id}`}
+                  className="block rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors">
                   <div className="flex items-center gap-1.5">
                     {d.prioridad && PRIORIDAD_META[d.prioridad] && (
                       <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[d.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[d.prioridad].label}`} />
@@ -2570,7 +2571,7 @@ function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: an
                     <Badge variant="outline" className="text-[10px] truncate max-w-[130px]">{d.etapa_nombre}</Badge>
                     <span className="text-xs font-medium tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -3086,7 +3087,9 @@ export function CrmDeals() {
             <TableBody>
               {listRows.map((r: any) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.nombre}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link to={`/admin/portal-crm/ventas/negocios/${r.id}`} className="hover:underline hover:text-primary">{r.nombre}</Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{r.pipeline_nombre}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[11px]">{r.etapa_nombre}</Badge></TableCell>
                   <TableCell className="text-muted-foreground">
@@ -3197,6 +3200,427 @@ function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── CrmDealDetail — vista de un negocio ──────────────────────────────────────
+
+export function CrmDealDetail() {
+  const { dealId } = useParams();
+  const qc = useQueryClient();
+  const [form, setForm] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Acota el <main> al alto visible para que cada columna scrollee sola (estilo HubSpot).
+  useEffect(() => {
+    const el = document.querySelector("main") as HTMLElement | null;
+    const bodyPrev = document.body.style.overflow;
+    const htmlPrev = document.documentElement.style.overflow;
+    const prev = el ? { height: el.style.height, minHeight: el.style.minHeight, padding: el.style.padding, overflow: el.style.overflow } : null;
+    const apply = () => {
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
+      if (el) {
+        window.scrollTo(0, 0);
+        const top = el.getBoundingClientRect().top;
+        el.style.height = `${window.innerHeight - top}px`;
+        el.style.minHeight = "0";
+        el.style.padding = "0";
+        el.style.overflow = "hidden";
+      }
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      document.documentElement.style.overflow = htmlPrev;
+      document.body.style.overflow = bodyPrev;
+      if (el && prev) { el.style.height = prev.height; el.style.minHeight = prev.minHeight; el.style.padding = prev.padding; el.style.overflow = prev.overflow; }
+    };
+  }, []);
+
+  const { data: deal, isLoading } = useQuery({
+    queryKey: ["deal-detail", dealId],
+    enabled: !!dealId,
+    queryFn: async () => {
+      const { data: n } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion")
+        .eq("id", Number(dealId)).eq("activo", true).maybeSingle();
+      if (!n) return null;
+      const [pRes, eRes, oRes] = await Promise.all([
+        n.id_pipeline ? (supabase as any).from("crm_pipelines").select("nombre").eq("id", n.id_pipeline).maybeSingle() : Promise.resolve({ data: null }),
+        n.id_etapa ? (supabase as any).from("crm_pipeline_etapas").select("nombre").eq("id", n.id_etapa).maybeSingle() : Promise.resolve({ data: null }),
+        n.id_usuario_propietario ? (supabase as any).from("usuarios").select("nombre").eq("auth_user_id", n.id_usuario_propietario).maybeSingle() : Promise.resolve({ data: null }),
+      ]);
+      let contacto: any = null;
+      if (n.id_entidad_relacionada) {
+        const { data: er } = await (supabase as any).from("entidades_relacionadas").select("id, id_persona").eq("id", n.id_entidad_relacionada).maybeSingle();
+        if (er?.id_persona) {
+          const { data: p } = await (supabase as any).from("personas").select("nombre_legal, nombre_comercial, email, telefono").eq("id", er.id_persona).maybeSingle();
+          contacto = { id: n.id_entidad_relacionada, nombre: (p?.nombre_legal || p?.nombre_comercial || "Sin nombre").trim(), email: p?.email ?? null, telefono: p?.telefono ?? null };
+        }
+      }
+      return { ...n, pipeline_nombre: pRes.data?.nombre ?? "—", etapa_nombre: eRes.data?.nombre ?? "—", propietario_nombre: oRes.data?.nombre ?? "—", contacto };
+    },
+  });
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["deals-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  const { data: etapas } = useQuery({
+    queryKey: ["deal-detail-etapas", form?.id_pipeline],
+    enabled: !!form?.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  useEffect(() => {
+    if (deal) setForm({
+      nombre: deal.nombre ?? "",
+      id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
+      id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
+      valor: deal.valor != null ? String(deal.valor) : "",
+      moneda: deal.moneda ?? "MXN",
+      fecha_cierre: deal.fecha_cierre_estimada ?? "",
+      id_propietario: deal.id_usuario_propietario ?? "",
+      tipo_negocio: deal.tipo_negocio ?? "",
+      prioridad: deal.prioridad ?? "",
+    });
+  }, [deal]);
+
+  const save = async () => {
+    if (!form || !form.nombre.trim()) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({
+      nombre: form.nombre.trim(),
+      id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
+      id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
+      valor: form.valor ? Number(form.valor) : null,
+      moneda: form.moneda,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || null,
+      tipo_negocio: form.tipo_negocio || null,
+      prioridad: form.prioridad || null,
+    }).eq("id", Number(dealId));
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio actualizado");
+    qc.invalidateQueries({ queryKey: ["deal-detail", dealId] });
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+  };
+
+  // Actividad del negocio = notas/tareas de su contacto asociado (reutiliza el Timeline).
+  const erId: number | null = deal?.id_entidad_relacionada ?? null;
+  const { data: activity } = useQuery({
+    queryKey: ["deal-activity", erId],
+    enabled: !!erId,
+    queryFn: async () => {
+      const [notasRes, tareasRes] = await Promise.all([
+        (supabase as any).from("crm_notas").select("id, contenido, fecha_creacion, id_usuario, anclado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("anclado", { ascending: false }).order("fecha_creacion", { ascending: false }),
+        (supabase as any).from("crm_tareas").select("id, titulo, estatus, prioridad, fecha_vencimiento, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_vencimiento", { ascending: true }),
+      ]);
+      const notes = (notasRes.data ?? []).map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: null, anclado: n.anclado ?? false }));
+      const tasks = (tareasRes.data ?? []).map((t: any) => ({ id: t.id, title: t.titulo, status: t.estatus, priority: t.prioridad, due_date: t.fecha_vencimiento, created_at: t.fecha_creacion }));
+      return { notes, tasks };
+    },
+  });
+  const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+  const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea completada"); invalidateActivity(); };
+  const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea eliminada"); invalidateActivity(); };
+  const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Nota eliminada"); invalidateActivity(); };
+
+  if (isLoading || !form) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid md:grid-cols-3 gap-4"><Skeleton className="h-96 md:col-span-2" /><Skeleton className="h-64" /></div>
+      </div>
+    );
+  }
+  if (!deal) {
+    return (
+      <div className="space-y-3">
+        <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1" />Negocios</Link></Button>
+        <p className="text-sm text-muted-foreground">Este negocio no existe o fue eliminado.</p>
+      </div>
+    );
+  }
+
+  const valorFmt = deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—";
+  const tipoLabel = deal.tipo_negocio === "cliente_nuevo" ? "Cliente nuevo" : deal.tipo_negocio === "cliente_existente" ? "Cliente existente" : "—";
+  const quickFacts: [string, string][] = [
+    ["Pipeline", deal.pipeline_nombre],
+    ["Etapa", deal.etapa_nombre],
+    ["Fecha de cierre", deal.fecha_cierre_estimada ? fmtDate(deal.fecha_cierre_estimada) : "—"],
+    ["Propietario", deal.propietario_nombre],
+  ];
+  const actNotes = activity?.notes ?? [];
+  const actTasks = activity?.tasks ?? [];
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const upcomingTasks = actTasks.filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= todayStart)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  const pinnedNotes = actNotes.filter((n: any) => n.anclado);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm shrink-0">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
+            <Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1.5" />Negocios</Link>
+          </Button>
+          <span className="text-muted-foreground/40 text-sm">/</span>
+          <span className="text-sm font-medium text-foreground truncate max-w-[220px]">{deal.nombre}</span>
+        </div>
+      </div>
+
+      {/* 3-column body — estilo HubSpot; cada columna scrollea por su cuenta */}
+      <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
+        {/* Left: resumen + "Acerca de este negocio" (editable) */}
+        <aside className="col-span-3 border-r border-border p-5 space-y-5 bg-white h-full min-h-0 overflow-y-auto">
+          <div className="flex flex-col items-center gap-2 pt-2 text-center">
+            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary ring-4 ring-primary/5 shadow-sm">
+              <Briefcase className="h-6 w-6" />
+            </div>
+            <h2 className="font-semibold text-sm leading-tight">{deal.nombre}</h2>
+            <p className="text-lg font-semibold tabular-nums">{valorFmt}</p>
+            {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[deal.prioridad]}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} />{PRIORIDAD_META[deal.prioridad].label}
+              </span>
+            )}
+          </div>
+
+          {/* Datos rápidos */}
+          <div className="space-y-2">
+            {quickFacts.map(([l, v]) => (
+              <div key={l} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground shrink-0">{l}</span>
+                <span className="font-medium text-right truncate">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Acerca de este negocio (editable) */}
+          <Accordion type="single" collapsible defaultValue="about">
+            <AccordionItem value="about" className="border-0">
+              <AccordionTrigger className="text-xs font-semibold uppercase tracking-widest text-slate-500 hover:no-underline py-2 hover:text-primary transition-colors">
+                Acerca de este negocio
+              </AccordionTrigger>
+              <AccordionContent className="pt-1 pb-0">
+                <div className="grid gap-3">
+                  <DField label="Nombre *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></DField>
+                  <DField label="Pipeline">
+                    <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Etapa">
+                    <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+                      <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige pipeline"} /></SelectTrigger>
+                      <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <div className="grid grid-cols-2 gap-2">
+                    <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
+                    <DField label="Moneda">
+                      <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="MXN">MXN</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
+                      </Select>
+                    </DField>
+                  </div>
+                  <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
+                  <DField label="Propietario">
+                    <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Tipo de negocio">
+                    <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Prioridad">
+                    <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                          <SelectItem key={value} value={value}>
+                            <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </DField>
+                  <Button onClick={save} disabled={saving || !form.nombre.trim()} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                    {saving ? "Guardando…" : "Guardar cambios"}
+                  </Button>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
+
+        {/* Center: pestañas */}
+        <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
+          <Tabs defaultValue="descripcion" className="flex flex-col h-full min-h-0">
+            <div className="border-b border-border shrink-0">
+              <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
+                <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
+                <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
+              {/* Información sobre el negocio (IA — placeholder) */}
+              <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Información sobre el negocio</h3>
+                  <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">IA · Próximamente</span>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium"><TriangleAlert className="h-4 w-4 text-amber-500" />Riesgos</div>
+                  <p className="text-xs text-muted-foreground mt-1">Sin riesgos detectados según los datos disponibles.</p>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" />Metas del comprador</div>
+                  <p className="text-xs text-muted-foreground mt-1">Aún no hay metas del comprador identificadas.</p>
+                </div>
+              </div>
+
+              {/* Calificación de negocios (IA — placeholder) */}
+              <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Calificación de negocios</h3>
+                  <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">IA · Próximamente</span>
+                </div>
+                <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                  La calificación por IA de este negocio llegará en una fase posterior.
+                </div>
+              </div>
+
+              {/* Aspectos destacados de los datos (real) */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Aspectos destacados de los datos</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <HL label="Fecha de creación" value={deal.fecha_creacion ? fmtDateTime(deal.fecha_creacion) : "—"} />
+                  <HL label="Etapa del negocio" value={`${deal.etapa_nombre} (${deal.pipeline_nombre})`} />
+                  <HL label="Valor" value={valorFmt} />
+                  <HL label="Fecha de cierre" value={deal.fecha_cierre_estimada ? fmtDate(deal.fecha_cierre_estimada) : "—"} />
+                  <HL label="Tipo de negocio" value={tipoLabel} />
+                  <HL label="Propietario" value={deal.propietario_nombre} />
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
+              {/* Actividades recientes (notas/tareas del contacto asociado) */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
+                {!erId ? (
+                  <p className="text-xs text-muted-foreground">Sin contacto asociado.</p>
+                ) : (
+                  <Timeline
+                    notes={actNotes} tasks={actTasks} appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+                    contact={{ created_at: deal.fecha_creacion }} includeSystem={false}
+                    onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote} onEdited={invalidateActivity}
+                  />
+                )}
+              </div>
+              {/* Próximas actividades */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Próximas actividades</h3>
+                {!upcomingTasks.length ? (
+                  <p className="text-xs text-muted-foreground">Sin próximas actividades.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {upcomingTasks.map((t: any) => (
+                      <div key={t.id} className="flex items-center gap-3 group/up">
+                        <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 flex items-center justify-center">
+                          <ClipboardList className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{t.title}</div>
+                          <div className="text-xs text-muted-foreground">Pendiente: {fmtDate(t.due_date)}</div>
+                        </div>
+                        <button onClick={() => completeTask(t.id)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 shrink-0 opacity-0 group-hover/up:opacity-100 transition-opacity">
+                          <Check className="h-3 w-3" />Completar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Actividades ancladas */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Actividades ancladas</h3>
+                {!pinnedNotes.length ? (
+                  <p className="text-xs text-muted-foreground">Sin actividades ancladas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {pinnedNotes.map((n: any) => (
+                      <div key={n.id} className="rounded-md border border-border p-2.5">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><StickyNote className="h-3.5 w-3.5" />Nota · {fmtDate(n.created_at)}</div>
+                        <p className="text-sm">{stripHtml(n.content ?? "").slice(0, 160) || "Nota"}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </section>
+
+        {/* Right: entidades relacionadas */}
+        <aside className="col-span-3 p-4 bg-slate-50/40 h-full min-h-0 overflow-y-auto">
+          <Accordion type="multiple" defaultValue={["contactos", "empresas", "cotizaciones"]}>
+            <AccordionItem value="contactos">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Contactos <span className="text-xs text-muted-foreground font-normal">{deal.contacto ? 1 : 0}</span></span>
+              </AccordionTrigger>
+              <AccordionContent>
+                {!deal.contacto ? (
+                  <p className="text-xs text-muted-foreground py-2">Sin contacto asociado</p>
+                ) : (
+                  <div className="rounded-md border border-border p-3 bg-card space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">{dealInitials(deal.contacto.nombre)}</span>
+                      <Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`} className="text-sm font-medium hover:underline hover:text-primary truncate">{deal.contacto.nombre}</Link>
+                    </div>
+                    {deal.contacto.email && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.email}</span></div>}
+                    {deal.contacto.telefono && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.telefono}</span></div>}
+                    <Button variant="outline" size="sm" className="w-full h-7 text-xs" asChild><Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`}>Ver ficha</Link></Button>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="empresas">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Empresas <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin empresas asociadas</p></AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="cotizaciones" className="border-b-0">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Cotizaciones <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin cotizaciones asociadas</p></AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
+      </div>
+    </div>
   );
 }
 
