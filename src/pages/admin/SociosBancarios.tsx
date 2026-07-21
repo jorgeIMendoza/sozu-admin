@@ -114,8 +114,8 @@ function SociosBancariosInner() {
                   <td className="px-4 py-2.5 text-right tabular-nums">{s.desarrollosActivos}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{s.usuariosActivos}</td>
                   <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={cn(s.estado === "activo" ? "border-success text-success" : "text-muted-foreground")}>
-                      {s.estado === "activo" ? "Activo" : "Inactivo"}
+                    <Badge variant="outline" className={cn(s.activo ? "border-success text-success" : "text-muted-foreground")}>
+                      {s.activo ? "Activo" : "Inactivo"}
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5">
@@ -123,7 +123,7 @@ function SociosBancariosInner() {
                       <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => setSelectedId(s.id)}>
                         <Settings2 className="h-3.5 w-3.5" /> Ver / Administrar
                       </Button>
-                      {s.estado === "activo" ? (
+                      {s.activo ? (
                         <Button size="sm" variant="ghost" className="h-8 gap-1 text-[12px] text-destructive hover:text-destructive" onClick={() => setDesactivar(s)}>
                           <Ban className="h-3.5 w-3.5" /> Desactivar
                         </Button>

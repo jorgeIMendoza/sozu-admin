@@ -13,10 +13,12 @@ import { useAuth } from "@/contexts/AuthContext";
  * hardcodear un desarrollo, sino crear el vínculo real con el Admin de Socios
  * Bancarios (/admin/socios-bancarios).
  *
- * Cadena de resolución (modelo M:N):
- *   auth.users → usuarios_socio_bancario (por auth_user_id, estado ≠ inactivo)
- *   → id_socio_bancario → socio_bancario_desarrollos (estado 'activo')
- *   → lista de id_desarrollo (= id de proyecto) → proyectos (nombre).
+ * Cadena de resolución (modelo M:N vigente — migrations#372):
+ *   auth.users → usuarios (por auth_user_id) → usuarios.id_socio_bancario
+ *   → socio_bancario_desarrollos (activo = true) → lista de id_desarrollo
+ *   (= id de proyecto) → proyectos (nombre).
+ *   Los usuarios de banco viven en `usuarios` (rol 'Socio Bancario'), no en una
+ *   tabla aparte. Ya NO existe usuarios.id_proyecto_socio ni usuarios_socio_bancario.
  *
  * Un banco puede financiar varios desarrollos: se expone la lista + un
  * "activo" seleccionable (el portal muestra selector si hay más de uno). Los
@@ -57,21 +59,20 @@ export interface SocioProyecto {
 }
 
 async function fetchDesarrollosSocio(authUserId: string): Promise<DesarrolloSocio[]> {
-  // 1) Fila del usuario de banco (activo/invitado). Probe graceful.
+  // 1) Banco del usuario: usuarios.id_socio_bancario (por auth_user_id). Probe graceful.
   const { data: usuario, error: uErr } = await (supabase as any)
-    .from("usuarios_socio_bancario")
-    .select("id, id_socio_bancario, estado")
+    .from("usuarios")
+    .select("id_socio_bancario, activo")
     .eq("auth_user_id", authUserId)
-    .neq("estado", "inactivo")
     .maybeSingle();
-  if (uErr || !usuario?.id_socio_bancario) return [];
+  if (uErr || !usuario?.id_socio_bancario || usuario.activo === false) return [];
 
   // 2) Desarrollos activos asignados al banco.
   const { data: asigns, error: aErr } = await (supabase as any)
     .from("socio_bancario_desarrollos")
     .select("id_desarrollo")
     .eq("id_socio_bancario", usuario.id_socio_bancario)
-    .eq("estado", "activo");
+    .eq("activo", true);
   if (aErr || !asigns?.length) return [];
   const ids = Array.from(
     new Set((asigns as any[]).map((r) => r.id_desarrollo).filter((v): v is number => v != null)),
