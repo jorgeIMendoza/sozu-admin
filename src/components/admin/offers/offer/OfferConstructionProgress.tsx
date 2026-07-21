@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, Circle, HardHat, Calendar, X, ImageIcon } from "lucide-react";
+import { HardHat, Calendar, X, ImageIcon } from "lucide-react";
 import { deriveStages, currentStageOf } from "@/utils/avanceObra";
 
 interface ConstructionPhoto {
@@ -64,31 +64,38 @@ const OfferConstructionProgress = ({
         </p>
       </div>
 
-      {/* Milestones checklist */}
-      <ul className="space-y-2">
-        {stageRows.map((m, i) => {
+      {/* Milestones checklist — 1ª mitad izquierda, resto derecha, en secuencia */}
+      {(() => {
+        const renderStage = (m: typeof stageRows[number], i: number) => {
           const isCurrent = !m.done && m.phase === currentStage;
           return (
-            <li key={i} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                {m.done ? (
-                  <CheckCircle2 className="w-4 h-4 text-success" />
-                ) : isCurrent ? (
-                  <span className="w-4 h-4 flex items-center justify-center">
-                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  </span>
-                ) : (
-                  <Circle className="w-4 h-4 text-muted-foreground" />
-                )}
-                <span className={m.done ? "text-foreground" : isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"}>
-                  {m.phase}
-                </span>
-              </div>
-              <span className={`text-xs tabular-nums ${m.done ? "text-success font-medium" : isCurrent ? "text-primary font-semibold" : "text-muted-foreground"}`}>{m.ownPct}%</span>
+            <li key={i} className="flex items-center gap-2.5 text-sm">
+              <span
+                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold leading-none tabular-nums ${
+                  m.done
+                    ? "border-success text-success"
+                    : isCurrent
+                    ? "border-amber-500 bg-amber-50 text-amber-600"
+                    : "border-muted-foreground/30 text-muted-foreground/50"
+                }`}
+              >
+                {i + 1}
+              </span>
+              <span className={`flex-1 truncate ${m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                {m.phase}
+              </span>
+              <span className={`shrink-0 text-xs tabular-nums ${m.done ? "font-medium text-success" : isCurrent ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>{m.ownPct}%</span>
             </li>
           );
-        })}
-      </ul>
+        };
+        const mid = Math.ceil(stageRows.length / 2);
+        return (
+          <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+            <ul className="space-y-2">{stageRows.slice(0, mid).map((m, j) => renderStage(m, j))}</ul>
+            <ul className="space-y-2">{stageRows.slice(mid).map((m, j) => renderStage(m, mid + j))}</ul>
+          </div>
+        );
+      })()}
 
       <div className="pt-1 border-t border-border space-y-0.5">
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">

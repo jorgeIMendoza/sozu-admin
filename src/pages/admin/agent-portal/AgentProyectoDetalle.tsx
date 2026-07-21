@@ -18,7 +18,7 @@ import { createPortal } from "react-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
-import { Globe, Play, X, ChevronLeft, CheckCircle2, Circle, ExternalLink } from "lucide-react";
+import { Globe, Play, X, ChevronLeft, ExternalLink } from "lucide-react";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
 import { OptImg } from "@/components/ui/OptImg";
 import { cn } from "@/lib/utils";
@@ -817,7 +817,7 @@ const AgentProyectoDetalle = () => {
                   </p>
                 </div>
               )}
-              <div className="grid items-stretch gap-4 md:grid-cols-2">
+              <div className="grid items-start gap-4 md:grid-cols-2">
                 {latestVideoEmbed && (
                   <div className="flex flex-col overflow-hidden rounded-md border border-gray-100">
                     <YouTubeFacade embedUrl={latestVideoEmbed} title={latestVideo?.nombre} />
@@ -827,28 +827,32 @@ const AgentProyectoDetalle = () => {
                 {avanceObra > 0 && (
                   <div className={cn("rounded-md border border-gray-100 p-4", !latestVideoEmbed && "md:col-span-2")}>
                     <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-[#8A929B]">Etapas de obra</h3>
-                    <ul className="space-y-2.5">
-                      {milestones.map((m) => {
+                    {(() => {
+                      const renderStage = (m: typeof milestones[number], i: number) => {
                         const isCurrent = !m.done && m.phase === currentStage;
                         return (
-                          <li key={m.phase} className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2">
-                              {m.done ? (
-                                <CheckCircle2 className="h-4 w-4 text-primary" />
-                              ) : isCurrent ? (
-                                <span className="flex h-4 w-4 items-center justify-center">
-                                  <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                                </span>
-                              ) : (
-                                <Circle className="h-4 w-4 text-muted-foreground/40" />
-                              )}
-                              <span className={m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}>{m.phase}</span>
+                          <li key={m.phase} className="flex items-center gap-2.5 text-sm">
+                            <span className={cn(
+                              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold leading-none tabular-nums",
+                              m.done ? "border-primary text-primary"
+                                : isCurrent ? "border-amber-500 bg-amber-50 text-amber-600"
+                                : "border-muted-foreground/30 text-muted-foreground/50",
+                            )}>
+                              {i + 1}
                             </span>
-                            <span className={cn("text-xs tabular-nums", m.done ? "font-medium text-primary" : isCurrent ? "font-semibold text-primary" : "text-muted-foreground/60")}>{m.ownPct}%</span>
+                            <span className={cn("flex-1 truncate", m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground")}>{m.phase}</span>
+                            <span className={cn("shrink-0 text-xs tabular-nums", m.done ? "font-medium text-primary" : isCurrent ? "font-semibold text-amber-600" : "text-muted-foreground/60")}>{m.ownPct}%</span>
                           </li>
                         );
-                      })}
-                    </ul>
+                      };
+                      const mid = Math.ceil(milestones.length / 2);
+                      return (
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
+                          <ul className="space-y-2.5">{milestones.slice(0, mid).map((m, j) => renderStage(m, j))}</ul>
+                          <ul className="space-y-2.5">{milestones.slice(mid).map((m, j) => renderStage(m, mid + j))}</ul>
+                        </div>
+                      );
+                    })()}
                     {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
                       <div className="mt-4 pt-3 border-t border-gray-100 space-y-0.5">
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
