@@ -39,6 +39,9 @@ const PORTAL_LABEL: Record<string, string> = {
   notaria: "Notaría",
   crm: "CRM",
   condominio: "Condominio",
+  bancos: "Bancos",
+  "legal-flow": "Legal Flow",
+  "socio-bancario": "Socio Bancario",
 };
 
 type RangoPreset = "24h" | "semana" | "mes" | "trimestre" | "todo";

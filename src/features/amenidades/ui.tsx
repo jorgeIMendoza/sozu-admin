@@ -3,9 +3,13 @@
 // Paleta SOZU: verde=disponible, ámbar=apartado/por pagar, rojo=reservada,
 // azul-gris=mantenimiento.
 // =============================================================
-import { Users, Tv, Flame, Utensils, User, Clock, Check, Wrench, type LucideIcon } from "lucide-react";
+import {
+  Users, Tv, Flame, Utensils, User, Clock, Check, Wrench,
+  Dumbbell, Sofa, Leaf, Wine, Gamepad2, Briefcase, Store, Trees, Building2,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { EstadoSlot, TipoEspacio } from "./types";
+import type { EstadoSlot, ModalidadUso, ModeloCobro, TipoAmenidad } from "./types";
 
 export const ESTADO_LABEL: Record<EstadoSlot, string> = {
   disponible: "Disponible",
@@ -70,18 +74,57 @@ export function EstadoBadge({ estado }: { estado: EstadoSlot }) {
   );
 }
 
-export const TIPO_ICON: Record<TipoEspacio, LucideIcon> = {
+export const TIPO_ICON: Record<TipoAmenidad, LucideIcon> = {
   sala_juntas: Users,
   sala_tv: Tv,
   asador: Flame,
   cocina_equipada: Utensils,
+  gimnasio: Dumbbell,
+  lobby: Sofa,
+  roof_garden: Leaf,
+  sky_bar: Wine,
+  sala_juegos: Gamepad2,
+  coworking: Briefcase,
+  area_comercial: Store,
+  parque: Trees,
+  otro: Building2,
 };
 
-export const TIPO_LABEL: Record<TipoEspacio, string> = {
+export const TIPO_LABEL: Record<TipoAmenidad, string> = {
   sala_juntas: "Sala de juntas",
   sala_tv: "Sala de TV",
   asador: "Asador",
   cocina_equipada: "Cocina equipada",
+  gimnasio: "Gimnasio",
+  lobby: "Lobby",
+  roof_garden: "Roof garden",
+  sky_bar: "Sky bar",
+  sala_juegos: "Sala de juegos",
+  coworking: "Coworking",
+  area_comercial: "Área comercial",
+  parque: "Parque",
+  otro: "Otro",
+};
+
+// ── Modalidad de uso ───────────────────────────────────────
+export const MODALIDAD_LABEL: Record<ModalidadUso, string> = {
+  libre: "Uso libre",
+  reservable: "Reservable",
+};
+
+// ── Modelo de cobro (para el editor de ficha) ──────────────
+export const MODELO_COBRO_LABEL: Record<ModeloCobro, string> = {
+  gratuito: "Gratuito",
+  por_franja: "Por franja",
+  por_uso: "Por uso",
+  por_hora: "Por hora",
+};
+
+export const MODELO_COBRO_AYUDA: Record<ModeloCobro, string> = {
+  gratuito: "Sin costo. Se confirma al validar, sin paso de pago.",
+  por_franja: "Tarifa fija por franja reservada.",
+  por_uso: "Tarifa única por reservación, sin importar la duración.",
+  por_hora: "El cobro se calcula sobre las horas de la franja; el calendario sigue siendo por bloques.",
 };
 
 export function Leyenda() {

@@ -8,10 +8,27 @@ import type {
   Concepto,
   CentroCosto,
   AreaGasto,
+  EgresoTesoreria,
   Erogacion,
   Presupuesto,
   DerivadoPartida,
 } from "./types";
+
+/** Deriva las erogaciones (fuente única = Tesorería) desde los egresos
+ *  CLASIFICADOS. Un egreso sin clasificar no produce erogación. */
+export function erogacionesDesdeEgresos(egresos: EgresoTesoreria[]): Erogacion[] {
+  return egresos
+    .filter((e) => e.conceptoPresupuestalId)
+    .map((e) => ({
+      id: `ero-${e.id}`,
+      conceptoId: e.conceptoPresupuestalId as string,
+      egresoTesoreriaId: e.id,
+      fecha: e.fecha,
+      monto: e.monto,
+      proveedor: e.proveedor,
+      concepto: e.concepto,
+    }));
+}
 
 export const MESES = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -109,11 +126,13 @@ export function derivarCentro(
   ejercicio: number,
   mesActual: number,
 ): DerivadoPartida {
-  const hijos = conceptos.filter((c) => c.centroCostoId === centro.id && c.activo);
+  // Presupuesto: solo conceptos activos. Erogado: TODOS (un concepto desactivado
+  // con erogado histórico sigue contando en el ejercicio).
   let pres = ceros12();
   let erog = ceros12();
-  for (const c of hijos) {
-    pres = sumar12(pres, presupuestoPorMesConcepto(c));
+  for (const c of conceptos) {
+    if (c.centroCostoId !== centro.id) continue;
+    if (c.activo) pres = sumar12(pres, presupuestoPorMesConcepto(c));
     erog = sumar12(erog, erogadoPorMesDe(erogacionesDeConcepto(erogaciones, c.id), ejercicio));
   }
   return derivarDe(pres, erog, mesActual);
@@ -129,11 +148,11 @@ export function derivarArea(
 ): DerivadoPartida {
   const centrosArea = centros.filter((cc) => cc.areaId === area.id);
   const idsCentros = new Set(centrosArea.map((cc) => cc.id));
-  const hijos = conceptos.filter((c) => idsCentros.has(c.centroCostoId) && c.activo);
   let pres = ceros12();
   let erog = ceros12();
-  for (const c of hijos) {
-    pres = sumar12(pres, presupuestoPorMesConcepto(c));
+  for (const c of conceptos) {
+    if (!idsCentros.has(c.centroCostoId)) continue;
+    if (c.activo) pres = sumar12(pres, presupuestoPorMesConcepto(c));
     erog = sumar12(erog, erogadoPorMesDe(erogacionesDeConcepto(erogaciones, c.id), ejercicio));
   }
   return derivarDe(pres, erog, mesActual);
@@ -147,8 +166,7 @@ export function derivarTotal(
   let pres = ceros12();
   let erog = ceros12();
   for (const c of p.conceptos) {
-    if (!c.activo) continue;
-    pres = sumar12(pres, presupuestoPorMesConcepto(c));
+    if (c.activo) pres = sumar12(pres, presupuestoPorMesConcepto(c));
     erog = sumar12(erog, erogadoPorMesDe(erogacionesDeConcepto(erogaciones, c.id), p.ejercicio));
   }
   return derivarDe(pres, erog, mesActual);

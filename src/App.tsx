@@ -1082,7 +1082,10 @@ const App = () => (
                   <Route path="portal-socio-bancario/ventas-inventario" element={<SocioBancarioVentasInventario />} />
                   <Route path="portal-socio-bancario/expedientes" element={<SocioBancarioExpedientes />} />
                   {/* Rutas deprecadas (confidencial / fuera de scope V1): historico-comercial,
-                      analisis-cobranza, ingresos-egresos, forecast-ingresos → removidas del router. */}
+                      analisis-cobranza, ingresos-egresos, forecast-ingresos → removidas del router.
+                      Catch-all: cualquier subruta obsoleta (bookmarks/menús viejos en BD) redirige
+                      al Resumen en vez de un 404 duro. NO reexpone las páginas confidenciales. */}
+                  <Route path="portal-socio-bancario/*" element={<Navigate to="/admin/portal-socio-bancario/resumen" replace />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
