@@ -10,6 +10,7 @@ interface BodegaDetalle {
   ubicacion: string;
   precio_m2: number | null;
   precio_final: number | null;
+  es_incluido?: boolean;
 }
 
 interface BodegasDetailDialogProps {
@@ -30,27 +31,31 @@ const formatCurrency = (value: number | null): string => {
 };
 
 // Componente para mostrar precio final con badge
-const PrecioFinalBadge = ({ value }: { value: number | null }) => {
-  if (value === null || value === undefined) return <span className="text-muted-foreground">N/A</span>;
-  
+const PrecioFinalBadge = ({ value, esIncluido }: { value: number | null; esIncluido?: boolean }) => {
+  if (!esIncluido && (value === null || value === undefined)) {
+    return <span className="text-muted-foreground">N/A</span>;
+  }
+
+  const shown = value ?? 0;
   const formattedValue = new Intl.NumberFormat('es-MX', {
     style: 'currency',
     currency: 'MXN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value);
-  
-  if (value === 0) {
+  }).format(shown);
+
+  // es_incluido = bodega incluida en el precio del depa → muestra su valor con la leyenda.
+  if (esIncluido) {
     return (
       <div className="flex items-center gap-1">
         <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300">
           {formattedValue}
         </Badge>
-        <span className="text-xs text-muted-foreground italic">(incluido con el depa)</span>
+        <span className="text-xs text-muted-foreground italic">(incluido en precio del depa)</span>
       </div>
     );
   }
-  
+
   return (
     <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300">
       {formattedValue}
@@ -91,7 +96,7 @@ export const BodegasDetailDialog = ({
                     </TableCell>
                     <TableCell>{bodega.m2} m²</TableCell>
                     <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
-                    <TableCell><PrecioFinalBadge value={bodega.precio_final} /></TableCell>
+                    <TableCell><PrecioFinalBadge value={bodega.precio_final} esIncluido={bodega.es_incluido} /></TableCell>
                     <TableCell>{bodega.ubicacion || 'N/A'}</TableCell>
                   </TableRow>
                 ))}

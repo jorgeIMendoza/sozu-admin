@@ -55,31 +55,30 @@ const formatCurrency = (value: number | null): string => {
 
 // Componente para mostrar precio final con badge
 const PrecioFinalBadge = ({ value, esIncluido }: { value: number | null; esIncluido?: boolean }) => {
-  // es_incluido = bodega incluida en el precio del depa → precio 0 + leyenda
-  if (esIncluido) {
-    return (
-      <div className="flex items-center gap-1">
-        <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300">
-          {new Intl.NumberFormat('es-MX', {
-            style: 'currency',
-            currency: 'MXN',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          }).format(0)}
-        </Badge>
-        <span className="text-xs text-muted-foreground italic">(incluido en precio del depa)</span>
-      </div>
-    );
+  if (!esIncluido && (value === null || value === undefined)) {
+    return <span className="text-muted-foreground">N/A</span>;
   }
 
-  if (value === null || value === undefined) return <span className="text-muted-foreground">N/A</span>;
-
+  const shown = value ?? 0;
   const formattedValue = new Intl.NumberFormat('es-MX', {
     style: 'currency',
     currency: 'MXN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(shown);
+
+  // es_incluido = bodega incluida en el precio del depa → muestra su valor
+  // (precio/m² × m²) con la leyenda; no se cobra por separado.
+  if (esIncluido) {
+    return (
+      <div className="flex items-center gap-1">
+        <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300">
+          {formattedValue}
+        </Badge>
+        <span className="text-xs text-muted-foreground italic">(incluido en precio del depa)</span>
+      </div>
+    );
+  }
 
   if (value === 0) {
     return (
@@ -646,7 +645,7 @@ const Bodegas = () => {
                         <TableCell>{highlightText(bodega.nombre, searchTerm)}</TableCell>
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
-                        <TableCell><PrecioFinalBadge value={bodega.precio_final} esIncluido={bodega.es_incluido} /></TableCell>
+                        <TableCell><PrecioFinalBadge value={bodega.es_incluido ? Number(bodega.precio_m2 ?? 0) * Number(bodega.m2 ?? 0) : bodega.precio_final} esIncluido={bodega.es_incluido} /></TableCell>
                         <TableCell>
                           {bodega.es_incluido ? (
                             <span className="text-muted-foreground">N/A</span>
@@ -762,7 +761,7 @@ const Bodegas = () => {
                         <TableCell>{highlightText(bodega.nombre, searchTerm)}</TableCell>
                         <TableCell>{bodega.m2} m²</TableCell>
                         <TableCell>{formatCurrency(bodega.precio_m2)}</TableCell>
-                        <TableCell><PrecioFinalBadge value={bodega.precio_final} esIncluido={bodega.es_incluido} /></TableCell>
+                        <TableCell><PrecioFinalBadge value={bodega.es_incluido ? Number(bodega.precio_m2 ?? 0) * Number(bodega.m2 ?? 0) : bodega.precio_final} esIncluido={bodega.es_incluido} /></TableCell>
                         <TableCell>
                           {bodega.es_incluido ? (
                             <span className="text-muted-foreground">N/A</span>

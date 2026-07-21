@@ -1595,7 +1595,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     const precioLista = bodega.productos_servicios?.precio_lista || 0;
                     const m2 = bodega.m2 || 0;
                     const precioFinal = precioLista * m2;
-                    const isIncludedInPrice = precioFinal === 0;
+                    // Incluida = es_incluido (su valor va en el precio del depa, sin oferta aparte),
+                    // no depende de que el precio sea 0.
+                    const isIncludedInPrice = bodega.es_incluido === true;
                     return (
                       <Badge 
                         key={`bodega-${bodega.id}`}
@@ -1608,7 +1610,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(incluida)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluida en precio del depa)</span>
                         ) : (
                           <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
                         )}
@@ -1619,7 +1621,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     const precioLista = est.productos_servicios?.precio_lista || 0;
                     const m2 = est.m2 || 0;
                     const precioFinal = precioLista * m2;
-                    const isIncludedInPrice = precioFinal === 0;
+                    const isIncludedInPrice = est.es_incluido === true;
                     return (
                       <Badge 
                         key={`est-${est.id}`}
@@ -1632,7 +1634,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Car className="h-3 w-3" />
                         {est.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(incluido)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluido en precio del depa)</span>
                         ) : (
                           <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
                         )}
@@ -1696,12 +1698,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 {(includedProducts.bodegas.some((b: any) => {
                   const precio = b.productos_servicios?.precio_lista || 0;
                   const m2 = b.m2 || 0;
-                  return (precio * m2) > 0;
+                  return !b.es_incluido && (precio * m2) > 0;
                 }) ||
                   includedProducts.estacionamientos.some((e: any) => {
                     const precio = e.productos_servicios?.precio_lista || 0;
                     const m2 = e.m2 || 0;
-                    return (precio * m2) > 0;
+                    return !e.es_incluido && (precio * m2) > 0;
                   })) && (
                   <p className="text-xs text-muted-foreground mt-2">
                     Los productos No incluidos generan ofertas adicionales.

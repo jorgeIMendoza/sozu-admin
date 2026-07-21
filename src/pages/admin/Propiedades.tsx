@@ -3595,12 +3595,13 @@ const Propiedades = () => {
         nombre,
         m2,
         ubicacion,
+        es_incluido,
         productos_servicios!bodegas_id_producto_fkey(precio_lista)
       `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true)
       .order('nombre');
-    
+
     if (error) {
       console.error('Error fetching bodegas:', error);
       return [];
@@ -3614,6 +3615,7 @@ const Propiedades = () => {
         nombre: item.nombre,
         m2: item.m2,
         ubicacion: item.ubicacion,
+        es_incluido: item.es_incluido,
         precio_m2: precioM2,
         precio_final: precioFinal
       };
