@@ -133,6 +133,14 @@ export class OfertaPdfNativeService {
       compress: true,
     });
 
+    // Valor de bodegas incluidas (es_incluido): suma a la BASE del precio final,
+    // no al precio de lista mostrado. costo = precio/m² del producto × m2 (calculado
+    // en htmlToPdfService.fetchBodegas).
+    const bodegasIncluidasTotal = (data.bodegas ?? []).reduce(
+      (sum: number, b: any) => sum + (b.es_incluido ? Number(b.costo ?? 0) : 0),
+      0,
+    );
+
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 12;
@@ -212,7 +220,10 @@ export class OfertaPdfNativeService {
 
     // Calculate payment amounts for a scheme
     const calculatePaymentAmounts = (scheme: PaymentScheme, mesesEfectivos: number = 0) => {
-      const result = calcDynamicScheme(scheme, data.propertyDetails.precio_lista, mesesEfectivos);
+      // Base = precio_lista_depa + bodegas incluidas; el descuento del esquema
+      // se aplica sobre esta base dentro de calcDynamicScheme.
+      const basePrice = Number(data.propertyDetails.precio_lista ?? 0) + bodegasIncluidasTotal;
+      const result = calcDynamicScheme(scheme, basePrice, mesesEfectivos);
       return {
         enganche: result.enganche,
         mensualidad: result.mensualidad,
@@ -542,12 +553,18 @@ export class OfertaPdfNativeService {
       iconItems.push({ icon: "estacionamiento", value: estTexto });
     }
     if (data.bodegas.length > 0) {
-      iconItems.push({
-        icon: "bodega",
-        value: `${data.bodegas.length} ${
-          data.bodegas.length === 1 ? "Bodega" : "Bodegas"
-        }`,
-      });
+      // Describir bodega con metraje; marcar "incluida" cuando es_incluido = true.
+      const fmtM2 = (m2: any) =>
+        m2 != null ? ` (${Number(m2).toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²)` : "";
+      const bodegaValue =
+        data.bodegas.length === 1
+          ? `Bodega ${data.bodegas[0].nombre ?? ""}${fmtM2(data.bodegas[0].m2)}${
+              data.bodegas[0].es_incluido ? " incluida" : ""
+            }`.trim()
+          : `${data.bodegas.length} Bodegas${
+              data.bodegas.every((b: any) => b.es_incluido) ? " incluidas" : ""
+            }`;
+      iconItems.push({ icon: "bodega", value: bodegaValue });
     }
     if (data.propertyDetails.tieneBalcon) {
       iconItems.push({ icon: "balcon", value: "Balcón" });

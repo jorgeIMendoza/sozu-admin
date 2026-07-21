@@ -6,6 +6,7 @@ import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } 
 import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { getBodegasIncluidasCosto } from "./included-bodegas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -484,6 +485,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
 
+  // Bodegas incluidas (es_incluido): su valor suma a la BASE del precio final,
+  // no al precio de lista mostrado. base = precio_lista_depa + Σ (precio/m² × m²).
+  // El descuento del esquema se aplica sobre esta base (ver calcPaymentPlans).
+  const { total: bodegasIncluidasTotal } = await getBodegasIncluidasCosto(propiedadId);
+  const calcBasePrice = listPrice + bodegasIncluidasTotal;
+
   // Si el esquema seleccionado fue VERSIONADO (desactivado al editarlo), no aparece en la
   // lista activa del proyecto. Lo traemos aparte para que la oferta del cliente siga
   // mostrando su plan CONGELADO (los porcentajes con los que lo aceptó).
@@ -539,7 +546,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ?? (proyecto as any).fecha_entrega
     ?? null;
 
-  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
+  const paymentPlans = calcPaymentPlans(filteredEsqs, calcBasePrice, oferta.fecha_generacion, entregaFecha);
 
   // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
   if (selectedIsManual && selectedId && paymentPlans.length > 0) {
